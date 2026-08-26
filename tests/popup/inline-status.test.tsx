@@ -138,6 +138,40 @@ describe("full-year completion claim", () => {
 });
 
 describe("inline filed-return recovery status", () => {
+  it("renders the cancelled-run reset confirmation instead of dropping it", () => {
+    const cancelledSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      status: "cancelled",
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: ["filed-returns-target-cancelled"],
+        safeMessage: "The saved target was cancelled.",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Reset",
+          body: "The previous recovery state was cleared. Start a fresh download when ready.",
+          icon: "✓",
+          kind: "ready",
+          title: "Ready for a new download",
+          tone: "ready",
+        }}
+        summary={cancelledSummary}
+      />,
+    );
+
+    expect(markup).toContain("Ready for a new download");
+    expect(markup).toContain("The previous recovery state was cleared");
+  });
+
   it("still explains the portal-gated secondary action when the inline action is local", () => {
     const reconcileSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,

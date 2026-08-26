@@ -45,6 +45,27 @@ export function canRetryFullFiscalYearZipWithoutPortal(
   );
 }
 
+/** Copy only: the background must still validate the retained run before cleanup. */
+export function getFullFiscalYearCleanupCopy(summary: FiledReturnsFlowSummary | null | undefined) {
+  if (
+    !summary ||
+    !canRetryFullFiscalYearZipWithoutPortal(summary) ||
+    summary.currentPeriod ||
+    hasUnresolvedFiledReturnsRecovery(summary) ||
+    isAmbiguousFullFiscalYearZipHandoff(summary) ||
+    !summary.flowStep.safeSignals.includes("full-fiscal-year-local-cleanup-retry")
+  ) {
+    return null;
+  }
+  return {
+    label: "Retry local cleanup",
+    summary: "Retry cleanup for this saved run.",
+    contextLabel: "Saved run · local cleanup",
+    busyLabel: "Checking saved run",
+    busySummary: "Pack is checking the saved run before retrying local cleanup.",
+  };
+}
+
 /**
  * Whether the target-review retry action — reconciling the exact browser download, or
  * retrying local cleanup — can complete without a portal tab. Both paths return locally in

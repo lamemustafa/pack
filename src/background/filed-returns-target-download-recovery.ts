@@ -20,13 +20,18 @@ import {
   type SinglePeriodBundleLedger,
 } from "./filed-returns-single-period-bundle-ledger";
 import {
-  clearFiledReturnsTargetReview,
+  clearFiledReturnsTargetReviewWithReason,
   persistFiledReturnsTargetReview,
   readFiledReturnsTargetReview,
   responseForFiledReturnsTargetReview,
   type FiledReturnsTargetReviewDeps,
   updateFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
+import {
+  filedReturnsTargetReviewClearFailureSignal,
+  type FiledReturnsTargetReviewClearFailureStage,
+} from "../connectors/gst/filed-returns-target-review-clear";
+import { singlePeriodCleanupCheckpointFailureSignal } from "../connectors/gst/single-period-cleanup-checkpoint";
 import { copyFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import { hasPositiveFiledReturnsDownloadEvidence } from "./filed-returns-download-diagnostic-state";
 import { persistCanonicalSinglePeriodCompletion } from "./filed-returns-session-summary";
@@ -210,18 +215,19 @@ async function completeReconciledDownload(
     );
   }
 
-  let targetReviewCleared = false;
-  try {
-    targetReviewCleared = await clearFiledReturnsTargetReview(
-      checkpointReview.scope,
+  const targetReviewClear = await clearFiledReturnsTargetReviewWithReason(
+    checkpointReview.scope,
+    deps,
+    checkpointReview.revision ?? 1,
+  );
+  if (!targetReviewClear.ok) {
+    return persistCompletedTargetReviewCleanupFailure(
+      checkpointReview,
+      flowStep,
+      cleanup,
+      targetReviewClear.error.stage,
       deps,
-      checkpointReview.revision ?? 1,
     );
-  } catch {
-    targetReviewCleared = false;
-  }
-  if (!targetReviewCleared) {
-    return persistCompletedTargetReviewCleanupFailure(checkpointReview, flowStep, cleanup, deps);
   }
   return { ok: true, flowStep: durableSummary.flowStep, flowSummary: durableSummary };
 }
@@ -532,6 +538,7 @@ async function persistCompletedTargetReviewCleanupFailure(
   review: FiledReturnsTargetReview,
   verifiedCompletionStep: PortalFlowStepResult,
   cleanup: Awaited<ReturnType<typeof cleanupSinglePeriodBundleStaging>> | null,
+  clearFailureStage: FiledReturnsTargetReviewClearFailureStage,
   deps: FiledReturnsTargetReviewDeps,
 ): Promise<PackMessageResponse> {
   const step: PortalFlowStepResult = {
@@ -542,8 +549,12 @@ async function persistCompletedTargetReviewCleanupFailure(
       new Set([
         ...verifiedCompletionStep.safeSignals,
         "filed-returns-target-review-clear-failed",
+        filedReturnsTargetReviewClearFailureSignal(clearFailureStage),
         ...(review.downloadAttempt?.kind === "single-period-zip"
-          ? ["single-period-cleanup-checkpoint-failed"]
+          ? [
+              "single-period-cleanup-checkpoint-failed",
+              singlePeriodCleanupCheckpointFailureSignal("target-review-clear-failed"),
+            ]
           : []),
         ...(cleanup?.safeSignals ?? []),
       ]),

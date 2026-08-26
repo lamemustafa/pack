@@ -856,6 +856,92 @@ describe("Pack GST tab selection", () => {
     });
   });
 
+  it("stores neutral access denial without making the error tab actionable", async () => {
+    await import("../../src/entrypoints/background");
+
+    const listener = browserMocks.getMessageListener();
+    expect(listener).not.toBeNull();
+    const context = {
+      connectorId: "gst",
+      origin: "https://services.gst.gov.in",
+      pageKind: "gst-access-denied",
+      supported: false,
+    };
+    const response = await new Promise((resolve) => {
+      listener?.(
+        { type: "PACK_CONTENT_CONTEXT", payload: context },
+        {
+          id: "pack-test-extension",
+          tab: {
+            id: 52,
+            url: "https://services.gst.gov.in/services/error/accessdenied",
+          } as Browser.tabs.Tab,
+        },
+        resolve,
+      );
+    });
+
+    expect(response).toEqual({ ok: true, context });
+    expect(browserMocks.storage.session.set).toHaveBeenCalledOnce();
+    expect(browserMocks.storage.session.set).toHaveBeenCalledWith({
+      "pack:last-context": context,
+    });
+    expect(browserMocks.storage.session.set).not.toHaveBeenCalledWith({
+      "pack:last-gst-tab-id": 52,
+    });
+    expect(browserMocks.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
+  it("refreshes neutral context from the active non-actionable access-denied tab", async () => {
+    const liveContext = {
+      connectorId: "gst",
+      origin: "https://services.gst.gov.in",
+      pageKind: "gst-access-denied",
+      supported: false,
+    };
+    browserMocks.tabs.query.mockResolvedValueOnce([
+      {
+        active: true,
+        id: 53,
+        url: "https://services.gst.gov.in/services/error/accessdenied",
+      },
+    ]);
+    const sendMessage = browserMocks.tabs.sendMessage as unknown as {
+      mockImplementation: (
+        implementation: (tabId: number, message: { type: string }) => Promise<unknown>,
+      ) => void;
+    };
+    sendMessage.mockImplementation(async (_tabId, message) => {
+      if (message.type === "PACK_CONTENT_PING_V2") {
+        return {
+          ok: true,
+          context: null,
+          contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+        };
+      }
+      if (unwrapContentRequest(message).type === "PACK_CONTENT_REFRESH_CONTEXT_V3") {
+        return {
+          ok: true,
+          context: liveContext,
+          contentScriptVersion: PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
+        };
+      }
+      return { ok: false, error: "Unexpected message." };
+    });
+
+    await import("../../src/entrypoints/background");
+    const listener = browserMocks.getMessageListener();
+    const response = await new Promise((resolve) => {
+      listener?.({ type: "PACK_GET_CONTEXT" }, { id: "pack-test-extension" }, resolve);
+    });
+
+    expect(response).toEqual({ ok: true, context: liveContext });
+    expect(browserMocks.storage.session.set).toHaveBeenCalledWith({
+      "pack:last-context": liveContext,
+    });
+    expect(browserMocks.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
   it("rejects a content context whose claimed origin does not match the sender tab", async () => {
     await import("../../src/entrypoints/background");
 
@@ -1034,6 +1120,23 @@ describe("Pack GST tab selection", () => {
       );
     });
     expect(boundResponse).toEqual({ ok: false, error: "Unsupported Pack message." });
+    expect(browserMocks.storage.session.remove).toHaveBeenCalledWith("pack:last-context");
+
+    vi.clearAllMocks();
+    const errorPageResponse = await new Promise((resolve) => {
+      listener?.(
+        malformedMessage,
+        {
+          id: "pack-test-extension",
+          tab: {
+            id: 52,
+            url: "https://services.gst.gov.in/services/error/accessdenied",
+          } as Browser.tabs.Tab,
+        },
+        resolve,
+      );
+    });
+    expect(errorPageResponse).toEqual({ ok: false, error: "Unsupported Pack message." });
     expect(browserMocks.storage.session.remove).toHaveBeenCalledWith("pack:last-context");
   });
 

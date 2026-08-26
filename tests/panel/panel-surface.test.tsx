@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import {
   PACK_EXTENSION_PERMISSIONS,
   PACK_GST_HOST_PERMISSIONS,
@@ -11,37 +12,29 @@ vi.mock("wxt/browser", () => ({
   browser: { tabs: { create: vi.fn() } },
 }));
 
-import { panelPresets, type PanelPreset } from "../../src/entrypoints/panel/panel-presets";
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
-import {
-  FIRST_PANEL_PRESET,
-  completedPanelSummary,
-  panelController,
-} from "./panel-controller.test-helpers";
+import { completedPanelSummary, panelController } from "./panel-controller.test-helpers";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 const read = (relative: string) => readFileSync(path.join(root, relative), "utf-8");
 
-const firstPreset = FIRST_PANEL_PRESET;
 const controller = panelController;
 const completedSummary = completedPanelSummary;
 
-/** The rendered markup of the one preset button carrying `label`. */
-function presetButton(markup: string, label: string): string {
-  const escaped = label
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#x27;");
-  const button = markup
-    .split("<button")
-    .map((fragment) => `<button${fragment}`)
-    .find((fragment) => fragment.includes(escaped));
-  expect(button, `no preset button rendered for ${label}`).toBeDefined();
-  if (button === undefined) throw new Error(`no preset button rendered for ${label}`);
-  const [opening = ""] = button.split("</button>");
-  return opening;
+function activePanelSummary(status: "running" | "partial" | "blocked"): FiledReturnsFlowSummary {
+  return {
+    ...completedSummary(),
+    status,
+    completedPeriods: status === "partial" ? ["April"] : [],
+    currentPeriod: "May",
+    flowStep: {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      state: status === "running" ? "user-action-required" : "blocked",
+      safeSignals: status === "running" ? ["filed-returns-run-active"] : [],
+      safeMessage: `Synthetic ${status} state.`,
+    },
+  };
 }
 
 describe("panel surface", () => {
@@ -118,6 +111,34 @@ describe("panel surface", () => {
     expect(markup).toContain("2 periods saved as one ZIP.");
   });
 
+  it.each([
+    [
+      "downloading",
+      activePanelSummary("running"),
+      "Packing your files",
+      "Keep the GST Portal tab open while Pack prepares the files.",
+    ],
+    [
+      "partial",
+      activePanelSummary("partial"),
+      "Download partly complete",
+      "Synthetic partial state.",
+    ],
+    [
+      "blocked",
+      activePanelSummary("blocked"),
+      "May needs a quick check",
+      "Synthetic blocked state.",
+    ],
+  ])("renders the %s run family with an honest visible status", (_name, summary, title, body) => {
+    const markup = renderToStaticMarkup(
+      <PanelSurface pack={controller({ scopedFlowSummary: summary })} />,
+    );
+
+    expect(markup).toContain(title);
+    expect(markup).toContain(body);
+  });
+
   it("renders the partly-available outcome of a run that finished with a missing artifact", () => {
     const summary = completedSummary({
       flowStep: {
@@ -162,63 +183,28 @@ describe("panel surface", () => {
     expect(markup).toContain("Open GST Portal");
   });
 
-  it("disables a preset the start-action guard blocks, and says which guard", () => {
-    // The saved run is for this preset's own scope, but the panel's current scope is not
-    // matched to it, so nothing scope-matched can report the guard. Only the raw last run
-    // can, which is why the guard reads that and not the scoped summary.
-    const interrupted = completedSummary({
-      status: "blocked",
-      flowStep: {
-        connectorId: "gst",
-        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-        state: "user-action-required",
-        safeSignals: ["filed-returns-run-needs-review"],
-        safeMessage: "A previous run was interrupted. Reset it before starting another.",
-      },
-    });
-    const markup = renderToStaticMarkup(
-      <PanelSurface pack={controller({ lastRunSummary: interrupted })} />,
-    );
+  it("renders a checking state while portal context is still empty", () => {
+    const markup = renderToStaticMarkup(<PanelSurface pack={controller({ context: null })} />);
 
-    const button = presetButton(markup, firstPreset.label);
-    expect(button).toContain("disabled");
-    expect(button).toContain("Reset interrupted run");
+    expect(markup).toContain("Checking this tab");
+    expect(markup).toContain("Checking for a supported GST Portal page in this browser.");
+    expect(markup).not.toContain("Which return?");
   });
 
-  it("keeps an unblocked preset enabled and priced in periods", () => {
+  it("renders the guided single-scope chooser from the catalogue", () => {
     const markup = renderToStaticMarkup(<PanelSurface pack={controller()} />);
-    const button = presetButton(markup, firstPreset.label);
+    expect(markup).toContain("Step 1 of 4");
+    expect(markup).toContain("One active scope");
+    expect(markup).toContain("2025-26");
+    expect(markup).toContain("Full fiscal year");
+    expect(markup).toContain("Catalogue &amp; limits");
 
-    expect(button).not.toContain("disabled");
-    expect(button).toContain("periods · one ZIP");
-  });
-
-  it("prices a preset by the format its own scope requests, not every format on offer", () => {
-    // The GSTR-1 capability summary reads "Summary PDF + E-invoice details (Excel)". Every
-    // preset scope is PDF-only, so a control that borrowed the summary promised a workbook
-    // the click never asks the portal for.
-    const gstr1 = panelPresets().find((preset) => preset.scope.returnType === "GSTR-1");
-    expect(gstr1, "no GSTR-1 preset was produced").toBeDefined();
-    const markup = renderToStaticMarkup(<PanelSurface pack={controller()} />);
-    const button = presetButton(markup, (gstr1 as PanelPreset).label);
-
-    expect(button).toContain("Summary (PDF)");
-    expect(button).not.toContain("Excel");
-  });
-
-  it("names the financial year the click will actually download, in April", () => {
-    // 10 April 2026 IST: FY 2026-27 has begun and has no completed return period, so
-    // `normaliseFiledReturnsScope` answers with 2025-26. A label written from the requested
-    // year would still say "this year".
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-04-10T09:00:00+05:30"));
-
-    const markup = renderToStaticMarkup(<PanelSurface pack={controller()} />);
-    const button = presetButton(markup, "2025-26 GSTR-3B");
-
-    expect(button).toContain("2025-26 GSTR-3B");
-    expect(markup).not.toContain("2026-27");
-    expect(markup).not.toContain("This year");
+    const returnSelect = markup.match(/<select[^>]*>(.*?)<\/select>/)?.[1] ?? "";
+    expect(returnSelect).toContain("GSTR-3B");
+    expect(returnSelect).toContain("GSTR-1");
+    expect(returnSelect).toContain("GSTR-2B");
+    expect(returnSelect).not.toContain("GSTR-9");
+    expect(returnSelect).not.toContain("Ledgers");
   });
 
   it("does not claim a signed-in portal on the authentication landing page", () => {
@@ -238,29 +224,46 @@ describe("panel surface", () => {
     expect(markup).toContain("Sign in on GST Portal");
   });
 
-  it("disables every preset while a different scope's saved run needs recovery", () => {
-    // The saved run is the GSTR-3B full-year scope. `startFiledReturnsDownloadFlow` returns
-    // the outstanding review before it reads the requested scope, so the GSTR-1 preset could
-    // not start either — it just looked as though it could.
-    const interrupted = completedSummary({
-      status: "blocked",
+  it("renders access denial without guessing whether sign-in or authorization caused it", () => {
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={controller({
+          context: {
+            connectorId: "gst",
+            pageKind: "gst-access-denied",
+            supported: false,
+          },
+        })}
+      />,
+    );
+
+    expect(markup).toContain("GST Portal access blocked");
+    expect(markup).toContain("Return to a GST Portal page you can access");
+    expect(markup).toContain(">Open GST Portal</button>");
+    expect(markup).not.toContain("Sign in on GST Portal");
+    expect(markup).not.toContain("signed-in");
+    expect(markup).not.toContain("navigate to filed returns");
+  });
+
+  it("keeps a cancelled-run confirmation visible above the fresh chooser", () => {
+    const cancelledSummary = completedSummary({
+      status: "cancelled",
+      completedPeriods: [],
+      currentPeriod: "May",
       flowStep: {
         connectorId: "gst",
         scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-        state: "user-action-required",
-        safeSignals: ["filed-returns-run-needs-review"],
-        safeMessage: "A previous run was interrupted. Reset it before starting another.",
+        state: "blocked",
+        safeSignals: ["filed-returns-target-cancelled"],
+        safeMessage: "The saved target was cancelled.",
       },
     });
-    const otherScope = panelPresets().find((preset) => preset.scope.returnType !== "GSTR-3B");
-    expect(otherScope, "no preset for a return type other than GSTR-3B").toBeDefined();
-
     const markup = renderToStaticMarkup(
-      <PanelSurface pack={controller({ lastRunSummary: interrupted })} />,
+      <PanelSurface pack={controller({ scopedFlowSummary: cancelledSummary })} />,
     );
-    const button = presetButton(markup, (otherScope as PanelPreset).label);
 
-    expect(button).toContain("disabled");
-    expect(button).toContain("Reset interrupted run");
+    expect(markup).toContain("Ready for a new download");
+    expect(markup).toContain("The previous recovery state was cleared");
+    expect(markup).toContain("Which return?");
   });
 });

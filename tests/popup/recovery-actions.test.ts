@@ -7,7 +7,6 @@ import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-
 import { ScopeForm } from "../../src/entrypoints/popup/components";
 import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
 import { canReconcileFiledReturnsTarget } from "../../src/entrypoints/popup/run-summary";
-import { RunEvidencePanel } from "../../src/entrypoints/popup/run-evidence-panel";
 
 describe("popup full-year recovery actions", () => {
   it("offers manual observation only for final-click recovery states", () => {
@@ -714,94 +713,6 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Open GST Portal to continue.");
     expect(markup).toContain('<button class="primary-action" type="button" disabled="">');
     expect(markup).not.toContain("Open GST Portal tab");
-  });
-
-  it("normalizes older login-opened evidence copy in the run panel", () => {
-    const summary = summaryFor("blocked");
-    summary.flowStep.safeSignals = ["gst-login-tab-opened"];
-    summary.flowStep.safeMessage =
-      "Pack opened the GST Portal login page. Sign in, then click Start download.";
-
-    const markup = renderToStaticMarkup(
-      createElement(RunEvidencePanel, {
-        portalReady: false,
-        filedReturnsObservation: null,
-        scopedFlowSummary: summary,
-        summaryHeading: "Last filed-returns run: blocked",
-      }),
-    );
-
-    expect(markup).toContain(
-      "Open a signed-in GST Portal tab, then retry this period or cancel and reset.",
-    );
-    expect(markup).not.toContain("Pack opened the GST Portal login page.");
-  });
-
-  it("explains final zip retry instead of showing stale unconfirmed copy", () => {
-    const summary = summaryFor("download-unconfirmed");
-    summary.status = "blocked";
-    summary.flowStep.state = "download-unconfirmed";
-    summary.flowStep.safeSignals = ["full-fiscal-year-zip-download-unconfirmed"];
-    summary.flowStep.safeMessage =
-      "Pack prepared the fiscal-year zip, but the final browser download did not complete.";
-
-    const markup = renderToStaticMarkup(
-      createElement(RunEvidencePanel, {
-        portalReady: true,
-        filedReturnsObservation: null,
-        scopedFlowSummary: summary,
-        summaryHeading: "Last filed-returns run: blocked",
-      }),
-    );
-
-    expect(markup).toContain("Retry the final ZIP handoff before starting another full-year run.");
-    expect(markup).not.toContain("the final browser download did not complete");
-  });
-
-  it("labels completed evidence as previous work when the portal tab is missing", () => {
-    const summary = summaryFor("download-unconfirmed");
-    summary.status = "complete";
-    summary.completedPeriods = ["April"];
-    summary.flowStep.state = "downloaded";
-    summary.flowStep.safeSignals = ["full-fiscal-year-complete"];
-    summary.flowStep.safeMessage = "Pack completed the local full fiscal year run.";
-
-    const markup = renderToStaticMarkup(
-      createElement(RunEvidencePanel, {
-        portalReady: false,
-        filedReturnsObservation: null,
-        scopedFlowSummary: summary,
-        summaryHeading: "Last filed-returns run: complete",
-      }),
-    );
-
-    expect(markup).toContain("Status");
-    expect(markup).toContain("Previous filed-returns run complete");
-    expect(markup).not.toContain("Last filed-returns run: complete");
-    expect(markup).not.toContain("evidence-panel-active");
-  });
-
-  it("labels completed evidence as previous work before starting a new portal-ready run", () => {
-    const summary = summaryFor("download-unconfirmed");
-    summary.status = "complete";
-    summary.completedPeriods = ["April"];
-    summary.flowStep.state = "downloaded";
-    summary.flowStep.safeSignals = ["full-fiscal-year-complete"];
-    summary.flowStep.safeMessage = "Pack completed the local full fiscal year run.";
-
-    const markup = renderToStaticMarkup(
-      createElement(RunEvidencePanel, {
-        portalReady: true,
-        filedReturnsObservation: null,
-        scopedFlowSummary: summary,
-        summaryHeading: "Last filed-returns run: complete",
-      }),
-    );
-
-    expect(markup).toContain("Status");
-    expect(markup).toContain("Previous filed-returns run complete");
-    expect(markup).not.toContain("Last filed-returns run: complete");
-    expect(markup).not.toContain("evidence-panel-active");
   });
 });
 

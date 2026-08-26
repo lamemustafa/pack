@@ -30,9 +30,9 @@ import {
 } from "./filed-returns-full-fiscal-year-ledger";
 import {
   hasRetainedFullFiscalYearStaging,
-  readLedgerForScope,
   readMalformedLedgerState,
   readPlanLedgersStorageState,
+  readRetainedPlanLedgers,
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
@@ -197,22 +197,20 @@ export async function startFiledReturnsDownloadFlow(
           },
         };
       }
-      const existingLedger = await readLedgerForScope(deps, scope);
-      const replaceableCompletedLedger =
-        existingLedger?.status === "complete" &&
-        canCompleteFullFiscalYearLedger(existingLedger) &&
-        !hasRetainedFullFiscalYearStaging(existingLedger);
-      if (
-        existingLedger &&
-        !sameFiledReturnsScope(existingLedger.scope, scope) &&
-        !replaceableCompletedLedger
-      ) {
-        const existingLedgerResponse = responseForExistingLedger(
-          existingLedger,
-          deps.now?.() ?? new Date(),
-          { blockRetainedStaging: true },
-        );
-        if (existingLedgerResponse) return existingLedgerResponse;
+      for (const existingLedger of await readRetainedPlanLedgers(deps)) {
+        const replaceableCompletedLedger =
+          existingLedger.status === "complete" &&
+          canCompleteFullFiscalYearLedger(existingLedger) &&
+          !existingLedger.zipDownloadAttempt &&
+          !hasRetainedFullFiscalYearStaging(existingLedger);
+        if (!sameFiledReturnsScope(existingLedger.scope, scope) && !replaceableCompletedLedger) {
+          const existingLedgerResponse = responseForExistingLedger(
+            existingLedger,
+            deps.now?.() ?? new Date(),
+            { blockRetainedStaging: true },
+          );
+          if (existingLedgerResponse) return existingLedgerResponse;
+        }
       }
     }
     if (isFullFiscalYearScope(scope)) {

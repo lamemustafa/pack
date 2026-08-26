@@ -1,8 +1,10 @@
-export function isRequestedFilenameOverridden(
+export type RequestedFilenameOutcome = "matched" | "overridden" | "unavailable";
+
+export function classifyRequestedFilenameOutcome(
   requestedFilename: string,
   observedFilename: string | undefined,
-): boolean {
-  if (!observedFilename) return false;
+): RequestedFilenameOutcome {
+  if (!observedFilename) return "unavailable";
   const requestedPath = normaliseFilenamePath(requestedFilename);
   const observedPath = normaliseFilenamePath(observedFilename);
   const expectedBasename = filenameBasename(requestedPath);
@@ -14,7 +16,9 @@ export function isRequestedFilenameOverridden(
     requestedDirectoryEnd < 0 ||
     observedDirectory === requestedDirectory ||
     observedDirectory.endsWith(`/${requestedDirectory}`);
-  return !relativeDirectoryMatches || !matchesRequestedBasename(expectedBasename, observedBasename);
+  return relativeDirectoryMatches && matchesRequestedBasename(expectedBasename, observedBasename)
+    ? "matched"
+    : "overridden";
 }
 
 function matchesRequestedBasename(requested: string, observed: string): boolean {

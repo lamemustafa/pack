@@ -284,6 +284,19 @@ function exactTotalSpreadsheetValue(
   inputs: readonly string[],
   hasUnrepresentableMonth: boolean,
 ): number | string {
+  // A single canonical source decimal longer than an Excel cell cannot produce
+  // a storable exact-total explanation, and this row is already required to
+  // stay non-numeric. Avoid converting tens of thousands of discarded digits
+  // through BigInt only to select the same bounded fallback below. Multiple
+  // inputs still take the exact sum because cancellation can shorten a total.
+  if (
+    hasUnrepresentableMonth &&
+    inputs.length === 1 &&
+    inputs[0]!.length > MAX_EXCEL_STRING_LENGTH &&
+    /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(inputs[0]!)
+  ) {
+    return "Exact total unavailable at spreadsheet numeric precision";
+  }
   const exactText = exactDecimalSum(inputs);
   if (exactText === null) return "Exact total unavailable: invalid source decimal";
   const value = exactSpreadsheetNumber(exactText);

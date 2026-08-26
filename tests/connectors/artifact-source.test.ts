@@ -27,6 +27,25 @@ describe("acquireFiledReturnArtifact", () => {
     );
   });
 
+  it("fails closed before dispatching a future catalogue return without an acquisition path", async () => {
+    const { documentRef, fetch } = page(validJson());
+    const click = vi.fn();
+    documentRef.body.addEventListener("click", click);
+    const futureRequest = {
+      ...REQUEST,
+      returnType: "GSTR-FUTURE",
+    } as unknown as ArtifactRequest;
+
+    await expect(acquireFiledReturnArtifact(documentRef, futureRequest)).resolves.toEqual({
+      ok: false,
+      reason: "unsupported-target",
+      requestId: REQUEST.requestId,
+      safeSignals: [],
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+  });
+
   it("prepares JSON without fetching or returning portal bytes to the content script", async () => {
     const raw =
       '{  "status":1, "data" : {"r3b":{"ret_period":"042024"}}, "padding":"' +

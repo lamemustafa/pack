@@ -8,6 +8,7 @@ describe("popup presentation state", () => {
   it.each([
     ["unsupported", unsupportedContext(), null, null],
     ["session-expired", authContext(), null, null],
+    ["access-denied", accessDeniedContext(), null, null],
     ["ready", supportedContext(), null, null],
     ["downloading", supportedContext(), runningSummary(), "start-filed-returns-flow"],
     ["partial", supportedContext(), partialSummary(), null],
@@ -79,7 +80,7 @@ describe("popup presentation state", () => {
     expect(getPopupPresentationState(unsupportedContext(), retainedZipSummary, null)).toMatchObject(
       {
         kind: "blocked",
-        title: "Finish the saved fiscal-year ZIP",
+        title: "Saved run needs attention",
       },
     );
   });
@@ -131,6 +132,14 @@ function authContext(): PortalContext {
     connectorId: "gst",
     pageKind: "gst-auth-landing",
     requiredAction: { type: "LOGIN", message: "Sign in", canResume: true },
+    supported: false,
+  };
+}
+
+function accessDeniedContext(): PortalContext {
+  return {
+    connectorId: "gst",
+    pageKind: "gst-access-denied",
     supported: false,
   };
 }

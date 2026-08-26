@@ -19,7 +19,7 @@ pnpm exec prettier --check .
 node scripts/verify-extension-package.mjs .output/chrome-mv3
 pnpm exec wxt zip && node scripts/verify-extension-zip.mjs   # release only
 pnpm workflow:preflight                                      # before non-trivial edits
-pnpm review:gate -- --strict-head-review                     # PR readiness
+pnpm review:gate -- --strict-head-review                     # PR readiness; requires Codex's current-head review
 ```
 
 Run the first seven before calling any change complete. Quote the last three lines of the Vitest

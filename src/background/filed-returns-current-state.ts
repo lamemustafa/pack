@@ -1,5 +1,4 @@
 import { fullFiscalYearTargetEvidence } from "./filed-returns-full-fiscal-year-summary";
-import { browser } from "wxt/browser";
 import type {
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
@@ -9,10 +8,15 @@ import { readActiveFiledReturnsRunSummary } from "./filed-returns-active-run";
 import { readCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 import { summariseFullFiscalYearLedger } from "./filed-returns-full-fiscal-year";
 import {
+  hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedger,
   sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
-import { readLedgerForScope } from "./filed-returns-full-fiscal-year-run-state";
+import {
+  hasRetainedFullFiscalYearStaging,
+  readLedgerForScope,
+  readRetainedPlanLedgers,
+} from "./filed-returns-full-fiscal-year-run-state";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
 
 export interface FiledReturnsCurrentStateDeps {
@@ -20,6 +24,7 @@ export interface FiledReturnsCurrentStateDeps {
     activeRun: string;
     completion: string;
     fullFiscalYearLedger: string;
+    fullFiscalYearLedgerIndex?: string;
     targetReview: string;
   };
   now?: () => Date;
@@ -60,10 +65,26 @@ export async function readCurrentFiledReturnsFlowSummary(
   });
   if (targetReviewSummary) return targetReviewSummary;
 
-  const ledger =
+  const scopedLedger =
     completionSummary && isFullFiscalYearScope(completionSummary.scope)
       ? await readLedgerForScope(deps, completionSummary.scope)
-      : await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+      : null;
+  const retainedLedgers = await readRetainedPlanLedgers(deps);
+  const candidates = scopedLedger
+    ? [scopedLedger, ...retainedLedgers.filter((item) => item.ledgerId !== scopedLedger.ledgerId)]
+    : retainedLedgers;
+  // A session summary is not an index of retained runs. A different selection or
+  // a lost session must not hide a plan that still owns unresolved recovery.
+  const ledger =
+    candidates.find(hasInconsistentFullFiscalYearCompletion) ??
+    candidates.find(
+      (item) => isActionableFullFiscalYearLedger(item) || hasRetainedFullFiscalYearStaging(item),
+    ) ??
+    scopedLedger ??
+    candidates.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0];
+  if (isFullFiscalYearLedger(ledger) && hasInconsistentFullFiscalYearCompletion(ledger)) {
+    return summariseFullFiscalYearLedger(ledger, deps.now?.());
+  }
   if (isFullFiscalYearLedger(ledger) && isRetainedZipRetrySummary(completionSummary, ledger)) {
     // Evidence is display-only and never persisted, so this path -- which
     // returns the durable summary rather than re-summarising -- has to rebuild
@@ -74,7 +95,10 @@ export async function readCurrentFiledReturnsFlowSummary(
       targetEvidence: fullFiscalYearTargetEvidence(ledger, completionSummary.flowStep),
     };
   }
-  if (isFullFiscalYearLedger(ledger) && isActionableFullFiscalYearLedger(ledger)) {
+  if (
+    isFullFiscalYearLedger(ledger) &&
+    (isActionableFullFiscalYearLedger(ledger) || hasRetainedFullFiscalYearStaging(ledger))
+  ) {
     return summariseFullFiscalYearLedger(ledger, deps.now?.());
   }
 
@@ -120,9 +144,15 @@ function isRetainedZipRetrySummary(
 function isActionableFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   if (ledger.status === "complete") return false;
   return ledger.targets.some((target) =>
-    ["pending", "running", "download-unconfirmed", "blocked", "failed", "cancelled"].includes(
-      target.status,
-    ),
+    [
+      "pending",
+      "running",
+      "download-unconfirmed",
+      "blocked",
+      "failed",
+      "cancelled",
+      "manually-observed",
+    ].includes(target.status),
   );
 }
 
@@ -144,9 +174,4 @@ function flowSummaryTimestampMs(summary: FiledReturnsFlowSummary): number {
   const timestamp = summary.completedAt ?? summary.updatedAt;
   if (!timestamp) return Number.NaN;
   return Date.parse(timestamp);
-}
-
-async function readLocalValue<T>(key: string): Promise<T | null> {
-  const values = await browser.storage.local.get(key);
-  return (values[key] as T | undefined) ?? null;
 }

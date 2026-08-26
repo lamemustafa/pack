@@ -2,6 +2,14 @@ import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "./offscreen-blob-url";
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
+import {
+  ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS,
+  artifactAcquisitionCheckpointClearFailureSignal,
+} from "./artifact-acquisition-checkpoint-clear";
+import {
+  FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS,
+  filedReturnsArtifactProgressFailureSignal,
+} from "./filed-returns-artifact-progress-recovery";
 import { isSafeDashboardSelectedValue } from "./dashboard-selected-signal-values";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "./filed-returns-observer-signals";
 import {
@@ -13,6 +21,10 @@ import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
 } from "./single-period-cleanup-checkpoint";
+import {
+  FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES,
+  filedReturnsTargetReviewClearFailureSignal,
+} from "./filed-returns-target-review-clear";
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
 
@@ -55,7 +67,25 @@ export const FILED_RETURN_ROUTE_MISMATCH_SIGNALS = {
   "GSTR-3B": "gstr3b-route-mismatched-return",
 } as const satisfies Record<FiledReturnsReturnType, string>;
 
+export const FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS = [
+  "download-filename-unavailable",
+  "zip-download-filename-item-unavailable",
+  "zip-download-filename-search-unavailable",
+  "zip-download-filename-unavailable",
+] as const;
+export const FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS = [
+  "download-filename-overridden",
+  "zip-download-filename-overridden",
+] as const;
+
 const EXACT_DURABLE_SIGNALS = new Set([
+  "artifact-acquisition-malformed-reference-unavailable",
+  "filed-returns-active-run-malformed",
+  "filed-returns-target-review-malformed",
+  "filed-returns-target-review-not-found",
+  "gstr2b-full-fiscal-year-acquisition-not-wired",
+  "no-filed-returns-candidate",
+  "result-row-gstr1",
   ...FILED_RETURNS_OBSERVATION_SIGNALS,
   "browser-download-completed",
   "browser-download-correlation-rejected",
@@ -84,6 +114,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "detail-ready-step-limit-reached",
   "download-excel-gstr1-visible",
   "download-excel-gstr2b-visible",
+  ...FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS,
+  ...FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS,
   "download-filed-gstr1-visible",
   "download-filed-gstr2b-visible",
   "download-filed-gstr3b-visible",
@@ -189,13 +221,15 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-returns-page-settling",
   "filed-returns-route",
   "filed-returns-run-acknowledged",
-  "zip-download-filename-overridden",
   "filed-returns-run-active",
   "filed-returns-run-needs-review",
   "filed-returns-target-cancelled",
   "filed-returns-target-manually-observed",
   "filed-returns-target-bound-candidate-window-interrupted",
   "filed-returns-target-review-clear-failed",
+  ...FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES.map(
+    filedReturnsTargetReviewClearFailureSignal,
+  ),
   "filed-returns-target-review-required",
   "financial-year-selected",
   "flow-step-limit-reached",
@@ -218,6 +252,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "full-fiscal-year-opfs-staged",
   "full-fiscal-year-pinned-gst-tab-unavailable",
   "full-fiscal-year-plan-narrower-than-eligible",
+  "full-fiscal-year-target-plan-invalid",
   "full-fiscal-year-restaging-required",
   "full-fiscal-year-resume-confirmation-required",
   "full-fiscal-year-retained-staging-scope-conflict",
@@ -540,6 +575,10 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   // recovery path exists to handle.
   "artifact-acquisition-checkpoint-malformed",
   "artifact-acquisition-checkpoint-clear-failed",
+  ...ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS.map(
+    artifactAcquisitionCheckpointClearFailureSignal,
+  ),
+  ...FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS.map(filedReturnsArtifactProgressFailureSignal),
   // Marks a completion rebuilt from the review's own durable marker after the
   // browser session ended between persisting the summary and removing the
   // review. The exact download IDs lived in the cleared session checkpoints, so
@@ -689,6 +728,8 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     "full-fiscal-year-zip-phase:download-intent-persisted",
     "full-fiscal-year-zip-phase:download-observing",
     "full-fiscal-year-zip-phase:download-started",
+    "full-fiscal-year-zip-phase:downloaded-cleanup-pending",
+    "full-fiscal-year-zip-phase:no-artifacts-cleanup-pending",
     "full-fiscal-year-zip-phase:export-retry-pending",
     "full-fiscal-year-zip-phase:legacy-cleanup-pending",
     "pack-error:CONTENT_SCRIPT_UNAVAILABLE",

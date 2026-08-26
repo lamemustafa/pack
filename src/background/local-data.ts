@@ -7,6 +7,7 @@ import {
   runFiledReturnsOperationCriticalSection,
 } from "./filed-returns-active-run";
 import {
+  hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedger,
   recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-ledger";
@@ -22,6 +23,7 @@ import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-targ
 import {
   clearLedgerPlans,
   readPlanLedgersStorageState,
+  readRetainedPlanLedgers,
 } from "./filed-returns-full-fiscal-year-run-state";
 
 export interface PackLocalDataDeps {
@@ -148,13 +150,10 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
   ) {
     return true;
   }
-  const planLedgers = await readPlanLedgersStorageState(deps);
-  return (
-    planLedgers.state === "valid" &&
-    planLedgers.ledgers.some(
-      (planLedger) =>
-        hasUnresolvedZipState(planLedger) || isUnresolvedFullFiscalYearLedger(planLedger),
-    )
+  const retainedLedgers = await readRetainedPlanLedgers(deps);
+  return retainedLedgers.some(
+    (planLedger) =>
+      hasUnresolvedZipState(planLedger) || isUnresolvedFullFiscalYearLedger(planLedger),
   );
 }
 
@@ -164,9 +163,17 @@ function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolea
 }
 
 function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  if (hasInconsistentFullFiscalYearCompletion(ledger)) return true;
   if (ledger.status === "complete" || ledger.status === "cancelled") return false;
   return ledger.targets.some((target) =>
-    ["pending", "running", "download-unconfirmed", "blocked", "failed"].includes(target.status),
+    [
+      "pending",
+      "running",
+      "download-unconfirmed",
+      "blocked",
+      "failed",
+      "manually-observed",
+    ].includes(target.status),
   );
 }
 

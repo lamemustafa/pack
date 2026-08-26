@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 
 const browserMocks = vi.hoisted(() => ({
   session: {} as Record<string, unknown>,
@@ -20,6 +21,7 @@ const browserMocks = vi.hoisted(() => ({
   windows: { update: vi.fn(async () => undefined) },
 }));
 const flowMocks = vi.hoisted(() => ({
+  triggerSelectedArtifacts: vi.fn(),
   preflightSelectedArtifactsRecovery: vi.fn(async () => null),
   reconcileArtifactAcquisitionCheckpoint: vi.fn(async () => ({ state: "none" })),
 }));
@@ -30,7 +32,7 @@ vi.mock("../../src/background/artifact-acquisition-state", () => ({
 }));
 vi.mock("../../src/background/filed-returns-selected-artifacts", () => ({
   preflightSelectedArtifactsRecovery: flowMocks.preflightSelectedArtifactsRecovery,
-  triggerSelectedArtifacts: vi.fn(),
+  triggerSelectedArtifacts: flowMocks.triggerSelectedArtifacts,
 }));
 
 import { startSinglePeriodFiledReturnsDownloadFlow } from "../../src/background/filed-returns-single-period-flow";
@@ -75,6 +77,37 @@ describe("single-period tab identity blocks", () => {
     });
     assertImmediateAndPersistedMessagesMatch(response);
   });
+
+  it("blocks before target work when portal-owned dashboard navigation is refused", async () => {
+    const openReturnsDashboardWithPortalAnchor = vi.fn(async () => "not-found" as const);
+    const sendMessageToTabWithInjection = vi.fn();
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(scope, {
+      ...deps(),
+      openReturnsDashboardWithPortalAnchor,
+      sendMessageToTabWithInjection,
+      timings: { returnsDashboardNavigationTimeoutMs: 0 },
+    });
+
+    expect(openReturnsDashboardWithPortalAnchor).toHaveBeenCalledExactlyOnceWith(17);
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["wrong-origin-open-returns-dashboard", "returns-dashboard-anchor-not-found"],
+        userAction: { type: "NAVIGATE_TO_SUPPORTED_PAGE" },
+      },
+    });
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+    expect(flowMocks.triggerSelectedArtifacts).not.toHaveBeenCalled();
+    expect(browserMocks.tabs.update).toHaveBeenCalledExactlyOnceWith(17, { active: true });
+    expect(browserMocks.session.completion).toMatchObject({
+      status: "blocked",
+      completedPeriods: [],
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["wrong-origin-open-returns-dashboard", "returns-dashboard-anchor-not-found"],
+      },
+    });
+  });
 });
 
 function deps() {
@@ -89,7 +122,7 @@ function deps() {
       fullFiscalYearLedger: "ledger",
       observation: "observation",
     },
-  } as never;
+  } as FiledReturnsFlowRunnerDeps;
 }
 
 function assertImmediateAndPersistedMessagesMatch(

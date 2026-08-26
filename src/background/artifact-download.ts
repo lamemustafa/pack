@@ -6,7 +6,7 @@ import {
 } from "./offscreen-blob-url";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 import type { PackDownloadFilenameReservation } from "./pack-download-filename-reassertion";
-import { isRequestedFilenameOverridden } from "./download-filename-comparison";
+import { classifyRequestedFilenameOutcome } from "./download-filename-comparison";
 import { classifyDownloadDanger } from "./download-observer-results";
 import { extensionBlobUrlFingerprint } from "./filed-returns-durable-download-reconciler";
 
@@ -210,8 +210,19 @@ function completedArtifact(
   requestedFilename: string,
   observedFilename: string | undefined,
 ): Extract<ArtifactDownloadResult, { ok: true }> {
-  if (!isRequestedFilenameOverridden(requestedFilename, observedFilename)) {
+  const filenameOutcome = classifyRequestedFilenameOutcome(requestedFilename, observedFilename);
+  if (filenameOutcome === "matched") {
     return { ok: true, downloadId, bytesReceived, safeSignals: [] };
+  }
+  if (filenameOutcome === "unavailable") {
+    return {
+      ok: true,
+      downloadId,
+      bytesReceived,
+      safeMessage:
+        "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+      safeSignals: ["download-filename-unavailable"],
+    };
   }
   return {
     ok: true,

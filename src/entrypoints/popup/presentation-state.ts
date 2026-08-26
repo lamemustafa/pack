@@ -1,9 +1,13 @@
 import type { PortalContext } from "../../core/contracts";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
-import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
+import {
+  canRetryFullFiscalYearZipWithoutPortal,
+  getFullFiscalYearCleanupCopy,
+} from "./flow-summary";
 
 export type PopupPresentationKind =
   | "loading"
+  | "access-denied"
   | "unsupported"
   | "session-expired"
   | "ready"
@@ -29,6 +33,18 @@ export function getPopupPresentationState(
   busy: string | null,
   actionError: string | null = null,
 ): PopupPresentationState {
+  const cleanupCopy =
+    busy === "start-filed-returns-flow" ? getFullFiscalYearCleanupCopy(summary) : null;
+  if (cleanupCopy) {
+    return {
+      badge: "Checking",
+      body: cleanupCopy.busySummary,
+      icon: "…",
+      kind: "downloading",
+      title: cleanupCopy.busyLabel,
+      tone: "neutral",
+    };
+  }
   if (busy === "start-filed-returns-flow" || summary?.status === "running") {
     return {
       badge: "Downloading",
@@ -57,7 +73,7 @@ export function getPopupPresentationState(
       body: summary?.flowStep.safeMessage ?? "Retry the retained fiscal-year ZIP.",
       icon: "!",
       kind: "blocked",
-      title: "Finish the saved fiscal-year ZIP",
+      title: "Saved run needs attention",
       tone: "warning",
     };
   }
@@ -185,7 +201,17 @@ export function getPopupPresentationState(
 }
 
 function getUnsupportedContextState(context: PortalContext): PopupPresentationState {
-  const authRequired = context.pageKind === "gst-auth-landing";
+  if (context.pageKind === "gst-access-denied") {
+    return {
+      badge: "Access blocked",
+      body: "The GST Portal did not allow this page. Return to a GST Portal page you can access, then reopen Pack.",
+      icon: "!",
+      kind: "access-denied",
+      title: "GST Portal access blocked",
+      tone: "warning",
+    };
+  }
+  const authRequired = isGstSignInRequired(context);
   return {
     badge: authRequired ? "Sign-in needed" : "Unsupported tab",
     body: authRequired

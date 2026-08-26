@@ -50,6 +50,16 @@ import {
   sameSinglePeriodBundleScope,
   type SinglePeriodBundleLedger,
 } from "./filed-returns-single-period-bundle-ledger";
+import {
+  FiledReturnsTargetReviewClearError,
+  isFiledReturnsTargetReviewClearFailureSignal,
+  type FiledReturnsTargetReviewClearFailureStage,
+  type FiledReturnsTargetReviewClearResult,
+} from "../connectors/gst/filed-returns-target-review-clear";
+import {
+  artifactAcquisitionCheckpointClearFailureSignal,
+  type ArtifactAcquisitionCheckpointClearFailureReason,
+} from "../connectors/gst/artifact-acquisition-checkpoint-clear";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -252,24 +262,82 @@ export async function clearFiledReturnsTargetReview(
   deps: FiledReturnsTargetReviewDeps,
   expectedRevision?: number,
 ): Promise<boolean> {
+  return (
+    await clearFiledReturnsTargetReviewAttempt(
+      scope,
+      deps,
+      expectedRevision,
+      "throw-storage-errors",
+    )
+  ).ok;
+}
+
+/**
+ * The diagnostic form used where the caller can safely persist a reason. It
+ * preserves the boolean export's storage-error behaviour for every existing
+ * caller while preventing this recovery boundary from replacing a specific
+ * failed exit with `false`.
+ */
+export function clearFiledReturnsTargetReviewWithReason(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+  expectedRevision?: number,
+): Promise<FiledReturnsTargetReviewClearResult> {
+  return clearFiledReturnsTargetReviewAttempt(scope, deps, expectedRevision, "name-storage-errors");
+}
+
+async function clearFiledReturnsTargetReviewAttempt(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+  expectedRevision: number | undefined,
+  storageErrorMode: "name-storage-errors" | "throw-storage-errors",
+): Promise<FiledReturnsTargetReviewClearResult> {
   const key = deps.storageKeys.targetReview;
-  if (!key) return false;
+  if (!key) return targetReviewClearFailure("storage-key-missing");
   if (
     expectedRevision !== undefined &&
     (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || expectedRevision > 10_000)
   ) {
-    return false;
+    return targetReviewClearFailure("expected-revision-invalid");
   }
 
   return runTargetReviewMutationCriticalSection(async () => {
-    const state = await readTargetReviewStorageStateByKey(key);
-    if (state.state !== "valid" || !sameFiledReturnsScope(state.review.scope, scope)) return false;
-    if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
-      return false;
+    let state: FiledReturnsTargetReviewStorageState;
+    try {
+      state = await readTargetReviewStorageStateByKey(
+        key,
+        storageErrorMode === "name-storage-errors" ? "tag-write-error" : "throw-storage-error",
+      );
+    } catch (error) {
+      if (storageErrorMode === "throw-storage-errors") throw error;
+      return targetReviewClearFailure(
+        error instanceof TargetReviewStorageWriteError
+          ? "storage-write-failed"
+          : "storage-read-failed",
+      );
     }
-    await browser.storage.local.remove(key);
-    return true;
+    if (state.state === "missing") return targetReviewClearFailure("review-missing");
+    if (state.state === "malformed") return targetReviewClearFailure("review-malformed");
+    if (!sameFiledReturnsScope(state.review.scope, scope)) {
+      return targetReviewClearFailure("scope-mismatch");
+    }
+    if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
+      return targetReviewClearFailure("revision-mismatch");
+    }
+    try {
+      await browser.storage.local.remove(key);
+    } catch (error) {
+      if (storageErrorMode === "throw-storage-errors") throw error;
+      return targetReviewClearFailure("storage-remove-failed");
+    }
+    return { ok: true };
   });
+}
+
+function targetReviewClearFailure(
+  stage: FiledReturnsTargetReviewClearFailureStage,
+): FiledReturnsTargetReviewClearResult {
+  return { error: new FiledReturnsTargetReviewClearError(stage), ok: false };
 }
 
 /**
@@ -440,7 +508,14 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       // service-worker stop can leave the local review behind after checkpoint
       // cleanup; never replace that completed target with a cancellation.
       const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
-      if (cancellation.state === "blocked") return responseForFiledReturnsTargetReview(review);
+      if (cancellation.state === "blocked") {
+        return persistArtifactCheckpointClearFailureReview(
+          key,
+          review,
+          cancellation.reason,
+          deps.now?.() ?? new Date(),
+        );
+      }
       if (cancellation.state === "completed") {
         await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
           review.scope,
@@ -561,21 +636,12 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         discardMissing: true,
       });
       if (cancellation.state === "blocked") {
-        const clearFailureReview: FiledReturnsTargetReview = {
-          ...review,
-          revision: targetReviewRevision(review) + 1,
-          safeSignals: uniqueSafeSignals([
-            ...review.safeSignals,
-            "artifact-acquisition-checkpoint-clear-failed",
-          ]),
-          safeMessage:
-            "Pack could not clear retained artifact recovery state. It will not start another portal action automatically.",
-          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-        };
-        const parsedReview = parseFiledReturnsTargetReview(clearFailureReview);
-        if (!parsedReview) return malformedTargetReviewResponse(scope);
-        await browser.storage.local.set({ [key]: parsedReview });
-        return responseForFiledReturnsTargetReview(parsedReview);
+        return persistArtifactCheckpointClearFailureReview(
+          key,
+          review,
+          cancellation.reason,
+          deps.now?.() ?? new Date(),
+        );
       }
     }
 
@@ -600,6 +666,40 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     await persistResolvedTargetReviewSummary(flowSummary, deps);
     return { ok: true, flowStep, flowSummary };
   });
+}
+
+async function persistArtifactCheckpointClearFailureReview(
+  key: string,
+  review: FiledReturnsTargetReview,
+  reason: ArtifactAcquisitionCheckpointClearFailureReason,
+  now: Date,
+): Promise<PackMessageResponse> {
+  const durableStatus = parseDurableTargetStatus(
+    review.scope,
+    "target-review",
+    uniqueSafeSignals([
+      ...review.safeSignals.filter(
+        (signal) => !signal.startsWith("artifact-acquisition-checkpoint-clear-failed:"),
+      ),
+      "artifact-acquisition-checkpoint-clear-failed",
+      artifactAcquisitionCheckpointClearFailureSignal(reason),
+    ]),
+  );
+  // The original review is the durable recovery guard. If diagnostic enrichment
+  // would exceed or otherwise violate the closed signal contract, retain that
+  // guard unchanged instead of replacing it with a generic rejection record.
+  if (!durableStatus) return responseForFiledReturnsTargetReview(review);
+  const clearFailureReview: FiledReturnsTargetReview = {
+    ...review,
+    revision: targetReviewRevision(review) + 1,
+    safeSignals: durableStatus.safeSignals,
+    safeMessage: durableStatus.safeMessage,
+    updatedAt: now.toISOString(),
+  };
+  const parsedReview = parseFiledReturnsTargetReview(clearFailureReview);
+  if (!parsedReview) return responseForFiledReturnsTargetReview(review);
+  await browser.storage.local.set({ [key]: parsedReview });
+  return responseForFiledReturnsTargetReview(parsedReview);
 }
 
 export async function retryCompletedSinglePeriodZipCleanup(
@@ -1103,7 +1203,7 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
         ...review.safeSignals.filter(
           (signal) =>
             isSinglePeriodCleanupFailureSignal(signal) ||
-            signal === "filed-returns-target-review-clear-failed",
+            isFiledReturnsTargetReviewClearFailureSignal(signal),
         ),
       ]),
       safeMessage: transientStagingCleared
@@ -1324,6 +1424,7 @@ function uniqueSafeSignals(safeSignals: readonly string[]): string[] {
 
 async function readTargetReviewStorageStateByKey(
   key: string,
+  writeErrorMode: "tag-write-error" | "throw-storage-error" = "throw-storage-error",
 ): Promise<FiledReturnsTargetReviewStorageState> {
   const values = await browser.storage.local.get(key);
   const stored = values[key];
@@ -1333,8 +1434,20 @@ async function readTargetReviewStorageStateByKey(
   if (review) return { review, state: "valid" };
   // Do not retain unvalidated recovery metadata. The sentinel preserves the
   // fail-closed state until the user explicitly clears local Pack data.
-  await browser.storage.local.set({ [key]: MALFORMED_TARGET_REVIEW_SENTINEL });
+  try {
+    await browser.storage.local.set({ [key]: MALFORMED_TARGET_REVIEW_SENTINEL });
+  } catch (error) {
+    if (writeErrorMode === "tag-write-error") throw new TargetReviewStorageWriteError();
+    throw error;
+  }
   return { state: "malformed" };
+}
+
+class TargetReviewStorageWriteError extends Error {
+  constructor() {
+    super("Target review storage write failed.");
+    this.name = "TargetReviewStorageWriteError";
+  }
 }
 
 async function readCanonicalTargetReviewStorageStateByKey(

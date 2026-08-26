@@ -13,6 +13,7 @@ import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   canCompleteFullFiscalYearLedger,
   hasActionRequiredFullFiscalYearTarget,
+  hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedger,
   isFullFiscalYearLedgerStale,
   recoverableFullFiscalYearLedgerId,
@@ -60,6 +61,10 @@ export function responseForExistingLedger(
   now: Date,
   options: { allowExistingLedgerResume?: boolean; blockRetainedStaging?: boolean } = {},
 ): PackMessageResponse | null {
+  if (hasInconsistentFullFiscalYearCompletion(ledger)) {
+    const summary = summariseFullFiscalYearLedger(ledger, now);
+    return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  }
   if (options.blockRetainedStaging && hasRetainedFullFiscalYearStaging(ledger)) {
     const step = retainedStagingScopeConflictStep(ledger);
     return { ok: true, flowStep: step, flowSummary: toFullFiscalYearSummary(ledger, step) };
@@ -113,8 +118,7 @@ export function responseForExistingLedger(
         target.safeSignals.includes("full-fiscal-year-target-retry-approved"),
     );
   if (hasActionRequiredFullFiscalYearTarget(ledger) && !hasApprovedPendingRetry) {
-    const displayLedger = coerceInconsistentCompleteLedger(ledger, now);
-    const summary = summariseFullFiscalYearLedger(displayLedger, now);
+    const summary = summariseFullFiscalYearLedger(ledger, now);
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
   }
 
@@ -143,12 +147,10 @@ function retainedStagingScopeConflictStep(
       "full-fiscal-year-opfs-retained",
       ...(finalZipRetry ? ["full-fiscal-year-final-zip-retry"] : []),
     ],
-    safeMessage: finalZipRetry
-      ? `Pack retained the prepared FY ${ledger.scope.financialYear} files. Retry that final ZIP before starting another full-year selection.`
-      : `Pack retained staged files for FY ${ledger.scope.financialYear}. Resolve or discard that saved run before starting another full-year selection.`,
+    safeMessage: `Pack retained the FY ${ledger.scope.financialYear} run. Return to that saved selection and resolve it before starting another full-year selection.`,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
-      message: "Return to the saved full-year selection and finish or discard it first.",
+      message: "Return to the saved full-year selection and resolve it first.",
       canResume: true,
     },
   };
@@ -208,7 +210,12 @@ export async function readLedgerForScope(
   if (!indexKey) return readLedger(deps.storageKeys.fullFiscalYearLedger);
   const index = await readPlanLedgerIndex(indexKey);
   const ledgerId = index?.ledgerIdsByScope[planScopeKey(scope)];
-  if (ledgerId) return readLedger(filedReturnsPlanStorageKey(ledgerId));
+  if (ledgerId) {
+    const ledger = await readLedger(filedReturnsPlanStorageKey(ledgerId));
+    return ledger?.ledgerId === ledgerId && sameFiledReturnsScope(ledger.scope, scope)
+      ? ledger
+      : null;
+  }
 
   const legacy = await readLedger(deps.storageKeys.fullFiscalYearLedger);
   return legacy && sameFiledReturnsScope(legacy.scope, scope) ? legacy : null;
@@ -219,7 +226,7 @@ export async function readLedgerById(
   ledgerId: string,
 ): Promise<FiledReturnsFullFiscalYearLedger | null> {
   const ledger = await readLedger(filedReturnsPlanStorageKey(ledgerId));
-  if (ledger) return ledger;
+  if (ledger?.ledgerId === ledgerId) return ledger;
   const legacy = await readLedger(deps.storageKeys.fullFiscalYearLedger);
   return legacy?.ledgerId === ledgerId ? legacy : null;
 }
@@ -250,9 +257,12 @@ export async function readLedgersWithPendingZipDownload(
   if (!index) return [];
   return (
     await Promise.all(
-      Object.values(index.ledgerIdsByScope).map((ledgerId) =>
-        readLedger(filedReturnsPlanStorageKey(ledgerId)),
-      ),
+      Object.entries(index.ledgerIdsByScope).map(async ([scopeKey, ledgerId]) => {
+        const ledger = await readLedger(filedReturnsPlanStorageKey(ledgerId));
+        return ledger?.ledgerId === ledgerId && planScopeKey(ledger.scope) === scopeKey
+          ? ledger
+          : null;
+      }),
     )
   ).filter((ledger): ledger is FiledReturnsFullFiscalYearLedger =>
     pendingZipLedgerMatches(ledger, downloadId),
@@ -281,12 +291,35 @@ export async function readPlanLedgersStorageState(
   ) {
     return { state: "malformed" };
   }
-  const ledgers = indexedPlanKeys.map((key) =>
-    isFullFiscalYearLedger(values[key]) ? values[key] : null,
-  );
+  const ledgers = Object.entries(index.ledgerIdsByScope).map(([scopeKey, ledgerId]) => {
+    const ledger = values[filedReturnsPlanStorageKey(ledgerId)];
+    return isFullFiscalYearLedger(ledger) &&
+      ledger.ledgerId === ledgerId &&
+      planScopeKey(ledger.scope) === scopeKey
+      ? ledger
+      : null;
+  });
   return ledgers.every((ledger): ledger is FiledReturnsFullFiscalYearLedger => ledger !== null)
     ? { state: "valid", ledgers }
     : { state: "malformed" };
+}
+
+/** Recovery must remain visible even when a separate index entry is malformed. */
+export async function readRetainedPlanLedgers(
+  deps: LedgerStorageDeps,
+): Promise<FiledReturnsFullFiscalYearLedger[]> {
+  if (!deps.storageKeys.fullFiscalYearLedgerIndex) {
+    const legacy = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+    return legacy ? [legacy] : [];
+  }
+  const values = await browser.storage.local.get(null);
+  return Object.entries(values)
+    .filter(
+      ([key]) =>
+        key === deps.storageKeys.fullFiscalYearLedger || key.startsWith(PLAN_STORAGE_KEY_PREFIX),
+    )
+    .map(([, value]) => value)
+    .filter(isFullFiscalYearLedger);
 }
 
 export async function readLedger(key: string): Promise<FiledReturnsFullFiscalYearLedger | null> {
@@ -323,19 +356,30 @@ export async function persistLedger(
     await browser.storage.local.set({ [deps.storageKeys.fullFiscalYearLedger]: ledger });
     return;
   }
+  if ((await readPlanLedgersStorageState(deps)).state === "malformed") {
+    throw new Error("Pack could not verify the saved plan index before saving this run.");
+  }
   const index = (await readPlanLedgerIndex(indexKey)) ?? {
     schemaVersion: PLAN_INDEX_SCHEMA_VERSION,
     ledgerIdsByScope: {},
   };
-  index.ledgerIdsByScope[planScopeKey(ledger.scope)] = ledger.ledgerId;
+  const scopeKey = planScopeKey(ledger.scope);
+  const previousId = index.ledgerIdsByScope[scopeKey];
+  if (previousId && previousId !== ledger.ledgerId) {
+    const previous = await readLedger(filedReturnsPlanStorageKey(previousId));
+    if (!previous || !canReplaceLedger(previous)) {
+      throw new Error("Pack must resolve the saved plan before replacing this selection.");
+    }
+  }
+  index.ledgerIdsByScope[scopeKey] = ledger.ledgerId;
   await browser.storage.local.set({
     [filedReturnsPlanStorageKey(ledger.ledgerId)]: ledger,
     [indexKey]: index,
   });
-  const legacy = await readLedger(deps.storageKeys.fullFiscalYearLedger);
-  if (legacy?.ledgerId === ledger.ledgerId) {
-    await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
+  if (previousId && previousId !== ledger.ledgerId) {
+    await browser.storage.local.remove(filedReturnsPlanStorageKey(previousId));
   }
+  await removeMatchingLegacyLedger(deps, ledger);
 }
 
 export async function removeLedger(
@@ -344,17 +388,32 @@ export async function removeLedger(
 ): Promise<void> {
   const indexKey = deps.storageKeys.fullFiscalYearLedgerIndex;
   if (!indexKey) {
-    await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
+    await removeMatchingLegacyLedger(deps, ledger);
     return;
   }
   const index = await readPlanLedgerIndex(indexKey);
   if (!index) {
     await browser.storage.local.remove(filedReturnsPlanStorageKey(ledger.ledgerId));
+    await removeMatchingLegacyLedger(deps, ledger);
     return;
   }
-  delete index.ledgerIdsByScope[planScopeKey(ledger.scope)];
+  const scopeKey = planScopeKey(ledger.scope);
+  if (index.ledgerIdsByScope[scopeKey] === ledger.ledgerId) {
+    delete index.ledgerIdsByScope[scopeKey];
+  }
   await browser.storage.local.remove(filedReturnsPlanStorageKey(ledger.ledgerId));
   await browser.storage.local.set({ [indexKey]: index });
+  await removeMatchingLegacyLedger(deps, ledger);
+}
+
+async function removeMatchingLegacyLedger(
+  deps: LedgerStorageDeps,
+  ledger: Pick<FiledReturnsFullFiscalYearLedger, "ledgerId" | "scope">,
+): Promise<void> {
+  const legacy = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  if (legacy?.ledgerId === ledger.ledgerId && sameFiledReturnsScope(legacy.scope, ledger.scope)) {
+    await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
+  }
 }
 
 export async function clearLedgerPlans(deps: LedgerStorageDeps): Promise<void> {
@@ -405,25 +464,18 @@ export function fullFiscalYearErrorStep(
     safeMessage: `Pack stopped while checking ${target.period}. The GST tab could not be reached safely.`,
   };
 }
-
-function coerceInconsistentCompleteLedger(
-  ledger: FiledReturnsFullFiscalYearLedger,
-  now: Date,
-): FiledReturnsFullFiscalYearLedger {
-  if (ledger.status !== "complete") return ledger;
-  return { ...ledger, status: "blocked", updatedAt: now.toISOString() };
-}
-
 async function readPlanLedgerIndex(key: string): Promise<PlanLedgerIndex | null> {
   const values = await browser.storage.local.get(key);
   return parsePlanLedgerIndex(values[key]);
 }
 
 function parsePlanLedgerIndex(value: unknown): PlanLedgerIndex | null {
-  if (!value || typeof value !== "object") return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const index = value as Partial<PlanLedgerIndex>;
   if (index.schemaVersion !== PLAN_INDEX_SCHEMA_VERSION || !index.ledgerIdsByScope) return null;
-  if (typeof index.ledgerIdsByScope !== "object") return null;
+  if (typeof index.ledgerIdsByScope !== "object" || Array.isArray(index.ledgerIdsByScope)) {
+    return null;
+  }
   if (
     !Object.entries(index.ledgerIdsByScope).every(
       ([scopeKey, ledgerId]) =>
@@ -436,7 +488,10 @@ function parsePlanLedgerIndex(value: unknown): PlanLedgerIndex | null {
   ) {
     return null;
   }
-  return { schemaVersion: PLAN_INDEX_SCHEMA_VERSION, ledgerIdsByScope: index.ledgerIdsByScope };
+  return {
+    schemaVersion: PLAN_INDEX_SCHEMA_VERSION,
+    ledgerIdsByScope: { ...index.ledgerIdsByScope },
+  };
 }
 
 function planScopeKey(scope: FiledReturnsDownloadScope): string {
@@ -445,4 +500,13 @@ function planScopeKey(scope: FiledReturnsDownloadScope): string {
     scope.financialYear,
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
   ].join(":");
+}
+
+function canReplaceLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  if (hasInconsistentFullFiscalYearCompletion(ledger)) return false;
+  if (ledger.zipDownloadAttempt || hasRetainedFullFiscalYearStaging(ledger)) return false;
+  return (
+    ledger.status === "cancelled" ||
+    (ledger.status === "complete" && canCompleteFullFiscalYearLedger(ledger))
+  );
 }

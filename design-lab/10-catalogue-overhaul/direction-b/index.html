@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Pack catalogue direction B — guided scope</title>
+    <style>
+      :root {
+        --pack-surface: #ffffff;
+        --pack-surface-raised: #fbfcfe;
+        --pack-surface-muted: #f7f9fb;
+        --pack-canvas: #f5f7fa;
+        --pack-surface-inset: #eef3f8;
+        --pack-surface-accent-soft: #e9f1f8;
+        --pack-ink-primary: #172033;
+        --pack-ink-secondary: #334155;
+        --pack-ink-tertiary: #43566b;
+        --pack-ink-muted: #526477;
+        --pack-ink-link: #244d7c;
+        --pack-ink-inverse: #ffffff;
+        --pack-border-subtle: #d8e1ec;
+        --pack-border-default: #c8d3de;
+        --pack-border-strong: #9fb0c1;
+        --pack-border-accent: #245b91;
+        --pack-action: #173a63;
+        --pack-action-hover: #0f2a49;
+        --pack-success-fg: #115d38;
+        --pack-success-bg: #e8f8ef;
+        --pack-success-border: #9cc7b1;
+        --pack-warning-fg: #75420b;
+        --pack-warning-bg: #fff7e8;
+        --pack-warning-border: #ddc58b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--pack-canvas);
+        color-scheme: light;
+      }
+
+      body {
+        min-width: 320px;
+        margin: 0;
+        background: var(--pack-canvas);
+        color: var(--pack-ink-primary);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      button,
+      select {
+        font: inherit;
+      }
+
+      button,
+      select,
+      summary {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button:focus-visible,
+      select:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--pack-border-accent);
+        outline-offset: 2px;
+      }
+
+      .panel {
+        width: 320px;
+        max-width: 100vw;
+        min-height: 100vh;
+        margin: 0 auto;
+        overflow-x: clip;
+        border-right: 1px solid var(--pack-border-default);
+        border-left: 1px solid var(--pack-border-default);
+        background: var(--pack-surface);
+      }
+
+      .product-bar,
+      .step-band,
+      .scope-band,
+      .advanced,
+      .metrics-band,
+      .legal {
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+
+      .product-bar {
+        display: flex;
+        min-height: 44px;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: var(--pack-surface-raised);
+      }
+
+      .product-name {
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .prototype-tag {
+        margin-left: auto;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 2px;
+        padding: 2px 5px;
+        color: var(--pack-ink-muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .step-band {
+        padding: 16px;
+      }
+
+      .step-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+        color: var(--pack-ink-muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .progress-track {
+        display: grid;
+        flex: 1;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+      }
+
+      .progress-segment {
+        height: 3px;
+        border-radius: 2px;
+        background: var(--pack-surface-inset);
+      }
+
+      .progress-segment[data-state="current"],
+      .progress-segment[data-state="complete"] {
+        background: var(--pack-action);
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--pack-ink-primary);
+        font-size: 20px;
+        font-weight: 600;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+
+      .step-hint {
+        min-height: 45px;
+        margin: 6px 0 14px;
+        color: var(--pack-ink-tertiary);
+        font-size: 13px;
+        text-wrap: pretty;
+      }
+
+      .field-label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--pack-ink-secondary);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      select {
+        width: 100%;
+        min-height: 44px;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 6px;
+        padding: 0 36px 0 10px;
+        background: var(--pack-surface);
+        color: var(--pack-ink-primary);
+        font-size: 14px;
+      }
+
+      select:hover {
+        border-color: var(--pack-border-strong);
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      button {
+        min-height: 44px;
+        cursor: pointer;
+        border: 1px solid var(--pack-action);
+        border-radius: 6px;
+        padding: 0 14px;
+        background: var(--pack-action);
+        color: var(--pack-ink-inverse);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      button:hover {
+        border-color: var(--pack-action-hover);
+        background: var(--pack-action-hover);
+      }
+
+      button.secondary {
+        border-color: var(--pack-border-default);
+        background: var(--pack-surface);
+        color: var(--pack-ink-secondary);
+      }
+
+      button.secondary:hover {
+        border-color: var(--pack-border-strong);
+        background: var(--pack-surface-muted);
+      }
+
+      button[hidden] {
+        display: none;
+      }
+
+      .primary-action {
+        flex: 1;
+      }
+
+      .feedback {
+        margin: 12px 0 0;
+        border: 1px solid var(--pack-success-border);
+        border-radius: 4px;
+        padding: 8px 10px;
+        background: var(--pack-success-bg);
+        color: var(--pack-success-fg);
+        font-size: 12px;
+      }
+
+      .feedback[hidden] {
+        display: none;
+      }
+
+      .scope-band {
+        padding: 12px 16px;
+        background: var(--pack-surface-muted);
+      }
+
+      .band-title {
+        margin: 0 0 6px;
+        color: var(--pack-ink-secondary);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .scope-list {
+        margin: 0;
+      }
+
+      .scope-row {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr);
+        gap: 8px;
+        min-height: 30px;
+        align-items: center;
+        border-top: 1px solid var(--pack-border-subtle);
+      }
+
+      .scope-row dt {
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+      }
+
+      .scope-row dd {
+        min-width: 0;
+        margin: 0;
+        overflow-wrap: anywhere;
+        color: var(--pack-ink-primary);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .cost-line {
+        margin: 8px 0 0;
+        color: var(--pack-ink-tertiary);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .advanced {
+        background: var(--pack-surface);
+      }
+
+      .advanced summary {
+        display: flex;
+        min-height: 44px;
+        cursor: pointer;
+        list-style: none;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        color: var(--pack-ink-link);
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .advanced summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .advanced summary::before {
+        content: "+";
+        width: 16px;
+        color: var(--pack-ink-link);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 16px;
+        line-height: 1;
+      }
+
+      .advanced[open] summary::before {
+        content: "−";
+      }
+
+      .catalogue-count {
+        margin-left: auto;
+        color: var(--pack-ink-muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .catalogue-intro {
+        margin: 0;
+        border-top: 1px solid var(--pack-border-subtle);
+        padding: 10px 16px;
+        background: var(--pack-surface-muted);
+        color: var(--pack-ink-tertiary);
+        font-size: 12px;
+      }
+
+      .catalogue-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .catalogue-row {
+        padding: 9px 16px;
+        border-top: 1px solid var(--pack-border-subtle);
+      }
+
+      .catalogue-heading {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .catalogue-name {
+        color: var(--pack-ink-primary);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .status-label {
+        margin-left: auto;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 2px;
+        padding: 1px 4px;
+        background: var(--pack-surface-muted);
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .catalogue-row[data-support="unsupported"] .status-label {
+        border-color: var(--pack-warning-border);
+        background: var(--pack-warning-bg);
+        color: var(--pack-warning-fg);
+      }
+
+      .catalogue-meta {
+        margin: 3px 0 0;
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+
+      .metrics-band {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        background: var(--pack-surface-inset);
+      }
+
+      .metric {
+        min-width: 0;
+        margin: 0;
+        padding: 8px 12px;
+      }
+
+      .metric:nth-child(odd) {
+        border-right: 1px solid var(--pack-border-subtle);
+      }
+
+      .metric:nth-child(-n + 2) {
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+
+      .metric dt {
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+      }
+
+      .metric dd {
+        margin: 1px 0 0;
+        color: var(--pack-ink-primary);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .legal {
+        margin: 0;
+        padding: 10px 16px 12px;
+        background: var(--pack-surface-raised);
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+        text-wrap: pretty;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        select,
+        button,
+        .progress-segment {
+          transition:
+            background-color 120ms ease-out,
+            border-color 120ms ease-out,
+            color 120ms ease-out;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel" id="panel" data-design-width="320" aria-labelledby="step-title">
+      <header class="product-bar">
+        <span class="product-name">Pack</span>
+        <span class="prototype-tag">SYNTHETIC · 320px</span>
+      </header>
+
+      <section class="step-band" aria-labelledby="step-title">
+        <div class="step-meta">
+          <span id="step-counter">Step 1 of 4</span>
+          <div class="progress-track" id="progress-track" aria-hidden="true"></div>
+        </div>
+        <h1 id="step-title">Which return?</h1>
+        <p class="step-hint" id="step-hint">Choose one return for this run.</p>
+
+        <form id="guided-form">
+          <label class="field-label" id="step-label" for="step-select">Return</label>
+          <select id="step-select" aria-describedby="step-hint"></select>
+          <div class="actions">
+            <button class="secondary" id="back-button" type="button" hidden>Back</button>
+            <button class="primary-action" id="next-button" type="submit">Continue</button>
+          </div>
+          <p class="feedback" id="feedback" role="status" hidden></p>
+        </form>
+      </section>
+
+      <section class="scope-band" aria-labelledby="scope-heading">
+        <h2 class="band-title" id="scope-heading">One active scope</h2>
+        <dl class="scope-list" id="scope-list"></dl>
+        <p class="cost-line" id="cost-line">1 run · 1 target · 1 artifact selection</p>
+      </section>
+
+      <details class="advanced" id="catalogue-door">
+        <summary>
+          Catalogue &amp; limits
+          <span class="catalogue-count" id="catalogue-count">9 rows</span>
+        </summary>
+        <p class="catalogue-intro">
+          Unsupported returns are reference rows only. They are never selectable.
+        </p>
+        <ol class="catalogue-list" id="catalogue-list"></ol>
+      </details>
+
+      <dl class="metrics-band" aria-label="Prototype measurements">
+        <div class="metric">
+          <dt>Default controls</dt>
+          <dd id="metric-controls">3 now · 4 max</dd>
+        </div>
+        <div class="metric">
+          <dt>Active selection</dt>
+          <dd id="metric-selection">1 scope</dd>
+        </div>
+        <div class="metric">
+          <dt>Common case</dt>
+          <dd>4 clicks</dd>
+        </div>
+        <div class="metric">
+          <dt>Overflow</dt>
+          <dd id="metric-overflow">0px</dd>
+        </div>
+      </dl>
+
+      <p class="legal">
+        Pack is not affiliated with, endorsed by or operated by GSTN, CBIC or the Government of
+        India.
+      </p>
+    </main>
+
+    <script>
+      const RETURN_CATALOGUE = Object.freeze([
+        {
+          id: "GSTR-3B",
+          label: "GSTR-3B",
+          periodicity: "monthly",
+          support: "supported",
+          artifacts: [
+            { id: "PDF", label: "Filed return (PDF)" },
+            { id: "JSON", label: "Portal data (JSON)" },
+          ],
+        },
+        {
+          id: "GSTR-1",
+          label: "GSTR-1",
+          periodicity: "monthly",
+          support: "supported",
+          artifacts: [
+            { id: "PDF", label: "Summary (PDF)" },
+            { id: "EXCEL", label: "E-invoice details (Excel)" },
+            { id: "PDF_AND_EXCEL", label: "All formats" },
+          ],
+        },
+        {
+          id: "GSTR-2B",
+          label: "GSTR-2B",
+          periodicity: "monthly",
+          support: "supported",
+          artifacts: [
+            { id: "PDF", label: "Summary (PDF)" },
+            { id: "EXCEL", label: "Details (Excel)" },
+            { id: "JSON", label: "Portal data (JSON)" },
+            { id: "PDF_AND_EXCEL", label: "All formats" },
+          ],
+        },
+        {
+          id: "GSTR-9",
+          label: "GSTR-9",
+          periodicity: "annual",
+          support: "unsupported",
+          artifacts: [],
+        },
+        {
+          id: "GSTR-9C",
+          label: "GSTR-9C",
+          periodicity: "annual",
+          support: "unsupported",
+          artifacts: [],
+        },
+        {
+          id: "GSTR-4",
+          label: "GSTR-4",
+          periodicity: "quarterly",
+          support: "unsupported",
+          artifacts: [],
+        },
+        {
+          id: "GSTR-4A",
+          label: "GSTR-4A",
+          periodicity: "quarterly",
+          support: "unsupported",
+          artifacts: [],
+        },
+        {
+          id: "IFF",
+          label: "IFF",
+          periodicity: "monthly",
+          support: "unsupported",
+          artifacts: [],
+        },
+        {
+          id: "LEDGERS",
+          label: "Ledgers",
+          periodicity: "none",
+          support: "unsupported",
+          artifacts: [],
+        },
+      ]);
+
+      const FINANCIAL_YEARS = Object.freeze([
+        { id: "2025-26", label: "2025–26" },
+        { id: "2024-25", label: "2024–25" },
+      ]);
+
+      const PERIODICITY = Object.freeze({
+        monthly: { label: "Monthly", periodLabel: "Filed period" },
+        quarterly: { label: "Quarterly", periodLabel: "Quarter" },
+        annual: { label: "Annual", periodLabel: "Financial year" },
+        none: { label: "No period", periodLabel: "Not period-based" },
+      });
+
+      const MONTHS = Object.freeze([
+        ["04", "April"],
+        ["05", "May"],
+        ["06", "June"],
+        ["07", "July"],
+        ["08", "August"],
+        ["09", "September"],
+        ["10", "October"],
+        ["11", "November"],
+        ["12", "December"],
+        ["01", "January"],
+        ["02", "February"],
+        ["03", "March"],
+      ]);
+
+      const periodsFor = Object.freeze({
+        monthly: (financialYear) =>
+          MONTHS.map(([month, name], index) => ({
+            id: `${financialYear}-${month}`,
+            label: `${name} ${index < 9 ? financialYear.slice(0, 4) : financialYear.slice(0, 2) + financialYear.slice(5)}`,
+          })),
+        quarterly: (financialYear) =>
+          [1, 2, 3, 4].map((quarter) => ({
+            id: `${financialYear}-Q${quarter}`,
+            label: `Q${quarter} · ${financialYear}`,
+          })),
+        annual: (financialYear) => [{ id: financialYear, label: financialYear }],
+        none: () => [{ id: "none", label: "No period" }],
+      });
+
+      const supportedReturns = RETURN_CATALOGUE.filter((row) => row.support === "supported");
+      const initialReturn = supportedReturns[0];
+      const model = {
+        returnType: initialReturn.id,
+        financialYear: FINANCIAL_YEARS[0].id,
+        period: periodsFor[initialReturn.periodicity](FINANCIAL_YEARS[0].id)[0].id,
+        artifact: initialReturn.artifacts[0].id,
+      };
+
+      const selectedReturn = () =>
+        RETURN_CATALOGUE.find((row) => row.id === model.returnType) ?? supportedReturns[0];
+      const currentPeriods = () => periodsFor[selectedReturn().periodicity](model.financialYear);
+      const selectedPeriod = () =>
+        currentPeriods().find((period) => period.id === model.period) ?? currentPeriods()[0];
+      const selectedArtifact = () =>
+        selectedReturn().artifacts.find((artifact) => artifact.id === model.artifact) ??
+        selectedReturn().artifacts[0];
+
+      const STEPS = Object.freeze([
+        {
+          key: "returnType",
+          title: "Which return?",
+          hint: "Choose one return for this run.",
+          label: "Return",
+          options: () => supportedReturns.map(({ id, label }) => ({ id, label })),
+        },
+        {
+          key: "financialYear",
+          title: "Which financial year?",
+          hint: "Choose one financial year. Pack does not combine years in one run.",
+          label: "Financial year",
+          options: () => FINANCIAL_YEARS,
+        },
+        {
+          key: "period",
+          title: "Which filed period?",
+          hint: "Choose one period. The next run carries one period only.",
+          label: "Filed period",
+          options: currentPeriods,
+        },
+        {
+          key: "artifact",
+          title: "Which artifact?",
+          hint: "Choose one available artifact selection for this return.",
+          label: "Artifact",
+          options: () => selectedReturn().artifacts,
+        },
+      ]);
+
+      const panel = document.querySelector("#panel");
+      const form = document.querySelector("#guided-form");
+      const stepCounter = document.querySelector("#step-counter");
+      const progressTrack = document.querySelector("#progress-track");
+      const stepTitle = document.querySelector("#step-title");
+      const stepHint = document.querySelector("#step-hint");
+      const stepLabel = document.querySelector("#step-label");
+      const stepSelect = document.querySelector("#step-select");
+      const backButton = document.querySelector("#back-button");
+      const nextButton = document.querySelector("#next-button");
+      const feedback = document.querySelector("#feedback");
+      const scopeList = document.querySelector("#scope-list");
+      const catalogueList = document.querySelector("#catalogue-list");
+      const catalogueDoor = document.querySelector("#catalogue-door");
+      const metricControls = document.querySelector("#metric-controls");
+      const metricOverflow = document.querySelector("#metric-overflow");
+      let activeStep = 0;
+
+      function labelFor(items, value) {
+        return items.find((item) => item.id === value)?.label ?? value;
+      }
+
+      function reconcileScopeAfterReturnChange() {
+        const row = selectedReturn();
+        const periods = periodsFor[row.periodicity](model.financialYear);
+        model.period = periods[0].id;
+        model.artifact = row.artifacts[0].id;
+      }
+
+      function renderProgress() {
+        progressTrack.replaceChildren(
+          ...STEPS.map((_, index) => {
+            const segment = document.createElement("span");
+            segment.className = "progress-segment";
+            segment.dataset.state =
+              index < activeStep ? "complete" : index === activeStep ? "current" : "next";
+            return segment;
+          }),
+        );
+      }
+
+      function renderStep() {
+        const step = STEPS[activeStep];
+        const options = step.options();
+        stepCounter.textContent = `Step ${activeStep + 1} of ${STEPS.length}`;
+        stepTitle.textContent = step.title;
+        stepHint.textContent = step.hint;
+        stepLabel.textContent = step.label;
+        stepSelect.setAttribute("aria-label", step.label);
+        stepSelect.replaceChildren(
+          ...options.map((option) => {
+            const element = document.createElement("option");
+            element.value = option.id;
+            element.textContent = option.label;
+            return element;
+          }),
+        );
+        stepSelect.value = model[step.key];
+        backButton.hidden = activeStep === 0;
+        nextButton.textContent =
+          activeStep === STEPS.length - 1 ? "Start synthetic run" : "Continue";
+        feedback.hidden = true;
+        renderProgress();
+        renderMetrics();
+      }
+
+      function renderScope() {
+        const values = [
+          ["Return", selectedReturn().label],
+          ["FY", labelFor(FINANCIAL_YEARS, model.financialYear)],
+          ["Period", selectedPeriod().label],
+          ["Artifact", selectedArtifact().label],
+        ];
+        scopeList.replaceChildren(
+          ...values.map(([term, value]) => {
+            const row = document.createElement("div");
+            row.className = "scope-row";
+            const dt = document.createElement("dt");
+            const dd = document.createElement("dd");
+            dt.textContent = term;
+            dd.textContent = value;
+            row.append(dt, dd);
+            return row;
+          }),
+        );
+      }
+
+      function renderCatalogue() {
+        catalogueList.replaceChildren(
+          ...RETURN_CATALOGUE.map((row) => {
+            const item = document.createElement("li");
+            item.className = "catalogue-row";
+            item.dataset.support = row.support;
+
+            const heading = document.createElement("div");
+            heading.className = "catalogue-heading";
+            const name = document.createElement("span");
+            name.className = "catalogue-name";
+            name.textContent = row.label;
+            const status = document.createElement("span");
+            status.className = "status-label";
+            status.textContent = row.support === "supported" ? "Supported" : "Not supported";
+            heading.append(name, status);
+
+            const meta = document.createElement("p");
+            meta.className = "catalogue-meta";
+            const periodicity = PERIODICITY[row.periodicity].label;
+            const artifacts = row.artifacts.length
+              ? row.artifacts.map((artifact) => artifact.label).join(" · ")
+              : "No Pack artifacts";
+            meta.textContent = `${periodicity} · ${artifacts}`;
+            item.append(heading, meta);
+            return item;
+          }),
+        );
+      }
+
+      function renderMetrics() {
+        requestAnimationFrame(() => {
+          const visibleControls = [...panel.querySelectorAll("button, select, summary")].filter(
+            (control) => control.getClientRects().length > 0,
+          );
+          metricControls.textContent = `${visibleControls.length} now · 4 max`;
+          metricOverflow.textContent = `${Math.max(0, panel.scrollWidth - panel.clientWidth)}px`;
+        });
+      }
+
+      stepSelect.addEventListener("change", () => {
+        const step = STEPS[activeStep];
+        model[step.key] = stepSelect.value;
+        if (step.key === "returnType") reconcileScopeAfterReturnChange();
+        if (step.key === "financialYear") model.period = currentPeriods()[0].id;
+        renderScope();
+        feedback.hidden = true;
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (activeStep < STEPS.length - 1) {
+          activeStep += 1;
+          renderStep();
+          stepSelect.focus();
+          return;
+        }
+        feedback.textContent =
+          "Synthetic only: one scoped run is ready. No portal action was taken.";
+        feedback.hidden = false;
+        renderMetrics();
+      });
+
+      backButton.addEventListener("click", () => {
+        activeStep = Math.max(0, activeStep - 1);
+        renderStep();
+        stepSelect.focus();
+      });
+
+      catalogueDoor.addEventListener("toggle", renderMetrics);
+      window.addEventListener("resize", renderMetrics);
+
+      renderCatalogue();
+      renderScope();
+      renderStep();
+    </script>
+  </body>
+</html>

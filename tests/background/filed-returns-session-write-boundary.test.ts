@@ -22,6 +22,11 @@ import {
   GSTR2B_ARTIFACT_DISPATCH_FAILURE_MESSAGES,
   Gstr2bArtifactDispatchFailureReason,
 } from "../../src/background/filed-returns-download-trigger";
+import {
+  FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
+  FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE,
+  FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE,
+} from "../../src/connectors/gst/filed-returns-portal-availability";
 
 const storage = vi.hoisted(() => ({ session: {} as Record<string, unknown> }));
 
@@ -716,6 +721,216 @@ describe("filed-return session write boundary", () => {
     ).resolves.toBeNull();
   });
 
+  it.each([
+    [
+      "download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+  ])(
+    "retains direct-download filename outcome %s through canonical persistence and reopen",
+    async (signal, warning) => {
+      const base = completeSinglePeriodSummary();
+      const summary = completeSinglePeriodSummary({
+        flowStep: {
+          safeSignals: [...base.flowStep.safeSignals, signal],
+        },
+      });
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "complete",
+        flowStep: {
+          state: "downloaded",
+          safeSignals: expect.arrayContaining([signal]),
+          safeMessage: `Pack completed the local filed-return download for March. ${warning}`,
+        },
+      });
+    },
+  );
+
+  const confirmedPartialZipSignals = [
+    "single-period-zip-downloaded",
+    "browser-download-completed",
+    "browser-download-non-empty",
+    "browser-download-id:81",
+  ];
+  describe.each([
+    ["confirmed", confirmedPartialZipSignals, true],
+    ["legacy ZIP signal only", ["single-period-zip-downloaded"], false],
+    ["no ZIP evidence", [], false],
+    ["missing ZIP signal", confirmedPartialZipSignals.slice(1), false],
+    [
+      "missing ID",
+      confirmedPartialZipSignals.filter((signal) => !signal.startsWith("browser-download-id:")),
+      false,
+    ],
+    [
+      "missing completion",
+      confirmedPartialZipSignals.filter((signal) => signal !== "browser-download-completed"),
+      false,
+    ],
+    [
+      "missing non-empty proof",
+      confirmedPartialZipSignals.filter((signal) => signal !== "browser-download-non-empty"),
+      false,
+    ],
+    ["multiple IDs", [...confirmedPartialZipSignals, "browser-download-id:82"], false],
+    [
+      "contradictory evidence",
+      [...confirmedPartialZipSignals, "browser-download-correlation-rejected"],
+      false,
+    ],
+  ] as const)("partial ZIP filename evidence: %s", (_name, evidence, confirmed) => {
+    it.each([
+      [
+        "zip-download-filename-unavailable",
+        "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+        "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+      ],
+      [
+        "zip-download-filename-overridden",
+        "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+        "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+      ],
+    ])(
+      "retains partial ZIP reason and %s after reopen",
+      async (signal, confirmedCopy, neutralCopy) => {
+        const base = partialSelectedArtifactBundleSummary(signal);
+        const summary = {
+          ...base,
+          flowStep: {
+            ...base.flowStep,
+            safeSignals: [
+              ...base.flowStep.safeSignals.filter(
+                (value) => value !== "single-period-zip-downloaded",
+              ),
+              ...evidence,
+            ],
+          },
+        };
+
+        await expect(
+          persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+        ).resolves.not.toBeNull();
+        await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+          status: "partial",
+          completedPeriods: [],
+          flowStep: {
+            state: "partial",
+            safeSignals: summary.flowStep.safeSignals,
+            safeMessage: `Pack prepared a partial ZIP; missing EXCEL (artifact-generation-timeout). ${confirmed ? confirmedCopy : neutralCopy}`,
+            downloadDiagnostics: summary.flowStep.downloadDiagnostics,
+          },
+        });
+      },
+    );
+  });
+
+  describe.each([
+    [
+      "single-period status alone",
+      "March",
+      [],
+      "Pack retained verified artifact progress for March; the selection is not complete.",
+    ],
+    [
+      "full-year status alone",
+      "FULL_FISCAL_YEAR",
+      [],
+      "Pack retained verified artifact progress for the saved fiscal-year run; the selection is not complete.",
+    ],
+    [
+      "full-year scope with foreign single-period evidence",
+      "FULL_FISCAL_YEAR",
+      confirmedPartialZipSignals,
+      "Pack retained verified artifact progress for the saved fiscal-year run; the selection is not complete.",
+    ],
+    [
+      "single-period unresolved portal key with delivery signals",
+      "March",
+      [...confirmedPartialZipSignals, "portal-system-error"],
+      "The GST portal returned a system-error page. Return to an authenticated GST page and retry this period.",
+    ],
+  ] as const)("unresolved partial filename context: %s", (_name, period, signals, baseCopy) => {
+    it.each([
+      [
+        "download-filename-overridden",
+        "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+      ],
+      [
+        "download-filename-unavailable",
+        "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+      ],
+    ])("keeps %s neutral after reopen", async (filenameSignal, neutralCopy) => {
+      const safeSignals = [...signals, filenameSignal];
+      const base = singlePeriodSummary({ safeSignals, state: "partial" });
+      const summary = { ...base, status: "partial", scope: { ...base.scope, period } };
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        scope: summary.scope,
+        status: "partial",
+        completedPeriods: [],
+        flowStep: {
+          state: "partial",
+          safeSignals,
+          safeMessage: `${baseCopy} ${neutralCopy}`,
+        },
+      });
+    });
+  });
+
+  it.each([
+    [
+      "zip-download-filename-item-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-search-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+  ])(
+    "retains completed ZIP reason %s and its warning through canonical persistence and reopen",
+    async (signal, warning) => {
+      const base = completeSelectedArtifactBundleSummary(true);
+      const summary = {
+        ...base,
+        flowStep: {
+          ...base.flowStep,
+          safeSignals: [...base.flowStep.safeSignals, signal],
+        },
+      };
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "complete",
+        flowStep: {
+          state: "downloaded",
+          safeSignals: expect.arrayContaining([signal]),
+          safeMessage: `Pack completed the local filed-return download for May. ${warning}`,
+        },
+      });
+    },
+  );
+
   it("accepts positive not-filed completion only without download diagnostics", async () => {
     await expect(
       persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, completeNotFiledSummary()),
@@ -731,10 +946,50 @@ describe("filed-return session write boundary", () => {
     ).resolves.toBeNull();
   });
 
+  it.each([
+    "download-filename-overridden",
+    "download-filename-unavailable",
+    "zip-download-filename-overridden",
+    "zip-download-filename-unavailable",
+    "zip-download-filename-item-unavailable",
+    "zip-download-filename-search-unavailable",
+  ])("does not let filename signal %s claim a not-filed download", async (signal) => {
+    const base = completeNotFiledSummary();
+    const summary = {
+      ...base,
+      flowStep: {
+        ...base.flowStep,
+        safeSignals: [...base.flowStep.safeSignals, signal],
+      },
+    };
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      completedPeriods: ["March"],
+      flowStep: {
+        state: "candidate-not-found",
+        safeSignals: expect.arrayContaining(["filed-return-positively-not-filed", signal]),
+        safeMessage: "The GST Portal reported no filed return for the selected period.",
+      },
+    });
+  });
+
   it("accepts full-year completion only as a terminal aggregate", async () => {
     await expect(
       persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, completeFullFiscalYearSummary()),
     ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the saved fiscal-year run, but could not confirm a final ZIP download. Check browser Downloads before relying on a file.",
+        safeSignals: ["full-fiscal-year-complete"],
+      },
+    });
 
     for (const summary of [
       completeFullFiscalYearSummary({ currentPeriod: "May" }),
@@ -746,6 +1001,403 @@ describe("filed-return session write boundary", () => {
       ).resolves.toBeNull();
     }
   });
+
+  it("does not let a filename outcome supply missing full-year delivery proof", async () => {
+    const base = completeFullFiscalYearSummary();
+    const summary = completeFullFiscalYearSummary({
+      flowStep: {
+        safeSignals: [...base.flowStep.safeSignals, "zip-download-filename-overridden"],
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the saved fiscal-year run, but could not confirm a final ZIP download. Check browser Downloads before relying on a file.",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "zip-download-filename-overridden",
+        ]),
+      },
+    });
+  });
+
+  it("does not let a full-year signal relabel a completed single-period download", async () => {
+    const base = completeSinglePeriodSummary();
+    const summary = completeSinglePeriodSummary({
+      flowStep: {
+        safeSignals: [
+          ...base.flowStep.safeSignals,
+          "full-fiscal-year-complete",
+          "download-filename-overridden",
+        ],
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the local filed-return download for March. Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "download-filename-overridden",
+        ]),
+      },
+    });
+  });
+
+  it.each([
+    "full-fiscal-year-resume-confirmation-required",
+    "full-fiscal-year-run-interrupted",
+    "full-fiscal-year-run-active",
+    "full-fiscal-year-zip-download-unconfirmed",
+  ])("does not let cross-scope %s relabel a blocked single-period summary", async (signal) => {
+    const summary = singlePeriodSummary({ safeSignals: [signal] });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "blocked",
+      flowStep: {
+        state: "blocked",
+        safeMessage: "Pack needs an explicit recovery action before continuing March.",
+        safeSignals: [signal],
+      },
+    });
+  });
+
+  const confirmedSinglePeriodCleanupSignals = [
+    "single-period-opfs-clear-failed",
+    "single-period-zip-downloaded",
+    "browser-download-completed",
+    "browser-download-non-empty",
+    "browser-download-id:81",
+  ];
+  describe.each([
+    [
+      "full-year delivered",
+      "FULL_FISCAL_YEAR",
+      ["full-fiscal-year-opfs-clear-failed", "full-fiscal-year-zip-downloaded"],
+      "full-year",
+    ],
+    ["full-year unconfirmed", "FULL_FISCAL_YEAR", ["full-fiscal-year-opfs-clear-failed"], "none"],
+    ["single-period delivered", "March", confirmedSinglePeriodCleanupSignals, "single-period"],
+    [
+      "missing ID",
+      "March",
+      confirmedSinglePeriodCleanupSignals.filter(
+        (signal) => !signal.startsWith("browser-download-id:"),
+      ),
+      "none",
+    ],
+    [
+      "missing completion",
+      "March",
+      confirmedSinglePeriodCleanupSignals.filter(
+        (signal) => signal !== "browser-download-completed",
+      ),
+      "none",
+    ],
+    [
+      "missing non-empty proof",
+      "March",
+      confirmedSinglePeriodCleanupSignals.filter(
+        (signal) => signal !== "browser-download-non-empty",
+      ),
+      "none",
+    ],
+    [
+      "multiple IDs",
+      "March",
+      [...confirmedSinglePeriodCleanupSignals, "browser-download-id:82"],
+      "none",
+    ],
+    [
+      "contradictory evidence",
+      "March",
+      [...confirmedSinglePeriodCleanupSignals, "browser-download-correlation-rejected"],
+      "none",
+    ],
+    [
+      "foreign full-year delivery",
+      "March",
+      ["single-period-opfs-clear-failed", "full-fiscal-year-zip-downloaded"],
+      "none",
+    ],
+  ] as const)("blocked cleanup filename context: %s", (_name, period, signals, confirmed) => {
+    it.each([
+      [
+        "download-filename-overridden",
+        "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+        "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+      ],
+      [
+        "download-filename-unavailable",
+        "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+        "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+      ],
+    ])(
+      "preserves %s according to canonical delivery classification",
+      async (filenameSignal, confirmedCopy, neutralCopy) => {
+        const safeSignals = [...signals, filenameSignal];
+        const base = singlePeriodSummary({ safeSignals });
+        const summary = { ...base, scope: { ...base.scope, period } };
+        const baseCopy =
+          confirmed === "full-year"
+            ? "Pack confirmed the final fiscal-year ZIP download; only retained local staging remains to be cleared."
+            : confirmed === "single-period"
+              ? "Pack confirmed the selected ZIP download for March; only temporary local staging remains to be cleared."
+              : "Pack cannot complete this review while temporary selected-file staging remains uncleared.";
+
+        await expect(
+          persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+        ).resolves.not.toBeNull();
+        await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+          scope: summary.scope,
+          status: "blocked",
+          currentPeriod: "March",
+          completedPeriods: [],
+          flowStep: {
+            state: "blocked",
+            safeSignals,
+            safeMessage: `${baseCopy} ${confirmed === "none" ? neutralCopy : confirmedCopy}`,
+            userAction: {
+              type: "LOGIN",
+              message: "Sign in to the GST Portal, then retry.",
+              canResume: false,
+            },
+          },
+        });
+      },
+    );
+  });
+
+  it("does not let cross-scope ZIP delivery relabel single-period cleanup", async () => {
+    const summary = singlePeriodSummary({
+      safeSignals: ["single-period-opfs-clear-failed", "full-fiscal-year-zip-downloaded"],
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "blocked",
+      flowStep: {
+        state: "blocked",
+        safeMessage:
+          "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+        safeSignals: ["single-period-opfs-clear-failed", "full-fiscal-year-zip-downloaded"],
+      },
+    });
+  });
+
+  it.each([
+    ["portal-system-error", FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE],
+    ["portal-scheduled-downtime", FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE],
+    ["portal-blocked-or-session-expired", FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE],
+  ])("reopens a single-period %s with its fixed portal cause", async (signal, safeMessage) => {
+    const summary = singlePeriodSummary({ safeSignals: [signal] });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "blocked",
+      flowStep: {
+        state: "blocked",
+        safeMessage,
+        safeSignals: [signal],
+      },
+    });
+  });
+
+  it("reopens a confirmed fiscal-year ZIP as complete instead of download-unconfirmed", async () => {
+    const base = completeFullFiscalYearSummary();
+    const summary = completeFullFiscalYearSummary({
+      flowStep: {
+        safeSignals: [
+          ...base.flowStep.safeSignals,
+          "full-fiscal-year-zip-downloaded",
+          "full-fiscal-year-opfs-cleared",
+        ],
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the local filed-return download for the saved fiscal-year run.",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "full-fiscal-year-zip-downloaded",
+        ]),
+      },
+    });
+  });
+
+  it("reopens a completed no-artifacts fiscal-year run without claiming a ZIP download", async () => {
+    const base = completeFullFiscalYearSummary();
+    const summary = completeFullFiscalYearSummary({
+      flowStep: {
+        safeSignals: [
+          ...base.flowStep.safeSignals,
+          "full-fiscal-year-no-zip-artifacts",
+          "full-fiscal-year-opfs-cleared",
+        ],
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+      flowStep: {
+        state: "downloaded",
+        safeMessage:
+          "Pack completed the saved fiscal-year run. No ZIP was created because no filed-return artifacts were available for export.",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-complete",
+          "full-fiscal-year-no-zip-artifacts",
+        ]),
+      },
+    });
+  });
+
+  it.each(["zip-download-filename-overridden", "zip-download-filename-unavailable"])(
+    "does not let no-artifacts plus %s claim a download",
+    async (filenameSignal) => {
+      const base = completeFullFiscalYearSummary();
+      const summary = completeFullFiscalYearSummary({
+        flowStep: {
+          safeSignals: [
+            ...base.flowStep.safeSignals,
+            "full-fiscal-year-no-zip-artifacts",
+            "full-fiscal-year-opfs-cleared",
+            filenameSignal,
+          ],
+        },
+      });
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "complete",
+        flowStep: {
+          state: "downloaded",
+          safeMessage:
+            "Pack completed the saved fiscal-year run. No ZIP was created because no filed-return artifacts were available for export.",
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-complete",
+            "full-fiscal-year-no-zip-artifacts",
+            filenameSignal,
+          ]),
+        },
+      });
+    },
+  );
+
+  it.each([
+    ["portal-system-error", FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE],
+    ["portal-scheduled-downtime", FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE],
+    ["portal-blocked-or-session-expired", FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE],
+  ])("reopens a full-year %s with its fixed portal cause", async (signal, safeMessage) => {
+    const summary = completeFullFiscalYearSummary({
+      completedAt: undefined,
+      status: "partial",
+      updatedAt: "2026-07-24T00:00:00.000Z",
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-run-needs-action", signal],
+        userAction: {
+          type: "WAIT_FOR_PORTAL_AVAILABILITY",
+          message: "Synthetic supplied portal instruction.",
+          canResume: true,
+        },
+      },
+    });
+
+    await expect(
+      persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+    ).resolves.not.toBeNull();
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "partial",
+      flowStep: {
+        state: "blocked",
+        safeMessage,
+        safeSignals: expect.arrayContaining(["full-fiscal-year-run-needs-action", signal]),
+      },
+    });
+  });
+
+  it.each([
+    [
+      "cleanup failure",
+      "full-fiscal-year-opfs-clear-failed",
+      "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+    ],
+    [
+      "unconfirmed ZIP download",
+      "full-fiscal-year-zip-download-unconfirmed",
+      "Pack could not confirm the final fiscal-year ZIP. Check the exact browser download before retrying.",
+    ],
+    [
+      "target review",
+      "filed-returns-target-review-required",
+      "Pack could not verify the browser download for the saved fiscal-year run. Check Downloads before retrying or cancelling this target.",
+    ],
+  ])(
+    "keeps %s ahead of a retained portal cause after full-year reopen",
+    async (_case, strongerSignal, safeMessage) => {
+      const summary = completeFullFiscalYearSummary({
+        completedAt: undefined,
+        status: "partial",
+        updatedAt: "2026-07-24T00:00:00.000Z",
+        flowStep: {
+          state: "blocked",
+          safeSignals: ["full-fiscal-year-run-needs-action", "portal-system-error", strongerSignal],
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message: "Synthetic supplied recovery instruction.",
+            canResume: true,
+          },
+        },
+      });
+
+      await expect(
+        persistCanonicalFiledReturnsFlowSummary(COMPLETION_KEY, summary),
+      ).resolves.not.toBeNull();
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+        status: "partial",
+        flowStep: {
+          state: "blocked",
+          safeMessage,
+          safeSignals: expect.arrayContaining([
+            "full-fiscal-year-run-needs-action",
+            "portal-system-error",
+            strongerSignal,
+          ]),
+        },
+      });
+    },
+  );
 
   it("canonicalizes observations persisted from flow responses", async () => {
     await persistFlowResponse(
@@ -944,6 +1596,44 @@ function completeSelectedArtifactBundleSummary(includeZipSignal: boolean) {
         "filed-return-artifact-downloaded:JSON",
         "single-period-opfs-staged:JSON",
         ...(includeZipSignal ? ["single-period-zip-downloaded"] : []),
+      ],
+      safeMessage: "Synthetic supplied portal prose.",
+      downloadDiagnostic: diagnostics.at(-1),
+      downloadDiagnostics: diagnostics,
+    },
+  };
+}
+
+function partialSelectedArtifactBundleSummary(filenameSignal: string) {
+  const diagnostics = [
+    selectedArtifactDiagnostic("PDF", "action-12345678-pdf"),
+    selectedArtifactDiagnostic("JSON", "action-12345678-json"),
+  ];
+  return {
+    scope: {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "May",
+      returnType: "GSTR-2B" as const,
+    },
+    status: "partial" as const,
+    updatedAt: "2026-07-24T00:00:00.000Z",
+    completedPeriods: [],
+    currentPeriod: "May",
+    totalPeriods: 1,
+    flowStep: {
+      connectorId: "gst" as const,
+      scopeId: "gst-gstr2b-private-v0",
+      state: "partial" as const,
+      safeSignals: [
+        "filed-return-artifact-downloaded:PDF",
+        "single-period-opfs-staged:PDF",
+        "filed-return-artifact-downloaded:JSON",
+        "single-period-opfs-staged:JSON",
+        "filed-return-artifact-unavailable:EXCEL",
+        "artifact-generation-timeout",
+        "single-period-zip-downloaded",
+        filenameSignal,
       ],
       safeMessage: "Synthetic supplied portal prose.",
       downloadDiagnostic: diagnostics.at(-1),

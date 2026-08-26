@@ -481,6 +481,123 @@ describe("full fiscal year ledger", () => {
     expect(durable.safeMessage).toContain("verify the browser download");
   });
 
+  it.each([
+    [
+      "download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-item-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-search-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-unavailable",
+      "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    ],
+    [
+      "download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+    [
+      "zip-download-filename-overridden",
+      "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    ],
+  ])("retains filename outcome %s in canonical target copy", (signal, warning) => {
+    const durable = canonicalDurableTargetStatus(
+      { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" },
+      "downloaded",
+      ["browser-download-completed", "browser-download-non-empty", signal],
+    );
+
+    expect(durable.safeMessage).toBe(
+      `Pack confirmed the filed-return download for April. ${warning}`,
+    );
+  });
+
+  it.each([
+    [
+      "download-filename-overridden",
+      "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "download-filename-unavailable",
+      "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "zip-download-filename-overridden",
+      "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "zip-download-filename-unavailable",
+      "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "zip-download-filename-item-unavailable",
+      "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+    ],
+    [
+      "zip-download-filename-search-unavailable",
+      "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.",
+    ],
+  ])("keeps target-review filename outcome %s neutral", (signal, warning) => {
+    const durable = canonicalDurableTargetStatus(
+      { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" },
+      "target-review",
+      ["portal-system-error", signal],
+    );
+
+    expect(durable.safeMessage).toBe(
+      `Pack could not verify the browser download for April. Check Downloads before retrying or cancelling this target. ${warning}`,
+    );
+    expect(durable.safeMessage).not.toContain("Pack completed the download");
+  });
+
+  it.each(["downloaded", "target-review"] as const)(
+    "keeps filename override precedence for %s copy",
+    (status) => {
+      const scope = { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" } as const;
+      const overridden = canonicalDurableTargetStatus(scope, status, [
+        "zip-download-filename-overridden",
+      ]);
+      const mixed = canonicalDurableTargetStatus(scope, status, [
+        "download-filename-unavailable",
+        "zip-download-filename-overridden",
+      ]);
+
+      expect(mixed.safeMessage).toBe(overridden.safeMessage);
+    },
+  );
+
+  it.each([
+    "filed-return-download-target-mismatch",
+    "filed-gstr3b-direct-download-action-mismatch",
+    "filed-gstr3b-direct-download-start-rejected",
+    "filed-gstr3b-direct-download-target-rejected",
+    "filed-return-download-diagnostics-rejected",
+  ])("keeps target-review filename copy neutral with %s", (contradiction) => {
+    const durable = canonicalDurableTargetStatus(
+      { financialYear: "2026-27", period: "April", returnType: "GSTR-3B" },
+      "target-review",
+      [
+        "browser-download-completed",
+        "browser-download-id:81",
+        "browser-download-non-empty",
+        "download-filename-overridden",
+        contradiction,
+      ],
+    );
+
+    expect(durable.safeMessage).toBe(
+      "Pack could not verify the browser download for April. Check Downloads before retrying or cancelling this target. The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.",
+    );
+    expect(durable.safeMessage).not.toContain("Pack completed the download");
+    expect(durable.safeMessage).not.toContain("Pack recorded a different saved name");
+  });
+
   it("maps only positive not-filed evidence to a terminal not-filed target", () => {
     expect(
       targetStatusFromFlowStep({

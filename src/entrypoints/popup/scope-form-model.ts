@@ -16,16 +16,18 @@ import {
   FULL_FISCAL_YEAR_PERIOD,
   isFullFiscalYearScope,
 } from "../../connectors/gst/filed-returns-scope";
-import { FILED_RETURNS_RETURN_TYPES } from "../../connectors/gst/filed-returns-return-types";
 import {
   filedReturnsCapabilityArtifactDescription,
   filedReturnsCapabilityArtifactLabel,
   filedReturnsCapabilityRunNotes,
   filedReturnsCapabilitySentenceSubject,
   filedReturnsCapabilitySummary,
+  supportedFiledReturnsCatalogueEntries,
 } from "../../connectors/gst/filed-returns-capabilities";
 import {
   canRetryFullFiscalYearZipWithoutPortal,
+  getFullFiscalYearCleanupCopy,
+  getScopeMatchedFiledReturnsSummary,
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
@@ -60,10 +62,11 @@ export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
 }
 
 export function returnTypeOptions() {
-  return FILED_RETURNS_RETURN_TYPES.map((returnType) => ({
+  return supportedFiledReturnsCatalogueEntries().map(({ returnType, capability }) => ({
     value: returnType,
-    label: returnType,
+    label: capability.label,
     description: filedReturnsCapabilitySummary(returnType),
+    periodicity: capability.periodicity,
   }));
 }
 
@@ -78,7 +81,12 @@ export function getSinglePeriodFallback(
 export function getScopeActionCopy(
   scope: FiledReturnsDownloadScope,
   fullFiscalYear: boolean,
-): { summary: string; details: string[] } {
+  summary?: FiledReturnsFlowSummary | null,
+): { summary: string; details: string[]; busySummary?: string } {
+  const cleanupCopy = getFullFiscalYearCleanupCopy(
+    getScopeMatchedFiledReturnsSummary(scope, summary ?? null),
+  );
+  if (cleanupCopy) return { ...cleanupCopy, details: [] };
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const multiFile = concreteFiledReturnsArtifactTypes(artifactType).length > 1;
   if (!fullFiscalYear) {
@@ -115,24 +123,24 @@ export function getScopeFormStartAction(
   busy: string | null,
   fullFiscalYear: boolean,
 ): { disabled: boolean; label: string } {
-  if (busy === "start-filed-returns-flow") return { disabled: true, label: "Downloading..." };
+  const matchedSummary = getScopeMatchedFiledReturnsSummary(scope, summary ?? null);
+  const cleanupCopy = getFullFiscalYearCleanupCopy(matchedSummary);
+  if (busy === "start-filed-returns-flow") {
+    return { disabled: true, label: cleanupCopy?.busyLabel ?? "Downloading..." };
+  }
   if (busy !== null) return { disabled: true, label: defaultStartLabel(scope, fullFiscalYear) };
-  if (
-    summary &&
-    canRetryFullFiscalYearZipWithoutPortal(summary) &&
-    isSameScope(scope, summary.scope)
-  ) {
+  if (matchedSummary && canRetryFullFiscalYearZipWithoutPortal(matchedSummary)) {
     return {
       disabled: false,
-      label: hasPersistedFullFiscalYearZipDownloadId(summary)
+      label: hasPersistedFullFiscalYearZipDownloadId(matchedSummary)
         ? "Check final ZIP status"
-        : isAmbiguousFullFiscalYearZipHandoff(summary)
+        : isAmbiguousFullFiscalYearZipHandoff(matchedSummary)
           ? "I checked—retry final ZIP"
-          : "Retry final ZIP",
+          : (cleanupCopy?.label ?? "Retry final ZIP"),
     };
   }
-  if (summary && isSameScope(scope, summary.scope)) {
-    const signals = new Set(summary.flowStep.safeSignals);
+  if (matchedSummary) {
+    const signals = new Set(matchedSummary.flowStep.safeSignals);
     if (signals.has("filed-returns-run-active") || signals.has("full-fiscal-year-run-active")) {
       return { disabled: true, label: "Run in progress" };
     }
@@ -177,14 +185,4 @@ function artifactOptionLabel(
   artifactType: (typeof FILED_RETURNS_ARTIFACT_TYPES)[number],
 ): string {
   return filedReturnsCapabilityArtifactLabel(returnType, artifactType);
-}
-
-function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {
-  return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
-  );
 }

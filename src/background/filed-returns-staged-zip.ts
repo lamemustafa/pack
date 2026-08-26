@@ -25,7 +25,7 @@ import {
 } from "./filed-returns-durable-download-reconciler";
 import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
-import { isRequestedFilenameOverridden } from "./download-filename-comparison";
+import { classifyRequestedFilenameOutcome } from "./download-filename-comparison";
 
 const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 
@@ -378,6 +378,7 @@ export async function exportStagedFiledReturnsZip({
         safeMessage: joinedSafeMessages(
           "Pack downloaded the selected ZIP but could not clear its temporary local staging.",
           filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+          filenameOutcome.safeMessage,
         ),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
@@ -402,6 +403,7 @@ export async function exportStagedFiledReturnsZip({
         safeMessage: joinedSafeMessages(
           stagingCleanupCheckpointFailedMessage ?? zipFailedMessage,
           filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+          filenameOutcome.safeMessage,
         ),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
@@ -439,14 +441,42 @@ async function completedZipFilenameOutcome(
   downloadId: number,
   requestedFilename: string,
 ): Promise<{ safeMessage?: string; safeSignals: string[] }> {
-  const [item] = await browser.downloads.search({ id: downloadId }).catch(() => []);
-  if (!isRequestedFilenameOverridden(requestedFilename, item?.filename)) {
+  let item;
+  try {
+    [item] = await browser.downloads.search({ id: downloadId });
+  } catch {
+    return unavailableZipFilenameOutcome("zip-download-filename-search-unavailable");
+  }
+  if (!item || item.id !== downloadId) {
+    return unavailableZipFilenameOutcome("zip-download-filename-item-unavailable");
+  }
+  const filenameOutcome = classifyRequestedFilenameOutcome(requestedFilename, item.filename);
+  if (filenameOutcome === "matched") {
     return { safeSignals: [] };
+  }
+  if (filenameOutcome === "unavailable") {
+    return unavailableZipFilenameOutcome("zip-download-filename-unavailable");
   }
   return {
     safeSignals: ["zip-download-filename-overridden"],
     safeMessage:
       "Pack completed the ZIP download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+  };
+}
+
+type UnavailableZipFilenameSignal =
+  | "zip-download-filename-item-unavailable"
+  | "zip-download-filename-search-unavailable"
+  | "zip-download-filename-unavailable";
+
+function unavailableZipFilenameOutcome(signal: UnavailableZipFilenameSignal): {
+  safeMessage: string;
+  safeSignals: string[];
+} {
+  return {
+    safeSignals: [signal],
+    safeMessage:
+      "Pack completed the ZIP download, but could not confirm its saved filename. Check browser Downloads before using the file.",
   };
 }
 

@@ -117,6 +117,53 @@ describe("filed-return ZIP filename reassertion", () => {
     });
   });
 
+  it.each([
+    {
+      label: "the exact download item is missing",
+      search: async () => [],
+      signal: "zip-download-filename-item-unavailable",
+    },
+    {
+      label: "the completed item has no filename",
+      search: async () => [{ id: 91, state: "complete" }],
+      signal: "zip-download-filename-unavailable",
+    },
+    {
+      label: "the browser filename query fails",
+      search: async () => {
+        throw new Error("synthetic filename query failure");
+      },
+      signal: "zip-download-filename-search-unavailable",
+    },
+  ])("keeps completed ZIP evidence but names when $label", async ({ search, signal }) => {
+    mocks.browser.downloads.search.mockImplementationOnce(search);
+
+    const result = await exportSinglePeriodFiledReturnsZip({
+      completeStep: completeStep(),
+      entryPlan: { artifactTypes: ["PDF", "EXCEL", "JSON"], unavailableArtifactTypes: [] },
+      ledgerId: "single-period:12345678-test",
+      options: {
+        onAfterStagingCleared: vi.fn(async () => undefined),
+        onBeforeDownloadStart: vi.fn(async () => undefined),
+        onDownloadStarted: vi.fn(async () => undefined),
+      },
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-2B",
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: "downloaded",
+      safeSignals: expect.arrayContaining([signal]),
+    });
+    expect(result.safeMessage).toContain(
+      "Pack completed the ZIP download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    );
+  });
+
   it("uses the same reservation lifecycle for the full-fiscal-year ZIP path", async () => {
     mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
       status: "created",

@@ -2,10 +2,10 @@ import React from "react";
 import { browser } from "wxt/browser";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
-import { ScopeForm } from "../popup/components";
 import { ContextState } from "../popup/context-state";
 import {
   canRetryFullFiscalYearZipWithoutPortal,
+  getFullFiscalYearCleanupCopy,
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
 } from "../popup/flow-summary";
@@ -17,7 +17,7 @@ import { getPopupPresentationState, isGstSignInRequired } from "../popup/present
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
-import { panelPresets, presetPeriodCount, type PanelPreset, type PanelView } from "./panel-presets";
+import { PanelGuidedScope } from "./panel-guided-scope";
 
 export type PackPanelController = ReturnType<typeof usePackPopupController>;
 
@@ -27,14 +27,6 @@ export type PackPanelController = ReturnType<typeof usePackPopupController>;
  * run that rendered nothing at all: only a render assertion catches that.
  */
 export function PanelSurface({ pack }: { pack: PackPanelController }) {
-  const [view, setView] = React.useState<PanelView>("presets");
-  const {
-    presets,
-    periodCounts,
-    refresh: refreshPresets,
-    isStale: presetsAreStale,
-  } = usePanelPresets();
-
   const summary = pack.recoverySummary ?? pack.scopedFlowSummary;
   const presentation = getPopupPresentationState(
     pack.context,
@@ -50,14 +42,16 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
    * `isGstSignInRequired` is the same test the popup's disabled-reason copy consults.
    */
   const portalSignedIn = portalReady && !isGstSignInRequired(pack.context);
+  const portalAccessDenied = pack.context?.pageKind === "gst-access-denied";
+  const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
   const running = pack.effectiveBusy !== null || summary?.status === "running";
 
   usePortalContextRefresh(pack.refreshPortalContext);
 
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy);
-  // The same test the presets use, so the form and the presets cannot
-  // disagree about whether the saved run is describing this scope.
+  // Use the canonical scope matcher so the guide and the start guard cannot
+  // disagree about whether the saved run describes the visible target.
   const savedRunIsThisScope = getScopeMatchedFiledReturnsSummary(pack.scope, savedRun) !== null;
 
   /**
@@ -72,7 +66,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   );
   const showFlow =
     (portalReady || canRetryFullFiscalYearZipWithoutPortal(summary) || terminalSummary) &&
-    !["loading", "unsupported", "session-expired"].includes(presentation.kind);
+    !["access-denied", "loading", "unsupported", "session-expired"].includes(presentation.kind);
 
   const openPortal = () => void browser.tabs.create({ url: "https://www.gst.gov.in" });
 
@@ -91,7 +85,11 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
           className={portalSignedIn ? "panel-source-dot" : "panel-source-dot panel-source-dot-off"}
           aria-hidden="true"
         />
-        {portalSignedIn ? "GST portal · signed in" : "Open a signed-in GST Portal tab"}
+        {portalSignedIn
+          ? "GST portal · signed in"
+          : portalAccessDenied
+            ? "GST Portal · access blocked"
+            : (cleanupCopy?.contextLabel ?? "Open a signed-in GST Portal tab")}
       </p>
 
       <div className="panel-body">
@@ -118,98 +116,17 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 here hid the per-period evidence at exactly the moment it
                 explains what those controls are for. */}
             <TargetEvidence summary={summary ?? null} />
-            {running ? null : view === "presets" ? (
-              <>
-                <h2>What do you need?</h2>
-                {presets.map((preset, presetIndex) => {
-                  // The same guard matrix the popup's start control consults. Reading it here
-                  // rather than re-deriving "is something running" is the point: a preset that
-                  // the background will refuse must say so instead of looking available.
-                  const ownScopeAction = getScopeFormStartAction(
-                    preset.scope,
-                    savedRun,
-                    pack.effectiveBusy,
-                    isFullFiscalYearScope(preset.scope),
-                  );
-                  // ...but that matrix filters the saved run's signals through `isSameScope`,
-                  // so a saved run belonging to a different scope reads as no signal at all.
-                  // The background does not work that way: `startFiledReturnsDownloadFlow`
-                  // returns the outstanding target review before it looks at the requested
-                  // scope, and refuses a mismatched fiscal-year ledger straight after. Reuse
-                  // the block the saved run reports about itself rather than inventing one.
-                  const savedRunIsThisPreset =
-                    getScopeMatchedFiledReturnsSummary(preset.scope, savedRun) !== null;
-                  const startAction =
-                    savedRunBlock && !savedRunIsThisPreset ? savedRunBlock : ownScopeAction;
-                  const blockedReason = startAction.disabled
-                    ? startAction.label
-                    : portalReady
-                      ? null
-                      : "Open a signed-in GST Portal tab";
-                  return (
-                    <button
-                      key={preset.id}
-                      className="panel-choice"
-                      type="button"
-                      disabled={blockedReason !== null}
-                      onClick={() => {
-                        // Never submit a scope the button is not showing. The
-                        // first version of this recomputed at click time and
-                        // started the fresh scope, so a stale label could read
-                        // 2025-26 while the run downloaded 2026-27 -- a user
-                        // getting something other than the target they clicked,
-                        // which is worse than the staleness it was fixing.
-                        if (presetsAreStale()) {
-                          refreshPresets();
-                          return;
-                        }
-                        void pack.startFiledReturnsFlow(preset.scope);
-                      }}
-                    >
-                      <span>{preset.label}</span>
-                      <span className="panel-choice-detail">
-                        {blockedReason ??
-                          `${preset.detail} · ${periodCounts[presetIndex]} periods · one ZIP`}
-                      </span>
-                    </button>
-                  );
-                })}
-                <button
-                  className="panel-choice"
-                  type="button"
-                  onClick={() => setView("custom")}
-                  disabled={pack.effectiveBusy !== null}
-                >
-                  <span>Choose a period</span>
-                  <span className="panel-choice-detail">pick your own</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <ScopeForm
-                  busy={pack.effectiveBusy}
-                  context={pack.context}
-                  // The saved run blocks this form for the same reason it blocks
-                  // every preset: the background refuses an unresolved target
-                  // review before it reads the requested scope. Changing the
-                  // selection nulls `scopedFlowSummary` and would otherwise
-                  // leave the start button enabled for a run that cannot begin.
-                  // Only when the form shows a DIFFERENT scope, matching how
-                  // the presets apply it. A saved run blocked merely because no
-                  // portal tab was available re-enables itself once one is, and
-                  // its own scope must be allowed to act on that rather than
-                  // being disabled by a block describing itself.
-                  externalBlock={savedRunIsThisScope ? null : savedRunBlock}
-                  flowSummary={pack.scopedFlowSummary}
-                  scope={pack.scope}
-                  scopeLockedForReview={pack.scopeLockedForReview}
-                  onScopeChange={pack.setScope}
-                  onStart={() => void pack.startFiledReturnsFlow()}
-                />
-                <button className="panel-link" type="button" onClick={() => setView("presets")}>
-                  Back
-                </button>
-              </>
+            {running ? null : (
+              <PanelGuidedScope
+                busy={pack.effectiveBusy}
+                context={pack.context}
+                externalBlock={savedRunIsThisScope ? null : savedRunBlock}
+                flowSummary={pack.scopedFlowSummary}
+                scope={pack.scope}
+                scopeLockedForReview={pack.scopeLockedForReview}
+                onScopeChange={pack.setScope}
+                onStart={() => void pack.startFiledReturnsFlow()}
+              />
             )}
           </>
         ) : (
@@ -278,10 +195,9 @@ function usePortalContextRefresh(refresh: () => Promise<void>) {
 }
 
 /**
- * Calls back when the user returns to this page, and only then. Both things the
- * panel must not answer from a mount-time reading -- the portal context and the
- * presets' "now" -- go stale for the same reason and are woken by the same
- * signals, so there is one listener pair rather than two.
+ * Calls back when the user returns to this page, and only then. Portal context
+ * must not be answered from a mount-time reading, so it is woken by the browser's
+ * own focus and visibility signals rather than a polling timer.
  */
 function useReturnToPage(onReturn: () => void) {
   React.useEffect(() => {
@@ -299,89 +215,16 @@ function useReturnToPage(onReturn: () => void) {
 }
 
 /**
- * Presets are normalised against "now". In April the new financial year has no
- * completed period, so `normaliseFiledReturnsScope` answers with the preceding
- * one -- and every string a preset shows is read back off that scope, so a
- * stale basis produces a label that reads correct while the click downloads the
- * wrong year.
- *
- * Computing once at mount was right for the popup, which dies on outside focus.
- * The panel outlives the boundary: one mounted on 30 April would still offer
- * April's answer in May. Recomputed on the browser's own return signals, so no
- * timer polls and no permission is added.
- *
- * The array is kept when the recomputed answer matches, which is every return
- * but the one that crosses a boundary. Handing back a new array each time would
- * re-render the list for nothing.
- */
-function usePanelPresets(): {
-  presets: PanelPreset[];
-  periodCounts: number[];
-  refresh: () => void;
-  isStale: () => boolean;
-} {
-  // The identity is SNAPSHOTTED when the presets are stored. Recomputing it for
-  // the stored presets defeats the check: `presetPeriodCount` reads the current
-  // date, so a panel mounted in June and read in July produced three for both
-  // sides and compared equal, while the button still showed two.
-  const [rendered, setRendered] = React.useState(renderedPresetsNow);
-  const refresh = React.useCallback(() => {
-    setRendered((current) => {
-      const next = renderedPresetsNow();
-      return next.identity === current.identity ? current : next;
-    });
-  }, []);
-  // Deliberately a plain closure over the CURRENT render's snapshot, not a ref:
-  // it is only called from a click handler, which is itself recreated each
-  // render, so there is no stale-closure risk and no ref read during render.
-  const isStale = () => presetsIdentity(panelPresets()) !== rendered.identity;
-  useReturnToPage(refresh);
-  return {
-    presets: rendered.presets,
-    periodCounts: rendered.periodCounts,
-    refresh,
-    isStale,
-  };
-}
-
-function renderedPresetsNow(): {
-  presets: PanelPreset[];
-  periodCounts: number[];
-  identity: string;
-} {
-  const presets = panelPresets();
-  // The counts are captured HERE, with the presets, and rendered from this
-  // snapshot. Reading `presetPeriodCount` again at render time made the button
-  // show the current month's count while the stored identity held the old one,
-  // so the label moved without the freshness check ever noticing.
-  return {
-    presets,
-    periodCounts: presets.map((preset) => presetPeriodCount(preset)),
-    identity: presetsIdentity(presets),
-  };
-}
-
-// Compares whole presets rather than the fields believed to matter: a preset
-// that gained a time-dependent field would otherwise go stale again, silently.
-function presetsIdentity(presets: readonly PanelPreset[]): string {
-  // The rendered period count is part of what the user is agreeing to, and it is
-  // NOT derivable from the preset alone: crossing an ordinary month boundary
-  // inside one financial year leaves `panelPresets()` byte-identical while the
-  // count rises, so a panel showing "2 periods" in June would accept a click in
-  // July and download three.
-  return JSON.stringify(presets.map((preset) => [preset, presetPeriodCount(preset)]));
-}
-
-/**
  * What the one saved run says about starting anything at all, asked in the only scope where
  * its signals are visible: its own.
  *
  * `getScopeFormStartAction` filters a saved run's signals through `isSameScope`, which is
- * right for the popup — it only ever offers the scope on screen. The panel offers several at
- * once, and the background does not scope its refusal: `startFiledReturnsDownloadFlow`
+ * right for the popup — it only ever offers the scope on screen. The panel lets the user change
+ * that scope while a saved run remains, and the background does not scope its refusal:
+ * `startFiledReturnsDownloadFlow`
  * returns the outstanding target review before it reads the requested scope, and refuses a
  * mismatched fiscal-year ledger immediately after. So a saved run that blocks itself blocks
- * every other preset too, and the reason it gives is the reason they must show.
+ * every other selected scope too, and the reason it gives is the reason they must show.
  *
  * `null` while an action is in flight: every control is already disabled by its own guard
  * then, and the saved run's label would name the wrong scope.

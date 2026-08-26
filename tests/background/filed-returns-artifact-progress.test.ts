@@ -229,6 +229,12 @@ describe("durable selected-artifact progress", () => {
     ).resolves.toMatchObject({ completedArtifactTypes: ["PDF"] });
   });
 
+  it("keeps genuinely missing selected-artifact progress retryable", async () => {
+    await expect(readPersistedArtifactProgress(scope, ["PDF", "EXCEL"], deps)).resolves.toBeNull();
+    expect(browserMocks.storage.session.remove).not.toHaveBeenCalled();
+    expect(browserMocks.storage.session.set).not.toHaveBeenCalled();
+  });
+
   it("recovers completed GSTR-2B JSON alongside the selected PDF and Excel artifacts", async () => {
     const gstr2bScope: FiledReturnsDownloadScope = {
       artifactType: "PDF_AND_EXCEL",
@@ -255,6 +261,74 @@ describe("durable selected-artifact progress", () => {
     await expect(
       readPersistedArtifactProgress(gstr2bScope, ["PDF", "EXCEL", "JSON"], deps),
     ).resolves.toMatchObject({ completedArtifactTypes: ["PDF", "JSON"] });
+  });
+
+  it("redacts malformed selected-artifact progress and retains its blocked reason", async () => {
+    state.session.completion = { unknown: "synthetic noncanonical value" };
+
+    await expect(readPersistedArtifactProgress(scope, ["PDF", "EXCEL"], deps)).resolves.toEqual({
+      reason: "malformed-summary",
+      state: "blocked",
+    });
+    expect(state.session.completion).toMatchObject({
+      flowStep: {
+        safeSignals: ["filed-return-artifact-progress-malformed-summary"],
+        state: "blocked",
+      },
+      status: "blocked",
+    });
+    expect(JSON.stringify(state.session.completion)).not.toContain("synthetic noncanonical value");
+    expect(browserMocks.storage.session.remove).not.toHaveBeenCalled();
+    await expect(readPersistedArtifactProgress(scope, ["PDF", "EXCEL"], deps)).resolves.toEqual({
+      reason: "malformed-summary",
+      state: "blocked",
+    });
+  });
+
+  it("blocks when malformed selected-artifact progress cannot be redacted", async () => {
+    state.session.completion = { unknown: "synthetic noncanonical value" };
+    browserMocks.storage.session.set.mockRejectedValueOnce(
+      new Error("synthetic redaction write failure"),
+    );
+
+    await expect(readPersistedArtifactProgress(scope, ["PDF", "EXCEL"], deps)).resolves.toEqual({
+      reason: "storage-write-failed",
+      state: "blocked",
+    });
+    expect(state.session.completion).toEqual({ unknown: "synthetic noncanonical value" });
+  });
+
+  it("does not turn an unavailable progress read into missing progress", async () => {
+    browserMocks.storage.session.get.mockRejectedValueOnce(
+      new Error("synthetic session read failure"),
+    );
+
+    await expect(readPersistedArtifactProgress(scope, ["PDF", "EXCEL"], deps)).resolves.toEqual({
+      reason: "storage-read-failed",
+      state: "blocked",
+    });
+  });
+
+  it("distinguishes a canonical progress write failure from a read failure", async () => {
+    await persistPartialArtifactSummary(
+      scope,
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "downloaded",
+        safeSignals: ["filed-return-artifact-downloaded:PDF"],
+        safeMessage: "Synthetic selected-artifact progress.",
+      },
+      deps,
+    );
+    browserMocks.storage.session.set.mockRejectedValueOnce(
+      new Error("synthetic session write failure"),
+    );
+
+    await expect(readPersistedArtifactProgress(scope, ["PDF", "EXCEL"], deps)).resolves.toEqual({
+      reason: "storage-write-failed",
+      state: "blocked",
+    });
   });
 
   it("does not retain partial progress with an unknown signal", async () => {

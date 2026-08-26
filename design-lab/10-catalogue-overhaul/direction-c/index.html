@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Pack catalogue direction C</title>
+    <style>
+      :root {
+        --pack-surface: #ffffff;
+        --pack-surface-raised: #fbfcfe;
+        --pack-surface-muted: #f7f9fb;
+        --pack-canvas: #f5f7fa;
+        --pack-surface-inset: #eef3f8;
+        --pack-surface-accent-soft: #e9f1f8;
+        --pack-ink-primary: #172033;
+        --pack-ink-secondary: #334155;
+        --pack-ink-tertiary: #43566b;
+        --pack-ink-muted: #526477;
+        --pack-ink-inverse: #ffffff;
+        --pack-border-subtle: #d8e1ec;
+        --pack-border-default: #c8d3de;
+        --pack-border-strong: #9fb0c1;
+        --pack-border-accent: #245b91;
+        --pack-action: #173a63;
+        --pack-action-hover: #0f2a49;
+        --pack-success-fg: #115d38;
+        --pack-success-bg: #e8f8ef;
+        --pack-success-border: #9cc7b1;
+        --pack-warning-fg: #75420b;
+        --pack-warning-bg: #fff7e8;
+        --pack-warning-border: #ddc58b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--pack-canvas);
+      }
+
+      body {
+        width: 320px;
+        min-width: 320px;
+        margin: 0;
+        overflow-x: hidden;
+        background: var(--pack-canvas);
+        color: var(--pack-ink-primary);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.4;
+      }
+
+      button,
+      select,
+      summary {
+        font: inherit;
+      }
+
+      button,
+      select,
+      summary {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .prototype {
+        width: 320px;
+        min-height: 100vh;
+        border-right: 1px solid var(--pack-border-default);
+        border-left: 1px solid var(--pack-border-default);
+        background: var(--pack-surface);
+      }
+
+      .masthead {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--pack-border-default);
+        background: var(--pack-surface-raised);
+      }
+
+      .brand {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .synthetic-flag {
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+      }
+
+      .intro {
+        padding: 16px;
+        border-bottom: 1px solid var(--pack-border-default);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+
+      .intro p {
+        margin: 6px 0 0;
+        color: var(--pack-ink-secondary);
+        font-size: 13px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin: 0;
+        border-bottom: 1px solid var(--pack-border-default);
+        background: var(--pack-surface-muted);
+      }
+
+      .metric {
+        min-width: 0;
+        padding: 8px 12px;
+        border-right: 1px solid var(--pack-border-subtle);
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+
+      .metric:nth-child(2n) {
+        border-right: 0;
+      }
+
+      .metric:nth-last-child(-n + 2) {
+        border-bottom: 0;
+      }
+
+      .metric dt {
+        margin: 0;
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+      }
+
+      .metric dd {
+        margin: 2px 0 0;
+        overflow: hidden;
+        color: var(--pack-ink-primary);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .register-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--pack-border-default);
+        background: var(--pack-surface-inset);
+      }
+
+      .register-heading h2,
+      .catalogue-heading {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .one-target {
+        color: var(--pack-ink-muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .scope-form {
+        margin: 0;
+      }
+
+      .field-row {
+        display: grid;
+        grid-template-columns: 84px minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+        min-height: 48px;
+        padding: 6px 16px;
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+
+      label {
+        color: var(--pack-ink-secondary);
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      select {
+        width: 100%;
+        min-width: 0;
+        min-height: 34px;
+        border: 1px solid var(--pack-border-default);
+        border-radius: 4px;
+        background: var(--pack-surface);
+        color: var(--pack-ink-primary);
+        padding: 4px 28px 4px 8px;
+        font-size: 13px;
+      }
+
+      select:hover {
+        border-color: var(--pack-border-strong);
+      }
+
+      select:focus-visible,
+      button:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--pack-border-accent);
+        outline-offset: 2px;
+      }
+
+      .active-target {
+        margin: 0;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--pack-border-default);
+        background: var(--pack-surface-raised);
+      }
+
+      .active-target div {
+        display: grid;
+        grid-template-columns: 84px minmax(0, 1fr);
+        gap: 8px;
+        padding: 2px 0;
+      }
+
+      .active-target dt {
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+      }
+
+      .active-target dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+        color: var(--pack-ink-secondary);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .submit-band {
+        padding: 12px 16px 16px;
+        border-bottom: 1px solid var(--pack-border-default);
+      }
+
+      .primary-action {
+        width: 100%;
+        min-height: 40px;
+        cursor: pointer;
+        border: 1px solid var(--pack-action);
+        border-radius: 6px;
+        background: var(--pack-action);
+        color: var(--pack-ink-inverse);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .primary-action:hover {
+        border-color: var(--pack-action-hover);
+        background: var(--pack-action-hover);
+      }
+
+      .run-status {
+        margin: 8px 0 0;
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+        text-wrap: pretty;
+      }
+
+      details {
+        border-bottom: 1px solid var(--pack-border-default);
+      }
+
+      summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 44px;
+        cursor: pointer;
+        padding: 8px 16px;
+        color: var(--pack-ink-secondary);
+        font-size: 13px;
+        font-weight: 600;
+        list-style: none;
+      }
+
+      summary::-webkit-details-marker {
+        display: none;
+      }
+
+      summary::after {
+        content: "+";
+        color: var(--pack-ink-muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 16px;
+        font-weight: 400;
+      }
+
+      details[open] summary::after {
+        content: "−";
+      }
+
+      .catalogue-intro {
+        margin: 0;
+        padding: 0 16px 12px;
+        color: var(--pack-ink-secondary);
+        font-size: 12px;
+        text-wrap: pretty;
+      }
+
+      .catalogue-columns {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 66px;
+        gap: 8px;
+        padding: 7px 16px;
+        border-top: 1px solid var(--pack-border-default);
+        border-bottom: 1px solid var(--pack-border-default);
+        background: var(--pack-surface-inset);
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .catalogue-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .catalogue-row {
+        padding: 9px 16px 10px;
+        border-bottom: 1px solid var(--pack-border-subtle);
+      }
+
+      .catalogue-row:last-child {
+        border-bottom: 0;
+      }
+
+      .catalogue-line {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 66px;
+        align-items: baseline;
+        gap: 8px;
+      }
+
+      .return-name {
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .cadence {
+        color: var(--pack-ink-muted);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        text-align: right;
+        text-transform: capitalize;
+      }
+
+      .row-detail {
+        margin: 3px 0 0;
+        color: var(--pack-ink-tertiary);
+        font-size: 12px;
+        text-wrap: pretty;
+      }
+
+      .availability {
+        display: inline-block;
+        margin-top: 6px;
+        border: 1px solid var(--pack-success-border);
+        border-radius: 2px;
+        background: var(--pack-success-bg);
+        color: var(--pack-success-fg);
+        padding: 2px 5px;
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .catalogue-row[data-supported="false"] {
+        background: var(--pack-surface-muted);
+      }
+
+      .catalogue-row[data-supported="false"] .availability {
+        border-color: var(--pack-warning-border);
+        background: var(--pack-warning-bg);
+        color: var(--pack-warning-fg);
+      }
+
+      .footer-note {
+        margin: 0;
+        padding: 12px 16px 16px;
+        color: var(--pack-ink-muted);
+        font-size: 12px;
+        text-wrap: pretty;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="prototype" id="prototype">
+      <header class="masthead">
+        <p class="brand">Pack</p>
+        <span class="synthetic-flag">Synthetic prototype</span>
+      </header>
+
+      <section class="intro" aria-labelledby="page-title">
+        <h1 id="page-title">Filed returns</h1>
+        <p>Set one target, confirm its scope, then start one run.</p>
+      </section>
+
+      <dl class="metrics" aria-label="Prototype metrics">
+        <div class="metric">
+          <dt>Default controls</dt>
+          <dd id="metric-controls">4</dd>
+        </div>
+        <div class="metric">
+          <dt>Active selection</dt>
+          <dd id="metric-selection">1 target</dd>
+        </div>
+        <div class="metric">
+          <dt>Common-case clicks</dt>
+          <dd id="metric-clicks">1</dd>
+        </div>
+        <div class="metric">
+          <dt>Overflow</dt>
+          <dd id="metric-overflow">0 px</dd>
+        </div>
+      </dl>
+
+      <form class="scope-form" id="scope-form">
+        <div class="register-heading">
+          <h2>Active run register</h2>
+          <span class="one-target">1 scope</span>
+        </div>
+
+        <div class="field-row">
+          <label for="scope">Period</label>
+          <select id="scope" name="scope">
+            <option value="2025-26|07">2025–26 · July</option>
+            <option value="2025-26|06">2025–26 · June</option>
+            <option value="2025-26|05">2025–26 · May</option>
+            <option value="2024-25|03">2024–25 · March</option>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <label for="return-type">Return</label>
+          <select id="return-type" name="returnType"></select>
+        </div>
+
+        <div class="field-row">
+          <label for="artifact">Artifact</label>
+          <select id="artifact" name="artifact"></select>
+        </div>
+
+        <dl class="active-target" aria-label="Exact active selection" aria-live="polite">
+          <div>
+            <dt>Financial year</dt>
+            <dd id="active-fy">2025–26</dd>
+          </div>
+          <div>
+            <dt>Period</dt>
+            <dd id="active-period">July</dd>
+          </div>
+          <div>
+            <dt>Return</dt>
+            <dd id="active-return">GSTR-3B</dd>
+          </div>
+          <div>
+            <dt>Artifact</dt>
+            <dd id="active-artifact">Filed return (PDF)</dd>
+          </div>
+        </dl>
+
+        <div class="submit-band">
+          <button class="primary-action" type="submit" id="run-button">Start this run</button>
+          <p class="run-status" id="run-status" role="status">
+            Ready. Pack would start exactly the target shown above.
+          </p>
+        </div>
+      </form>
+
+      <details id="advanced">
+        <summary>Advanced · return catalogue</summary>
+        <p class="catalogue-intro">
+          Availability is explanatory here. Unsupported rows are not controls and cannot enter a
+          run.
+        </p>
+        <div class="catalogue-columns" aria-hidden="true">
+          <span>Return / availability</span>
+          <span>Cadence</span>
+        </div>
+        <ol class="catalogue-list" id="catalogue-list" aria-label="Return catalogue"></ol>
+      </details>
+
+      <p class="footer-note">
+        Pack is not affiliated with, endorsed by or operated by GSTN, CBIC or the Government of
+        India. This prototype does not connect to the GST Portal or download files.
+      </p>
+    </main>
+
+    <script>
+      const CATALOGUE = Object.freeze([
+        {
+          id: "GSTR-3B",
+          label: "GSTR-3B",
+          periodicity: "monthly",
+          supported: true,
+          artifacts: [
+            { id: "PDF", label: "Filed return (PDF)" },
+            { id: "JSON", label: "Portal data (JSON)" },
+          ],
+          explanation: "Filed PDF or portal data.",
+        },
+        {
+          id: "GSTR-1",
+          label: "GSTR-1",
+          periodicity: "monthly",
+          supported: true,
+          artifacts: [
+            { id: "PDF", label: "Summary (PDF)" },
+            { id: "EXCEL", label: "E-invoice details (Excel)" },
+          ],
+          explanation: "Summary PDF or E-invoice workbook.",
+        },
+        {
+          id: "GSTR-2B",
+          label: "GSTR-2B",
+          periodicity: "monthly",
+          supported: true,
+          artifacts: [
+            { id: "PDF", label: "Summary (PDF)" },
+            { id: "EXCEL", label: "Details (Excel)" },
+            { id: "JSON", label: "Portal data (JSON)" },
+          ],
+          explanation: "ITC summary, details workbook or portal data.",
+        },
+        {
+          id: "GSTR-9",
+          label: "GSTR-9",
+          periodicity: "annual",
+          supported: false,
+          artifacts: [],
+          explanation: "Annual return acquisition is not supported by Pack.",
+        },
+        {
+          id: "GSTR-9C",
+          label: "GSTR-9C",
+          periodicity: "annual",
+          supported: false,
+          artifacts: [],
+          explanation: "Annual reconciliation statement acquisition is not supported by Pack.",
+        },
+        {
+          id: "GSTR-4",
+          label: "GSTR-4",
+          periodicity: "quarterly",
+          supported: false,
+          artifacts: [],
+          explanation: "Quarterly return acquisition is not supported by Pack.",
+        },
+        {
+          id: "GSTR-4A",
+          label: "GSTR-4A",
+          periodicity: "quarterly",
+          supported: false,
+          artifacts: [],
+          explanation: "Quarterly statement acquisition is not supported by Pack.",
+        },
+        {
+          id: "IFF",
+          label: "IFF",
+          periodicity: "monthly",
+          supported: false,
+          artifacts: [],
+          explanation: "Monthly IFF acquisition within a quarter is not supported by Pack.",
+        },
+        {
+          id: "LEDGERS",
+          label: "Ledgers",
+          periodicity: "none",
+          supported: false,
+          artifacts: [],
+          explanation: "Ledgers are not period-shaped and are not supported by Pack.",
+        },
+      ]);
+
+      const MONTHS = Object.freeze({
+        "03": "March",
+        "05": "May",
+        "06": "June",
+        "07": "July",
+      });
+
+      const elements = {
+        prototype: document.querySelector("#prototype"),
+        form: document.querySelector("#scope-form"),
+        scope: document.querySelector("#scope"),
+        returnType: document.querySelector("#return-type"),
+        artifact: document.querySelector("#artifact"),
+        catalogue: document.querySelector("#catalogue-list"),
+        activeFy: document.querySelector("#active-fy"),
+        activePeriod: document.querySelector("#active-period"),
+        activeReturn: document.querySelector("#active-return"),
+        activeArtifact: document.querySelector("#active-artifact"),
+        runStatus: document.querySelector("#run-status"),
+        overflow: document.querySelector("#metric-overflow"),
+      };
+
+      function catalogueRowMarkup(row) {
+        const availability = row.supported
+          ? `${row.artifacts.length} artifact${row.artifacts.length === 1 ? "" : "s"}`
+          : "Not supported";
+
+        return `
+          <li class="catalogue-row" data-supported="${row.supported}">
+            <div class="catalogue-line">
+              <span class="return-name">${row.label}</span>
+              <span class="cadence">${row.periodicity}</span>
+            </div>
+            <p class="row-detail">${row.explanation}</p>
+            <span class="availability">${availability}</span>
+          </li>
+        `;
+      }
+
+      function renderCatalogue() {
+        elements.catalogue.innerHTML = CATALOGUE.map(catalogueRowMarkup).join("");
+      }
+
+      function renderSupportedReturns() {
+        elements.returnType.innerHTML = CATALOGUE.filter((row) => row.supported)
+          .map((row) => `<option value="${row.id}">${row.label} · ${row.periodicity}</option>`)
+          .join("");
+      }
+
+      function activeCatalogueRow() {
+        return CATALOGUE.find((row) => row.id === elements.returnType.value);
+      }
+
+      function renderArtifacts() {
+        const row = activeCatalogueRow();
+        elements.artifact.innerHTML = row.artifacts
+          .map((artifact) => `<option value="${artifact.id}">${artifact.label}</option>`)
+          .join("");
+      }
+
+      function renderActiveTarget() {
+        const [financialYear, period] = elements.scope.value.split("|");
+        const row = activeCatalogueRow();
+        const artifact = row.artifacts.find((item) => item.id === elements.artifact.value);
+
+        elements.activeFy.textContent = financialYear.replace("-", "–");
+        elements.activePeriod.textContent = MONTHS[period];
+        elements.activeReturn.textContent = row.label;
+        elements.activeArtifact.textContent = artifact.label;
+        elements.runStatus.textContent = "Ready. Pack would start exactly the target shown above.";
+      }
+
+      function measureOverflow() {
+        const overflow = Math.max(
+          0,
+          elements.prototype.scrollWidth - elements.prototype.clientWidth,
+        );
+        elements.overflow.textContent = `${overflow} px`;
+      }
+
+      elements.returnType.addEventListener("change", () => {
+        renderArtifacts();
+        renderActiveTarget();
+      });
+
+      elements.scope.addEventListener("change", renderActiveTarget);
+      elements.artifact.addEventListener("change", renderActiveTarget);
+
+      elements.form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const [financialYear, period] = elements.scope.value.split("|");
+        const row = activeCatalogueRow();
+        const artifact = row.artifacts.find((item) => item.id === elements.artifact.value);
+        elements.runStatus.textContent = `Prototype only — no action sent. Target remains ${financialYear} / ${MONTHS[period]} / ${row.label} / ${artifact.label}.`;
+      });
+
+      renderSupportedReturns();
+      renderArtifacts();
+      renderCatalogue();
+      renderActiveTarget();
+      measureOverflow();
+
+      if ("ResizeObserver" in window) {
+        new ResizeObserver(measureOverflow).observe(elements.prototype);
+      } else {
+        window.addEventListener("resize", measureOverflow);
+      }
+    </script>
+  </body>
+</html>

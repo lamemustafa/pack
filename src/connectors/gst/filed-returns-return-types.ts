@@ -1,8 +1,14 @@
-import { FILED_RETURNS_CAPABILITIES } from "./filed-returns-capabilities.ts";
+import {
+  FILED_RETURNS_CAPABILITIES,
+  supportedFiledReturnsCatalogueEntries,
+} from "./filed-returns-capabilities.ts";
+import type { FiledReturnsSupportedReturnType } from "./filed-returns-capabilities.ts";
 
-export const FILED_RETURNS_RETURN_TYPES = ["GSTR-3B", "GSTR-1", "GSTR-2B"] as const;
+export type FiledReturnsReturnType = FiledReturnsSupportedReturnType;
 
-export type FiledReturnsReturnType = (typeof FILED_RETURNS_RETURN_TYPES)[number];
+/** Runtime-valid return types, derived from supported catalogue rows. */
+export const FILED_RETURNS_RETURN_TYPES: readonly FiledReturnsReturnType[] =
+  supportedFiledReturnsCatalogueEntries().map((entry) => entry.returnType);
 
 export function isFiledReturnsReturnType(input: unknown): input is FiledReturnsReturnType {
   return (

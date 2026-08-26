@@ -34,6 +34,7 @@ import {
   getActiveGstTab,
   inferActiveFiledReturnsObservation,
   isSupportedGstBrowserTab,
+  isTrustedGstContextReporterTab,
   refreshActiveFiledReturnsObservation,
   refreshActiveGstContext,
   rememberActiveGstTabById,
@@ -222,11 +223,11 @@ async function handleMessage(
       portalObservation: (input) => parseCanonicalFiledReturnsObservation(input) !== null,
     })
   ) {
-    if (sender.id === browser.runtime.id && isSupportedGstBrowserTab(sender.tab)) {
-      if (isFiledReturnsObservationEnvelope(message)) {
+    if (sender.id === browser.runtime.id) {
+      if (isFiledReturnsObservationEnvelope(message) && isSupportedGstBrowserTab(sender.tab)) {
         await browser.storage.session.remove(PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation);
       }
-      if (isContentContextEnvelope(message)) {
+      if (isContentContextEnvelope(message) && isTrustedGstContextReporterTab(sender.tab)) {
         await browser.storage.session.remove(PACK_SESSION_STORAGE_KEYS.lastContext);
       }
     }
@@ -235,7 +236,7 @@ async function handleMessage(
 
   switch (message.type) {
     case "PACK_CONTENT_CONTEXT": {
-      if (sender.id !== browser.runtime.id || !isSupportedGstBrowserTab(sender.tab)) {
+      if (sender.id !== browser.runtime.id || !isTrustedGstContextReporterTab(sender.tab)) {
         return { ok: false, error: "Invalid Pack sender or context." };
       }
       const context = await persistCanonicalGstPortalContext(
@@ -244,12 +245,13 @@ async function handleMessage(
         sender.tab.url,
       );
       if (!context) return { ok: false, error: "Invalid Pack sender or context." };
-      const nextSessionValues: Record<string, unknown> = {
-        [PACK_SESSION_STORAGE_KEYS.lastGstTabId]: sender.tab.id,
-      };
-      await browser.storage.session.set({
-        ...nextSessionValues,
-      });
+      // Error and logout pages may report context but must never replace the
+      // remembered actionable tab used by navigation/download operations.
+      if (isSupportedGstBrowserTab(sender.tab)) {
+        await browser.storage.session.set({
+          [PACK_SESSION_STORAGE_KEYS.lastGstTabId]: sender.tab.id,
+        });
+      }
       return { ok: true, context };
     }
     case "PACK_FILED_RETURNS_OBSERVATION": {

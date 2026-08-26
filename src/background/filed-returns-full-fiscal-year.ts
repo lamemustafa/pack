@@ -14,6 +14,7 @@ import {
   canCompleteFullFiscalYearLedger,
   createFullFiscalYearLedger,
   hasCanonicalFullFiscalYearTargetPlan,
+  hasInconsistentFullFiscalYearCompletion,
   markFullFiscalYearTargetRunning,
   markFullFiscalYearTargetTerminal,
   nextRunnableFullFiscalYearTarget,
@@ -145,6 +146,10 @@ export async function startFullFiscalYearDownloadFlow(
   const now = deps.now?.() ?? new Date();
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
   let existingLedger = await readLedgerForScope(deps, scope);
+  if (existingLedger && hasInconsistentFullFiscalYearCompletion(existingLedger)) {
+    const summary = summariseFullFiscalYearLedger(existingLedger, now);
+    return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  }
   let sameScopeExistingLedger =
     existingLedger && sameFiledReturnsScope(existingLedger.scope, scope) ? existingLedger : null;
   if (sameScopeExistingLedger && plannedPeriods.length > 0) {
@@ -244,12 +249,14 @@ export async function startFullFiscalYearDownloadFlow(
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     existingLedger.status === "complete" &&
     canCompleteFullFiscalYearLedger(existingLedger) &&
+    !existingLedger.zipDownloadAttempt &&
     !hasRetainedFullFiscalYearStaging(existingLedger) &&
     !options.allowExistingLedgerResume;
-  const replaceUnstartedBlockedSameScopeLedger =
+  const replaceUnstartedCancelledSameScopeLedger =
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
-    (existingLedger.status === "blocked" || existingLedger.status === "cancelled") &&
+    existingLedger.status === "cancelled" &&
+    !existingLedger.zipDownloadAttempt &&
     !hasTerminalPositiveTarget(existingLedger) &&
     !hasDownloadUnconfirmedTarget(existingLedger) &&
     !hasRetainedFullFiscalYearStaging(existingLedger) &&
@@ -276,7 +283,7 @@ export async function startFullFiscalYearDownloadFlow(
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
+    !replaceUnstartedCancelledSameScopeLedger
       ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
       : createFullFiscalYearLedger(scope, now, plannedPeriods);
 
@@ -284,7 +291,7 @@ export async function startFullFiscalYearDownloadFlow(
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
+    !replaceUnstartedCancelledSameScopeLedger
   ) {
     if (shouldPersistReconciledLedger(existingLedger, ledger)) {
       await persistLedger(deps, ledger);
@@ -297,7 +304,7 @@ export async function startFullFiscalYearDownloadFlow(
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
+    !replaceUnstartedCancelledSameScopeLedger
       ? resumeFullFiscalYearLedger(ledger, now)
       : ledger;
 

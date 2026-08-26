@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import {
   GST_PORTAL_TAB_URL_PATTERNS,
   isActionableGstPortalTabUrl,
+  isSupportedGstPortalUrl,
   pickSupportedGstPortalTab,
   pickUniquePreferredGstPortalTab,
 } from "../connectors/gst/hosts";
@@ -95,7 +96,7 @@ export async function inferActiveFiledReturnsObservation(): Promise<PortalObserv
 }
 
 export async function refreshActiveGstContext(): Promise<PortalContext | null> {
-  const activeTab = await getActiveGstTab();
+  const activeTab = await getActiveGstContextTab();
   if (!activeTab) return null;
 
   const response = await sendMessageToTabWithInjection(activeTab.id, {
@@ -109,6 +110,17 @@ export async function refreshActiveGstContext(): Promise<PortalContext | null> {
     response.context,
     activeTab.url,
   );
+}
+
+/**
+ * Context reporting is observational, not permission to automate a tab. An
+ * active GST error page must be allowed to describe itself even though the
+ * action selector below correctly excludes it from navigation and downloads.
+ */
+export async function getActiveGstContextTab(): Promise<ActiveGstTab | null> {
+  const activeCurrentWindowTabs = await browser.tabs.query({ active: true, currentWindow: true });
+  const activeContextTab = activeCurrentWindowTabs.find(isTrustedGstContextReporterTab);
+  return activeContextTab ?? getActiveGstTab();
 }
 
 export async function getActiveGstTab(): Promise<ActiveGstTab | null> {
@@ -166,6 +178,12 @@ export function isSupportedGstBrowserTab(
   tab: Browser.tabs.Tab | undefined,
 ): tab is Browser.tabs.Tab & { id: number } {
   return typeof tab?.id === "number" && isActionableGstPortalTabUrl(tab.url);
+}
+
+export function isTrustedGstContextReporterTab(
+  tab: Browser.tabs.Tab | undefined,
+): tab is Browser.tabs.Tab & { id: number } {
+  return typeof tab?.id === "number" && isSupportedGstPortalUrl(tab.url);
 }
 
 export async function sendMessageToTabWithInjection(

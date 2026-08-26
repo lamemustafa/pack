@@ -88,7 +88,7 @@ export async function prepareFullFiscalYearTargetRetry(
         ok: false,
         response: recoveryActionUnavailableResponse(
           "full-fiscal-year-run-interrupted",
-          `Pack cannot safely retry interrupted ${checked.target.period} because a staged file may exist without its final ledger checkpoint. Discard this saved run before starting again.`,
+          "Pack cannot safely retry an interrupted period because a staged file may exist without its final ledger checkpoint. Discard this saved run before starting again.",
           checked.ledger,
         ),
       };
