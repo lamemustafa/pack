@@ -80,7 +80,7 @@ describe("popup presentation state", () => {
     expect(getPopupPresentationState(unsupportedContext(), retainedZipSummary, null)).toMatchObject(
       {
         kind: "blocked",
-        title: "Finish the saved fiscal-year ZIP",
+        title: "Saved run needs attention",
       },
     );
   });
