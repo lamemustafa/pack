@@ -316,7 +316,13 @@ async function clearFiledReturnsTargetReviewAttempt(
           : "storage-read-failed",
       );
     }
-    if (state.state === "missing") return targetReviewClearFailure("review-missing");
+    // Nothing to remove is the post-condition, not a failure. A live
+    // single-period All-formats run downloaded its ZIP, correlated it by exact
+    // browser download ID, cleared staging -- and then blocked, because the
+    // review record it went to delete was already gone. A non-idempotent delete
+    // reported success as an error and held a proven download hostage to its
+    // own bookkeeping.
+    if (state.state === "missing") return { ok: true };
     if (state.state === "malformed") return targetReviewClearFailure("review-malformed");
     if (!sameFiledReturnsScope(state.review.scope, scope)) {
       return targetReviewClearFailure("scope-mismatch");
