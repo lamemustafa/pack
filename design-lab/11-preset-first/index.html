@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Pack — preset-first panel at 320px</title>
+    <style>
+      :root {
+        --surface: #fff;
+        --muted: #f7f9fb;
+        --canvas: #f5f7fa;
+        --sunken: #e5ebf2;
+        --ink: #172033;
+        --ink2: #334155;
+        --mut: #526477;
+        --link: #244d7c;
+        --bs: #d8e1ec;
+        --bd: #c8d3de;
+        --str: #9fb0c1;
+        --action: #173a63;
+        --action2: #0f2a49;
+        --ok: #115d38;
+        --okbg: #e8f8ef;
+        --okbd: #9cc7b1;
+        --warn: #75420b;
+        --warnbg: #fff7e8;
+        --warnbd: #ddc58b;
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.5;
+        padding: 24px;
+      }
+      .stage {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .cap {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--mut);
+        margin: 0 0 8px;
+      }
+      /* the hard constraint: Chrome will not go below ~320px and will not persist a resize */
+      .panel {
+        width: 320px;
+        border: 1px solid var(--bd);
+        border-radius: 8px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+      }
+      .mark {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        background: var(--action);
+        flex: 0 0 auto;
+      }
+      .name {
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        font-size: 14px;
+      }
+      .pub {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--mut);
+      }
+      .src {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ok);
+        padding: 0 12px 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ok);
+      }
+      .body {
+        padding: 12px;
+        border-top: 1px solid var(--bs);
+      }
+      h2 {
+        margin: 0 0 10px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.012em;
+      }
+      .choice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        font-size: 13.5px;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--bs);
+        border-radius: 6px;
+        padding: 9px 10px;
+        margin-bottom: 6px;
+        cursor: pointer;
+      }
+      .choice:hover {
+        border-color: var(--str);
+        background: var(--muted);
+      }
+      .choice .n {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--mut);
+        white-space: nowrap;
+      }
+      /* Not a ghost. A dashed blue link below three solid presets reads as a
+     footnote -- it took a second run to find where a run gets configured. It is
+     a peer control, set apart by a rule rather than by being faint. */
+      .more-rule {
+        border: 0;
+        border-top: 1px solid var(--bs);
+        margin: 10px 0 8px;
+      }
+      .choice.door {
+        border-color: var(--bd);
+        background: var(--muted);
+      }
+      .choice.door:hover {
+        border-color: var(--str);
+        background: var(--sunken);
+      }
+      .choice.door .n {
+        font-size: 14px;
+        color: var(--ink2);
+      }
+      .foot {
+        border-top: 1px solid var(--bs);
+        padding: 10px 12px;
+        background: var(--muted);
+      }
+      .fine {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--mut);
+        margin: 0;
+        text-align: center;
+        line-height: 1.5;
+      }
+      .btn {
+        width: 100%;
+        font: inherit;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: #fff;
+        background: var(--action);
+        border: 1px solid var(--action);
+        border-radius: 6px;
+        padding: 9px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: var(--action2);
+      }
+      .btn.g {
+        background: var(--surface);
+        color: var(--ink2);
+        border-color: var(--bd);
+        font-weight: 500;
+      }
+      .link {
+        font: inherit;
+        font-size: 12.5px;
+        color: var(--link);
+        background: none;
+        border: 0;
+        padding: 6px 0 0;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .rows {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .rows td {
+        padding: 3px 0;
+        border-bottom: 1px solid var(--bs);
+        color: var(--ink2);
+      }
+      .rows td.t {
+        font-family: var(--mono);
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .rows td.s {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        text-align: right;
+        color: var(--mut);
+      }
+      .rows tr.now td {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .bar {
+        height: 4px;
+        background: var(--sunken);
+        border-radius: 2px;
+        overflow: hidden;
+        margin: 8px 0 10px;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        background: var(--action);
+        transition: width 0.25s;
+      }
+      .status {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--ink2);
+        margin: 0 0 8px;
+      }
+      .status b {
+        color: var(--ink);
+      }
+      .ok {
+        border: 1px solid var(--okbd);
+        background: var(--okbg);
+        border-radius: 6px;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .ok h3 {
+        margin: 0 0 2px;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: var(--ok);
+      }
+      .ok p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink2);
+      }
+      .warn {
+        border: 1px solid var(--warnbd);
+        background: var(--warnbg);
+        border-radius: 6px;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .warn h3 {
+        margin: 0 0 3px;
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+      .warn p {
+        margin: 0 0 8px;
+        font-size: 12px;
+        color: var(--ink2);
+      }
+      .step {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 10px;
+      }
+      .step i {
+        flex: 1;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--sunken);
+      }
+      .step i.on {
+        background: var(--action);
+      }
+      select {
+        width: 100%;
+        font: inherit;
+        font-size: 13.5px;
+        padding: 8px 9px;
+        border: 1px solid var(--bd);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--ink);
+      }
+      label {
+        display: block;
+        font-size: 11.5px;
+        color: var(--mut);
+        margin: 0 0 4px;
+      }
+      .field {
+        margin-bottom: 10px;
+      }
+      .aside {
+        max-width: 26rem;
+        font-size: 13px;
+        color: var(--ink2);
+      }
+      .aside h3 {
+        font-size: 13px;
+        margin: 16px 0 4px;
+        color: var(--ink);
+      }
+      .aside ul {
+        padding-left: 17px;
+        margin: 4px 0;
+      }
+      .aside li {
+        margin-bottom: 4px;
+      }
+      .aside code {
+        font-family: var(--mono);
+        font-size: 11px;
+        background: var(--sunken);
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div>
+        <p class="cap">Panel · 320px · the width Chrome enforces</p>
+        <div class="panel">
+          <div class="head">
+            <span class="mark"></span><span class="name">Pack</span
+            ><span class="pub">ComplyEaze</span>
+          </div>
+          <div class="src"><span class="dot"></span>GST portal · signed in</div>
+          <div class="body" id="body"></div>
+          <div class="foot">
+            <p class="fine">
+              Local only · GST login and files stay on this device.<br />Not affiliated with GSTN,
+              CBIC or the Government of India.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="aside">
+        <h3>What this changes</h3>
+        <p>
+          The common case is one click again. The four guided steps still exist, behind
+          <i>Choose return, year and period</i>, for anything a preset does not cover.
+        </p>
+        <h3>Findings this absorbs</h3>
+        <ul>
+          <li><b>No quick full-year choice.</b> Presets are the default view.</li>
+          <li><b>Catalogue &amp; limits on step 1.</b> Moved to the door it belongs behind.</li>
+          <li><b>Full fiscal year buried among months.</b> It is a preset, not a dropdown row.</li>
+          <li><b>Starting a new run.</b> One button on the completed state.</li>
+          <li><b>Button position moving.</b> Primary action sits last, always.</li>
+          <li><b>Four routes out of a paused run.</b> One primary, the rest behind <i>More</i>.</li>
+          <li><b>Month status lagging.</b> Rows tick as the run advances.</li>
+        </ul>
+        <h3>Honest about the runtime</h3>
+        <p>
+          Every preset is <b>one</b> scope, because <code>FiledReturnsDownloadScope</code> carries
+          one return, one year, one period, one format. No preset promises a mixed run the runner
+          cannot accept.
+        </p>
+      </div>
+    </div>
+    <script>
+      const MONTHS = [
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+        "January",
+        "February",
+        "March",
+      ];
+      // Derived, never written down. A preset that says "12 periods" while the
+      // runtime plans four is a control whose shape over-claims -- the same mistake as
+      // a grid that accepts one cell. The real panel reads this from
+      // getFiledReturnsFullFiscalYearPeriods(financialYear, now).
+      const TODAY = new Date("2026-08-26T00:00:00Z");
+      function eligiblePeriods(fy) {
+        const startYear = Number(fy.slice(0, 4));
+        // a month is filed once its due date has passed, roughly the 20th of the next month
+        return MONTHS.filter((_, idx) => {
+          const monthNo = (3 + idx) % 12; // April = index 3
+          const year = startYear + (idx <= 8 ? 0 : 1);
+          return TODAY > new Date(Date.UTC(year, monthNo + 1, 20));
+        });
+      }
+      const CURRENT_FY = "2026-27";
+      const PRESETS = [
+        { id: "3b", label: "This year's GSTR-3B", ret: "GSTR-3B", fmt: "Filed return (PDF)" },
+        { id: "2b", label: "This year's GSTR-2B", ret: "GSTR-2B", fmt: "All formats" },
+        { id: "r1", label: "This year's GSTR-1", ret: "GSTR-1", fmt: "Summary (PDF)" },
+      ].map((p) => {
+        const n = eligiblePeriods(CURRENT_FY).length;
+        return { ...p, periods: n, note: `${n} ${n === 1 ? "period" : "periods"} · one ZIP` };
+      });
+      let view = "home",
+        plan = [],
+        i = 0,
+        timer = null,
+        cur = null,
+        moreOpen = false,
+        step = 0;
+      const body = document.getElementById("body");
+      const esc = (s) =>
+        String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+
+      function start(p) {
+        cur = p;
+        plan = eligiblePeriods(CURRENT_FY).map((m) => ({ m, st: "waiting" }));
+        i = 0;
+        view = "run";
+        render();
+        tick();
+      }
+      function tick() {
+        if (i >= plan.length) {
+          view = "done";
+          render();
+          return;
+        }
+        plan[i].st = "running";
+        render();
+        timer = setTimeout(() => {
+          // one period deliberately needs review, to show the exception path
+          if (i === Math.min(2, plan.length - 1)) {
+            plan[i].st = "review";
+            view = "paused";
+            render();
+            return;
+          }
+          plan[i].st = "saved";
+          i++;
+          render();
+          tick();
+        }, 420);
+      }
+      function render() {
+        if (view === "home") {
+          body.innerHTML =
+            `<h2>What do you need?</h2>` +
+            PRESETS.map(
+              (p) =>
+                `<button class="choice" data-p="${p.id}"><span>${esc(p.label)}</span><span class="n">${esc(p.note)}</span></button>`,
+            ).join("") +
+            `<hr class="more-rule"><button class="choice door" data-custom="1"><span>Choose return, year and period</span><span class="n">&rsaquo;</span></button>`;
+          return;
+        }
+        if (view === "custom") {
+          const titles = [
+            "Which return?",
+            "Which financial year?",
+            "Which filed period?",
+            "Which file?",
+          ];
+          const opts = [
+            ["GSTR-3B", "GSTR-1", "GSTR-2B"],
+            ["2026-27", "2025-26", "2024-25"],
+            ["Full fiscal year", ...MONTHS],
+            ["Filed return (PDF)", "Portal data (JSON)", "All formats"],
+          ];
+          body.innerHTML =
+            `<div class="step">${[0, 1, 2, 3].map((n) => `<i class="${n <= step ? "on" : ""}"></i>`).join("")}</div>` +
+            `<h2>${titles[step]}</h2>` +
+            `<div class="field"><select>${opts[step].map((o) => `<option>${esc(o)}</option>`).join("")}</select></div>` +
+            `<button class="btn" data-next="1">${step === 3 ? "Download" : "Continue"}</button>` +
+            `<button class="link" data-back="1">${step === 0 ? "Back to presets" : "Back"}</button>`;
+          return;
+        }
+        const saved = plan.filter((t) => t.st === "saved").length;
+        const list = `<table class="rows"><tbody>${plan
+          .map(
+            (t) =>
+              `<tr class="${t.st === "running" ? "now" : ""}"><td class="t">${t.m}</td><td class="s">${
+                { saved: "Saved", running: "Working…", review: "Needs review", waiting: "" }[t.st]
+              }</td></tr>`,
+          )
+          .join("")}</tbody></table>`;
+
+        if (view === "run") {
+          body.innerHTML = `<h2>${esc(cur.ret)} · this year</h2>
+      <div class="bar"><i style="width:${Math.round((saved / plan.length) * 100)}%"></i></div>
+      <p class="status"><b>${saved} of ${plan.length} saved</b> · keep the GST tab open</p>${list}`;
+          return;
+        }
+        if (view === "paused") {
+          const m = plan.find((t) => t.st === "review").m;
+          body.innerHTML = `<div class="warn"><h3>${m} needs a check</h3>
+        <p>Pack could not confirm ${m}. Everything before it is saved.</p>
+        <button class="btn" data-retry="1">Retry ${m}</button></div>
+      <button class="link" data-more="1">${moreOpen ? "Fewer options" : "More options"}</button>
+      ${
+        moreOpen
+          ? `<div style="margin-top:6px">
+        <button class="btn g" data-skip="1" style="margin-bottom:5px">Skip ${m} and continue</button>
+        <button class="btn g" data-reset="1">Discard this run</button></div>`
+          : ""
+      }
+      <div class="bar" style="margin-top:12px"><i style="width:${Math.round((saved / plan.length) * 100)}%"></i></div>
+      <p class="status"><b>${saved} of ${plan.length} saved</b></p>${list}`;
+          return;
+        }
+        body.innerHTML = `<div class="ok"><h3>Download complete</h3><p>${plan.length} periods saved as one ZIP.</p></div>
+    <p class="status">${esc(cur.ret)} · this year · <b>saved by your browser</b></p>
+    <button class="btn" data-new="1">Start another</button>
+    <button class="link" data-detail="1">Show all ${plan.length} periods</button>`;
+      }
+      document.addEventListener("click", (e) => {
+        const p = e.target.closest("[data-p]");
+        if (p) {
+          start(PRESETS.find((x) => x.id === p.dataset.p));
+          return;
+        }
+        if (e.target.closest("[data-custom]")) {
+          view = "custom";
+          step = 0;
+          render();
+          return;
+        }
+        if (e.target.closest("[data-next]")) {
+          if (step < 3) {
+            step++;
+            render();
+          } else {
+            start(PRESETS[0]);
+          }
+          return;
+        }
+        if (e.target.closest("[data-back]")) {
+          if (step === 0) {
+            view = "home";
+          } else {
+            step--;
+          }
+          render();
+          return;
+        }
+        if (e.target.closest("[data-retry]")) {
+          plan[i].st = "saved";
+          i++;
+          view = "run";
+          moreOpen = false;
+          render();
+          tick();
+          return;
+        }
+        if (e.target.closest("[data-more]")) {
+          moreOpen = !moreOpen;
+          render();
+          return;
+        }
+        if (e.target.closest("[data-skip]")) {
+          plan[i].st = "saved";
+          i++;
+          view = "run";
+          moreOpen = false;
+          render();
+          tick();
+          return;
+        }
+        if (e.target.closest("[data-reset]") || e.target.closest("[data-new]")) {
+          clearTimeout(timer);
+          view = "home";
+          moreOpen = false;
+          render();
+          return;
+        }
+        if (e.target.closest("[data-detail]")) {
+          alert("Per-period detail expands here.");
+          return;
+        }
+      });
+      render();
+    </script>
+  </body>
+</html>
