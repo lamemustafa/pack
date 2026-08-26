@@ -1,6 +1,5 @@
 import type {
   FiledReturnsDownloadScope,
-  FiledReturnsDownloadTarget,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { delay } from "../core/time";
@@ -10,7 +9,6 @@ import {
   contentScriptUnavailableResponse,
   normaliseContentScriptMessageResponse,
 } from "./content-script-message-response";
-import { ambiguousDownloadTriggerResponse } from "./filed-returns-flow-guards";
 import { isValidFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 
 const FLOW_STEP_MESSAGE_RETRY_MS = 1_250;
@@ -67,26 +65,6 @@ export interface FiledReturnsFlowMessagingDeps {
     contentMessageTimeoutMs?: number;
     targetBoundPortalDownloadWaitMs?: number;
   };
-}
-
-export async function runDownloadTriggerOnce(
-  deps: FiledReturnsFlowMessagingDeps,
-  tabId: number,
-  target: FiledReturnsDownloadTarget,
-): Promise<PackMessageResponse> {
-  try {
-    return normaliseContentScriptMessageResponse(
-      await withContentMessageTimeout(
-        deps.sendMessageToTabWithInjection(tabId, {
-          type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3",
-          payload: target,
-        }),
-        deps,
-      ),
-    );
-  } catch {
-    return ambiguousDownloadTriggerResponse();
-  }
 }
 
 export async function runDownloadStepWithRetry(

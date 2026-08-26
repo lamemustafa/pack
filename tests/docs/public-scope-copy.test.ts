@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -55,7 +56,9 @@ const TEXT_FILE = /\.(ts|tsx|js|mjs|cjs|json|md|svg|html|yml|yaml)$/;
 function trackedTextFiles(): string[] {
   return execFileSync("git", ["ls-files"], { cwd: rootDir, encoding: "utf8" })
     .split("\n")
-    .filter((entry) => entry !== "" && TEXT_FILE.test(entry));
+    .filter(
+      (entry) => entry !== "" && TEXT_FILE.test(entry) && existsSync(path.join(rootDir, entry)),
+    );
 }
 
 // Public documents are found by rule, not listed. The previous version named
