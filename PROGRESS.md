@@ -1,5 +1,28 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 38 — audit 320px panel-state coverage
+
+- Window: 2026-08-27 04:08–04:12 IST.
+- Picked: the objective's panel-state matrix at the 320px floor.
+- Measured before: current component tests render honest loading, unsupported, access-denied,
+  action-error, running, partial, blocked, complete, unavailable and cancelled families. The current
+  packaged browser verifier remeasures the supported guided-flow and expanded catalogue geometry;
+  historic synthetic packaged measurements cover every presentation family at 320px.
+- Disposition: no source change. Extending the current verifier to inject arbitrary portal contexts
+  would create a new portal-state simulation, which the objective forbids. Static rendering confirms
+  no blank body or misleading chooser for the non-ready families, but is not presented as fresh
+  geometry proof. The existing browser measurement remains valid only for its supported-flow scope.
+- Impeccable audit influence: the project/product register and current panel system were re-read.
+  The deterministic detector reports one pre-existing `width` transition on the 4px run-progress
+  bar; it is an intentional state-progress motion but remains a performance advisory, not a new
+  finding or change.
+- Focused evidence: panel surface and guided-scope interaction suites cover the visible state and
+  unsupported-control contracts. This is a quiet evidence-boundary audit, not portal qualification
+  or a complete-gate claim.
+- Learned / plan change: distinguish prior packaged layout evidence from current semantic coverage.
+  The next cycle returns to duplicate-fact/test-quality work that can be qualified locally without
+  manufacturing a portal state.
+
 ## Cycle 37 — audit typed selected-artifact storage failures
 
 - Window: 2026-08-27 04:06–04:08 IST.
