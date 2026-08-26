@@ -1272,3 +1272,40 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 - Checkpoints: runtime and test commits follow this record; the progress record is committed
   separately after this append. No live/authenticated GST qualification, release claim, push or PR
   action was made.
+
+## Cycle 27 — preserve a real 320px panel geometry check
+
+- Window: 2026-08-27 03:08–03:24 IST (16 minutes). This is a short test-quality checkpoint, not a
+  cadence-qualifying 45–75-minute cycle; the actual duration is recorded without an idle hold.
+- Picked: the release browser verifier proved that the panel mounted, but it did not exercise the
+  signed-in guide at the declared 320px floor. CSS-only inspection could not prove that the preset
+  controls and expanded catalogue remained inside the rendered panel.
+- Measured before: the existing headed packaged-extension check passed at its default viewport. A
+  first compact-flow probe correctly found that the catalogue is behind the explicit custom-scope
+  door, so the final check opens that door rather than mistaking the preset screen for catalogue
+  coverage.
+- Changed: the browser verifier now opens a synthetic filed-returns tab on an already approved GST
+  host, waits for the canonical supported context, and loads the packaged extension at 320 × 900.
+  It asserts no document-wide horizontal scroll, no clipped button/select/summary, and no control
+  shorter than 44px for both the presets and the expanded declared catalogue. The synthetic portal
+  page remains local to the verifier; no Pack production navigation, portal action, permission,
+  persistence, download or target-binding behavior changed.
+- Discrimination: temporarily setting each preset to a 320px minimum width made the browser check
+  fail with `Pack panel clipped a control at 320px during preset choices`; the stylesheet was
+  restored before final gates. The final packaged verifier passes with the normal responsive layout.
+- UI review: the Impeccable detector reports only existing advisory debt in `panel.css` (the
+  run-progress width transition and pre-existing type-ramp values). This checkpoint adds no
+  production CSS and does not suppress or reclassify those findings.
+- Gate: focused package-verifier tests passed 27 tests. Build, TypeScript, zero-warning ESLint,
+  repo-wide Prettier, package verification, headed browser verification and diff checks passed. The
+  final isolated serial Vitest run passed 2,798 tests. Exact footer:
+
+  ```text
+   Test Files  151 passed (151)
+        Tests  2798 passed (2798)
+     Start at  03:21:14
+     Duration  153.04s (transform 2.48s, setup 0ms, import 12.34s, tests 124.66s, environment 8ms)
+  ```
+
+- Checkpoints: test and progress commits follow this record. No live/authenticated GST
+  qualification, release claim, push or PR action was made.
