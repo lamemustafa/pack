@@ -144,9 +144,14 @@ async function completeReconciledDownload(
     return persistCompletedEvidenceFailure(review, observation, null, null, deps);
   }
   const isZip = attempt.kind === "single-period-zip";
-  const zipEvidence = isZip ? await readReconciledZipStagingEvidence(review, deps) : null;
-  if (isZip && !zipEvidence) {
-    return persistZipStagingEvidenceFailure(review, observation, deps);
+  let zipEvidence: ReconciledZipStagingEvidence | null = null;
+  if (isZip) {
+    const zipStaging = await readReconciledZipStagingEvidence(review, deps);
+    if (!zipStaging) return persistZipStagingEvidenceFailure(review, observation, deps);
+    if ("failureSignal" in zipStaging) {
+      return persistZipStagingEvidenceFailure(review, observation, deps, zipStaging.failureSignal);
+    }
+    zipEvidence = zipStaging;
   }
   const flowStep = reconciledCompletionStep(review, observation, zipEvidence);
   if (!flowStep) {
@@ -299,10 +304,14 @@ interface ReconciledZipStagingEvidence {
   ledger: SinglePeriodBundleLedger | null;
 }
 
+interface ReconciledZipStagingReadFailure {
+  failureSignal: "single-period-bundle-state-read-failed";
+}
+
 async function readReconciledZipStagingEvidence(
   review: FiledReturnsTargetReview,
   deps: FiledReturnsTargetReviewDeps,
-): Promise<ReconciledZipStagingEvidence | null> {
+): Promise<ReconciledZipStagingEvidence | ReconciledZipStagingReadFailure | null> {
   const attempt = review.downloadAttempt;
   if (!attempt || attempt.kind !== "single-period-zip" || attempt.phase !== "download-observing") {
     return null;
@@ -311,7 +320,7 @@ async function readReconciledZipStagingEvidence(
   try {
     storageState = await readSinglePeriodBundleLedgerStorageState();
   } catch {
-    return null;
+    return { failureSignal: "single-period-bundle-state-read-failed" };
   }
   if (storageState.state === "missing") {
     if (
@@ -471,6 +480,7 @@ async function persistZipStagingEvidenceFailure(
   review: FiledReturnsTargetReview,
   observation: SafeDownloadObservation,
   deps: FiledReturnsTargetReviewDeps,
+  stagingFailureSignal?: "single-period-bundle-state-read-failed",
 ): Promise<PackMessageResponse> {
   const step: PortalFlowStepResult = {
     connectorId: "gst",
@@ -478,7 +488,7 @@ async function persistZipStagingEvidenceFailure(
     state: "blocked",
     safeSignals: [
       "filed-returns-download-reconciled-by-id",
-      "single-period-bundle-ledger-malformed",
+      stagingFailureSignal ?? "single-period-bundle-ledger-malformed",
       "single-period-opfs-retained",
       ...observation.safeSignals,
     ],

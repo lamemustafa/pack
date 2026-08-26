@@ -1245,6 +1245,9 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
   if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
     const transientStagingCleared = review.safeSignals.includes("single-period-opfs-cleared");
     const downloadConfirmed = hasConfirmedSinglePeriodZipDownloadEvidence(review.safeSignals);
+    const stagingStateReadFailed = review.safeSignals.includes(
+      "single-period-bundle-state-read-failed",
+    );
     return {
       connectorId: "gst",
       scopeId: filedReturnScopeId(review.scope.returnType),
@@ -1275,14 +1278,18 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
       ]),
       safeMessage: transientStagingCleared
         ? "Pack cleared temporary selected-file staging but could not verify its durable recovery checkpoint cleanup."
-        : downloadConfirmed
-          ? `Pack confirmed the selected ZIP download for ${review.scope.period}; only temporary local staging remains to be cleared.`
-          : "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+        : stagingStateReadFailed
+          ? "Pack could not read temporary selected-file recovery state, so it retained local staging without clearing or replacing it."
+          : downloadConfirmed
+            ? `Pack confirmed the selected ZIP download for ${review.scope.period}; only temporary local staging remains to be cleared.`
+            : "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
         message: transientStagingCleared
           ? "Retry so Pack can reconcile the durable selected-file recovery checkpoint."
-          : "Retry so Pack can clear the retained temporary staging before completion.",
+          : stagingStateReadFailed
+            ? "Retry after local recovery state is available; Pack will not clear or replace it while it cannot read it."
+            : "Retry so Pack can clear the retained temporary staging before completion.",
         canResume: true,
       },
       ...copyFiledReturnsDownloadDiagnosticState(review),
