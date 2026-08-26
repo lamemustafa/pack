@@ -23,6 +23,11 @@
   `tests/popup/pack-summary.test.tsx`, `tests/panel/panel-evidence-counts.test.tsx` and
   `tests/panel/panel-ledger-evidence-counts.test.tsx`.
   The lane register had no competing claim, and the clean workflow preflight passed before edits.
+- Cycle 20 owns the existing full-year ledger, summary, run-state and orchestration modules,
+  the full-year recovery refusal message,
+  current-state and local-data readers, plus the new `full-year-completion-*` tests/helpers in
+  `tests/background` and `tests/panel`. The existing historical recovery test is included.
+  No competing lane claim existed; clean workflow preflight passed before edits.
 
 ## Outcome
 
@@ -382,6 +387,9 @@ reviewed persistence and failure contracts.
   Independent source review and isolated dependency-stubbed probes support that follow-up;
   its normal-workflow origin and live behavior remain unqualified. It is not part of the
   count-removal checkpoint or its approval.
+- Cycle 20 repairs the measured target-disagreement cases across readers and recovery selection.
+  Its synthetic sweep still leaves 48 all-positive legacy-cleanup projections rejected by the
+  summary parser. It does not certify general cleanup consistency or normal-workflow provenance.
 
 ## Decision log
 
@@ -1284,3 +1292,175 @@ retrying.` The focused test failed 1 of 115 session-boundary cases before the fi
   ```
 
   Test-only checkpoint: `979b02c17f710d48ef646fc877bbaf9f63166bb1`.
+
+## Cycle 20 — keep full-year recovery authoritative across readers
+
+- Started 2026-08-26 at 06:57 IST, after the preceding cycle's clean checkpoint and workflow
+  preflight. This is one recovery-consistency change spanning seven background modules, not a
+  change to portal behavior. Independent privacy and security reviews completed three rounds.
+- Canonical target state now takes precedence when it disagrees with a completed aggregate.
+  Summary reconstruction returns a blocked read-only view; it preserves ledger identity, revision,
+  timestamps and targets and omits `completedAt`. The original local ledger is not rewritten by
+  reads or refused Start/Clear operations. Existing active-run and target-review precedence remains.
+- A shared predicate uses the existing positive-target set. It is deliberately not the negation
+  of completion eligibility: plan validity, empty plans and ZIP delivery retain separate guards.
+  A false result from this predicate is not proof of completion or permission to clear data.
+- Start checks the existing recovery before reconciliation or cleanup; current-state reads prefer
+  it to competing summaries; Clear preserves unresolved state. Explicitly validated recovery still
+  uses the existing ledger/target/revision checks. The pending route retains account confirmation,
+  and interrupted-running retry remains refused. No guard was relaxed.
+- Message and recovery selection now share one helper. Unconfirmed-download priority is retained;
+  interruption selects a running target only for the corresponding action-required step. A copied
+  historical diagnostic does not change generic recovery selection. Ordinary current-target
+  preference remains. The running retry refusal keeps its staging/checkpoint reason and discard
+  instruction without naming a period that may differ from the returned canonical recovery.
+- Persistence eligibility changes: the existing blocked summary can now survive the canonical
+  session serializer where the contradictory completed projection was rejected. This is not
+  persistence-neutral. No field, data category, storage key, serializer rule, allowlist or write
+  path was added. Display-only target evidence remains excluded from storage. Historical tests
+  separately assert blocked reconstruction and rejection of a forced contradictory completion.
+- Evidence boundary: all inputs are synthetic factory-built ledgers accepted by the actual
+  validator, with canonical target signals and messages. This establishes reader behavior, not
+  that a normal workflow produces the inconsistent input. The initial unit/stubbed-reader checks
+  did not exercise actual browser storage, portal, download, authenticated session or service-worker
+  termination. The later isolated-browser check is distinguished below. Legacy no-plan completed
+  records and empty plans are not claimed to be accepted by the validator.
+
+### Regression and discrimination evidence
+
+- Initial corrected baseline: four new files, 106 cases, 90 failures and 16 passing controls.
+  The reader matrix's first draft contained an invalid single-period competitor; it was corrected
+  before the recorded baseline (28 failures / 6 passes). Six existing historical assertions also
+  required adjustment from rejected completion to the new blocked projection; their separate
+  forced-completion rejection assertion was retained. No failed blocking assertion was weakened.
+- Review added mixed-target, current-preference, copied-diagnostic and actual recovery-handler
+  cases. Final focused matrix: 121 passing cases in four files; TypeScript also passed. Positive
+  controls cover settled targets, ordinary noncomplete aggregates, active/target-review precedence,
+  validated pending retry, and unchanged ledger/target/revision/running rejection guards.
+- Independent review caught and closed three target-alignment cases before checkpoint. The actual
+  retry handler refuses interrupted recovery without writes; the actual manual-observation handler
+  changes only the named target. These use isolated storage and staging stubs, not browser actions.
+
+  | Reverted behavior            | Failed / selected | Discriminating result                                                         |
+  | ---------------------------- | ----------------: | ----------------------------------------------------------------------------- |
+  | Clear preservation           |             7 / 7 | Expected refused response; received `cleared: true`; original ledger absent   |
+  | Current-state priority       |           14 / 21 | Expected recovery summary; competing summary had no recovery identity         |
+  | Early Start ordering         |            7 / 14 | Expected revision 7; received revision 8 after an unwanted checkpoint         |
+  | Existing-ledger priority     |             7 / 7 | Unexpected `full-fiscal-year-retained-staging-scope-conflict`                 |
+  | Nonterminal projection       |           14 / 14 | `expected 'complete' to be 'blocked'`                                         |
+  | Pending confirmation         |             1 / 7 | `expected false to be true`                                                   |
+  | Shared cause selection       |             4 / 4 | Expected the target's recovery cause; received the positive-result cause      |
+  | Shared recovery identity     |            9 / 12 | Period mismatch; retry unexpectedly accepted; manual observation not recorded |
+  | Current interruption context |             2 / 2 | `expected 'April' to be 'May'`                                                |
+  | Period-neutral refusal       |             1 / 1 | Refusal named a period different from its returned recovery identity          |
+
+  Each mutation was restored. The shared-cause mutation's first attempt was invalidated because
+  its process had not completed before restoration; the recorded rerun waited for exit and failed
+  all four selected cases. Initial mixed-target failures are not counted again as additional tests.
+  Final reviewed blobs are `be0ef54f8785550c4da14ec1ce9e14de66bb0f88` (summary) and
+  `9ab7cea9b27405fea9cd896820341ddb2ff4e8d9` (retry refusal). Both independent reviewers reported
+  no remaining findings against these blobs; this is source review, not release qualification.
+
+### Scope and line accounting
+
+| File under `src/background`                   | Before | After |
+| --------------------------------------------- | -----: | ----: |
+| `filed-returns-current-state.ts`              |    148 |   152 |
+| `filed-returns-full-fiscal-year-ledger.ts`    |    432 |   442 |
+| `filed-returns-full-fiscal-year-run-state.ts` |    245 |   241 |
+| `filed-returns-full-fiscal-year-summary.ts`   |    585 |   609 |
+| `filed-returns-full-fiscal-year-recovery.ts`  |    439 |   439 |
+| `filed-returns-full-fiscal-year.ts`           |    558 |   563 |
+| `local-data.ts`                               |    144 |   146 |
+
+- Production total: 2,551→2,592 lines, a net addition of 41. This correctness change is not a net
+  code reduction. The obsolete aggregate-coercion helper was deleted after its responsibility moved
+  to the canonical read-only view. No source module or import edge was removed.
+- New test/helper lines: fixtures 93, readers 268, Start 308, summary 270, panel 104; total 1,043.
+  The existing historical recovery test changed from 2,181 to 2,183 lines, without adding cases.
+- Read-only TypeScript AST scan: 177 source modules, 778 import edges, six WXT/HTML roots, zero
+  zero-importer candidates, zero unreachable modules, zero unresolved local imports and zero
+  nonliteral dynamic imports. The fixed point was reached in one pass. Type-import reachability
+  does not prove runtime use of every export. No Graphify index exists in this lane.
+
+### Packaged 320px check
+
+The actual packaged panel consumed old/current summary producers using identical canonical
+synthetic ledgers. The old producer came from `c88b51a`; UI assets were unchanged. This compares
+producer effects through the real controller/render path, not old/new production browser sessions.
+The fresh task-owned browser profile blocked page network requests and stubbed runtime responses.
+All fixtures used no detected portal context (`context: null`), not a live sign-in assessment;
+no recovery or download action was executed.
+
+| Target status        | Baseline shell | Current shell | Operable controls, before→after |
+| -------------------- | -------------: | ------------: | ------------------------------: |
+| Pending              |     1,576.81px |    1,765.91px |                             6→6 |
+| Running              |     1,576.81px |    1,640.33px |                             6→6 |
+| Download unconfirmed |     1,637.61px |    1,717.92px |                             7→7 |
+| Blocked              |     1,576.81px |    1,673.92px |                             6→6 |
+| Failed               |     1,576.81px |    1,673.92px |                             6→6 |
+| Cancelled            |     1,576.81px |    1,657.13px |                             6→6 |
+| Manually observed    |     1,576.81px |    1,690.72px |                             6→6 |
+
+- All seven headings changed from `Periods processed, ZIP unconfirmed` to the named paused-period
+  warning. Across all seven fixtures, inline height increased 108.06→188.38px, and an existing disabled inline retry became
+  visible (disabled controls 2→3). The pack card stayed 109.41px. This is a visibility correction,
+  not a density reduction or satisfaction of the default three-to-four-control budget.
+- The mixed-target page named April consistently and measured 1,734.11px. Fifteen pages had 320px
+  document width and zero measured horizontal clipping. The blocked page at 400px measured
+  1,595.34px; restoring 320px restored 1,673.92px. The saved-run disclosure closed and reopened by
+  keyboard. Screenshot inspection found the warning, evidence and controls readable.
+- Long recovery pages still scroll, and the initial inline copy still uses a generic recovery
+  remedy while the detailed cause appears below. No native side-panel resize, zoom, screen reader,
+  live action, worker restart or authenticated behavior is qualified by this check.
+- Full source/test gate passed: build, full Vitest, TypeScript, zero-warning ESLint, repo-wide
+  Prettier, package verification and diff checks. Final suite: 131 files, 2,503 tests, 121 more than
+  Cycle 19. Package remains 1.01 MB. Known synthetic workflow/review-test stderr and the TypeScript
+  source-map warning were non-failing. Exact final three Vitest lines:
+
+  ```text
+        Tests  2503 passed (2503)
+     Start at  07:17:11
+     Duration  208.88s (transform 8.89s, setup 0ms, import 28.55s, tests 151.82s, environment 14ms)
+  ```
+
+- Checkpoints: `166cb6d fix(recovery): preserve unresolved full-year state across readers` and
+  `5f28c76 test(recovery): trace full-year recovery through readers and actions`.
+  The browser was closed and its exact task-generated 14 MB profile removed. Across fifteen
+  synthetic pages there were zero action messages and zero observed page network requests.
+  Generated extension output remains only for subsequent cycle verification, not in git.
+- Additional read-only sweep: 6,480 factory-built inputs varied two target statuses, aggregate
+  status, current-target position, a historical diagnostic and recency. All passed the ledger
+  validator. Checked source immutability, recovery identity/status/revision, nonterminal projection,
+  named unconfirmed/interruption identity and persisted recovery/display-evidence boundaries.
+  The old producer had 1,232 nonterminal-projection, 500 unconfirmed-identity and 10 interruption-
+  identity violations. The current producer had none of those checked violations. Counts overlap
+  and are not additional tests, normal-workflow coverage or performance measurements.
+- The initial persistence comparator used JSON property order and reported false differences;
+  the recorded sweep uses structural equality. The canonical summary parser rejected 1,280 old
+  projections versus 48 current projections. The remaining 48 are all-positive legacy cleanup
+  combinations, outside this target-disagreement repair; they are not counted as success or fixed.
+  Their source/reader behavior remains a separate cleanup follow-up. The original ledger validator
+  and summary serializer were not modified to make these generated combinations pass.
+
+### Additional isolated-browser runtime check
+
+- A second fresh profile loaded the same gated package without runtime-message stubs. A generated
+  canonical ledger was seeded only in that profile. The real summary message handler returned
+  blocked recovery, the expected period, the existing recovery identity/revision and twelve
+  display-evidence rows; the stored source ledger remained structurally identical.
+- Closing and relaunching that entire isolated browser with the same profile created a new worker
+  object. The actual message handler reconstructed the structurally identical summary, and the
+  panel again displayed the named paused-period warning. The local ledger remained unchanged.
+  This is synthetic browser-restart reconstruction, not an authenticated run or a test that kills
+  only the service worker at a specific in-flight checkpoint.
+- The actual Options-page Clear button was then clicked once for each of the seven unresolved
+  synthetic target statuses, reloading the page between cases. All seven displayed the specific
+  unresolved-recovery refusal; each stored ledger remained structurally equal to its input.
+  These are real UI inputs against the isolated package, distinct from the fifteen stubbed
+  pages' zero-action check. No download, portal, retry, observation or discard action was used.
+- Page network blocking was enabled before the restart and subsequent Clear checks; it observed
+  zero requests in that interval. It is not a browser-wide network audit. The Options refusal
+  screenshot was inspected at 320px. The browser was closed and its exact 9.7 MB profile removed.
+- This adds runtime evidence for reconstruction and refused Clear only. It does not validate
+  live account identity, portal navigation, staging bytes, download correlation or recovery effects.

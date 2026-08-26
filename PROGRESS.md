@@ -936,3 +936,69 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   do not establish that a normal workflow produces the inconsistent input. Cleanup status,
   action-label and selection-retention work remains queued separately. A display-only recovery
   predicate must not be substituted for the existing start-fresh authorization predicate.
+
+## Cycle 20 — 2026-08-26, 06:57 IST start (review window open)
+
+- Picked: full-year recovery consistency across readers, elevated by Cycle 19's independent
+  triage. Kept cleanup presentation and selection retention separate. Clean preflight passed and
+  the lane register had no competing claim before edits.
+- Before: 106 new cases gave 90 failures and 16 passing controls against the original source.
+  Fixtures used the canonical factory, target-status helper and actual ledger validator. The
+  first reader draft's malformed competitor was corrected before that recorded baseline.
+- Changed: one shared target-disagreement predicate, a read-only blocked summary projection,
+  recovery-preserving reader/Start/Clear ordering, and shared cause/action selection. The existing
+  pending confirmation and ledger/target/revision/running retry guards remain. Source ledgers are
+  not rewritten by reads/refusals; no new persisted field, category, key or serializer rule exists.
+- Persistence qualification: blocked reconstruction now survives the existing session serializer
+  where contradictory completed reconstruction was rejected. This is changed eligibility inside
+  the existing schema, not persistence-neutral. Display-only evidence remains excluded.
+- Three review rounds: mixed-target tests exposed selection differences in unconfirmed and
+  interrupted recovery. Further checks exposed a copied-diagnostic context error and a refusal
+  that named a different period from the returned action. All were rectified before checkpoint.
+  Privacy and security reported no remaining findings on the final source blobs recorded in
+  `VALIDATION.md`. No live, normal-workflow-origin or release qualification is implied.
+- Discrimination: isolated reverts failed 7 Clear, 14 reader-priority, 7 early-Start, 7 existing-
+  ledger, 14 projection, 1 confirmation, 4 cause-selection and 9 identity-selection cases. The
+  two copied-diagnostic and one refusal-copy cases failed before their fixes. Passing controls,
+  filters and failure messages are recorded in `VALIDATION.md`; these are not summed as test count.
+  One prematurely restored mutation was invalidated and rerun while waiting for process completion.
+- Gate: build, full Vitest, TypeScript, zero-warning ESLint, repo-wide Prettier, package verifier
+  and diff checks passed. Final suite: 131 files / 2,503 tests, 121 more than Cycle 19. The package
+  remained 1.01 MB. Exact final three Vitest lines:
+
+  ```text
+        Tests  2503 passed (2503)
+     Start at  07:17:11
+     Duration  208.88s (transform 8.89s, setup 0ms, import 28.55s, tests 151.82s, environment 14ms)
+  ```
+
+- Checkpoints: `166cb6d fix(recovery): preserve unresolved full-year state across readers` and
+  `5f28c76 test(recovery): trace full-year recovery through readers and actions`.
+- Accounting: seven production files 2,551→2,592 lines (+41); five new test/helper files 1,043
+  lines; existing historical tests 2,181→2,183. This is correctness work, not a net code reduction.
+  The obsolete coercion helper was removed. The module scan reached its fixed point in one pass:
+  177 modules, 778 edges, zero orphan or unreachable modules; export-level liveness is not proven.
+- Browser: fifteen synthetic packaged pages, with no detected portal context, zero action
+  messages and zero observed page network requests. At 320px, all seven recovery statuses now show
+  the named paused-period warning. Shell heights increased because recovery is visible; exact
+  before/after values are in `VALIDATION.md`. Operable counts stayed 6→6 or 7→7, while an existing
+  disabled inline action became visible. No horizontal clipping was measured. Keyboard disclosure
+  and 320→400→320 resizing passed. The isolated browser and its exact 14 MB profile were removed.
+- Deeper read-only sweep: 6,480 validator-accepted synthetic inputs; zero violations of the checked
+  current recovery invariants, versus the documented old-producer violations. Property-order false
+  positives were corrected with structural equality. Forty-eight all-positive legacy-cleanup
+  summary rejections remain explicit, outside this target-disagreement repair. These are not
+  additional tests or evidence that a normal workflow produces every generated combination.
+- Learned / next: cleanup-only blocked summaries have no unresolved period and must not acquire
+  a manufactured target action. The next bounded item is visible, canonical recovery copy. A
+  fallback must remain status-only for missing-period input; existing action helpers must agree
+  with what actually renders. Selection retention, cleanup button labels and legacy projection
+  consistency remain separately scoped until their own evidence supports a change.
+- Additional runtime proof: a second temporary profile used the actual packaged background service,
+  with a generated ledger and no runtime-response mocks. A full isolated-browser restart rebuilt
+  the same blocked summary and preserved the stored ledger. The actual Options Clear control then
+  refused all seven synthetic unresolved statuses with visible error copy and unchanged ledgers.
+  This is browser-restart/refusal evidence, not authenticated portal or in-flight-worker-stop
+  qualification. The browser was closed and its exact 9.7 MB profile removed; no retry, download
+  or portal action was performed. Network monitoring was page-scoped and covered the restart/Clear
+  interval only. No source or test file changed after the recorded gate.
