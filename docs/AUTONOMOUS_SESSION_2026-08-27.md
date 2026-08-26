@@ -102,6 +102,7 @@ The immutable source baseline can be checked directly. Remote states are printed
 as observations only.
 
 ```sh
+set -e
 test "$(git rev-parse edad122e61914e8a88e93c00e50f4449bbc8a2c5^{commit})" = \
   "edad122e61914e8a88e93c00e50f4449bbc8a2c5"
 pnpm exec vitest run tests/repo/unreferenced-module-guard.test.ts
