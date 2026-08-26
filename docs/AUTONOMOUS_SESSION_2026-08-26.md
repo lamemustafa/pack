@@ -41,30 +41,31 @@ This later pass does not replace the earlier failures on the same commit.
 
 ## Ledger
 
-| Item                     | Outcome       | Evidence                                                                                                                                                                                                                                                                                                         |
-| ------------------------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Baseline                 | DONE          | Pinned master, clean status and retained exit-1 result above.                                                                                                                                                                                                                                                    |
-| #102                     | BLOCKED       | Issue explicitly requires live re-verification before implementation; this objective prohibits it.                                                                                                                                                                                                               |
-| #115                     | PARTIAL       | [PR #231](https://github.com/lamemustafa/pack/pull/231), b8f402a7066150d01857f12d5ec9d57a097765a1; CI [32924337797](https://github.com/lamemustafa/pack/actions/runs/32924337797); 125 files/2122 tests; five individual mutation proofs. Draft: live qualification unavailable and formal review object absent. |
-| #118                     | BLOCKED       | Read-only audit of artifact-acquisition-state.ts:624. Unknown states already rejected; corrupt/future shape is latent. Central parser tightening also changes cleanup readers. No speculative implementation.                                                                                                    |
-| #122                     | BLOCKED       | Retry-scope half already fixed in #142, 76916d81fea1d03f737179a01c373e52669cf7df; cancellation requires peer-owned filed-returns-target-review.ts. No new implementation credited.                                                                                                                               |
-| #166                     | PARTIAL       | [PR #233](https://github.com/lamemustafa/pack/pull/233), d94686ecc2173f38fbc3224e64da59ec62ec2b23; CI [32924862816](https://github.com/lamemustafa/pack/actions/runs/32924862816); 126 files/2121 tests; four mutation proofs. Draft: live/formal-review gaps remain.                                            |
-| #172                     | PARTIAL       | [PR #234](https://github.com/lamemustafa/pack/pull/234), 11ccc05785f69e61cf7cd734fe59d24b9de472fc; 126 files/2123 tests. Static relative-import/re-export cycle guard and singleton identity/race tests. Draft; live qualification unavailable; hosted CI/review pending at publication checkpoint.              |
-| #200                     | BLOCKED       | [PR #232](https://github.com/lamemustafa/pack/pull/232), 63aa9a18d16966bdda1d01aec05b80e586ab4ba6; CI [32924369570](https://github.com/lamemustafa/pack/actions/runs/32924369570); two consecutive final-head 125-file/2117-test passes. GitHub CLEAN at 08:51; strict gate lacks formal exact-head review.      |
-| #148                     | BLOCKED       | New durable record/trusted writer required. Conservatively kept outside the objective's new-persisted-state prohibition; no implementation.                                                                                                                                                                      |
-| #108                     | DONE          | Closed after merged-master verification: #217 merge e3eaf4061351e8e8dbff3d94c24d014100050d76; tests/repo/unreferenced-module-guard.test.ts registered 37 tests and all 37 passed in the clean baseline.                                                                                                          |
-| #225/#226/#227/#220/#221 | DONE          | Current-source activation comments posted; issues remain open. Recursive enumeration: 182 source files, zero runtime JavaScript; AST: zero glob calls, one directly default-exported defineConfig call.                                                                                                          |
-| #218/#219/#171/#180/#191 | BLOCKED       | Reserved UI lane; committed panel/popup/styles/design overlap confirmed by git diff --name-only origin/master...tapish-codex/catalogue-overhaul-01a03759, even when its tree was clean.                                                                                                                          |
-| #197/#163/#164/#121/#156 | NOT ATTEMPTED | Dependency, future-form, and design-direction work deferred.                                                                                                                                                                                                                                                     |
-| #59/#62/#187/#194        | NOT ATTEMPTED | Explicit live/Store non-goals.                                                                                                                                                                                                                                                                                   |
-| PR #230                  | BLOCKED       | Read-only inspection of 93f5ce868f4d0c3cf00cba24756bc6231cfbdef1: six unresolved threads and stale live-state assertions in its historical replay script. No source or PR change made.                                                                                                                           |
+| Item                     | Outcome       | Evidence                                                                                                                                                                                                                                                                                                                               |
+| ------------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Baseline                 | DONE          | Pinned master, clean status and retained exit-1 result above.                                                                                                                                                                                                                                                                          |
+| #102                     | BLOCKED       | Issue explicitly requires live re-verification before implementation; this objective prohibits it.                                                                                                                                                                                                                                     |
+| #115                     | PARTIAL       | [PR #231](https://github.com/lamemustafa/pack/pull/231), b8f402a7066150d01857f12d5ec9d57a097765a1; CI [32924337797](https://github.com/lamemustafa/pack/actions/runs/32924337797); 125 files/2122 tests; five individual mutation proofs. Draft: live qualification unavailable and formal review object absent.                       |
+| #118                     | BLOCKED       | Read-only audit of artifact-acquisition-state.ts:624. Unknown states already rejected; corrupt/future shape is latent. Central parser tightening also changes cleanup readers. No speculative implementation.                                                                                                                          |
+| #122                     | BLOCKED       | Retry-scope half already fixed in #142, 76916d81fea1d03f737179a01c373e52669cf7df; cancellation requires peer-owned filed-returns-target-review.ts. No new implementation credited.                                                                                                                                                     |
+| #166                     | PARTIAL       | [PR #233](https://github.com/lamemustafa/pack/pull/233), d94686ecc2173f38fbc3224e64da59ec62ec2b23; CI [32924862816](https://github.com/lamemustafa/pack/actions/runs/32924862816); 126 files/2121 tests; four mutation proofs. Draft: live/formal-review gaps remain.                                                                  |
+| #172                     | PARTIAL       | [PR #234](https://github.com/lamemustafa/pack/pull/234), 11ccc05785f69e61cf7cd734fe59d24b9de472fc; CI [32926695073](https://github.com/lamemustafa/pack/actions/runs/32926695073) passed; 126 files/2123 tests. Static relative-import/re-export cycle guard and singleton identity/race tests. Draft; live/formal-review gaps remain. |
+| #200                     | BLOCKED       | [PR #232](https://github.com/lamemustafa/pack/pull/232), 63aa9a18d16966bdda1d01aec05b80e586ab4ba6; CI [32924369570](https://github.com/lamemustafa/pack/actions/runs/32924369570); two consecutive final-head 125-file/2117-test passes. GitHub CLEAN at 08:51; strict gate lacks formal exact-head review.                            |
+| #148                     | BLOCKED       | New durable record/trusted writer required. Conservatively kept outside the objective's new-persisted-state prohibition; no implementation.                                                                                                                                                                                            |
+| #108                     | DONE          | Closed after merged-master verification: #217 merge e3eaf4061351e8e8dbff3d94c24d014100050d76; tests/repo/unreferenced-module-guard.test.ts registered 37 tests and all 37 passed in the clean baseline.                                                                                                                                |
+| #225/#226/#227/#220/#221 | DONE          | Current-source activation comments posted; issues remain open. Recursive enumeration: 182 source files, zero runtime JavaScript; AST: zero glob calls, one directly default-exported defineConfig call.                                                                                                                                |
+| #218/#219/#171/#180/#191 | BLOCKED       | Reserved UI lane; committed panel/popup/styles/design overlap confirmed by git diff --name-only origin/master...tapish-codex/catalogue-overhaul-01a03759, even when its tree was clean.                                                                                                                                                |
+| #197/#163/#164/#121/#156 | NOT ATTEMPTED | Dependency, future-form, and design-direction work deferred.                                                                                                                                                                                                                                                                           |
+| #59/#62/#187/#194        | NOT ATTEMPTED | Explicit live/Store non-goals.                                                                                                                                                                                                                                                                                                         |
+| PR #230                  | BLOCKED       | Read-only inspection of 93f5ce868f4d0c3cf00cba24756bc6231cfbdef1: six unresolved threads and stale live-state assertions in its historical replay script. No source or PR change made.                                                                                                                                                 |
 
 ### Local verification evidence
 
 The #115, #166, #172 and #200 lanes ran frozen install, WXT prepare, preflight,
 focused/full Vitest, TypeScript, ESLint, Prettier, WXT build, package verification,
-dependency audit and diff-check. No local release ZIP was produced. Hosted
-artifacts are available through the linked runs, not committed into source.
+dependency audit and diff-check. No local release ZIP was produced. Linked CI
+logs record ephemeral ZIP verification and checksum evidence; no downloadable
+CI artifact or published release is claimed.
 
 #115 — exact b8f402a7066150d01857f12d5ec9d57a097765a1, exit 0:
 
@@ -184,7 +185,7 @@ df -h /
 - No live portal, real worker termination, browser restart, Store or release
   qualification. Source reviews and synthetic tests are not substitutes.
 - No formal exact-head review object for #231/#233 despite clean Codex comments;
-  strict gates exited 1. #232 also lacked a formal record at the snapshot above.
+  strict gates exited 1. #232/#234 also lacked a formal record at the snapshot above.
 - No causal proof of the previous session's GitHub blocking state.
 - No universal absence of load-sensitive failures. Initial-master failures and
   the intermediate #200 polling failure remain in this ledger.
@@ -205,6 +206,9 @@ df -h /
   caught the runner, tab/message and clock dependencies; corrected before publication.
 - #172's first graph assertion would print absolute workstation paths on failure.
   Privacy review required repository-relative diagnostics before publication.
+- This report initially overstated downloadable CI artifact availability and
+  nested Git status inside a test that could hide a command failure. Review
+  corrected the artifact claim and separated checked command assignments.
 - At 08:00 IST, gh api repos/lamemustafa/pack/branches/master/protection reported
   strict Review gate and Review gate (scheduled) checks. Ruleset 18044636
   separately required Verify extension and Review gate, zero ordinary approvals,
@@ -219,13 +223,15 @@ The script pins that checkout, locates retained worktrees by branch, and refuses
 dirty or different-head lanes. If a worktree has since been removed, restore its
 recorded commit in an isolated worktree first; the script fails rather than
 silently testing another revision. Check global suite occupancy before starting.
-The local commands run sequentially.
+The local commands run sequentially. The wrapper prints working directories;
+redact local paths before sharing its output publicly.
 
 ```sh
 set -euo pipefail
 run() { pwd >&2; "$@"; }
 report_head=$(run git rev-parse HEAD)
-test "$(run git branch --show-current)" = tapish-codex/autonomous-session-2026-08-26
+report_branch=$(run git branch --show-current)
+test "$report_branch" = tapish-codex/autonomous-session-2026-08-26
 
 lane_for() {
   run git worktree list --porcelain | awk -v wanted="refs/heads/$1" '
@@ -238,8 +244,10 @@ verify_lane() {
   test -n "$lane" || { printf 'Missing worktree for %s\n' "$1" >&2; return 1; }
   (
     cd "$lane"
-    test -z "$(run git status --porcelain)"
-    test "$(run git rev-parse HEAD)" = "$2"
+    lane_status=$(run git status --porcelain)
+    test -z "$lane_status"
+    lane_head=$(run git rev-parse HEAD)
+    test "$lane_head" = "$2"
     run pnpm install --frozen-lockfile
     run pnpm exec wxt prepare
     run pnpm workflow:preflight
@@ -251,7 +259,8 @@ verify_lane() {
     run node scripts/verify-extension-package.mjs .output/chrome-mv3
     run node scripts/run-dependency-audit.mjs
     run git diff --check
-    test -z "$(run git status --porcelain)"
+    lane_status=$(run git status --porcelain)
+    test -z "$lane_status"
   )
 }
 verify_lane tapish-codex/canonical-bundle-plan-20260826 b8f402a7066150d01857f12d5ec9d57a097765a1
