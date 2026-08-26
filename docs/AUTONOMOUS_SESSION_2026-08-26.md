@@ -209,8 +209,10 @@ df -h /
 - This report initially overstated downloadable CI artifact availability and
   nested Git status inside a test that could hide a command failure. Review
   corrected the artifact claim and separated checked command assignments.
-- Final review caught that the replay omitted the report PR's own strict gate;
-  it now checks that gate too. A review refresh launched through login Bash
+- Final review caught that the original replay omitted the report PR's own
+  strict gate; that historical script was corrected at the time. This Part B
+  replay deliberately records current review presence as a non-fatal observation
+  rather than executing a mutable review gate. A review refresh launched through login Bash
   selected an older Corepack and failed signature verification before reaching
   the gate. That launcher error is not review evidence; the established pnpm
   environment was used again without disabling signature checks.
@@ -286,6 +288,7 @@ require_replaced_content() {
   fi
 }
 git -C "$PACK_ROOT" fetch --no-tags origin \
+  refs/heads/master:refs/remotes/origin/master \
   refs/pull/231/head refs/pull/232/head refs/pull/233/head \
   refs/pull/234/head refs/pull/235/head
 for commit in \
@@ -316,7 +319,7 @@ recorded_at='2026-08-26T08:13:33+05:30'
 printf 'Recorded observation at %s: commit %s suite: 125 files, 2117 tests, exit 0\n' "$recorded_at" 63aa9a18d16966bdda1d01aec05b80e586ab4ba6
 recorded_at='2026-08-26T08:56:05+05:30'
 printf 'Recorded observation at %s: commit %s suite: 126 files, 2123 tests, exit 0\n' "$recorded_at" 11ccc05785f69e61cf7cd734fe59d24b9de472fc
-recorded_at='2026-08-26T09:00:00+05:30'
+recorded_at='2026-08-26T09:12:48+05:30'
 printf 'Recorded observation at %s: commit %s suite: 125 files, 2117 tests, exit 0\n' "$recorded_at" "$REPORT_COMMIT"
 
 baseline_parent=$(mktemp -d)
