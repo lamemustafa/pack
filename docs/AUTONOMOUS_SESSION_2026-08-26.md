@@ -332,7 +332,8 @@ trap cleanup EXIT
 git -C "$PACK_ROOT" worktree add --detach "$baseline_tree" "$MASTER_SHA" >/dev/null
 (
   cd "$baseline_tree"
-  test -z "$(run git status --porcelain)"
+  baseline_status=$(run git status --porcelain)
+  test -z "$baseline_status"
   run pnpm install --frozen-lockfile
   run pnpm exec wxt prepare
   active_vitest=$(pgrep -f '[v]itest' || true)
@@ -353,8 +354,9 @@ git -C "$PACK_ROOT" worktree add --detach "$baseline_tree" "$MASTER_SHA" >/dev/n
   run pnpm exec prettier --check .
   run pnpm exec wxt build
   run node scripts/verify-extension-package.mjs .output/chrome-mv3
-  run git diff --check
-  test -z "$(run git status --porcelain)"
+  run git diff --check "$MASTER_SHA^" "$MASTER_SHA"
+  baseline_status=$(run git status --porcelain)
+  test -z "$baseline_status"
 )
 
 observe_pr() {
