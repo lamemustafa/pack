@@ -15,7 +15,6 @@ import { isCanonicalFiledReturnsRunId } from "../connectors/gst/filed-returns-op
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
 const ACTIVE_RUN_REVIEW_MS = 30_000;
 const ACTIVE_RUN_LEASE_RENEWAL_MS = 10_000;
 const ACTIVE_RUN_KEYS = [
@@ -384,7 +383,7 @@ export function isInterruptedFiledReturnsRun(run: ActiveFiledReturnsRun, now: Da
 function acknowledgedRunResponse(run?: ActiveFiledReturnsRun): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
-    scopeId: run ? filedReturnScopeId(run.scope.returnType) : FILED_RETURNS_SCOPE_ID,
+    scopeId: filedReturnScopeId(run?.scope.returnType ?? "GSTR-3B"),
     state: "user-action-required",
     safeSignals: ["filed-returns-run-acknowledged"],
     safeMessage:
