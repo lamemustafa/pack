@@ -191,20 +191,14 @@ describe("panel surface", () => {
     expect(markup).not.toContain("Which return?");
   });
 
-  it("renders the guided single-scope chooser from the catalogue", () => {
+  it("renders the preset-first chooser without exposing the catalogue", () => {
     const markup = renderToStaticMarkup(<PanelSurface pack={controller()} />);
-    expect(markup).toContain("Step 1 of 4");
-    expect(markup).toContain("One active scope");
-    expect(markup).toContain("2025-26");
-    expect(markup).toContain("Full fiscal year");
-    expect(markup).toContain("Catalogue &amp; limits");
-
-    const returnSelect = markup.match(/<select[^>]*>(.*?)<\/select>/)?.[1] ?? "";
-    expect(returnSelect).toContain("GSTR-3B");
-    expect(returnSelect).toContain("GSTR-1");
-    expect(returnSelect).toContain("GSTR-2B");
-    expect(returnSelect).not.toContain("GSTR-9");
-    expect(returnSelect).not.toContain("Ledgers");
+    expect(markup).toContain("This year&#x27;s GSTR-3B");
+    expect(markup).toContain("This year&#x27;s GSTR-1");
+    expect(markup).toContain("This year&#x27;s GSTR-2B");
+    expect(markup).toContain("Choose return, year and period");
+    expect(markup).not.toContain("Catalogue &amp; limits");
+    expect(markup).not.toContain("Step 1 of 4");
   });
 
   it("does not claim a signed-in portal on the authentication landing page", () => {
@@ -264,6 +258,6 @@ describe("panel surface", () => {
 
     expect(markup).toContain("Ready for a new download");
     expect(markup).toContain("The previous recovery state was cleared");
-    expect(markup).toContain("Which return?");
+    expect(markup).toContain("Choose return, year and period");
   });
 });

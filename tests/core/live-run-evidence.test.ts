@@ -85,9 +85,13 @@ describe("live run evidence", () => {
     const evidenceWithoutReturnType = { ...createValidEvidence() } as Record<string, unknown>;
     delete evidenceWithoutReturnType.returnType;
     const missingReturnType = validateLiveRunEvidence(evidenceWithoutReturnType);
+    // GSTR-3B with every format it offers is now a supported selection: "all
+    // formats" means what the return offers, not literally PDF plus Excel. A
+    // genuinely unsupported pairing is GSTR-3B with Excel, which it has never
+    // offered.
     const invalidGstr3bArtifact = validateLiveRunEvidence({
       ...createValidEvidence(),
-      artifactType: "PDF_AND_EXCEL",
+      artifactType: "EXCEL",
     });
     const invalidFullYearPeriod = validateLiveRunEvidence({
       ...createValidEvidence(),

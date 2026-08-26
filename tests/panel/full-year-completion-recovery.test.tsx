@@ -39,7 +39,7 @@ describe("whole-panel unresolved completion recovery", () => {
       );
 
       expect(markup).toContain('aria-label="Full-year run paused at May"');
-      expect(markup).toContain("Saved run options");
+      expect(markup).toContain("More options");
       expect(markup).not.toContain("Download complete");
       expect(markup).not.toContain("Periods processed, ZIP unconfirmed");
       expect(markup).not.toContain("saved as one ZIP");
@@ -49,6 +49,30 @@ describe("whole-panel unresolved completion recovery", () => {
       expect(retry).not.toHaveBeenCalled();
     },
   );
+
+  it("keeps one paused-run primary action while destructive recovery stays collapsed", () => {
+    const ledger = makeCompletedRecoveryLedger("blocked", {
+      positiveFirst: true,
+      currentPositive: true,
+    });
+    const summary = summariseFullFiscalYearLedger(ledger, RECOVERY_NOW);
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={panelController({
+          scope: summary.scope,
+          scopedFlowSummary: summary,
+          recoverySummary: summary,
+          lastRunSummary: summary,
+          scopeLockedForReview: true,
+        })}
+      />,
+    );
+
+    expect(markup.match(/class="inline-status-primary"/g)).toHaveLength(1);
+    expect(markup).toContain("More options");
+    expect(markup).not.toContain("Discard saved run");
+    expect(markup).not.toContain("Cancel and reset");
+  });
 
   it("does not let filename caution promote unresolved recovery to Download complete", () => {
     const ledger = makeCompletedRecoveryLedger("blocked");
@@ -72,7 +96,7 @@ describe("whole-panel unresolved completion recovery", () => {
     );
     expect(markup).not.toContain("Download complete");
     expect(markup).toContain('aria-label="Full-year run paused at April"');
-    expect(markup).toContain("could not verify that any file belongs to this unresolved target");
+    expect(markup).toContain(summary.flowStep.safeMessage);
   });
 
   it("binds the mixed-target warning and action to the unconfirmed target", () => {
@@ -99,6 +123,6 @@ describe("whole-panel unresolved completion recovery", () => {
     expect(markup).toContain('aria-label="Full-year run paused at April"');
     expect(markup).toContain("Retry April");
     expect(markup).not.toContain("Resume saved period");
-    expect(markup).toContain("could not confirm the browser download for April");
+    expect(markup).toContain(summary.flowStep.safeMessage);
   });
 });

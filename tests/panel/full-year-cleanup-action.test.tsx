@@ -64,7 +64,8 @@ function Harness({
 
 async function click(label: string) {
   const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
-    (candidate) => candidate.textContent?.trim() === label,
+    (candidate) =>
+      candidate.textContent?.trim() === label || candidate.textContent?.trim() === `${label}›`,
   );
   expect(button, `missing button: ${label}`).toBeDefined();
   if (!button) throw new Error(`Missing expected button: ${label}`);
@@ -127,6 +128,7 @@ describe("whole-panel cleanup action", () => {
       await act(async () => {
         root?.render(<Harness initial={summary} onStart={onStart} onRecovery={onRecovery} />);
       });
+      await click("Choose return, year and period");
       for (let step = 0; step < 3; step += 1) await click("Continue");
       const action = container.querySelector<HTMLButtonElement>(".primary-action");
       expect(action?.textContent).toBe("Retry local cleanup");
@@ -163,7 +165,7 @@ describe("whole-panel cleanup action", () => {
       expect(container.querySelector(".inline-status")?.getAttribute("aria-label")).toBe(
         "Saved run needs attention",
       );
-      expect(container.querySelector(".panel-guide")).not.toBeNull();
+      expect(container.querySelector(".panel-presets")).not.toBeNull();
       expect(container.querySelector(".pack-summary-meta")?.textContent).toBe(testCase.delivery);
       expect(onStart).toHaveBeenCalledExactlyOnceWith(summary.scope);
       expect(onRecovery).not.toHaveBeenCalled();

@@ -7,12 +7,14 @@ import type {
   FiledReturnsFlowSummary,
 } from "../../src/connectors/gst/filed-returns-contracts";
 import { supportedFiledReturnsCatalogueEntries } from "../../src/connectors/gst/filed-returns-catalogue";
+import { getFiledReturnsFullFiscalYearPeriods } from "../../src/connectors/gst/filed-returns-scope";
 
 vi.mock("wxt/browser", () => ({
   browser: { tabs: { create: vi.fn() } },
 }));
 
 import { PanelSurface, type PackPanelController } from "../../src/entrypoints/panel/panel-surface";
+import { panelFullFiscalYearPresets } from "../../src/entrypoints/panel/panel-guided-scope-model";
 import {
   PANEL_TEST_SCOPE,
   completedPanelSummary,
@@ -43,14 +45,62 @@ function Harness({
       pack={panelController({
         scope,
         setScope,
-        startFiledReturnsFlow: async () => onStart(scope),
+        startFiledReturnsFlow: async (requestedScope) => onStart(requestedScope ?? scope),
         ...overrides,
       })}
     />
   );
 }
 
-async function mount(props: React.ComponentProps<typeof Harness> = {}, strict = false) {
+function LiveRunHarness({ onMount }: { onMount: () => void }) {
+  const [summary, setSummary] = React.useState<FiledReturnsFlowSummary>(() =>
+    completedPanelSummary({
+      status: "running",
+      completedPeriods: [],
+      totalPeriods: 2,
+      targetEvidence: [
+        { period: "April", outcome: "running" },
+        { period: "May", outcome: "pending" },
+      ],
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "clicked",
+        safeSignals: ["full-fiscal-year-run-active"],
+        safeMessage: "Pack is processing the planned periods.",
+      },
+    }),
+  );
+  React.useEffect(() => {
+    onMount();
+  }, [onMount]);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          setSummary((current) => ({
+            ...current,
+            completedPeriods: ["April"],
+            targetEvidence: [
+              { period: "April", outcome: "saved" },
+              { period: "May", outcome: "running" },
+            ],
+          }))
+        }
+      >
+        Advance synthetic run
+      </button>
+      <PanelSurface pack={panelController({ scope: summary.scope, scopedFlowSummary: summary })} />
+    </>
+  );
+}
+
+async function mount(
+  props: React.ComponentProps<typeof Harness> = {},
+  strict = false,
+  openGuide = true,
+) {
   root = createRoot(container);
   await act(async () => {
     root?.render(
@@ -64,6 +114,7 @@ async function mount(props: React.ComponentProps<typeof Harness> = {}, strict = 
     );
     await Promise.resolve();
   });
+  if (openGuide) await clickButtonContaining("Choose return, year and period");
 }
 
 async function clickButton(label: string) {
@@ -71,6 +122,17 @@ async function clickButton(label: string) {
     (candidate) => candidate.textContent?.trim() === label,
   );
   expect(button, `no button named ${label}`).toBeDefined();
+  await act(async () => {
+    button?.dispatchEvent(realmEvent("click"));
+    await Promise.resolve();
+  });
+}
+
+async function clickButtonContaining(text: string) {
+  const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+    candidate.textContent?.includes(text),
+  );
+  expect(button, `no button containing ${text}`).toBeDefined();
   await act(async () => {
     button?.dispatchEvent(realmEvent("click"));
     await Promise.resolve();
@@ -130,7 +192,7 @@ describe("panel guided scope interaction", () => {
 
   it("never exceeds four controls while advancing and focuses the active field", async () => {
     await mount();
-    expect(guideControlCount()).toBe(3);
+    expect(guideControlCount()).toBe(4);
 
     for (let step = 2; step <= 4; step += 1) {
       await clickButton("Continue");
@@ -140,6 +202,95 @@ describe("panel guided scope interaction", () => {
         container.querySelector(".panel-guide select"),
       );
     }
+  });
+
+  it("renders catalogue-derived presets and the custom-scope door before the guided flow", async () => {
+    await mount({}, false, false);
+
+    expect(container.textContent).toContain("This year's GSTR-3B");
+    expect(container.textContent).toContain("This year's GSTR-2B");
+    expect(container.textContent).toContain("This year's GSTR-1");
+    expect(container.textContent).toContain("Choose return, year and period");
+    expect(container.textContent).not.toContain("Catalogue & limits");
+    expect(container.textContent).not.toContain("Step 1 of 4");
+  });
+
+  it("advertises the same planned period count that a preset starts", async () => {
+    const started: FiledReturnsDownloadScope[] = [];
+    await mount({ onStart: (scope) => started.push(scope) }, false, false);
+    const preset = Array.from(container.querySelectorAll(".panel-preset")).find((candidate) =>
+      candidate.textContent?.includes("This year's GSTR-3B"),
+    );
+    const advertised = Number(
+      /\d+/.exec(preset?.querySelector(".panel-preset-count")?.textContent ?? "")?.[0],
+    );
+    await act(async () => {
+      preset?.dispatchEvent(realmEvent("click"));
+      await Promise.resolve();
+    });
+
+    expect(started).toHaveLength(1);
+    expect(getFiledReturnsFullFiscalYearPeriods(started[0]!.financialYear).length).toBe(advertised);
+  });
+
+  it("derives preset period counts from the fiscal-year planner as time changes", () => {
+    const financialYear = "2026-27";
+    const beforeMorePeriodsAreEligible = new Date("2026-08-26T00:00:00.000Z");
+    const afterMorePeriodsAreEligible = new Date("2027-02-26T00:00:00.000Z");
+    const before = panelFullFiscalYearPresets(financialYear, beforeMorePeriodsAreEligible);
+    const after = panelFullFiscalYearPresets(financialYear, afterMorePeriodsAreEligible);
+
+    expect(before.map((preset) => preset.periodCount)).toEqual(
+      before.map(
+        (preset) =>
+          getFiledReturnsFullFiscalYearPeriods(
+            preset.scope.financialYear,
+            beforeMorePeriodsAreEligible,
+          ).length,
+      ),
+    );
+    expect(after.map((preset) => preset.periodCount)).toEqual(
+      after.map(
+        (preset) =>
+          getFiledReturnsFullFiscalYearPeriods(
+            preset.scope.financialYear,
+            afterMorePeriodsAreEligible,
+          ).length,
+      ),
+    );
+    expect(after.map((preset) => preset.periodCount)).not.toEqual(
+      before.map((preset) => preset.periodCount),
+    );
+  });
+
+  it("adds a preset when catalogue data gains a supported full-year row", () => {
+    const catalogue = supportedFiledReturnsCatalogueEntries();
+    const addedRow = catalogue[0]!;
+    const label = `${addedRow.capability.label} catalogue addition`;
+    const presets = panelFullFiscalYearPresets("2026-27", new Date("2026-08-26T00:00:00.000Z"), [
+      ...catalogue,
+      { ...addedRow, capability: { ...addedRow.capability, label } },
+    ]);
+
+    expect(presets.some((preset) => preset.label === `This year's ${label}`)).toBe(true);
+  });
+
+  it("re-renders period rows and plan progress when the run state advances", async () => {
+    let mounts = 0;
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<LiveRunHarness onMount={() => (mounts += 1)} />);
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("0 of 2 saved");
+    expect(container.textContent).toContain("AprilIn progress");
+
+    await clickButton("Advance synthetic run");
+
+    expect(mounts).toBe(1);
+    expect(container.textContent).toContain("1 of 2 saved");
+    expect(container.textContent).toContain("AprilSaved");
+    expect(container.textContent).toContain("MayIn progress");
   });
 
   it("moves focus to a newly mounted field when the announced step changes", async () => {
@@ -196,7 +347,7 @@ describe("panel guided scope interaction", () => {
 
     expect(container.textContent).toContain("Step 1 of 4");
     expect(container.querySelectorAll(".panel-guide-scope")).toHaveLength(1);
-    expect(guideControlCount()).toBe(3);
+    expect(guideControlCount()).toBe(4);
     expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
   });
 

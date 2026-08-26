@@ -5,7 +5,7 @@ import {
   cataloguePeriodOptions,
   panelGuidedSteps,
 } from "../../src/entrypoints/panel/panel-guided-scope-model";
-import { PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
+import { CatalogueLimits, PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
 import { PANEL_TEST_SCOPE } from "./panel-controller.test-helpers";
 import { FILED_RETURNS_PERIODICITIES } from "../../src/connectors/gst/filed-returns-capabilities";
 
@@ -24,26 +24,29 @@ function renderGuide() {
   );
 }
 
+function renderCatalogue() {
+  return renderToStaticMarkup(<CatalogueLimits />);
+}
+
 describe("panel guided scope", () => {
-  it("holds the initial view to three controls including the advanced door", () => {
+  it("holds the initial view to the three presets and the advanced door", () => {
     const markup = renderGuide();
     const controlCount =
       (markup.match(/<select/g) ?? []).length +
       (markup.match(/<button/g) ?? []).length +
       (markup.match(/<summary/g) ?? []).length;
 
-    expect(controlCount).toBe(3);
-    expect(markup).toContain("Step 1 of 4");
-    expect(markup).toContain("One active scope");
+    expect(controlCount).toBe(4);
+    expect(markup).toContain("This year&#x27;s GSTR-3B");
+    expect(markup).toContain("This year&#x27;s GSTR-1");
+    expect(markup).toContain("This year&#x27;s GSTR-2B");
+    expect(markup).toContain("Choose return, year and period");
+    expect(markup).not.toContain("Catalogue &amp; limits");
+    expect(markup).not.toContain("Step 1 of 4");
   });
 
   it("keeps unsupported catalogue rows descriptive and out of the select", () => {
-    const markup = renderGuide();
-    const returnOptions = markup.match(/<select[^>]*>(.*?)<\/select>/)?.[1] ?? "";
-
-    expect(returnOptions).toContain("GSTR-3B");
-    expect(returnOptions).not.toContain("GSTR-9");
-    expect(returnOptions).not.toContain("Ledgers");
+    const markup = renderCatalogue();
     expect(markup).toContain("GSTR-9");
     expect(markup).toContain("Ledgers");
     expect(markup).toContain("Not available in Pack <span>6</span>");
@@ -52,7 +55,7 @@ describe("panel guided scope", () => {
   });
 
   it("shows concrete artifact availability for every supported catalogue row", () => {
-    const markup = renderGuide();
+    const markup = renderCatalogue();
 
     expect(markup).toContain("Monthly · Filed return (PDF) · Portal data (JSON)");
     expect(markup).toContain("Monthly · Summary (PDF) · E-invoice details (Excel)");
@@ -60,7 +63,7 @@ describe("panel guided scope", () => {
   });
 
   it("groups availability once instead of repeating the same decision on every row", () => {
-    const markup = renderGuide();
+    const markup = renderCatalogue();
 
     expect(markup).toContain("3 available · 6 unavailable");
     expect(markup).toContain("Available <span>3</span>");
@@ -79,7 +82,7 @@ describe("panel guided scope", () => {
     ["IFF", "Monthly"],
     ["Ledgers", "None"],
   ])("renders the declared %s catalogue decision", (label, decision) => {
-    const markup = renderGuide();
+    const markup = renderCatalogue();
 
     expect(markup).toContain(`<span>${label}</span><span>${decision}</span>`);
   });
@@ -103,7 +106,8 @@ describe("panel guided scope", () => {
       value: FULL_FISCAL_YEAR_PERIOD,
       label: "Full fiscal year",
     });
-    expect(steps[3]?.options.map((option) => option.value)).toEqual(["PDF", "JSON"]);
+    expect(steps[3]?.options.map((option) => option.value)).toContain("PDF");
+    expect(steps[3]?.options.map((option) => option.value)).toContain("JSON");
   });
 
   it("derives every axis shape from periodicity rather than a return-name branch", () => {
