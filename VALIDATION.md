@@ -33,6 +33,9 @@
   `panel/full-year-cleanup-status.test.tsx`, `background/full-year-retained-scope-copy.test.ts`,
   plus existing inline/presentation assertions if the intended copy change requires adjustment.
   The lane register had no competing claim; clean workflow preflight passed at cycle start.
+- Its short-window follow-up also owns the already claimed `panel/panel-guided-scope.tsx` and
+  `tests/panel/panel-guided-scope-interaction.test.tsx`. A clean workflow preflight passed again
+  before this focused change; no other lane claim existed.
 
 ## Outcome
 
@@ -1618,3 +1621,56 @@ no recovery or download action was executed.
   matching, unchanged ledger, but a stale summary is not execution authority. Do not promise zero
   downloads-API calls or unconditional cleanup-only execution from UI signals. Selection retention
   and the two summary-parser rejections remain separately bounded.
+
+### Short-window follow-up within Cycle 21
+
+- At 08:07 IST, an additional 320×600 reduced-motion check falsified the broader initial-view
+  assumption. The unchanged guide autofocus scrolled downloaded/no-artifacts cleanup to 496px and
+  legacy cleanup to 514px on opening. Their warning rectangles were entirely above the viewport.
+  The earlier 320×900 measurements are valid, but do not qualify shorter initial views.
+- Impeccable's hardening guidance therefore extended this same visibility cycle before closure.
+  The guide now focuses a field only after the existing Continue/Back action requests it. It does
+  not steal initial focus. The request is consumed before focusing; normal and StrictMode mounts
+  retain existing focus, while forward navigation and Back to the first field still focus normally.
+- Rejected `preventScroll` alone because it would leave focus in an offscreen field; rejected a
+  blanket step-zero exclusion because Back to the first step must still focus it. No guide step,
+  selection, enabled/disabled rule, control, callback or background action changed.
+- The revised ten-case interaction file failed three cases before the fix. Removing the new mount
+  guard after the fix failed both normal/StrictMode cases with expected existing button, received
+  select. Removing the user-request assignment failed six navigation/focus cases, including Back.
+  The source was restored to blob `d92b301` after both mutations. JSDOM proves focus behavior, not
+  scrolling; the real browser must separately establish viewport visibility.
+- Independent UI review approved the request-ref approach and confirmed there are no other move
+  callers or ordinary no-op navigation paths. The earlier 2,531-test gate predates this follow-up;
+  a fresh full gate and short-window remeasurement are required before its checkpoint.
+- After rebuilding, all three 320×600 pages opened at scroll position 0 with body focus. Each
+  warning was fully visible from y=120.80px to y=212.61px. Shell heights, evidence and four-control
+  counts were unchanged. There were no duplicate IDs or broken labelled/described-by references.
+- Native keyboard input then moved from the body to the guide field with Tab (deliberately
+  scrolling it into view), to Continue with another Tab, and to the financial-year field with
+  Enter. Tab then Enter on Back returned focus to the first field. No action message was sent.
+  Initial and post-navigation screenshots were inspected separately; this is not screen-reader
+  qualification. Existing warning colors yielded calculated contrast ratios of 15.28 for the
+  heading and 5.72 for body text against the warning background; no color or font rule changed.
+- This adds six stubbed pages, three before and three after the focus fix, to the earlier matrix.
+  They observed zero page network requests. Their separate 14 MB profile was closed and removed.
+  Final source review passed exact guide blob `d92b301` and interaction-test blob `668f636`.
+  Guide lines are 218→223; interaction tests 254→280, with two new cases and none removed.
+- Post-focus focused gate: 92 tests across six files. The third full Cycle 21 suite passed 134
+  files / 2,533 tests, now 30 new tests since Cycle 20. Its exact final three lines are:
+
+  ```text
+        Tests  2533 passed (2533)
+     Start at  08:09:44
+     Duration  175.33s (transform 4.49s, setup 0ms, import 17.36s, tests 138.82s, environment 9ms)
+  ```
+
+  The four production files total 1,032→1,043 lines (+11). This supersedes the three-file +6
+  subtotal, not the earlier per-file measurements. Existing scope/action guards remain unchanged.
+
+- The post-focus build, full suite, TypeScript, zero-warning ESLint, repo-wide Prettier, package
+  verifier and diff check passed. Focus source checkpoint: `07b34d5`; tests: `517fb4c`. UI and
+  privacy reviewers approved the exact source/test blobs and the qualified evidence record.
+- Intentional keyboard tradeoff: entering the first field now takes one explicit Tab instead of
+  receiving automatic focus on open. Mouse click count and guide navigation are unchanged. This
+  preserves the warning and existing focus position before the user chooses to enter the guide.

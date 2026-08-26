@@ -1017,7 +1017,7 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   Corrected baseline was 14 failures / four passes across 18 new cases. Ten additional export and
   ambiguity precedence cases raised the new-test total to 28. Seven targeted mutation groups failed
   as intended; sources were restored and hashes verified after every sequence.
-- Final focused result: 82 cases across five files. Repeated full gate passed: build, 134 Vitest
+- Pre-focus-follow-up result: 82 cases across five files. Repeated full gate passed: build, 134 Vitest
   files / 2,531 tests, TypeScript, zero-warning ESLint, repo-wide formatting, package and diff checks.
 
   ```text
@@ -1039,5 +1039,28 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   to keep the portal foregrounded. That visible contradiction outranks the unused-wrapper cleanup.
   The next cycle will trace and correct idle/busy action copy without changing eligibility or
   execution. Summary-parser widening and selection retention remain outside that copy task.
-- Implementation, verification and evidence review were completed by approximately 08:05 IST.
-  The cycle is not closed early; its remaining cadence/review interval will be recorded explicitly.
+- Initial implementation, verification and evidence review were checkpointed by 08:05 IST. A
+  subsequent 320×600 check found that guide autofocus scrolled the warning offscreen. The same
+  visibility cycle remains open for a narrowly scoped focus-on-user-navigation correction and a
+  fresh gate; the earlier result is not claimed to cover this follow-up.
+- Short-window correction: focus now follows only user-requested Continue/Back, including Back to
+  step zero. Initial focus is preserved in normal/StrictMode tests. Reverting the mount guard
+  failed two cases; removing the navigation request failed six. At 320×600 all three warnings now
+  open at scroll position 0, fully visible between y=120.80 and 212.61px; native Tab/Enter navigation
+  still scrolls and focuses the guide when requested. Six additional synthetic pages had no broken
+  ARIA references or duplicate IDs. Their separate 14 MB profile was closed and removed.
+- Updated focused gate: 92 tests / six files. The post-focus full suite passed 134 files / 2,533
+  tests, 30 more than Cycle 20 with none removed. The latest exact footer is:
+
+  ```text
+        Tests  2533 passed (2533)
+     Start at  08:09:44
+     Duration  175.33s (transform 4.49s, setup 0ms, import 17.36s, tests 138.82s, environment 9ms)
+  ```
+
+- Updated line accounting: four production files 1,032→1,043 (+11); interaction file 254→280;
+  three new test files remain 396 lines. The cycle remains open until its cadence close.
+- The post-focus build, TypeScript, zero-warning lint, repo-wide formatting, package and diff gates
+  also passed. Focus source `07b34d5` and tests `517fb4c` are checkpointed; independent UI/privacy
+  review found no actionable issue. Initial keyboard entry now requires an explicit Tab, preserving
+  the warning before entering the guide; click count and subsequent navigation are unchanged.
