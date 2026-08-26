@@ -196,8 +196,8 @@ df -h /
 
 ## Where I was wrong
 
-- Reusing the old 2080-test baseline would have been wrong: current master has
-  2117 tests, and the first run failed twice.
+- Reusing the old 2080-test baseline would have been wrong: the original-session
+  master run had 2117 tests, and the first run failed twice.
 - #200's old rasterization-test path was stale. The current test is in
   tests/scripts/export-chrome-web-store-assets.test.ts.
 - One passing #200 run did not establish repeated success: the next run exposed
@@ -339,7 +339,7 @@ git -C "$PACK_ROOT" worktree add --detach "$baseline_tree" "$MASTER_SHA" >/dev/n
   fi
   printf '%s\n' "$vitest_output"
   printf '%s\n' "$vitest_output" | grep -F 'Test Files  125 passed (125)'
-  printf '%s\n' "$vitest_output" | grep -F 'Tests  2117 passed (2117)'
+  printf '%s\n' "$vitest_output" | grep -F 'Tests  2118 passed (2118)'
   run pnpm exec tsc --noEmit
   run pnpm exec eslint . --max-warnings 0
   run pnpm exec prettier --check .
@@ -362,7 +362,7 @@ for pr in 231 232 233 234 235; do observe_pr "$pr"; done
 ```
 
 Expected local results: master `3b689eb` passes in a clean tree at 125 files
-and 2117 tests. Historical suite totals and current formal-review presence are
+and 2118 tests. Historical suite totals and current formal-review presence are
 observations, not replay assertions. The script does not assert that historical
 PR states never change, merge, tag, publish artifacts, or perform authenticated
 qualification.
