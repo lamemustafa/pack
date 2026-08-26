@@ -1943,3 +1943,16 @@ Six additional mutation groups were run serially and restored with matching file
 - The bookkeeping-delete policy decision remains open. No live portal, real download, Chrome Web
   Store, release, hosted CI, current-head PR review or general durability qualification is claimed.
   Manifest policy, WXT configuration, dependency manifest and lockfile match the lane's base.
+- Read-only caller tracing at handoff narrows the direct-prop mismatch concern: the only live
+  `ScopeFormAction` path is PanelSurface → PanelGuidedScope, supplied with the controller's
+  canonically matched `scopedFlowSummary`. The exported legacy ScopeForm wrapper has no production
+  importer. The malformed direct-prop test shape is therefore not established as a live panel
+  authorization defect. Removing that unused wrapper remains a separate reduction candidate.
+- The final scoped critique is archived in
+  `.impeccable/critique/2026-08-26T03-42-56Z__src-entrypoints-popup-inline-status-tsx.md`.
+  Snapshot write and metadata trend read succeeded; this is the first snapshot for that target,
+  so there is no historical trend. The temporary report body was deleted after writing.
+- The critique archive is ignored by the repository's existing `.impeccable/` rule. An attempted
+  ordinary stage was refused; no force-add or ignore-rule change was made. It remains a local
+  worktree artifact. The scored findings, limits and follow-ups are also recorded in this tracked
+  validation document; the archive itself is not claimed as part of the Git checkpoint.
