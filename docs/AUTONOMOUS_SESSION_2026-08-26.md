@@ -223,68 +223,138 @@ df -h /
 
 ## Re-verification script
 
-Run with Bash from a clean checkout of the report commit you intend to verify.
-The script pins that checkout, locates retained worktrees by branch, and refuses
-dirty or different-head lanes. If a worktree has since been removed, restore its
-recorded commit in an isolated worktree first; the script fails rather than
-silently testing another revision. Check global suite occupancy before starting.
+Run with Bash from any Pack worktree with GitHub CLI authentication. The
+historical evidence is reconstructed from named commits in fresh, clean,
+temporary worktrees; it does not depend on a retained lane or a PR's mutable
+head. Commit reachability, PR commit membership, recorded file content, and
+suite counts are fatal checks. PR state, current head, merge status, CI, and
+reviews are timestamped observations and cannot change the replay exit status.
 The local commands run sequentially. The wrapper prints working directories;
 redact local paths before sharing its output publicly.
 
 ```sh
 set -euo pipefail
 run() { pwd >&2; "$@"; }
-report_head=$(run git rev-parse HEAD)
-report_branch=$(run git branch --show-current)
-test "$report_branch" = tapish-codex/autonomous-session-2026-08-26
+PACK_ROOT=$(git rev-parse --show-toplevel)
+REPORT_COMMIT=64ea4ef8d19630cede149b7ee6e8802c54136549
 
-lane_for() {
-  run git worktree list --porcelain | awk -v wanted="refs/heads/$1" '
-    /^worktree / { lane = substr($0, 10) }
-    /^branch / && substr($0, 8) == wanted { print lane; exit }
-  '
+require_commit() {
+  git -C "$PACK_ROOT" rev-parse --verify --quiet "$1^{commit}" >/dev/null
 }
-verify_lane() {
-  lane=$(lane_for "$1")
-  test -n "$lane" || { printf 'Missing worktree for %s\n' "$1" >&2; return 1; }
+require_pr_commit() {
+  pr=$1
+  expected_commit=$2
+  test "$(gh pr view "$pr" --repo lamemustafa/pack --json number --jq .number)" = "$pr"
+  if ! gh pr view "$pr" --repo lamemustafa/pack --json commits --jq '.commits[].oid' | grep -Fx "$expected_commit" >/dev/null; then
+    printf 'Expected PR commit is absent: PR #%s at %s\n' "$pr" "$expected_commit" >&2
+    return 1
+  fi
+}
+require_added_content() {
+  commit=$1
+  file_path=$2
+  expected=$3
+  if ! git -C "$PACK_ROOT" diff "$commit^" "$commit" -- "$file_path" | grep -F "+$expected" >/dev/null; then
+    printf 'Expected added content is absent: %s at %s\n' "$file_path" "$commit" >&2
+    return 1
+  fi
+}
+require_replaced_content() {
+  commit=$1
+  file_path=$2
+  removed=$3
+  added=$4
+  if ! git -C "$PACK_ROOT" show "$commit^:$file_path" | grep -F "$removed" >/dev/null ||
+    git -C "$PACK_ROOT" show "$commit:$file_path" | grep -F "$removed" >/dev/null ||
+    ! git -C "$PACK_ROOT" show "$commit:$file_path" | grep -F "$added" >/dev/null; then
+    printf 'Expected replacement content is absent: %s at %s\n' "$file_path" "$commit" >&2
+    return 1
+  fi
+}
+assert_no_vitest() {
+  if pgrep -f 'vitest.*run' >/dev/null; then
+    printf 'A Vitest run is already active; refusing to overlap the replay.\n' >&2
+    return 1
+  fi
+}
+
+git -C "$PACK_ROOT" fetch --no-tags origin \
+  refs/pull/231/head refs/pull/232/head refs/pull/233/head \
+  refs/pull/234/head refs/pull/235/head
+for commit in \
+  b8f402a7066150d01857f12d5ec9d57a097765a1 \
+  d94686ecc2173f38fbc3224e64da59ec62ec2b23 \
+  63aa9a18d16966bdda1d01aec05b80e586ab4ba6 \
+  11ccc05785f69e61cf7cd734fe59d24b9de472fc \
+  "$REPORT_COMMIT"; do
+  require_commit "$commit"
+done
+require_pr_commit 231 b8f402a7066150d01857f12d5ec9d57a097765a1
+require_pr_commit 233 d94686ecc2173f38fbc3224e64da59ec62ec2b23
+require_pr_commit 232 63aa9a18d16966bdda1d01aec05b80e586ab4ba6
+require_pr_commit 234 11ccc05785f69e61cf7cd734fe59d24b9de472fc
+require_pr_commit 235 "$REPORT_COMMIT"
+require_added_content b8f402a7066150d01857f12d5ec9d57a097765a1 tests/background/filed-returns-single-period-bundle-ledger.test.ts 'const SINGLE_ARTIFACT_SCOPES'
+require_added_content d94686ecc2173f38fbc3224e64da59ec62ec2b23 tests/background/full-fiscal-year-observing-summary-checkpoint.test.ts 'describe("initial observing full-year summary checkpoint"'
+require_replaced_content 63aa9a18d16966bdda1d01aec05b80e586ab4ba6 tests/scripts/check-pr-review-gate.test.ts '"5",' '"1000",'
+require_added_content 11ccc05785f69e61cf7cd734fe59d24b9de472fc tests/background/background-module-graph.test.ts 'function repoRelativeCycle('
+require_added_content "$REPORT_COMMIT" docs/AUTONOMOUS_SESSION_2026-08-26.md 'run pnpm review:gate -- --repo lamemustafa/pack --pr 235'
+
+replay_parent=$(mktemp -d)
+cleanup() {
+  git -C "$PACK_ROOT" worktree remove --force "$replay_parent"/* >/dev/null 2>&1 || true
+  rmdir "$replay_parent" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+verify_recorded_suite() {
+  commit=$1
+  expected_files=$2
+  expected_tests=$3
+  tree="$replay_parent/$commit"
+  git -C "$PACK_ROOT" worktree add --detach "$tree" "$commit" >/dev/null
   (
-    cd "$lane"
-    lane_status=$(run git status --porcelain)
-    test -z "$lane_status"
-    lane_head=$(run git rev-parse HEAD)
-    test "$lane_head" = "$2"
+    cd "$tree"
+    test -z "$(run git status --porcelain)"
     run pnpm install --frozen-lockfile
     run pnpm exec wxt prepare
-    run pnpm workflow:preflight
-    run pnpm exec vitest run
+    assert_no_vitest
+    if ! vitest_output=$(run pnpm exec vitest run 2>&1); then
+      printf '%s\n' "$vitest_output"
+      return 1
+    fi
+    printf '%s\n' "$vitest_output"
+    printf '%s\n' "$vitest_output" | grep -F "Test Files  $expected_files passed ($expected_files)"
+    printf '%s\n' "$vitest_output" | grep -F "Tests  $expected_tests passed ($expected_tests)"
     run pnpm exec tsc --noEmit
     run pnpm exec eslint . --max-warnings 0
     run pnpm exec prettier --check .
     run pnpm exec wxt build
     run node scripts/verify-extension-package.mjs .output/chrome-mv3
-    run node scripts/run-dependency-audit.mjs
     run git diff --check
-    lane_status=$(run git status --porcelain)
-    test -z "$lane_status"
+    test -z "$(run git status --porcelain)"
   )
+  git -C "$PACK_ROOT" worktree remove "$tree" >/dev/null
 }
-verify_lane tapish-codex/canonical-bundle-plan-20260826 b8f402a7066150d01857f12d5ec9d57a097765a1
-verify_lane tapish-codex/observing-summary-20260826 d94686ecc2173f38fbc3224e64da59ec62ec2b23
-verify_lane tapish-codex/heavy-test-budgets-20260826 63aa9a18d16966bdda1d01aec05b80e586ab4ba6
-verify_lane tapish-codex/observation-ownership-20260826 11ccc05785f69e61cf7cd734fe59d24b9de472fc
-verify_lane tapish-codex/autonomous-session-2026-08-26 "$report_head"
+verify_recorded_suite b8f402a7066150d01857f12d5ec9d57a097765a1 125 2122
+verify_recorded_suite d94686ecc2173f38fbc3224e64da59ec62ec2b23 126 2121
+verify_recorded_suite 63aa9a18d16966bdda1d01aec05b80e586ab4ba6 125 2117
+verify_recorded_suite 11ccc05785f69e61cf7cd734fe59d24b9de472fc 126 2123
+verify_recorded_suite "$REPORT_COMMIT" 126 2123
 
-# Evaluate every independent review gate; retain a nonzero final result for any blocker.
-review_result=0
-run pnpm review:gate -- --repo lamemustafa/pack --pr 231 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid b8f402a7066150d01857f12d5ec9d57a097765a1 --wait-head-review-ms 0 || review_result=1
-run pnpm review:gate -- --repo lamemustafa/pack --pr 233 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid d94686ecc2173f38fbc3224e64da59ec62ec2b23 --wait-head-review-ms 0 || review_result=1
-run pnpm review:gate -- --repo lamemustafa/pack --pr 232 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid 63aa9a18d16966bdda1d01aec05b80e586ab4ba6 --wait-head-review-ms 0 || review_result=1
-run pnpm review:gate -- --repo lamemustafa/pack --pr 234 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid 11ccc05785f69e61cf7cd734fe59d24b9de472fc --wait-head-review-ms 0 || review_result=1
-run pnpm review:gate -- --repo lamemustafa/pack --pr 235 --strict-head-review --required-review-author chatgpt-codex-connector --expected-head-oid "$report_head" --wait-head-review-ms 0 || review_result=1
-exit "$review_result"
+observe_pr() {
+  pr=$1
+  observed_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  if observed=$(gh pr view "$pr" --repo lamemustafa/pack --json state,mergeable,mergeStateStatus,reviewDecision,latestReviews,headRefOid,statusCheckRollup --jq '{state,mergeable,mergeStateStatus,reviewDecision,latestReviews:[(.latestReviews // [])[] | {author:.author.login,state,submittedAt}],headRefOid,checks:[.statusCheckRollup[] | {name,status,conclusion}]}' 2>&1); then
+    printf 'Observed at %s: PR #%s %s\n' "$observed_at" "$pr" "$observed"
+  else
+    printf 'Observed at %s: PR #%s state unavailable: %s\n' "$observed_at" "$pr" "$observed"
+  fi
+}
+for pr in 231 232 233 234 235; do observe_pr "$pr"; done
 ```
 
-Expected local results: branch counts above, with no timing guarantee. Missing
-formal reviews are recorded blockers, not passing gates. The script does not
-assert that historical PR states never change, merge, tag, publish artifacts,
-or perform authenticated qualification.
+Expected local results: the historical suites above pass at their named
+commits, with no timing guarantee. Current formal-review presence is an
+observation, not a historical assertion. The script does not assert that
+historical PR states never change, merge, tag, publish artifacts, or perform
+authenticated qualification.
