@@ -83,9 +83,8 @@ export function concreteFiledReturnsArtifactTypesForSelection(
 
 export function filedReturnsArtifactLabel(
   artifactType: FiledReturnsArtifactType,
-  returnType?: FiledReturnsReturnType,
+  returnType: FiledReturnsReturnType,
 ): string {
-  if (!returnType) return artifactType === "PDF_AND_EXCEL" ? "All formats" : artifactType;
   return filedReturnsCapabilityArtifactLabel(returnType, artifactType);
 }
 
