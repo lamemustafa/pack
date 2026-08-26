@@ -78,7 +78,8 @@ describe("popup pack summary", () => {
     );
 
     expect(markup).toContain("Saved by your browser");
-    expect(markup).toContain("needs review");
+    // The complete panel pins the cleanup warning and retry beside this delivery metadata.
+    expect(markup).not.toContain("0 ready");
     expect(markup).not.toContain("Browser download not confirmed");
   });
 
