@@ -72,22 +72,13 @@ export function normaliseFiledReturnsArtifactType(
   return supportsFiledReturnsArtifactType(returnType, candidate) ? candidate : "PDF";
 }
 
-export function concreteFiledReturnsArtifactTypes(
-  artifactType: FiledReturnsArtifactType | undefined,
-): FiledReturnsConcreteArtifactType[] {
-  if (artifactType === "PDF_AND_EXCEL") return ["PDF", "EXCEL"];
-  if (artifactType === "EXCEL") return ["EXCEL"];
-  if (artifactType === "JSON") return ["JSON"];
-  return ["PDF"];
-}
-
 export function concreteFiledReturnsArtifactTypesForSelection(
   returnType: FiledReturnsReturnType,
   artifactType: FiledReturnsArtifactType | undefined,
 ): FiledReturnsConcreteArtifactType[] {
   const selectedArtifactType = normaliseFiledReturnsArtifactType(returnType, artifactType);
   if (selectedArtifactType === "PDF_AND_EXCEL") return filedReturnsOfferedArtifacts(returnType);
-  return concreteFiledReturnsArtifactTypes(selectedArtifactType);
+  return [selectedArtifactType];
 }
 
 export function filedReturnsArtifactLabel(

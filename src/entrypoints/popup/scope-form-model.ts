@@ -4,7 +4,7 @@ import type {
 } from "../../connectors/gst/filed-returns-contracts";
 import {
   FILED_RETURNS_ARTIFACT_TYPES,
-  concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
 } from "../../connectors/gst/filed-returns-artifacts";
@@ -88,7 +88,8 @@ export function getScopeActionCopy(
   );
   if (cleanupCopy) return { ...cleanupCopy, details: [] };
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
-  const multiFile = concreteFiledReturnsArtifactTypes(artifactType).length > 1;
+  const multiFile =
+    concreteFiledReturnsArtifactTypesForSelection(scope.returnType, artifactType).length > 1;
   if (!fullFiscalYear) {
     if (multiFile) {
       return {
