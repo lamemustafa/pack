@@ -705,6 +705,7 @@ describe("filed-return full-year workbook", () => {
     });
   });
 
+  // Expanding the 40,000-place exact decimal exceeded the default 5s budget (#200).
   it("keeps both derived artifacts when an exact total exceeds the Excel cell limit", () => {
     const oversized = "1e-40000";
     const plan = fullYearPlan("2026-27", "April");
@@ -736,7 +737,7 @@ describe("filed-return full-year workbook", () => {
       text: "Exact total unavailable at spreadsheet numeric precision",
       type: "inlineStr",
     });
-  });
+  }, 15_000);
 
   it("does not publish a partial total when a present month exceeds numeric precision", () => {
     const plan = FILED_RETURNS_MONTHS.map((period) => {

@@ -616,6 +616,7 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(statement).toContain("Synthetic Example Taxpayer");
   });
 
+  // Keep the full 40,000-place decimal path; its CPU work exceeds 5s under load (#200).
   it("keeps the CSV and workbook when a precision-limited total exceeds an Excel cell", async () => {
     await loadOffscreenEntrypoint();
     const sourceJson =
@@ -673,7 +674,7 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(new TextDecoder().decode(workbook.get("xl/worksheets/sheet1.xml"))).toContain(
       "Exact total unavailable at spreadsheet numeric precision",
     );
-  });
+  }, 15_000);
 
   it("adds only fixed outcome rows when a full-year run has no parseable JSON", async () => {
     await loadOffscreenEntrypoint();
@@ -1312,6 +1313,7 @@ describe("offscreen Blob URL entrypoint", () => {
     expect(JSON.stringify(zip)).not.toContain("synthetic workbook failure");
   });
 
+  // This intentionally processes a 26 MiB payload and has timed out under suite load (#200).
   it("keeps the artifact ZIP when the derived summary exceeds its local limit", async () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(
@@ -1354,7 +1356,7 @@ describe("offscreen Blob URL entrypoint", () => {
     });
     const entries = await extractStoredZipEntries(createdBlobs[0]!);
     expect([...entries.keys()]).toEqual(["april-data.json"]);
-  });
+  }, 15_000);
 
   it("rejects a stage receipt when the exact Excel slot does not survive its write", async () => {
     discardExcelWrites = true;
