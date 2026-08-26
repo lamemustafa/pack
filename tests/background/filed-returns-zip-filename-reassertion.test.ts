@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => {
     closeOffscreenBlobDocument: vi.fn(),
     createOffscreenFiledReturnZipUrl: vi.fn(),
     clearOffscreenFiledReturnLedger: vi.fn(),
+    extensionBlobUrlFingerprint: vi.fn(async () => "synthetic-fingerprint"),
     observeBrowserDownloadById: vi.fn(),
     reservation,
     reserve: vi.fn(() => reservation),
@@ -41,6 +42,10 @@ vi.mock("../../src/background/offscreen-blob-url", () => ({
 }));
 vi.mock("../../src/background/download-observer", () => ({
   observeBrowserDownloadById: mocks.observeBrowserDownloadById,
+}));
+vi.mock("../../src/background/filed-returns-durable-download-reconciler", () => ({
+  beginPendingExtensionDownloadUrl: vi.fn(() => () => undefined),
+  extensionBlobUrlFingerprint: mocks.extensionBlobUrlFingerprint,
 }));
 vi.mock("../../src/background/filed-returns-full-fiscal-year-ledger", () => ({
   canCompleteFullFiscalYearLedger: vi.fn(() => true),
@@ -70,6 +75,7 @@ describe("filed-return ZIP filename reassertion", () => {
       artifactEntryCount: 3,
     });
     mocks.clearOffscreenFiledReturnLedger.mockResolvedValue({ status: "cleared" });
+    mocks.extensionBlobUrlFingerprint.mockResolvedValue("synthetic-fingerprint");
     mocks.observeBrowserDownloadById.mockResolvedValue({
       state: "completed",
       safeSignals: ["browser-download-completed", "browser-download-non-empty"],
@@ -79,6 +85,38 @@ describe("filed-return ZIP filename reassertion", () => {
     mocks.browser.downloads.search.mockResolvedValue([
       { id: 91, state: "complete", filename: "/synthetic/Downloads/bundle-output.zip" },
     ]);
+  });
+
+  it("names a rejected selected-ZIP target-binding diagnostic instead of a checkpoint write failure", async () => {
+    mocks.extensionBlobUrlFingerprint.mockResolvedValueOnce(null as never);
+    const beforeDownloadStart = vi.fn(async () => undefined);
+
+    const result = await exportSinglePeriodFiledReturnsZip({
+      completeStep: completeStep(),
+      entryPlan: { artifactTypes: ["PDF", "EXCEL", "JSON"], unavailableArtifactTypes: [] },
+      ledgerId: "single-period:12345678-test",
+      options: {
+        onAfterStagingCleared: vi.fn(async () => undefined),
+        onBeforeDownloadStart: beforeDownloadStart,
+        onDownloadStarted: vi.fn(async () => undefined),
+      },
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-2B",
+      },
+    });
+
+    expect(result).toMatchObject({
+      state: "blocked",
+      safeSignals: expect.arrayContaining(["filed-return-download-diagnostics-rejected"]),
+    });
+    expect(result.safeSignals).not.toContain("single-period-zip-download-state-persist-failed");
+    expect(result.safeMessage).toContain("could not verify its target-binding diagnostic");
+    expect(result.userAction?.message).toContain("verify its target-binding diagnostic");
+    expect(beforeDownloadStart).not.toHaveBeenCalled();
+    expect(mocks.browser.downloads.download).not.toHaveBeenCalled();
   });
 
   it("reserves the single-period ZIP filename before download starts and reports a final basename mismatch", async () => {
