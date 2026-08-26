@@ -33,16 +33,21 @@ export function PanelGuidedScope({
 }) {
   const [activeStep, setActiveStep] = React.useState(0);
   const selectRef = React.useRef<HTMLSelectElement>(null);
+  const focusRequested = React.useRef(false);
   const steps = panelGuidedSteps(scope);
   const step = steps[activeStep] ?? steps[0];
 
   React.useEffect(() => {
+    // Initial autofocus can scroll a saved-run warning out of a short panel.
+    if (!focusRequested.current) return;
+    focusRequested.current = false;
     selectRef.current?.focus();
   }, [activeStep]);
 
   if (!step) return null;
 
   const move = (offset: number) => {
+    focusRequested.current = true;
     setActiveStep((current) => Math.max(0, Math.min(steps.length - 1, current + offset)));
   };
 
