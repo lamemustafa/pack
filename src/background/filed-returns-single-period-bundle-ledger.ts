@@ -7,6 +7,7 @@ import type {
 import {
   normaliseFiledReturnsArtifactType,
   type FiledReturnsConcreteArtifactType,
+  concreteFiledReturnsArtifactTypesForSelection,
 } from "../connectors/gst/filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import {
@@ -837,7 +838,11 @@ function isSupportedBundleScope(input: unknown): input is FiledReturnsDownloadSc
 function artifactPlanForScope(
   scope: FiledReturnsDownloadScope,
 ): FiledReturnsConcreteArtifactType[] {
-  return scope.returnType === "GSTR-2B" ? ["PDF", "EXCEL", "JSON"] : ["PDF", "EXCEL"];
+  // Derived, not listed. This was the second hardcoded copy of "what all formats
+  // means" -- it disagreed with FILED_RETURNS_CONCRETE_ARTIFACT_TYPES on order
+  // and would have kept a stale sequence alive after the selection logic started
+  // deriving its own.
+  return concreteFiledReturnsArtifactTypesForSelection(scope.returnType, "PDF_AND_EXCEL");
 }
 
 function parsedArtifactPlan(

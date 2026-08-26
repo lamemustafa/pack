@@ -181,16 +181,19 @@ export function usePackPopupController() {
     [showActionError],
   );
 
-  const startFiledReturnsFlow = React.useCallback(async () => {
-    const target = normaliseFiledReturnsScope(scope);
-    await withBusy("start-filed-returns-flow", async () => {
-      const response = await sendPackMessage({
-        type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
-        payload: target,
+  const startFiledReturnsFlow = React.useCallback(
+    async (requestedScope?: FiledReturnsDownloadScope) => {
+      const target = normaliseFiledReturnsScope(requestedScope ?? scope);
+      await withBusy("start-filed-returns-flow", async () => {
+        const response = await sendPackMessage({
+          type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
+          payload: target,
+        });
+        applyFlowResponse(response);
       });
-      applyFlowResponse(response);
-    });
-  }, [applyFlowResponse, scope, withBusy]);
+    },
+    [applyFlowResponse, scope, withBusy],
+  );
 
   const acknowledgeInterruptedRun = React.useCallback(async () => {
     await withBusy("acknowledge-interrupted-run", async () => {

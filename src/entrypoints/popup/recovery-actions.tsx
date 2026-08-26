@@ -1,3 +1,4 @@
+import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { canRetryFiledReturnsTargetWithoutPortal } from "./flow-summary";
 import {
@@ -16,6 +17,7 @@ export interface RecoveryActionsProps {
   onResolveFullFiscalYearTarget: (resolution: "manually-observed" | "cancelled") => void;
   onResolveTarget: (resolution: "manually-observed" | "cancelled") => void;
   onStartFresh: () => void;
+  collapsed?: boolean;
   showPortalRetryReason?: boolean;
 }
 
@@ -29,8 +31,10 @@ export function RecoveryActions({
   onResolveFullFiscalYearTarget,
   onResolveTarget,
   onStartFresh,
+  collapsed = false,
   showPortalRetryReason = true,
 }: RecoveryActionsProps) {
+  const [moreOpen, setMoreOpen] = React.useState(!collapsed);
   const recoveryState = getRecoveryActionState(summary);
   if (!summary || !recoveryState.visible) return null;
   const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
@@ -57,138 +61,154 @@ export function RecoveryActions({
         })
       : null;
   return (
-    <details className="recovery-details" open>
-      <summary>Saved run options</summary>
-      <div className="recovery-details-content" aria-label="Filed return recovery actions">
-        {runActive ? (
-          <>
-            <button type="button" disabled>
-              Run in progress
-            </button>
-            <p className="muted">
-              Retry controls appear automatically if the run stops making progress.
-            </p>
-          </>
-        ) : null}
-        {needsRunReview ? (
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy !== null}
-            onClick={onAcknowledgeInterruptedRun}
-          >
-            {busy === "acknowledge-interrupted-run" ? "Resetting..." : "Reset stuck run"}
-          </button>
-        ) : null}
-        {needsTargetReview ? (
-          <>
-            <p className="muted">
-              Why Pack paused: {targetReviewRecoveryMessage(summary, signals)}
-            </p>
-            {hasDiagnosticSignals(summary) ? (
-              <details className="diagnostic-details">
-                <summary>Safe diagnostics</summary>
-                <DiagnosticSignals summary={summary} />
-              </details>
-            ) : null}
-            {canReconcileTarget || canRetryTargetCleanup ? (
-              <button type="button" disabled={targetRetryDisabled} onClick={onRetryTarget}>
-                {busy === "retry-filed-returns-target"
-                  ? canReconcileTarget
-                    ? "Reconciling..."
-                    : "Cleaning up..."
-                  : canReconcileTarget
-                    ? "Reconcile browser download"
-                    : "Retry local cleanup"}
+    <details
+      className="recovery-details"
+      open={moreOpen}
+      onToggle={(event) => setMoreOpen(event.currentTarget.open)}
+    >
+      <summary>{collapsed ? "More options" : "Saved run options"}</summary>
+      {moreOpen ? (
+        <div className="recovery-details-content" aria-label="Filed return recovery actions">
+          {runActive ? (
+            <>
+              <button type="button" disabled>
+                Run in progress
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="secondary"
-              disabled={retryDisabled}
-              onClick={onStartFresh}
-            >
-              {busy === "start-fresh-filed-returns-flow"
-                ? "Starting fresh..."
-                : "Discard saved state and start selected download"}
-            </button>
-            {canManuallyResolveTarget ? (
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy !== null}
-                onClick={() => onResolveTarget("manually-observed")}
-              >
-                {busy === "resolve-unconfirmed-download"
-                  ? "Saving..."
-                  : "Record manual observation"}
-              </button>
-            ) : null}
-            {signals.has("filed-returns-target-manually-observed") ? (
               <p className="muted">
-                Manual observation recorded. It does not complete this target.
+                Retry controls appear automatically if the run stops making progress.
               </p>
-            ) : null}
+            </>
+          ) : null}
+          {needsRunReview ? (
             <button
               type="button"
               className="secondary"
               disabled={busy !== null}
-              onClick={() => onResolveTarget("cancelled")}
+              onClick={onAcknowledgeInterruptedRun}
             >
-              {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel and reset"}
+              {busy === "acknowledge-interrupted-run" ? "Resetting..." : "Reset stuck run"}
             </button>
-          </>
-        ) : null}
-        {needsFullFiscalYearReview ? (
-          <>
-            <p className="muted">Why Pack paused: {summary.flowStep.safeMessage}</p>
-            {signals.has("full-fiscal-year-resume-confirmation-required") ? (
+          ) : null}
+          {needsTargetReview ? (
+            <>
               <p className="muted">
-                This saved run is not bound to a GST account. Continue only if the same GST account
-                is currently open.
+                Why Pack paused: {targetReviewRecoveryMessage(summary, signals)}
               </p>
-            ) : null}
-            <button type="button" disabled={retryDisabled} onClick={onRetryFullFiscalYearTarget}>
-              {busy === "retry-full-fiscal-year-target"
-                ? "Retrying..."
-                : getSavedFullFiscalYearActionDecision(summary).label}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={retryDisabled}
-              onClick={onStartFresh}
-            >
-              {busy === "start-fresh-filed-returns-flow"
-                ? "Starting fresh..."
-                : "Discard saved run and start selected download"}
-            </button>
-            {canManuallyObserveFullYear ? (
+              {hasDiagnosticSignals(summary) ? (
+                <details className="diagnostic-details">
+                  <summary>Safe diagnostics</summary>
+                  <DiagnosticSignals summary={summary} />
+                </details>
+              ) : null}
+              {canReconcileTarget || canRetryTargetCleanup ? (
+                <button
+                  type="button"
+                  className={collapsed ? "secondary" : undefined}
+                  disabled={targetRetryDisabled}
+                  onClick={onRetryTarget}
+                >
+                  {busy === "retry-filed-returns-target"
+                    ? canReconcileTarget
+                      ? "Reconciling..."
+                      : "Cleaning up..."
+                    : canReconcileTarget
+                      ? "Reconcile browser download"
+                      : "Retry local cleanup"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="secondary"
+                disabled={retryDisabled}
+                onClick={onStartFresh}
+              >
+                {busy === "start-fresh-filed-returns-flow"
+                  ? "Starting fresh..."
+                  : "Discard saved state and start selected download"}
+              </button>
+              {canManuallyResolveTarget ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy !== null}
+                  onClick={() => onResolveTarget("manually-observed")}
+                >
+                  {busy === "resolve-unconfirmed-download"
+                    ? "Saving..."
+                    : "Record manual observation"}
+                </button>
+              ) : null}
+              {signals.has("filed-returns-target-manually-observed") ? (
+                <p className="muted">
+                  Manual observation recorded. It does not complete this target.
+                </p>
+              ) : null}
               <button
                 type="button"
                 className="secondary"
                 disabled={busy !== null}
-                onClick={() => onResolveFullFiscalYearTarget("manually-observed")}
+                onClick={() => onResolveTarget("cancelled")}
               >
-                {busy === "resolve-full-fiscal-year-target"
-                  ? "Saving..."
-                  : "Mark as manually observed"}
+                {busy === "cancel-unconfirmed-download" ? "Cancelling..." : "Cancel and reset"}
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy !== null}
-              onClick={() => onResolveFullFiscalYearTarget("cancelled")}
-            >
-              {busy === "cancel-full-fiscal-year-target"
-                ? "Cancelling..."
-                : cancelFullYearLabel(summary)}
-            </button>
-          </>
-        ) : null}
-        {portalDisabledReason ? <p className="muted">{portalDisabledReason}</p> : null}
-      </div>
+            </>
+          ) : null}
+          {needsFullFiscalYearReview ? (
+            <>
+              <p className="muted">Why Pack paused: {summary.flowStep.safeMessage}</p>
+              {signals.has("full-fiscal-year-resume-confirmation-required") ? (
+                <p className="muted">
+                  This saved run is not bound to a GST account. Continue only if the same GST
+                  account is currently open.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                className={collapsed ? "secondary" : undefined}
+                disabled={retryDisabled}
+                onClick={onRetryFullFiscalYearTarget}
+              >
+                {busy === "retry-full-fiscal-year-target"
+                  ? "Retrying..."
+                  : getSavedFullFiscalYearActionDecision(summary).label}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={retryDisabled}
+                onClick={onStartFresh}
+              >
+                {busy === "start-fresh-filed-returns-flow"
+                  ? "Starting fresh..."
+                  : "Discard saved run and start selected download"}
+              </button>
+              {canManuallyObserveFullYear ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy !== null}
+                  onClick={() => onResolveFullFiscalYearTarget("manually-observed")}
+                >
+                  {busy === "resolve-full-fiscal-year-target"
+                    ? "Saving..."
+                    : "Mark as manually observed"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy !== null}
+                onClick={() => onResolveFullFiscalYearTarget("cancelled")}
+              >
+                {busy === "cancel-full-fiscal-year-target"
+                  ? "Cancelling..."
+                  : cancelFullYearLabel(summary)}
+              </button>
+            </>
+          ) : null}
+          {portalDisabledReason ? <p className="muted">{portalDisabledReason}</p> : null}
+        </div>
+      ) : null}
     </details>
   );
 }

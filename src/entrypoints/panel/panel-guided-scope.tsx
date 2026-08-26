@@ -9,8 +9,14 @@ import {
   filedReturnsCatalogueEntries,
   type FiledReturnsCatalogueEntry,
 } from "../../connectors/gst/filed-returns-capabilities";
+import { getFiledReturnsFinancialYearOptions } from "../../connectors/gst/filed-returns-scope";
 import { ScopeFormAction } from "../popup/components";
-import { panelGuidedSteps, updatePanelGuidedScope } from "./panel-guided-scope-model";
+import { getScopeFormStartAction } from "../popup/scope-form-model";
+import {
+  panelFullFiscalYearPresets,
+  panelGuidedSteps,
+  updatePanelGuidedScope,
+} from "./panel-guided-scope-model";
 
 export function PanelGuidedScope({
   busy,
@@ -29,13 +35,16 @@ export function PanelGuidedScope({
   scope: FiledReturnsDownloadScope;
   scopeLockedForReview: boolean;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
-  onStart: () => void;
+  onStart: (scope: FiledReturnsDownloadScope) => void;
 }) {
+  const [view, setView] = React.useState<"presets" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
   const selectRef = React.useRef<HTMLSelectElement>(null);
   const focusRequested = React.useRef(false);
   const steps = panelGuidedSteps(scope);
   const step = steps[activeStep] ?? steps[0];
+  const currentFinancialYear = getFiledReturnsFinancialYearOptions()[0];
+  const presets = currentFinancialYear ? panelFullFiscalYearPresets(currentFinancialYear) : [];
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -50,6 +59,68 @@ export function PanelGuidedScope({
     focusRequested.current = true;
     setActiveStep((current) => Math.max(0, Math.min(steps.length - 1, current + offset)));
   };
+
+  if (view === "presets") {
+    return (
+      <section className="panel-presets" aria-labelledby="panel-presets-title">
+        <h2 id="panel-presets-title">What do you need?</h2>
+        <div className="panel-preset-list">
+          {presets.map((preset) => {
+            const startAction = getScopeFormStartAction(preset.scope, flowSummary, busy, true);
+            const portalReady = context?.supported === true;
+            const disabled =
+              !portalReady || externalBlock?.disabled === true || startAction.disabled;
+            const disabledReason =
+              externalBlock?.label ??
+              (startAction.disabled
+                ? startAction.label
+                : portalReady
+                  ? null
+                  : "Open GST Portal to continue.");
+            return (
+              <React.Fragment key={preset.scope.returnType}>
+                <button
+                  className="panel-preset"
+                  type="button"
+                  disabled={disabled}
+                  aria-describedby={
+                    disabledReason ? `preset-${preset.scope.returnType}-reason` : undefined
+                  }
+                  onClick={() => {
+                    onScopeChange(preset.scope);
+                    onStart(preset.scope);
+                  }}
+                >
+                  <span>{preset.label}</span>
+                  <span className="panel-preset-count">
+                    {preset.periodCount} {preset.periodCount === 1 ? "period" : "periods"} · one ZIP
+                  </span>
+                </button>
+                {disabledReason ? (
+                  <p
+                    className="panel-preset-reason"
+                    id={`preset-${preset.scope.returnType}-reason`}
+                  >
+                    {disabledReason}
+                  </p>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+        </div>
+        <div className="panel-preset-door-wrap">
+          <button
+            className="panel-preset panel-preset-door"
+            type="button"
+            onClick={() => setView("guided")}
+          >
+            <span>Choose return, year and period</span>
+            <span aria-hidden="true">›</span>
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="panel-guide" aria-labelledby="panel-guide-title">
@@ -98,11 +169,16 @@ export function PanelGuidedScope({
       </label>
       <ActiveScope scope={scope} />
       <div className="panel-guide-actions">
-        {activeStep > 0 ? (
-          <button className="panel-guide-back secondary" type="button" onClick={() => move(-1)}>
-            Back
-          </button>
-        ) : null}
+        <button
+          className="panel-guide-back secondary"
+          type="button"
+          onClick={() => {
+            if (activeStep === 0) setView("presets");
+            else move(-1);
+          }}
+        >
+          {activeStep === 0 ? "Back to presets" : "Back"}
+        </button>
         {activeStep < steps.length - 1 ? (
           <button className="panel-guide-next" type="button" onClick={() => move(1)}>
             Continue
@@ -114,7 +190,7 @@ export function PanelGuidedScope({
             externalBlock={externalBlock}
             flowSummary={flowSummary}
             scope={scope}
-            onStart={onStart}
+            onStart={() => onStart(scope)}
           />
         )}
       </div>
@@ -159,7 +235,7 @@ function ActiveScope({ scope }: { scope: FiledReturnsDownloadScope }) {
   );
 }
 
-function CatalogueLimits() {
+export function CatalogueLimits() {
   const entries = filedReturnsCatalogueEntries();
   const available = entries.filter((entry) => entry.capability.supportStatus === "supported");
   const unavailable = entries.filter((entry) => entry.capability.supportStatus === "unsupported");

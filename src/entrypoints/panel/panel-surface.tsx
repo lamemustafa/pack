@@ -115,7 +115,13 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 the recovery controls stay actionable -- reading the scoped one
                 here hid the per-period evidence at exactly the moment it
                 explains what those controls are for. */}
+            <PanelRunProgress summary={summary ?? null} />
             <TargetEvidence summary={summary ?? null} />
+            {hasRecoveryActions(summary ?? null) ? (
+              <p className="panel-recovery-reason">
+                Why Pack paused: {summary?.flowStep.safeMessage}
+              </p>
+            ) : null}
             {running ? null : (
               <PanelGuidedScope
                 busy={pack.effectiveBusy}
@@ -125,7 +131,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 scope={pack.scope}
                 scopeLockedForReview={pack.scopeLockedForReview}
                 onScopeChange={pack.setScope}
-                onStart={() => void pack.startFiledReturnsFlow()}
+                onStart={(scope) => void pack.startFiledReturnsFlow(scope)}
               />
             )}
           </>
@@ -136,6 +142,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         {hasRecoveryActions(summary ?? null) ? (
           <RecoveryActions
             busy={pack.effectiveBusy}
+            collapsed
             /*
              * Signed-in, not merely supported. The auth landing page is
              * `supported: true` -- that is how Pack offers to act on it -- so
@@ -171,6 +178,24 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         </p>
       </footer>
     </main>
+  );
+}
+
+function PanelRunProgress({ summary }: { summary: FiledReturnsFlowSummary | null }) {
+  const plan = summary?.targetEvidence;
+  if (!plan || plan.length === 0) return null;
+  const saved = plan.filter((target) => target.outcome === "saved").length;
+  return (
+    <section className="panel-run-progress" aria-label="Run progress">
+      <div className="panel-run-progress-track" aria-hidden="true">
+        <span style={{ width: `${(saved / plan.length) * 100}%` }} />
+      </div>
+      <p>
+        <strong>
+          {saved} of {plan.length} saved
+        </strong>
+      </p>
+    </section>
   );
 }
 

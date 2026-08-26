@@ -1,10 +1,15 @@
 import type { FiledReturnsDownloadScope } from "../../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifact-types";
 import {
   filedReturnsCapability,
+  supportedFiledReturnsCatalogueEntries,
+  type SupportedReturnTypeCapability,
   type FiledReturnsPeriodicity,
 } from "../../connectors/gst/filed-returns-capabilities";
 import {
+  FULL_FISCAL_YEAR_PERIOD,
   getFiledReturnsFinancialYearOptions,
+  getFiledReturnsFullFiscalYearPeriods,
   getFiledReturnsScopePeriodOptions,
   normaliseFiledReturnsScope,
 } from "../../connectors/gst/filed-returns-scope";
@@ -25,6 +30,53 @@ export interface PanelGuidedStep {
   readonly label: string;
   readonly value: string;
   readonly options: readonly GuidedOption[];
+}
+
+type PresetCatalogueEntry = {
+  readonly returnType: FiledReturnsReturnType;
+  readonly capability: Pick<
+    SupportedReturnTypeCapability,
+    "artifacts" | "fullFiscalYear" | "label"
+  >;
+};
+
+export interface PanelFullFiscalYearPreset {
+  readonly label: string;
+  readonly periodCount: number;
+  readonly scope: FiledReturnsDownloadScope;
+}
+
+/**
+ * The home view is a projection of the canonical catalogue, rather than its own list of
+ * returns. A supported full-year row gets a preset as soon as it has catalogue data; the
+ * label, default artifact and advertised number are all read from the same sources the run uses.
+ */
+export function panelFullFiscalYearPresets(
+  financialYear: string,
+  asOf = new Date(),
+  catalogue: readonly PresetCatalogueEntry[] = supportedFiledReturnsCatalogueEntries(),
+): readonly PanelFullFiscalYearPreset[] {
+  const periodCount = getFiledReturnsFullFiscalYearPeriods(financialYear, asOf).length;
+  if (periodCount === 0) return [];
+
+  return catalogue.flatMap(({ returnType, capability }) => {
+    if (!capability.fullFiscalYear) return [];
+    const defaultArtifactType = Object.keys(capability.artifacts)[0] as
+      FiledReturnsArtifactType | undefined;
+    if (!defaultArtifactType) return [];
+    return [
+      {
+        label: `This year's ${capability.label}`,
+        periodCount,
+        scope: {
+          financialYear,
+          period: FULL_FISCAL_YEAR_PERIOD,
+          returnType,
+          artifactType: defaultArtifactType,
+        },
+      },
+    ];
+  });
 }
 
 const PERIOD_STEP_COPY = {

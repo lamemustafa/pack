@@ -17,7 +17,11 @@
  */
 
 export const FILED_RETURNS_ARTIFACT_TYPES = ["PDF", "JSON", "EXCEL", "PDF_AND_EXCEL"] as const;
-export const FILED_RETURNS_CONCRETE_ARTIFACT_TYPES = ["PDF", "JSON", "EXCEL"] as const;
+// Order matters: it is the sequence artifacts are fetched and written into a
+// bundle. It matches the sequence the product has always shipped and that live
+// runs exercised. Two hardcoded copies of "all formats" used to carry this order
+// separately; both now derive from here, so this is the only place to change it.
+export const FILED_RETURNS_CONCRETE_ARTIFACT_TYPES = ["PDF", "EXCEL", "JSON"] as const;
 
 export type FiledReturnsArtifactType = (typeof FILED_RETURNS_ARTIFACT_TYPES)[number];
 export type FiledReturnsConcreteArtifactType =
