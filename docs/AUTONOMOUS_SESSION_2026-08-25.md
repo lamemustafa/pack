@@ -27,13 +27,21 @@ Re-run pointer: `git fetch origin master && git rev-parse origin/master && pnpm 
 | PR #223 `@types/chrome` bump                           | BLOCKED       | Head `ec1ee585884a49fada954d7a13d112374eb1fa68`; Pack CI run 32793520196 passed 124/2,080; threads 0; GitHub `MERGEABLE/CLEAN`; strict exact-head review gate exited 1: no formal connector review found.                                                                                                                                          |
 | PR #224 Vitest bump                                    | BLOCKED       | Head `f06eee4d6aa521750b86214a907b0fdd48d52a98`; Pack CI run 32793567544 passed 124/2,080; threads 0; ordinary gate run 32814776151 and scheduled check passed; strict gate exited 1; GitHub `MERGEABLE/BLOCKED`, formal reviews 0, owner review requested.                                                                                        |
 | Issue #215 unused summary-context headers              | BLOCKED       | PR #228, commit `b84eb09ee14d08e54c10b67d5756455c08cd38d5`; focused 121/121; local full suite 124/2,080; Pack CI run 32813603176 and exact ZIP verification passed; privacy review no findings; threads 0; strict review gate exited 1 because formal connector review is absent.                                                                  |
-| Issue #109 DCO governance mismatch                     | BLOCKED       | PR #229, commit `a654ee56ee7fe68fc0d18f808474e2430569b738`; Pack CI run 32814802899 passed 124/2,080 and exact ephemeral ZIP verification, SHA-256 `01647c18f8bf475c255307c9c8a32de48e03ebf9a963eaf1d6fe92534e6ec218`; privacy/public-claim re-review clean; threads 0; strict review gate exited 1 because the formal connector review is absent. |
+| Issue #109 DCO governance mismatch                     | BLOCKED       | PR #229, commit `a654ee56ee7fe68fc0d18f808474e2430569b738`; Pack CI run 32814802899 passed 124/2,080 and exact ephemeral ZIP verification; privacy/public-claim re-review clean; threads 0; strict review gate exited 1 because the formal connector review is absent. |
 | Issue #218 test-only evidence panel                    | BLOCKED       | UI collision: `panel-density@66c4251d4c3f` already carries the exact component/test deletion without a PR; active UI lane reserved popup surfaces.                                                                                                                                                                                                 |
 | Issue #219 unreferenced popup stylesheet               | BLOCKED       | UI collision: `ux-redesign@758d2d8c3b85` touches the stylesheet and design-token documentation; active UI lane reserved style surfaces.                                                                                                                                                                                                            |
 | Issue #171 unenforced design measurements              | BLOCKED       | Active UI/design lane reserved `DESIGN.md` and design-token tests; current issue is partly stale and remaining work is the color-literal detector.                                                                                                                                                                                                 |
 | Issue #108 closure after dead-module guard             | BLOCKED       | PR #217 remains open; merging it was an absolute non-goal, so merged-master verification could not occur.                                                                                                                                                                                                                                          |
 | Issues #226 and #227 latent guard shapes               | DONE          | Created with activation conditions and acceptance criteria; linked in PR #217 body and review-thread dispositions.                                                                                                                                                                                                                                 |
 | Issues #62, #59, #187, #194, #191, #121, #163 and #164 | NOT ATTEMPTED | Objective classifies these as maintainer-only, live-portal, Store, or design-direction work.                                                                                                                                                                                                                                                       |
+
+## Subsequent Events
+
+Observed at 2026-08-26T04:24:17Z, after this session ended: the maintainer
+merged PRs #217, #223, #224, #228, and #229. Issue #108 then closed. Master
+advanced to `214aabdf77dd3884a44db62878bab4345a2da970`. The ledger above is
+not rewritten: its `BLOCKED` outcomes describe the state and authority available
+to this session, rather than a later live-status board.
 
 ## Decisions I Made Without You
 
@@ -109,105 +117,119 @@ Files deliberately skipped because another lane owned them:
 9. I drafted this document before the required final prune sweep instead of after it. I ran the sweep before formatting, verification, commit, or publication; it found zero eligible removals. The final count and disk measurements above are from that corrected ordering, not from the earlier draft.
 10. I again copied an incorrect full commit SHA into the unpublished validation PR-body draft. `git rev-parse HEAD` exposed the mismatch before PR creation, and I corrected the draft to the observed SHA.
 11. A zsh verification probe used the reserved `path` array and then assumed unquoted scalar word-splitting. That temporarily hid commands from that probe and produced empty lane matches. I discarded its output and reran the branch-to-worktree checks with `lane_path` and one branch argument per iteration; all three retained lane heads matched their recorded SHAs.
+12. The original replay treated retained worktrees and current PR state as durable evidence. Once the maintainer merged the blocked PRs, two worktrees were gone and the script stopped before its stale state assertions. The replay below now fails only on immutable history and reports mutable state as an observation.
+13. The first follow-up replay ran workflow preflight in a detached baseline checkout. Preflight correctly rejected that checkout because it has no Pack branch. The script now reserves its detached tree for immutable history and suite evidence; branch preflight is run separately on this PR branch.
 
 ## Re-verification Script
 
-Run from any Pack worktree with GitHub CLI authentication. It discovers existing task worktrees by branch and does not embed workstation paths.
+Run from any Pack worktree with GitHub CLI authentication. It does not embed
+workstation paths.
+
+Immutable history checks below are fatal: named commits, their recorded source
+changes, referenced issue/PR numbers, and the baseline suite count must remain
+verifiable. PR state, mergeability, CI, and review state are mutable external
+observations. They are printed with a timestamp and never determine the exit
+status: a later merge is news, not failed historical evidence.
 
 ```sh
 set -euo pipefail
 
 PACK_ROOT=$(git rev-parse --show-toplevel)
 BASELINE_SHA=78b74d117e63cdaf4aba1d70a1431ba546e21bf0
-git -C "$PACK_ROOT" fetch origin master
-git -C "$PACK_ROOT" cat-file -e "$BASELINE_SHA^{commit}"
+git -C "$PACK_ROOT" fetch --no-tags origin master \
+  refs/pull/217/head \
+  refs/pull/223/head \
+  refs/pull/224/head \
+  refs/pull/228/head \
+  refs/pull/229/head
 
-worktree_for_branch() {
-  branch=$1
-  git -C "$PACK_ROOT" worktree list --porcelain |
-    awk -v wanted="refs/heads/$branch" '
-      /^worktree / { path = substr($0, 10) }
-      /^branch / && substr($0, 8) == wanted { print path; exit }
-    '
+require_commit() {
+  git -C "$PACK_ROOT" rev-parse --verify --quiet "$1^{commit}" >/dev/null
 }
 
-run_local_gates() {
-  branch=$1
-  expected_head=$2
-  lane=$(worktree_for_branch "$branch")
-  test -n "$lane"
-  test -z "$(git -C "$lane" status --porcelain)"
-  test "$(git -C "$lane" rev-parse HEAD)" = "$expected_head"
-  (
-    cd "$lane"
-    pnpm install --frozen-lockfile
-    pnpm exec wxt prepare
-    pnpm workflow:preflight
-    pnpm exec vitest run
-    pnpm exec tsc --noEmit
-    pnpm exec eslint . --max-warnings 0
-    pnpm exec prettier --check .
-    pnpm exec wxt build
-    node scripts/verify-extension-package.mjs .output/chrome-mv3
-    node scripts/run-dependency-audit.mjs
-    git diff --check
-  )
+require_pr_number() {
+  test "$(gh pr view "$1" --repo lamemustafa/pack --json number --jq .number)" = "$1"
 }
 
-run_local_gates tapish-codex/dead-module-check bcf9de63959e8bc704b825f102976b6908a460ec
-run_local_gates tapish-codex/remove-unused-summary-context-headers b84eb09ee14d08e54c10b67d5756455c08cd38d5
-run_local_gates tapish-codex/drop-unenforced-dco-claim a654ee56ee7fe68fc0d18f808474e2430569b738
-validation_head=$(gh pr view 230 --repo lamemustafa/pack --json headRefOid --jq .headRefOid)
-run_local_gates tapish-codex/autonomous-session-2026-08-25 "$validation_head"
+require_issue_number() {
+  test "$(gh issue view "$1" --repo lamemustafa/pack --json number --jq .number)" = "$1"
+}
 
-pnpm review:gate -- --repo lamemustafa/pack --pr 217 --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 0 --expected-head-oid bcf9de63959e8bc704b825f102976b6908a460ec
-
-expect_blocked_review() {
-  set +e
-  review_output=$(pnpm review:gate -- --repo lamemustafa/pack --pr "$1" --strict-head-review --required-review-author chatgpt-codex-connector --wait-head-review-ms 0 --expected-head-oid "$2" 2>&1)
-  actual=$?
-  set -e
-  printf '%s\n' "$review_output"
-  test "$actual" -eq 1
-  printf '%s\n' "$review_output" | grep -F "No review was found for current head $2."
-  if printf '%s\n' "$review_output" | grep -Eq 'Unresolved review threads|Unresolved PR-level review findings|Requested-changes reviews|PR body workflow/template issues|PR head changed while evaluating'; then
+require_recorded_change() {
+  commit=$1
+  path=$2
+  git -C "$PACK_ROOT" cat-file -e "$commit:$path"
+  if git -C "$PACK_ROOT" diff --quiet "$BASELINE_SHA" "$commit" -- "$path"; then
+    printf 'Expected recorded change is absent: %s at %s\n' "$path" "$commit" >&2
     return 1
   fi
 }
 
-expect_blocked_review 223 ec1ee585884a49fada954d7a13d112374eb1fa68
-expect_blocked_review 224 f06eee4d6aa521750b86214a907b0fdd48d52a98
-expect_blocked_review 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5
-expect_blocked_review 229 a654ee56ee7fe68fc0d18f808474e2430569b738
-expect_blocked_review 230 "$validation_head"
+for commit in \
+  "$BASELINE_SHA" \
+  bcf9de63959e8bc704b825f102976b6908a460ec \
+  ec1ee585884a49fada954d7a13d112374eb1fa68 \
+  f06eee4d6aa521750b86214a907b0fdd48d52a98 \
+  b84eb09ee14d08e54c10b67d5756455c08cd38d5 \
+  a654ee56ee7fe68fc0d18f808474e2430569b738 \
+  214aabdf77dd3884a44db62878bab4345a2da970; do
+  require_commit "$commit"
+done
 
-assert_pr_state() {
+require_recorded_change bcf9de63959e8bc704b825f102976b6908a460ec tests/repo/unreferenced-module-guard.test.ts
+require_recorded_change ec1ee585884a49fada954d7a13d112374eb1fa68 package.json
+require_recorded_change f06eee4d6aa521750b86214a907b0fdd48d52a98 package.json
+require_recorded_change b84eb09ee14d08e54c10b67d5756455c08cd38d5 src/connectors/gst/filed-returns-summary-sheet.ts
+require_recorded_change a654ee56ee7fe68fc0d18f808474e2430569b738 CONTRIBUTING.md
+
+for pr in 217 223 224 228 229 230; do require_pr_number "$pr"; done
+for issue in 108 109 215 218 219 171 226 227; do require_issue_number "$issue"; done
+
+baseline_parent=$(mktemp -d)
+baseline_tree="$baseline_parent/baseline"
+cleanup() {
+  git -C "$PACK_ROOT" worktree remove "$baseline_tree" >/dev/null 2>&1 || true
+  rmdir "$baseline_parent" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+git -C "$PACK_ROOT" worktree add --detach "$baseline_tree" "$BASELINE_SHA" >/dev/null
+baseline_status=$(git -C "$baseline_tree" status --porcelain)
+test -z "$baseline_status"
+(
+  cd "$baseline_tree"
+  pnpm install --frozen-lockfile
+  pnpm exec wxt prepare
+  # Workflow preflight rejects detached checkouts; run it on the current PR branch.
+  if ! vitest_output=$(pnpm exec vitest run 2>&1); then
+    printf '%s\n' "$vitest_output"
+    exit 1
+  fi
+  printf '%s\n' "$vitest_output"
+  printf '%s\n' "$vitest_output" | grep -F 'Test Files  124 passed (124)'
+  printf '%s\n' "$vitest_output" | grep -F 'Tests  2080 passed (2080)'
+  pnpm exec tsc --noEmit
+  pnpm exec eslint . --max-warnings 0
+  pnpm exec prettier --check .
+  pnpm exec wxt build
+  node scripts/verify-extension-package.mjs .output/chrome-mv3
+  node scripts/run-dependency-audit.mjs
+  git diff --check
+)
+
+observe_pr() {
   pr=$1
-  expected=$(printf '%s\t%s\t%s\t%s' "$2" "$3" "$4" "$5")
-  observed=$(gh pr view "$pr" --repo lamemustafa/pack --json headRefOid,state,mergeable,mergeStateStatus --jq '[.headRefOid,.state,.mergeable,.mergeStateStatus] | @tsv')
-  test "$observed" = "$expected"
+  observed_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  if observed=$(gh pr view "$pr" --repo lamemustafa/pack --json state,mergeStateStatus,headRefOid,statusCheckRollup --jq '{state,mergeStateStatus,headRefOid,checks:[.statusCheckRollup[] | {name,status,conclusion}]}'); then
+    printf 'Observed at %s: PR #%s %s\n' "$observed_at" "$pr" "$observed"
+  else
+    printf 'Observed at %s: PR #%s state unavailable\n' "$observed_at" "$pr"
+  fi
 }
 
-assert_pr_state 217 bcf9de63959e8bc704b825f102976b6908a460ec OPEN MERGEABLE CLEAN
-assert_pr_state 223 ec1ee585884a49fada954d7a13d112374eb1fa68 OPEN MERGEABLE CLEAN
-assert_pr_state 224 f06eee4d6aa521750b86214a907b0fdd48d52a98 OPEN MERGEABLE BLOCKED
-assert_pr_state 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5 OPEN MERGEABLE CLEAN
-assert_pr_state 229 a654ee56ee7fe68fc0d18f808474e2430569b738 OPEN MERGEABLE BLOCKED
-assert_pr_state 230 "$validation_head" OPEN MERGEABLE BLOCKED
-
-verify_pr_checks() {
-  pr=$1
-  expected_head=$2
-  gh pr checks "$pr" --repo lamemustafa/pack --required
-  test "$(gh pr view "$pr" --repo lamemustafa/pack --json headRefOid --jq .headRefOid)" = "$expected_head"
-}
-
-verify_pr_checks 217 bcf9de63959e8bc704b825f102976b6908a460ec
-verify_pr_checks 223 ec1ee585884a49fada954d7a13d112374eb1fa68
-verify_pr_checks 224 f06eee4d6aa521750b86214a907b0fdd48d52a98
-verify_pr_checks 228 b84eb09ee14d08e54c10b67d5756455c08cd38d5
-verify_pr_checks 229 a654ee56ee7fe68fc0d18f808474e2430569b738
-verify_pr_checks 230 "$validation_head"
+for pr in 217 223 224 228 229 230; do observe_pr "$pr"; done
 ```
 
-Expected state at document creation: #217 strict gate exits 0; #223/#224/#228/#229/#230 strict gates exit 1 for missing formal exact-head review; all required GitHub checks already present are green; no pull request is merged by this script.
+The historical session expected #217's strict gate to exit 0 and the other
+strict gates to exit 1. Those were session-time observations, not replay
+assertions; current states are printed by `observe_pr`.
