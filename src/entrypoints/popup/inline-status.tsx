@@ -83,12 +83,19 @@ export function InlineStatus({
             className="inline-status-primary"
             type="button"
             disabled={actionBusy || Boolean(portalDisabledReason)}
+            aria-describedby={
+              portalDisabledReason ? "inline-status-portal-disabled-reason" : undefined
+            }
             onClick={primaryAction.onClick}
           >
             {actionBusy ? "Working..." : primaryAction.label}
           </button>
         ) : null}
-        {portalDisabledReason ? <p className="muted">{portalDisabledReason}</p> : null}
+        {portalDisabledReason ? (
+          <p className="muted" id="inline-status-portal-disabled-reason">
+            {portalDisabledReason}
+          </p>
+        ) : null}
       </div>
     </section>
   );

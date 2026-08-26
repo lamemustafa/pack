@@ -240,6 +240,8 @@ describe("inline filed-return recovery status", () => {
       // here rather than silently skip its assertions.
       expect(markup).toContain("inline-status-primary");
       expect(markup).toContain("disabled");
+      expect(markup).toContain('aria-describedby="inline-status-portal-disabled-reason"');
+      expect(markup).toContain('id="inline-status-portal-disabled-reason"');
       expect(markup).toMatch(/Open a signed-in GST Portal tab before [^<]+\./);
     }
   });
