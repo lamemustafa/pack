@@ -271,11 +271,12 @@ require_replaced_content() {
     return 1
   fi
 }
-assert_no_vitest() {
-  if pgrep -f 'vitest.*run' >/dev/null; then
-    printf 'A Vitest run is already active; refusing to overlap the replay.\n' >&2
-    return 1
-  fi
+wait_for_vitest_slot() {
+  pgrep -f vitest || true
+  while active_vitest=$(pgrep -f vitest | grep -vx "$$" || true); do
+    printf 'Waiting for active Vitest run(s): %s\n' "$active_vitest" >&2
+    sleep 5
+  done
 }
 
 git -C "$PACK_ROOT" fetch --no-tags origin \
@@ -317,7 +318,7 @@ verify_recorded_suite() {
     test -z "$(run git status --porcelain)"
     run pnpm install --frozen-lockfile
     run pnpm exec wxt prepare
-    assert_no_vitest
+    wait_for_vitest_slot
     if ! vitest_output=$(run pnpm exec vitest run 2>&1); then
       printf '%s\n' "$vitest_output"
       return 1
