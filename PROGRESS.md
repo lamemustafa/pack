@@ -1336,7 +1336,7 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   background handler as an error response, but the panel controller ignored that response and
   rendered otherwise healthy context with no visible recovery-read failure.
 - Measured before: the new controller regression failed with `expected null to be ... saved local
-  recovery state`, proving the response was silently discarded after context succeeded.
+recovery state`, proving the response was silently discarded after context succeeded.
 - Changed: the generic handler now names this request as saved local recovery state, and the shared
   controller renders its existing safe message (with a local-only fallback) as an action error.
   Context remains usable; no saved summary, action authority, permission, target binding, download
@@ -1355,3 +1355,19 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
 
 - Checkpoints: runtime, test and progress commits follow. No live/authenticated GST qualification,
   release claim, push or PR action was made.
+
+## Cycle 31 — audit all-formats label and order ownership
+
+- Window: 2026-08-27 03:40–03:43 IST (3 minutes). This is a quiet duplicate-fact audit, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: the objective named two historical hardcoded all-formats orders. The current audit traced
+  label and ordering ownership across catalogue, artifact normalization and user-facing callers.
+- Measured: the catalogue owns each bundle label and description; the leaf artifact vocabulary owns
+  concrete fetch/write order; supported-selection expansion derives from those two sources. Focused
+  all-formats tests cover all supported return types, including the non-literal GSTR-3B and
+  three-format GSTR-2B cases. Production callers of the label helper supply a return type, so the
+  legacy no-return fallback is not a displayed second product fact.
+- Result: no duplicate production contract remains at this boundary. No compatibility fallback was
+  removed without a caller or behavior reason.
+- Gate: the existing all-formats focused suite is the relevant contract; no source change was
+  retained. The next audit moves to a different duplicate or lossy-surface boundary.
