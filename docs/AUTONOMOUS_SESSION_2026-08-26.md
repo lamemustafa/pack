@@ -220,15 +220,28 @@ df -h /
   no code-owner/last-push approval, and require_extra_approval_for_unattributed_changes=true.
   An early draft oversimplified those layers. They do not establish the historical
   cause or justify claiming the extra-approval rule is absent.
+- This replay repeated the same defect as the stale PR-state and stale-head
+  assertions: it tried to re-derive a recorded fact. Historical suite totals
+  are now preserved as timestamped observations; only the reproducible current
+  master suite is executed.
 
 ## Re-verification script
 
 Run with Bash from any Pack worktree with GitHub CLI authentication. The
-historical evidence is reconstructed from named commits in fresh, clean,
-temporary worktrees; it does not depend on a retained lane or a PR's mutable
-head. Commit reachability, PR commit membership, recorded file content, and
-suite counts are fatal checks. PR state, current head, merge status, CI, and
-reviews are timestamped observations and cannot change the replay exit status.
+historical evidence is checked at named commits; it does not depend on a
+retained lane or a PR's mutable head. Commit reachability, PR commit
+membership, recorded file content, and one current-master clean-tree suite
+are fatal checks. PR state, current head, merge status, CI, reviews, and
+historical suite totals are timestamped observations and cannot change the
+replay exit status.
+
+Historical suites are deliberately not re-executed. PR #232 (`3b689eb`) added
+15-second budgets for “keeps the CSV and workbook when a precision-limited
+total exceeds an Excel cell” and “keeps both derived artifacts when an exact
+total exceeds the Excel cell limit”. It is not an ancestor of the historical
+lane commits. The recorded lane totals below therefore remain observations at
+their original timestamps, not a claim that an old checkout can reproduce a
+later test-budget policy.
 The local commands run sequentially. The wrapper prints working directories;
 redact local paths before sharing its output publicly.
 
@@ -236,6 +249,7 @@ redact local paths before sharing its output publicly.
 set -euo pipefail
 run() { pwd >&2; "$@"; }
 PACK_ROOT=$(git rev-parse --show-toplevel)
+MASTER_SHA=3b689eb9027d0d08144d85986c4d596938e47373
 REPORT_COMMIT=64ea4ef8d19630cede149b7ee6e8802c54136549
 
 require_commit() {
@@ -271,20 +285,11 @@ require_replaced_content() {
     return 1
   fi
 }
-wait_for_vitest_slot() {
-  pgrep -f vitest || true
-  while true; do
-    active_vitest=$(pgrep -f vitest | grep -vx "$$" || true)
-    test -n "$active_vitest" || break
-    printf 'Waiting for active Vitest run(s): %s\n' "$active_vitest" >&2
-    sleep 5
-  done
-}
-
 git -C "$PACK_ROOT" fetch --no-tags origin \
   refs/pull/231/head refs/pull/232/head refs/pull/233/head \
   refs/pull/234/head refs/pull/235/head
 for commit in \
+  "$MASTER_SHA" \
   b8f402a7066150d01857f12d5ec9d57a097765a1 \
   d94686ecc2173f38fbc3224e64da59ec62ec2b23 \
   63aa9a18d16966bdda1d01aec05b80e586ab4ba6 \
@@ -303,46 +308,46 @@ require_replaced_content 63aa9a18d16966bdda1d01aec05b80e586ab4ba6 tests/scripts/
 require_added_content 11ccc05785f69e61cf7cd734fe59d24b9de472fc tests/background/background-module-graph.test.ts 'function repoRelativeCycle('
 require_added_content "$REPORT_COMMIT" docs/AUTONOMOUS_SESSION_2026-08-26.md 'run pnpm review:gate -- --repo lamemustafa/pack --pr 235'
 
-replay_parent=$(mktemp -d)
+recorded_at='2026-08-26T07:44:50+05:30'
+printf 'Recorded observation at %s: commit %s suite: 125 files, 2122 tests, exit 0\n' "$recorded_at" b8f402a7066150d01857f12d5ec9d57a097765a1
+recorded_at='2026-08-26T08:03:52+05:30'
+printf 'Recorded observation at %s: commit %s suite: 126 files, 2121 tests, exit 0\n' "$recorded_at" d94686ecc2173f38fbc3224e64da59ec62ec2b23
+recorded_at='2026-08-26T08:13:33+05:30'
+printf 'Recorded observation at %s: commit %s suite: 125 files, 2117 tests, exit 0\n' "$recorded_at" 63aa9a18d16966bdda1d01aec05b80e586ab4ba6
+recorded_at='2026-08-26T08:56:05+05:30'
+printf 'Recorded observation at %s: commit %s suite: 126 files, 2123 tests, exit 0\n' "$recorded_at" 11ccc05785f69e61cf7cd734fe59d24b9de472fc
+recorded_at='2026-08-26T09:00:00+05:30'
+printf 'Recorded observation at %s: commit %s suite: 125 files, 2117 tests, exit 0\n' "$recorded_at" "$REPORT_COMMIT"
+
+baseline_parent=$(mktemp -d)
+baseline_tree="$baseline_parent/master"
 cleanup() {
-  git -C "$PACK_ROOT" worktree remove --force "$replay_parent"/* >/dev/null 2>&1 || true
-  rmdir "$replay_parent" >/dev/null 2>&1 || true
+  git -C "$PACK_ROOT" worktree remove "$baseline_tree" >/dev/null 2>&1 || true
+  rmdir "$baseline_parent" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-verify_recorded_suite() {
-  commit=$1
-  expected_files=$2
-  expected_tests=$3
-  tree="$replay_parent/$commit"
-  git -C "$PACK_ROOT" worktree add --detach "$tree" "$commit" >/dev/null
-  (
-    cd "$tree"
-    test -z "$(run git status --porcelain)"
-    run pnpm install --frozen-lockfile
-    run pnpm exec wxt prepare
-    wait_for_vitest_slot
-    if ! vitest_output=$(run pnpm exec vitest run 2>&1); then
-      printf '%s\n' "$vitest_output"
-      return 1
-    fi
+git -C "$PACK_ROOT" worktree add --detach "$baseline_tree" "$MASTER_SHA" >/dev/null
+(
+  cd "$baseline_tree"
+  test -z "$(run git status --porcelain)"
+  run pnpm install --frozen-lockfile
+  run pnpm exec wxt prepare
+  pgrep -f vitest || true
+  if ! vitest_output=$(run pnpm exec vitest run 2>&1); then
     printf '%s\n' "$vitest_output"
-    printf '%s\n' "$vitest_output" | grep -F "Test Files  $expected_files passed ($expected_files)"
-    printf '%s\n' "$vitest_output" | grep -F "Tests  $expected_tests passed ($expected_tests)"
-    run pnpm exec tsc --noEmit
-    run pnpm exec eslint . --max-warnings 0
-    run pnpm exec prettier --check .
-    run pnpm exec wxt build
-    run node scripts/verify-extension-package.mjs .output/chrome-mv3
-    run git diff --check
-    test -z "$(run git status --porcelain)"
-  )
-  git -C "$PACK_ROOT" worktree remove "$tree" >/dev/null
-}
-verify_recorded_suite b8f402a7066150d01857f12d5ec9d57a097765a1 125 2122
-verify_recorded_suite d94686ecc2173f38fbc3224e64da59ec62ec2b23 126 2121
-verify_recorded_suite 63aa9a18d16966bdda1d01aec05b80e586ab4ba6 125 2117
-verify_recorded_suite 11ccc05785f69e61cf7cd734fe59d24b9de472fc 126 2123
-verify_recorded_suite "$REPORT_COMMIT" 125 2117
+    exit 1
+  fi
+  printf '%s\n' "$vitest_output"
+  printf '%s\n' "$vitest_output" | grep -F 'Test Files  125 passed (125)'
+  printf '%s\n' "$vitest_output" | grep -F 'Tests  2117 passed (2117)'
+  run pnpm exec tsc --noEmit
+  run pnpm exec eslint . --max-warnings 0
+  run pnpm exec prettier --check .
+  run pnpm exec wxt build
+  run node scripts/verify-extension-package.mjs .output/chrome-mv3
+  run git diff --check
+  test -z "$(run git status --porcelain)"
+)
 
 observe_pr() {
   pr=$1
@@ -356,8 +361,8 @@ observe_pr() {
 for pr in 231 232 233 234 235; do observe_pr "$pr"; done
 ```
 
-Expected local results: the historical suites above pass at their named
-commits, with no timing guarantee. Current formal-review presence is an
-observation, not a historical assertion. The script does not assert that
-historical PR states never change, merge, tag, publish artifacts, or perform
-authenticated qualification.
+Expected local results: master `3b689eb` passes in a clean tree at 125 files
+and 2117 tests. Historical suite totals and current formal-review presence are
+observations, not replay assertions. The script does not assert that historical
+PR states never change, merge, tag, publish artifacts, or perform authenticated
+qualification.
