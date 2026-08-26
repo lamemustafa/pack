@@ -1126,3 +1126,43 @@ the next plan. Synthetic evidence is labelled; no entry implies an authenticated
   their verified checkpoints. Final documentation formatting and diff checks passed after cleanup.
   No new cycle, push, PR, release operation or live session was started. The goal was not marked
   complete; this is the requested time-bounded handoff, with owner decisions still open.
+
+## Cycle 23 — retain retry-cleanup rejection causes
+
+- Window: 2026-08-27 02:11–02:30 IST (19 minutes). This was a short corrective checkpoint, not a
+  cadence-qualifying 45–75 minute cycle; its actual duration is recorded rather than padded with an
+  idle hold.
+- Picked: the lossy-surface audit at the completed selected-file cleanup retry boundary. It computed
+  a staging read, missing-checkpoint, malformed-ledger, scope-conflict, or revision-conflict reason,
+  then discarded it by returning the old generic target review.
+- Measured before: six parameterised tests failed against the prior source because neither the stored
+  review nor the returned flow step contained the named cause. The existing retry test also treated a
+  missing durable cleanup checkpoint as an unchanged review, proving the reason was not retained.
+- Changed: retry cleanup now projects only existing allowlisted cause signals through the canonical
+  target-review parser, persists the blocked review when storage succeeds, and returns the same
+  signal to the current UI. A rejected write leaves the old record intact but returns both the exact
+  cause and the existing `single-period-bundle-state-persist-failed` signal; it cannot create a
+  completion or a new action. No field, permission, dependency, portal action, target binding or
+  download-evidence rule changed.
+- Discrimination: before the source change all six new cases failed at the absent stored cause.
+  Replacing the rejected-write signal with an unrelated existing signal failed its dedicated case:
+  `expected ... to contain 'single-period-bundle-state-persist-failed'`. Each mutation was restored
+  before final validation.
+- Review: required background security review PASS after the rejected-write path was made explicit.
+  It found no manifest, CSP, network, target-binding, download-evidence or unsafe completion change.
+- Gate: final build and package verification passed; TypeScript, zero-warning ESLint, repo-wide
+  Prettier and diff checks passed. Focused recovery suites passed 122 tests. The isolated full serial
+  Vitest run passed 2,794 tests. Exact footer:
+
+  ```text
+        Tests  2794 passed (2794)
+     Start at  02:25:11
+     Duration  206.32s (transform 6.71s, setup 0ms, import 30.18s, tests 148.83s, environment 14ms)
+  ```
+
+- Checkpoints: `1c7701a fix(recovery): retain retry cleanup causes` and
+  `92983a3 test(recovery): cover retry cleanup cause retention`. The progress record is committed
+  separately after this append.
+- Learned / next: the retry boundary had two distinct storage outcomes: a retained diagnostic and a
+  visible-but-unretained diagnostic. The next lossy-surface pass should trace another bounded
+  rejection boundary rather than widening signal vocabulary or recovery authority.
