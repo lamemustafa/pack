@@ -735,10 +735,20 @@ export async function retryCompletedSinglePeriodZipCleanup(
       try {
         stagingRecord = await readSinglePeriodStagingRecord();
       } catch {
-        return responseForFiledReturnsTargetReview(review);
+        return retainSinglePeriodCleanupBlock(
+          review,
+          ["single-period-bundle-state-read-failed", "single-period-opfs-retained"],
+          key,
+          deps.now?.() ?? new Date(),
+        );
       }
       if (stagingRecord && stagingRecord.ledgerId !== attemptLedgerId) {
-        return responseForFiledReturnsTargetReview(review);
+        return retainSinglePeriodCleanupBlock(
+          review,
+          ["single-period-bundle-scope-conflict", "single-period-opfs-retained"],
+          key,
+          deps.now?.() ?? new Date(),
+        );
       }
     } else {
       const cleanupTarget = await readScopeBoundSinglePeriodCleanupTarget(
@@ -746,7 +756,12 @@ export async function retryCompletedSinglePeriodZipCleanup(
         isInterruptedSinglePeriodBundleReview(review),
       );
       if (cleanupTarget.state === "blocked") {
-        return responseForFiledReturnsTargetReview(review);
+        return retainSinglePeriodCleanupBlock(
+          review,
+          cleanupTarget.safeSignals,
+          key,
+          deps.now?.() ?? new Date(),
+        );
       }
       cleanupLedgerId = cleanupTarget.ledgerId;
       expectedLedger = cleanupTarget.expectedLedger;
@@ -758,7 +773,12 @@ export async function retryCompletedSinglePeriodZipCleanup(
       scope,
     });
     if (cleanup.state === "blocked") {
-      return responseForFiledReturnsTargetReview(review);
+      return retainSinglePeriodCleanupBlock(
+        review,
+        cleanup.safeSignals,
+        key,
+        deps.now?.() ?? new Date(),
+      );
     }
 
     const cancelled = review.safeSignals.includes("single-period-zip-cancel-cleanup-failed");
@@ -817,6 +837,43 @@ export async function retryCompletedSinglePeriodZipCleanup(
       flowSummary: durableSummary,
     };
   });
+}
+
+async function retainSinglePeriodCleanupBlock(
+  review: FiledReturnsTargetReview,
+  cleanupSignals: readonly string[],
+  key: string,
+  now: Date,
+): Promise<PackMessageResponse> {
+  if (cleanupSignals.every((signal) => review.safeSignals.includes(signal))) {
+    return responseForFiledReturnsTargetReview(review);
+  }
+  const durableStatus = parseDurableTargetStatus(
+    review.scope,
+    "target-review",
+    uniqueSafeSignals([...review.safeSignals, ...cleanupSignals]),
+  );
+  if (!durableStatus) return responseForFiledReturnsTargetReview(review);
+  const blockedReview = parseFiledReturnsTargetReview({
+    ...review,
+    revision: targetReviewRevision(review) + 1,
+    safeMessage: durableStatus.safeMessage,
+    safeSignals: durableStatus.safeSignals,
+    updatedAt: now.toISOString(),
+  });
+  if (!blockedReview) return responseForFiledReturnsTargetReview(review);
+  try {
+    await browser.storage.local.set({ [key]: blockedReview });
+  } catch {
+    return responseForFiledReturnsTargetReview({
+      ...blockedReview,
+      safeSignals: uniqueSafeSignals([
+        ...blockedReview.safeSignals,
+        "single-period-bundle-state-persist-failed",
+      ]),
+    });
+  }
+  return responseForFiledReturnsTargetReview(blockedReview);
 }
 
 export async function persistResolvedTargetReviewSummary(
@@ -1209,7 +1266,11 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
         ...review.safeSignals.filter(
           (signal) =>
             isSinglePeriodCleanupFailureSignal(signal) ||
-            isFiledReturnsTargetReviewClearFailureSignal(signal),
+            isFiledReturnsTargetReviewClearFailureSignal(signal) ||
+            [
+              "single-period-bundle-state-persist-failed",
+              "single-period-zip-recovery-checkpoint-missing",
+            ].includes(signal),
         ),
       ]),
       safeMessage: transientStagingCleared
