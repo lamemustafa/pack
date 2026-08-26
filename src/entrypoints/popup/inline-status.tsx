@@ -221,24 +221,32 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "blocked" && summary?.currentPeriod) {
     const signals = new Set(summary.flowStep.safeSignals);
+    // `userAction.message` is the remedy the flow already computed and the
+    // durable summary already persists. Nothing rendered it, so 82 blocked
+    // states told the reader what was wrong and never what to do -- and the
+    // strings below were written to compensate, one page at a time.
+    const remedy = summary.flowStep.userAction?.message;
     const needsTargetReview = signals.has("filed-returns-target-review-required");
     const needsFullFiscalYearRecovery = Boolean(summary.fullFiscalYearRecovery);
     const canReconcileTarget = canReconcileFiledReturnsTarget(summary);
     const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
     return {
-      body: needsTargetReview
-        ? signals.has("artifact-acquisition-session-proof-expired")
-          ? `Pack cannot reconcile ${summary.currentPeriod} after the extension reload cleared its temporary exact-download proof. Check Browser Downloads, then start fresh or cancel and reset.`
-          : canReconcileTarget
-            ? `Resolve ${summary.currentPeriod} before choosing another period. Finish or cancel any open Save dialog, then reconcile the exact browser download.`
-            : canRetryTargetCleanup
-              ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the local cleanup; Pack will not click the GST Portal again.`
-              : signals.has("single-period-zip-incomplete")
-                ? `Resolve ${summary.currentPeriod} before choosing another period. Open More run controls to discard the saved state and start the selected files again, or cancel and reset.`
-                : `Resolve ${summary.currentPeriod} before choosing another period. Check Browser Downloads, then open More run controls to record a manual observation, explicitly start fresh, or cancel and reset.`
-        : needsFullFiscalYearRecovery
-          ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
-          : summary.flowStep.safeMessage,
+      body: withRemedy(
+        needsTargetReview
+          ? signals.has("artifact-acquisition-session-proof-expired")
+            ? `Pack cannot reconcile ${summary.currentPeriod} after the extension reload cleared its temporary exact-download proof. Check Browser Downloads, then start fresh or cancel and reset.`
+            : canReconcileTarget
+              ? `Resolve ${summary.currentPeriod} before choosing another period. Finish or cancel any open Save dialog, then reconcile the exact browser download.`
+              : canRetryTargetCleanup
+                ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the local cleanup; Pack will not click the GST Portal again.`
+                : signals.has("single-period-zip-incomplete")
+                  ? `Resolve ${summary.currentPeriod} before choosing another period. Open More run controls to discard the saved state and start the selected files again, or cancel and reset.`
+                  : `Resolve ${summary.currentPeriod} before choosing another period. Check Browser Downloads, then open More run controls to record a manual observation, explicitly start fresh, or cancel and reset.`
+          : needsFullFiscalYearRecovery
+            ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
+            : summary.flowStep.safeMessage,
+        remedy,
+      ),
       icon: "!",
       title: needsTargetReview
         ? `${summary.currentPeriod} needs review`
@@ -257,6 +265,16 @@ function getInlineStatusCopy(
     };
   }
   return null;
+}
+
+/**
+ * Appends the flow step's own remedy when the body does not already carry it.
+ * The containment check exists because two states currently repeat their remedy
+ * inside `safeMessage`; those copies should come out now that this renders.
+ */
+function withRemedy(body: string, remedy: string | undefined): string {
+  if (!remedy || body.includes(remedy)) return body;
+  return `${body} ${remedy}`;
 }
 
 function getFullFiscalYearRecoveryBody(currentPeriod: string, signals: Set<string>): string {

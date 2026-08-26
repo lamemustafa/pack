@@ -20,6 +20,7 @@ import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durabl
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import {
   canCompleteFullFiscalYearLedger,
+  unplannedEligibleFullFiscalYearPeriods,
   isFullFiscalYearLedgerStale,
 } from "./filed-returns-full-fiscal-year-ledger";
 
@@ -186,7 +187,7 @@ export function summariseFullFiscalYearLedger(
   const zipPhaseStep = fullFiscalYearZipPhaseStep(ledger);
   if (zipPhaseStep) return toFullFiscalYearSummary(ledger, zipPhaseStep);
   if (ledger.status === "complete" && canCompleteFullFiscalYearLedger(ledger)) {
-    return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
+    return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger, now));
   }
   if (hasRecoverableActionRequiredTarget(ledger)) {
     return toFullFiscalYearSummary(ledger, recoverableActionRequiredFullFiscalYearStep(ledger));
@@ -427,7 +428,14 @@ export function toFullFiscalYearSummary(
  */
 export function completeFullFiscalYearStep(
   ledger: FiledReturnsFullFiscalYearLedger,
+  now = new Date(),
 ): PortalFlowStepResult {
+  // A plan is fixed at creation and never grows, so a run started mid-year can
+  // finish covering fewer periods than the year now has. Saying only "completed
+  // the full fiscal year run" would leave the reader to discover the gap from a
+  // period count. State it where the outcome is stated.
+  const unplanned = unplannedEligibleFullFiscalYearPeriods(ledger, now);
+  const plannedCount = (ledger.targetPlan ?? ledger.targets).length;
   return {
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
@@ -435,8 +443,15 @@ export function completeFullFiscalYearStep(
     safeSignals: [
       "full-fiscal-year-complete",
       ...(zipPhaseProvesDelivery(ledger.zipPhase) ? ["full-fiscal-year-zip-downloaded"] : []),
+      ...(unplanned.length > 0 ? ["full-fiscal-year-plan-narrower-than-eligible"] : []),
     ],
-    safeMessage: `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.`,
+    safeMessage:
+      `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.` +
+      (unplanned.length > 0
+        ? ` This run covers the ${plannedCount} ${plannedCount === 1 ? "period" : "periods"} planned when it started; ` +
+          `${unplanned.length} more ${unplanned.length === 1 ? "is" : "are"} eligible now, starting with ${unplanned[0]}. ` +
+          `Start this year again to include ${unplanned.length === 1 ? "it" : "them"}.`
+        : ""),
   };
 }
 

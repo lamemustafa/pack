@@ -28,6 +28,7 @@ import {
 import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isCanonicalSinglePeriodLedgerId } from "../connectors/gst/filed-returns-ledger-id";
+import { isSinglePeriodCleanupCheckpointFailureSignal } from "../connectors/gst/single-period-cleanup-checkpoint";
 import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
 import { isFiledReturnsTargetDownloadAttempt } from "./filed-returns-target-download-attempt-validation";
 import {
@@ -1093,6 +1094,17 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
           : ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"]),
         ...confirmedSinglePeriodZipSignals(review.safeSignals),
         ...singlePeriodOpfsClearDiagnosticSignals(review.safeSignals),
+        // Every signal that made hasSinglePeriodCleanupFailure true, not a
+        // generic stand-in for it. Seven signals can select this state and only
+        // two had a pass-through, so five distinct causes reached the surface as
+        // one hardcoded `single-period-cleanup-checkpoint-failed` and were
+        // indistinguishable from outside -- including in a live run this was
+        // diagnosed from.
+        ...review.safeSignals.filter(
+          (signal) =>
+            isSinglePeriodCleanupFailureSignal(signal) ||
+            signal === "filed-returns-target-review-clear-failed",
+        ),
       ]),
       safeMessage: transientStagingCleared
         ? "Pack cleared temporary selected-file staging but could not verify its durable recovery checkpoint cleanup."
@@ -1290,6 +1302,7 @@ function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean 
 }
 
 function isSinglePeriodCleanupFailureSignal(signal: string): boolean {
+  if (isSinglePeriodCleanupCheckpointFailureSignal(signal)) return true;
   return [
     "single-period-opfs-clear-failed",
     "single-period-cleanup-checkpoint-failed",

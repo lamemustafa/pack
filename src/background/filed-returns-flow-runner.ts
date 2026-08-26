@@ -30,8 +30,9 @@ import {
 } from "./filed-returns-full-fiscal-year-ledger";
 import {
   hasRetainedFullFiscalYearStaging,
-  readLedger,
+  readLedgerForScope,
   readMalformedLedgerState,
+  readPlanLedgersStorageState,
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
@@ -78,6 +79,7 @@ export interface FiledReturnsFlowRunnerDeps {
     activeRun?: string;
     completion: string;
     fullFiscalYearLedger: string;
+    fullFiscalYearLedgerIndex?: string;
     observation: string;
     targetReview?: string;
   };
@@ -136,6 +138,34 @@ export async function startFiledReturnsDownloadFlow(
     if (retainedArtifactRecovery) return retainedArtifactRecovery;
 
     if (isFullFiscalYearScope(scope)) {
+      const planLedgers = await readPlanLedgersStorageState(deps);
+      if (planLedgers.state === "malformed") {
+        const flowStep: PortalFlowStepResult = {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-private-v0",
+          state: "blocked",
+          safeSignals: ["full-fiscal-year-ledger-malformed", "full-fiscal-year-opfs-retained"],
+          safeMessage:
+            "Pack found damaged fiscal-year recovery metadata and cannot verify whether local staging remains.",
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message:
+              "Use Clear local Pack data to remove the retained staging before starting again.",
+            canResume: false,
+          },
+        };
+        return {
+          ok: true,
+          flowStep,
+          flowSummary: {
+            scope,
+            status: "blocked",
+            completedPeriods: [],
+            totalPeriods: 12,
+            flowStep,
+          },
+        };
+      }
       const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
       if (malformedLedger) {
         const flowStep: PortalFlowStepResult = {
@@ -167,7 +197,7 @@ export async function startFiledReturnsDownloadFlow(
           },
         };
       }
-      const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+      const existingLedger = await readLedgerForScope(deps, scope);
       const replaceableCompletedLedger =
         existingLedger?.status === "complete" &&
         canCompleteFullFiscalYearLedger(existingLedger) &&

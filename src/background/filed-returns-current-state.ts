@@ -12,6 +12,7 @@ import {
   isFullFiscalYearLedger,
   sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
+import { readLedgerForScope } from "./filed-returns-full-fiscal-year-run-state";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
 
 export interface FiledReturnsCurrentStateDeps {
@@ -40,7 +41,7 @@ export async function readCurrentFiledReturnsFlowSummary(
     //
     // Read the ledger here rather than moving the read above: the ledger lookup
     // costs a storage round trip that the other early returns do not need.
-    const activeLedger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+    const activeLedger = await readLedgerForScope(deps, activeRunSummary.scope);
     if (
       isFullFiscalYearLedger(activeLedger) &&
       sameFiledReturnsScope(activeLedger.scope, activeRunSummary.scope)
@@ -59,7 +60,10 @@ export async function readCurrentFiledReturnsFlowSummary(
   });
   if (targetReviewSummary) return targetReviewSummary;
 
-  const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
+  const ledger =
+    completionSummary && isFullFiscalYearScope(completionSummary.scope)
+      ? await readLedgerForScope(deps, completionSummary.scope)
+      : await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
   if (isFullFiscalYearLedger(ledger) && isRetainedZipRetrySummary(completionSummary, ledger)) {
     // Evidence is display-only and never persisted, so this path -- which
     // returns the durable summary rather than re-summarising -- has to rebuild

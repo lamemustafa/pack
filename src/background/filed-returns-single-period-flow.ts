@@ -6,9 +6,10 @@ import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
+import { canonicalDurableSummaryMessage } from "../connectors/gst/filed-returns-durable-status";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
-import { getRequiredGstTab } from "./filed-returns-active-tab";
+import { getFullFiscalYearTabSessionId, getRequiredGstTab } from "./filed-returns-active-tab";
 import {
   clickReturnsDashboardAnchorFromTab,
   verifyCurrentContentScriptFromTab,
@@ -51,7 +52,12 @@ const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
 export async function startSinglePeriodFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
-  options: { persistSinglePeriodSummary?: boolean } = {},
+  options: {
+    onPortalTabSelected?: (tabId: number, tabSessionId: string) => Promise<void>;
+    persistSinglePeriodSummary?: boolean;
+    requiredPortalTabId?: number;
+    requiredPortalTabSessionId?: string;
+  } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
   // Every direct-artifact return type checkpoints its acquisition, so every one
@@ -111,8 +117,39 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
         )
       : recoveryResponse;
   }
-  const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
+  const activeTab = await getRequiredGstTab(
+    deps.getActiveGstTab,
+    options.requiredPortalTabId,
+    options.requiredPortalTabSessionId,
+  );
   if (!activeTab) {
+    if (
+      options.requiredPortalTabId !== undefined ||
+      options.requiredPortalTabSessionId !== undefined
+    ) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId(scope.returnType),
+            state: "blocked",
+            safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
+            safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+              "full-fiscal-year-pinned-gst-tab-unavailable",
+            ]),
+            userAction: {
+              type: "RETRY_PORTAL_GENERATION",
+              message: "Discard this saved plan before using a different GST Portal tab.",
+              canResume: false,
+            },
+          },
+        },
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
     return withPersistedSinglePeriodSummary(
       scope,
       {
@@ -135,6 +172,34 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
       deps,
       shouldPersistSinglePeriodSummary,
     );
+  }
+  if (options.onPortalTabSelected) {
+    const tabSessionId = await getFullFiscalYearTabSessionId();
+    if (!tabSessionId) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId(scope.returnType),
+            state: "blocked",
+            safeSignals: ["full-fiscal-year-gst-tab-session-unavailable"],
+            safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+              "full-fiscal-year-gst-tab-session-unavailable",
+            ]),
+            userAction: {
+              type: "RETRY_PORTAL_GENERATION",
+              message: "Try again with the GST Portal tab open in the foreground.",
+              canResume: true,
+            },
+          },
+        },
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
+    await options.onPortalTabSelected(activeTab.tab.id, tabSessionId);
   }
 
   if (scope.returnType === "GSTR-3B" && !isReturnsOrigin(activeTab.tab.url)) {

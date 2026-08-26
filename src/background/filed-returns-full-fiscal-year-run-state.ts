@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type {
+  FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
   PortalFlowStepResult,
@@ -7,6 +8,7 @@ import type {
 import { isCleanedZipPhase } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { normaliseFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   canCompleteFullFiscalYearLedger,
@@ -14,6 +16,7 @@ import {
   isFullFiscalYearLedger,
   isFullFiscalYearLedgerStale,
   recoverableFullFiscalYearLedgerId,
+  sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
 import {
   activeFullFiscalYearStep,
@@ -175,10 +178,131 @@ export function shouldPersistReconciledLedger(
   );
 }
 
+const PLAN_STORAGE_KEY_PREFIX = "pack:filed-returns-plan:";
+const PLAN_INDEX_SCHEMA_VERSION = "1.0";
+
+type PlanLedgerIndex = {
+  schemaVersion: typeof PLAN_INDEX_SCHEMA_VERSION;
+  ledgerIdsByScope: Record<string, string>;
+};
+
+type LedgerStorageDeps = {
+  storageKeys: {
+    fullFiscalYearLedger: string;
+    fullFiscalYearLedgerIndex?: string;
+  };
+};
+
+export type PlanLedgersStorageState =
+  { state: "valid"; ledgers: FiledReturnsFullFiscalYearLedger[] } | { state: "malformed" };
+
+export function filedReturnsPlanStorageKey(ledgerId: string): string {
+  return `${PLAN_STORAGE_KEY_PREFIX}${ledgerId}`;
+}
+
+export async function readLedgerForScope(
+  deps: LedgerStorageDeps,
+  scope: FiledReturnsDownloadScope,
+): Promise<FiledReturnsFullFiscalYearLedger | null> {
+  const indexKey = deps.storageKeys.fullFiscalYearLedgerIndex;
+  if (!indexKey) return readLedger(deps.storageKeys.fullFiscalYearLedger);
+  const index = await readPlanLedgerIndex(indexKey);
+  const ledgerId = index?.ledgerIdsByScope[planScopeKey(scope)];
+  if (ledgerId) return readLedger(filedReturnsPlanStorageKey(ledgerId));
+
+  const legacy = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  return legacy && sameFiledReturnsScope(legacy.scope, scope) ? legacy : null;
+}
+
+export async function readLedgerById(
+  deps: LedgerStorageDeps,
+  ledgerId: string,
+): Promise<FiledReturnsFullFiscalYearLedger | null> {
+  const ledger = await readLedger(filedReturnsPlanStorageKey(ledgerId));
+  if (ledger) return ledger;
+  const legacy = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  return legacy?.ledgerId === ledgerId ? legacy : null;
+}
+
+export async function readLedgerWithPendingZipDownload(
+  deps: LedgerStorageDeps,
+  downloadId?: number,
+): Promise<FiledReturnsFullFiscalYearLedger | null> {
+  const candidates = await readLedgersWithPendingZipDownload(deps, downloadId);
+  return candidates.length === 1 ? (candidates[0] ?? null) : null;
+}
+
+export async function readLedgersWithPendingZipDownload(
+  deps: LedgerStorageDeps,
+  downloadId?: number,
+): Promise<FiledReturnsFullFiscalYearLedger[]> {
+  const indexKey = deps.storageKeys.fullFiscalYearLedgerIndex;
+  if (!indexKey) {
+    const ledger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+    return pendingZipLedgerMatches(ledger, downloadId) ? [ledger] : [];
+  }
+  const indexValues = await browser.storage.local.get(indexKey);
+  if (indexValues[indexKey] === undefined || indexValues[indexKey] === null) {
+    const ledger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+    return pendingZipLedgerMatches(ledger, downloadId) ? [ledger] : [];
+  }
+  const index = parsePlanLedgerIndex(indexValues[indexKey]);
+  if (!index) return [];
+  return (
+    await Promise.all(
+      Object.values(index.ledgerIdsByScope).map((ledgerId) =>
+        readLedger(filedReturnsPlanStorageKey(ledgerId)),
+      ),
+    )
+  ).filter((ledger): ledger is FiledReturnsFullFiscalYearLedger =>
+    pendingZipLedgerMatches(ledger, downloadId),
+  );
+}
+
+export async function readPlanLedgersStorageState(
+  deps: LedgerStorageDeps,
+): Promise<PlanLedgersStorageState> {
+  const indexKey = deps.storageKeys.fullFiscalYearLedgerIndex;
+  if (!indexKey) return { state: "valid", ledgers: [] };
+  const values = await browser.storage.local.get(null);
+  const planKeys = Object.keys(values).filter((key) => key.startsWith(PLAN_STORAGE_KEY_PREFIX));
+  const indexValue = values[indexKey];
+  if (indexValue === undefined || indexValue === null) {
+    return planKeys.length === 0 ? { state: "valid", ledgers: [] } : { state: "malformed" };
+  }
+  const index = parsePlanLedgerIndex(indexValue);
+  if (!index) return { state: "malformed" };
+  const ledgerIds = Object.values(index.ledgerIdsByScope);
+  if (new Set(ledgerIds).size !== ledgerIds.length) return { state: "malformed" };
+  const indexedPlanKeys = ledgerIds.map((ledgerId) => filedReturnsPlanStorageKey(ledgerId));
+  if (
+    indexedPlanKeys.length !== planKeys.length ||
+    indexedPlanKeys.some((key) => !planKeys.includes(key))
+  ) {
+    return { state: "malformed" };
+  }
+  const ledgers = indexedPlanKeys.map((key) =>
+    isFullFiscalYearLedger(values[key]) ? values[key] : null,
+  );
+  return ledgers.every((ledger): ledger is FiledReturnsFullFiscalYearLedger => ledger !== null)
+    ? { state: "valid", ledgers }
+    : { state: "malformed" };
+}
+
 export async function readLedger(key: string): Promise<FiledReturnsFullFiscalYearLedger | null> {
   const values = await browser.storage.local.get(key);
   const ledger = values[key];
   return isFullFiscalYearLedger(ledger) ? ledger : null;
+}
+
+function pendingZipLedgerMatches(
+  ledger: FiledReturnsFullFiscalYearLedger | null,
+  downloadId: number | undefined,
+): ledger is FiledReturnsFullFiscalYearLedger {
+  return (
+    ledger?.zipPhase === "download-observing" &&
+    (downloadId === undefined || ledger.zipDownloadAttempt?.downloadId === downloadId)
+  );
 }
 
 export async function readMalformedLedgerState(
@@ -191,10 +315,56 @@ export async function readMalformedLedgerState(
 }
 
 export async function persistLedger(
-  deps: FiledReturnsFlowRunnerDeps,
+  deps: LedgerStorageDeps,
   ledger: FiledReturnsFullFiscalYearLedger,
 ): Promise<void> {
-  await browser.storage.local.set({ [deps.storageKeys.fullFiscalYearLedger]: ledger });
+  const indexKey = deps.storageKeys.fullFiscalYearLedgerIndex;
+  if (!indexKey) {
+    await browser.storage.local.set({ [deps.storageKeys.fullFiscalYearLedger]: ledger });
+    return;
+  }
+  const index = (await readPlanLedgerIndex(indexKey)) ?? {
+    schemaVersion: PLAN_INDEX_SCHEMA_VERSION,
+    ledgerIdsByScope: {},
+  };
+  index.ledgerIdsByScope[planScopeKey(ledger.scope)] = ledger.ledgerId;
+  await browser.storage.local.set({
+    [filedReturnsPlanStorageKey(ledger.ledgerId)]: ledger,
+    [indexKey]: index,
+  });
+  const legacy = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  if (legacy?.ledgerId === ledger.ledgerId) {
+    await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
+  }
+}
+
+export async function removeLedger(
+  deps: LedgerStorageDeps,
+  ledger: Pick<FiledReturnsFullFiscalYearLedger, "ledgerId" | "scope">,
+): Promise<void> {
+  const indexKey = deps.storageKeys.fullFiscalYearLedgerIndex;
+  if (!indexKey) {
+    await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
+    return;
+  }
+  const index = await readPlanLedgerIndex(indexKey);
+  if (!index) {
+    await browser.storage.local.remove(filedReturnsPlanStorageKey(ledger.ledgerId));
+    return;
+  }
+  delete index.ledgerIdsByScope[planScopeKey(ledger.scope)];
+  await browser.storage.local.remove(filedReturnsPlanStorageKey(ledger.ledgerId));
+  await browser.storage.local.set({ [indexKey]: index });
+}
+
+export async function clearLedgerPlans(deps: LedgerStorageDeps): Promise<void> {
+  const indexKey = deps.storageKeys.fullFiscalYearLedgerIndex;
+  if (!indexKey) return;
+  const allValues = await browser.storage.local.get(null);
+  // Same predicate readPlanLedgersStorageState uses to find these records. A
+  // stricter eraser than finder leaves plan records behind on a clear.
+  const planKeys = Object.keys(allValues).filter((key) => key.startsWith(PLAN_STORAGE_KEY_PREFIX));
+  await browser.storage.local.remove([...planKeys, indexKey]);
 }
 
 export async function persistLedgerAndMaybeSummary(
@@ -242,4 +412,37 @@ function coerceInconsistentCompleteLedger(
 ): FiledReturnsFullFiscalYearLedger {
   if (ledger.status !== "complete") return ledger;
   return { ...ledger, status: "blocked", updatedAt: now.toISOString() };
+}
+
+async function readPlanLedgerIndex(key: string): Promise<PlanLedgerIndex | null> {
+  const values = await browser.storage.local.get(key);
+  return parsePlanLedgerIndex(values[key]);
+}
+
+function parsePlanLedgerIndex(value: unknown): PlanLedgerIndex | null {
+  if (!value || typeof value !== "object") return null;
+  const index = value as Partial<PlanLedgerIndex>;
+  if (index.schemaVersion !== PLAN_INDEX_SCHEMA_VERSION || !index.ledgerIdsByScope) return null;
+  if (typeof index.ledgerIdsByScope !== "object") return null;
+  if (
+    !Object.entries(index.ledgerIdsByScope).every(
+      ([scopeKey, ledgerId]) =>
+        scopeKey.length > 0 &&
+        scopeKey.length <= 240 &&
+        typeof ledgerId === "string" &&
+        ledgerId.length > 0 &&
+        ledgerId.length <= 120,
+    )
+  ) {
+    return null;
+  }
+  return { schemaVersion: PLAN_INDEX_SCHEMA_VERSION, ledgerIdsByScope: index.ledgerIdsByScope };
+}
+
+function planScopeKey(scope: FiledReturnsDownloadScope): string {
+  return [
+    scope.returnType,
+    scope.financialYear,
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
+  ].join(":");
 }

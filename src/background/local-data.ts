@@ -19,12 +19,17 @@ import {
 } from "./filed-returns-artifact-progress";
 import { hasArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
+import {
+  clearLedgerPlans,
+  readPlanLedgersStorageState,
+} from "./filed-returns-full-fiscal-year-run-state";
 
 export interface PackLocalDataDeps {
   clearableLocalStorageKeys: readonly string[];
   storageKeys: {
     activeRun: string;
     fullFiscalYearLedger: string;
+    fullFiscalYearLedgerIndex?: string;
     targetReview: string;
   };
 }
@@ -69,6 +74,8 @@ async function clearPackLocalDataWithinOperation(
     ? ledger.ledgerId
     : recoverableFullFiscalYearLedgerId(ledger);
   requiresBroadStagingClear ||= ledger !== null && !fullFiscalYearLedgerId;
+  const planLedgers = await readPlanLedgersStorageState(deps);
+  requiresBroadStagingClear ||= planLedgers.state === "malformed";
 
   if (requiresBroadStagingClear) {
     const clearSignals = await discardAllFiledReturnsStaging();
@@ -99,8 +106,21 @@ async function clearPackLocalDataWithinOperation(
       };
     }
   }
+  if (!requiresBroadStagingClear && planLedgers.state === "valid") {
+    for (const planLedger of planLedgers.ledgers) {
+      const clearSignals = await discardFullFiscalYearFiledReturnsZip(planLedger.ledgerId);
+      if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
+        return {
+          ok: false,
+          error:
+            "Pack could not clear retained fiscal-year files. Retry clearing local data before removing the saved ledger.",
+        };
+      }
+    }
+  }
 
   await browser.storage.session.clear();
+  await clearLedgerPlans(deps);
   await browser.storage.local.remove([...deps.clearableLocalStorageKeys]);
   return { ok: true, cleared: true };
 }
@@ -122,8 +142,20 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
   if (await hasArtifactAcquisitionCheckpoint()) return true;
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
-  if (!isFullFiscalYearLedger(ledger)) return false;
-  return hasUnresolvedZipState(ledger) || isUnresolvedFullFiscalYearLedger(ledger);
+  if (
+    isFullFiscalYearLedger(ledger) &&
+    (hasUnresolvedZipState(ledger) || isUnresolvedFullFiscalYearLedger(ledger))
+  ) {
+    return true;
+  }
+  const planLedgers = await readPlanLedgersStorageState(deps);
+  return (
+    planLedgers.state === "valid" &&
+    planLedgers.ledgers.some(
+      (planLedger) =>
+        hasUnresolvedZipState(planLedger) || isUnresolvedFullFiscalYearLedger(planLedger),
+    )
+  );
 }
 
 function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolean {

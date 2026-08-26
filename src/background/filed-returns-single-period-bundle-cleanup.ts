@@ -1,4 +1,8 @@
 import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
+import {
+  SinglePeriodCleanupCheckpointError,
+  singlePeriodCleanupCheckpointFailureSignal,
+} from "../connectors/gst/single-period-cleanup-checkpoint";
 import { discardSinglePeriodFiledReturnsZip } from "./filed-returns-single-period-zip";
 import {
   clearLegacySinglePeriodStagingRecord,
@@ -75,15 +79,22 @@ export async function cleanupSinglePeriodBundleStaging({
 
   if (onAfterTransientClear) {
     let checkpointPersisted = false;
+    let checkpointFailureStage: Parameters<typeof singlePeriodCleanupCheckpointFailureSignal>[0] =
+      "callback-failed";
     try {
       checkpointPersisted = await onAfterTransientClear();
-    } catch {
-      checkpointPersisted = false;
+    } catch (error) {
+      checkpointFailureStage =
+        error instanceof SinglePeriodCleanupCheckpointError ? error.stage : "callback-failed";
     }
     if (!checkpointPersisted) {
       return {
         state: "blocked",
-        safeSignals: ["single-period-opfs-cleared", "single-period-cleanup-checkpoint-failed"],
+        safeSignals: [
+          "single-period-opfs-cleared",
+          "single-period-cleanup-checkpoint-failed",
+          singlePeriodCleanupCheckpointFailureSignal(checkpointFailureStage),
+        ],
         transientStagingCleared: true,
       };
     }

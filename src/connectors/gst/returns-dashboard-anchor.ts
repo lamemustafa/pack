@@ -1,4 +1,4 @@
-import { isGstAuthLandingRoute } from "./detect";
+import { isActionableGstPortalTabUrl } from "./hosts";
 import { isActionablePortalControl, isSemanticallyEnabledPortalControl } from "./filed-returns-dom";
 
 export type ReturnsDashboardAnchorNavigation = "clicked" | "not-found" | "ambiguous";
@@ -25,11 +25,17 @@ export function clickReturnsDashboardAnchor(
   if (visibleMatches.length === 0) {
     const uniqueMatch = matches[0];
     const location = documentRef.defaultView?.location;
+    // Captured 2026-08-24: the GSTR-2B summary page carries exactly one Returns
+    // Dashboard anchor, semantically enabled, collapsed inside two `display:none`
+    // nav lists. Restricting this fallback to the services auth landing left a
+    // GSTR-3B run unable to leave that page at all. The conditions that carry the
+    // safety are unchanged -- one match on the whole page, and the control is not
+    // disabled, inert, aria-hidden, transparent or pointer-events:none -- and the
+    // caller still verifies the origin actually changed before continuing.
     if (
       matches.length === 1 &&
       uniqueMatch &&
-      location &&
-      isGstAuthLandingRoute(location) &&
+      isActionableGstPortalTabUrl(location?.href) &&
       isSemanticallyEnabledPortalControl(uniqueMatch)
     ) {
       uniqueMatch.click();

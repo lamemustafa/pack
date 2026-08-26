@@ -228,6 +228,19 @@ export interface FiledReturnsFullFiscalYearTarget {
 }
 
 /**
+ * The target set authorised when a multi-target run was created. This is
+ * deliberately separate from mutable target execution state: completion may
+ * only compare a run with the exact targets it was asked to acquire.
+ */
+export interface FiledReturnsLedgerPlanTarget {
+  targetId: string;
+  financialYear: string;
+  period: string;
+  returnType: FiledReturnsReturnType;
+  artifactType?: FiledReturnsArtifactType;
+}
+
+/**
  * The terminal cleanup phases. One predicate rather than a comparison repeated
  * at each call site: splitting `cleaned` by origin turned every existing
  * `=== "cleaned"` into a check that silently stopped matching three quarters of
@@ -290,10 +303,15 @@ export interface FiledReturnsFullFiscalYearLedger {
   };
   scope: FiledReturnsDownloadScope;
   currentTargetId?: string;
+  /** The one GST tab selected before this plan first performed portal work. */
+  portalTabId?: number;
+  /** Opaque browser-session marker paired with `portalTabId`; never portal data. */
+  portalTabSessionId?: string;
   createdAt: string;
   updatedAt: string;
   eligibleThrough?: string;
   lastReconciledAt?: string;
+  targetPlan?: FiledReturnsLedgerPlanTarget[];
   targets: FiledReturnsFullFiscalYearTarget[];
 }
 

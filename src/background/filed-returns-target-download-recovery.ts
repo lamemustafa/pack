@@ -31,6 +31,7 @@ import { copyFiledReturnsDownloadDiagnosticState } from "./filed-returns-downloa
 import { hasPositiveFiledReturnsDownloadEvidence } from "./filed-returns-download-diagnostic-state";
 import { persistCanonicalSinglePeriodCompletion } from "./filed-returns-session-summary";
 import { moveFiledReturnsTargetDownloadToManualReview } from "./filed-returns-target-download-attempt";
+import { SinglePeriodCleanupCheckpointError } from "../connectors/gst/single-period-cleanup-checkpoint";
 
 const PERSISTED_DOWNLOAD_RECONCILIATION_WAIT_MS = 30_000;
 
@@ -153,13 +154,7 @@ async function completeReconciledDownload(
           expectedLedger: zipEvidence.ledger,
           ledgerId: zipEvidence.ledger.ledgerId,
           onAfterTransientClear: async () => {
-            const updatedReview = await persistReconciledZipCleanupCheckpoint(
-              review,
-              flowStep,
-              deps,
-            );
-            if (!updatedReview) return false;
-            checkpointReview = updatedReview;
+            checkpointReview = await persistReconciledZipCleanupCheckpoint(review, flowStep, deps);
             return true;
           },
           scope: review.scope,
@@ -231,18 +226,18 @@ async function completeReconciledDownload(
   return { ok: true, flowStep: durableSummary.flowStep, flowSummary: durableSummary };
 }
 
-async function persistReconciledZipCleanupCheckpoint(
+export async function persistReconciledZipCleanupCheckpoint(
   review: FiledReturnsTargetReview,
   flowStep: PortalFlowStepResult,
   deps: FiledReturnsTargetReviewDeps,
-): Promise<FiledReturnsTargetReview | null> {
+): Promise<FiledReturnsTargetReview> {
   const originalAttempt = review.downloadAttempt;
   if (
     !originalAttempt ||
     originalAttempt.kind !== "single-period-zip" ||
     originalAttempt.phase !== "download-observing"
   ) {
-    return null;
+    throw new SinglePeriodCleanupCheckpointError("bundle-mismatch");
   }
   const diagnostics = copyFiledReturnsDownloadDiagnosticState(flowStep);
   if (
@@ -253,7 +248,7 @@ async function persistReconciledZipCleanupCheckpoint(
       "single-period",
     )
   ) {
-    return null;
+    throw new SinglePeriodCleanupCheckpointError("completion-evidence-missing");
   }
   const checkpointed = await updateFiledReturnsTargetReview(review.scope, deps, (currentReview) => {
     const currentAttempt = currentReview.downloadAttempt;
@@ -274,7 +269,9 @@ async function persistReconciledZipCleanupCheckpoint(
       updatedAt: (deps.now?.() ?? new Date()).toISOString(),
     };
   });
-  if (!checkpointed) return null;
+  if (!checkpointed) {
+    throw new SinglePeriodCleanupCheckpointError("completion-persist-failed");
+  }
   const updatedReview = await readFiledReturnsTargetReview(review.scope, deps);
   const attempt = updatedReview?.downloadAttempt;
   if (
@@ -286,7 +283,7 @@ async function persistReconciledZipCleanupCheckpoint(
     !updatedReview.safeSignals.includes("single-period-zip-downloaded") ||
     !updatedReview.safeSignals.includes("single-period-opfs-cleared")
   ) {
-    return null;
+    throw new SinglePeriodCleanupCheckpointError("completion-mismatch");
   }
   return updatedReview;
 }

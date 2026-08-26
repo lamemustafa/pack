@@ -380,6 +380,7 @@ export async function clearPackLocalData(): Promise<PackMessageResponse> {
     storageKeys: {
       activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
       fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
+      fullFiscalYearLedgerIndex: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedgerIndex,
       targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
     },
   });

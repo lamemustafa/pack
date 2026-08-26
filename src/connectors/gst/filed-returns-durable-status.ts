@@ -42,7 +42,10 @@ type DurableMessageKey =
   | "full-year-downloaded-cleanup-blocked"
   | "full-year-interrupted"
   | "full-year-needs-action"
+  | "full-year-pinned-tab-unavailable"
+  | "full-year-plan-narrower-than-eligible"
   | "full-year-resume"
+  | "full-year-tab-session-unavailable"
   | "full-year-zip-review"
   | "not-filed"
   | "partial"
@@ -273,6 +276,12 @@ function messageKeyForTarget(
   }
   if (signals.includes("full-fiscal-year-restaging-required")) return "target-restaging";
   if (signals.includes("full-fiscal-year-target-retry-approved")) return "target-retry-approved";
+  if (signals.includes("full-fiscal-year-pinned-gst-tab-unavailable")) {
+    return "full-year-pinned-tab-unavailable";
+  }
+  if (signals.includes("full-fiscal-year-gst-tab-session-unavailable")) {
+    return "full-year-tab-session-unavailable";
+  }
   if (signals.includes("filed-returns-target-manually-observed")) return "target-manually-observed";
   if (hasCleanupFailureSignal(signals)) {
     return "target-cleanup-blocked";
@@ -339,6 +348,15 @@ function messageKeyForSummary(
 ): DurableMessageKey {
   if (signals.includes("filed-return-durable-status-rejected")) return "durable-status-rejected";
   if (signals.includes("full-fiscal-year-resume-confirmation-required")) return "full-year-resume";
+  if (signals.includes("full-fiscal-year-pinned-gst-tab-unavailable")) {
+    return "full-year-pinned-tab-unavailable";
+  }
+  if (signals.includes("full-fiscal-year-gst-tab-session-unavailable")) {
+    return "full-year-tab-session-unavailable";
+  }
+  if (signals.includes("full-fiscal-year-plan-narrower-than-eligible")) {
+    return "full-year-plan-narrower-than-eligible";
+  }
   if (signals.includes("full-fiscal-year-run-interrupted")) return "full-year-interrupted";
   if (signals.includes("full-fiscal-year-run-needs-action")) return "full-year-needs-action";
   if (signals.includes("full-fiscal-year-run-active")) return "full-year-active";
@@ -373,8 +391,14 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
       "Pack confirmed the final fiscal-year ZIP download; only retained local staging remains to be cleared.",
     "full-year-interrupted": `Pack stopped before it could confirm ${period}. Check Downloads before retrying.`,
     "full-year-needs-action": `Pack needs an explicit recovery action before continuing ${period}.`,
+    "full-year-pinned-tab-unavailable":
+      "Pack stopped because the GST Portal tab selected for this saved plan is no longer available. Use Clear local Pack data to discard the saved plan, then start this year again.",
+    "full-year-plan-narrower-than-eligible":
+      "Pack completed the saved fiscal-year plan, but more periods are eligible now. Start this year again to include them.",
     "full-year-resume":
       "Pack cannot verify which GST account owns this saved run. Resume only with the same account open; otherwise discard it.",
+    "full-year-tab-session-unavailable":
+      "Pack could not retain the GST tab identity for this saved plan. Try again with the GST Portal tab open in the foreground.",
     "full-year-zip-review":
       "Pack could not confirm the final fiscal-year ZIP. Check the exact browser download before retrying.",
     "not-filed": "The GST Portal reported no filed return for the selected period.",
