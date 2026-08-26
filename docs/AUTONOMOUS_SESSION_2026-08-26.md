@@ -339,7 +339,7 @@ verify_recorded_suite b8f402a7066150d01857f12d5ec9d57a097765a1 125 2122
 verify_recorded_suite d94686ecc2173f38fbc3224e64da59ec62ec2b23 126 2121
 verify_recorded_suite 63aa9a18d16966bdda1d01aec05b80e586ab4ba6 125 2117
 verify_recorded_suite 11ccc05785f69e61cf7cd734fe59d24b9de472fc 126 2123
-verify_recorded_suite "$REPORT_COMMIT" 126 2123
+verify_recorded_suite "$REPORT_COMMIT" 125 2117
 
 observe_pr() {
   pr=$1
