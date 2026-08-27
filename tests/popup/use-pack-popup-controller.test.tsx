@@ -185,6 +185,34 @@ describe("popup background failure presentation", () => {
     await act(async () => root?.unmount());
   });
 
+  it("keeps an interrupted-run acknowledgement's specific safe rejection visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_ACKNOWLEDGE_INTERRUPTED_RUN") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack could not clear the saved run until its local state is checked.",
+        });
+      }
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+
+    await act(async () => {
+      await controller?.acknowledgeInterruptedRun();
+    });
+
+    expect(controller?.actionError).toBe(
+      "Pack could not clear the saved run until its local state is checked.",
+    );
+    await act(async () => root?.unmount());
+  });
+
   it("keeps a saved-summary read failure visible after context succeeds", async () => {
     await act(async () => root?.unmount());
     controller = null;
