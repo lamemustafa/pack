@@ -279,27 +279,24 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
 
 ## The GSTR-2B summary page does carry a Returns Dashboard link, collapsed
 
-Captured 2026-08-24 from a signed-in `gstr2b.gst.gov.in/gstr2b/auth/gstr2b/summary` page, by
+Captured 2026-08-24 from a signed-in `GST Portal` page, by
 enumerating anchors with `clickReturnsDashboardAnchor`'s own predicate. Only navigation structure
 was captured: route origin plus pathname with query stripped, link text, and actionability. No page
 HTML, identity fields or amounts.
 
 The page holds **139 anchors**, of which **exactly one** points at
-`return.gst.gov.in/returns/auth/dashboard`, labelled "Returns Dashboard". It reports as not
+`GST Portal`, labelled "Returns Dashboard". It reports as not
 actionable: it sits inside the collapsed "Returns" quick-links menu, whose parent anchor
-(`services.gst.gov.in/services/auth/quicklinks/returns`, label "Returns") _is_ actionable.
+(`GST Portal`, label "Returns") _is_ actionable.
 
 This corrects an assumption worth naming, because it was about to become a product constraint. The
 run-time signal is `returns-dashboard-anchor-not-found`, and the reasonable reading of that name —
 no such link exists on this page — is wrong. The link exists and the matcher finds it. What
 rejects it is the visibility test, and then the single-match fallback declining because
-`isGstAuthLandingRoute` requires the `services.gst.gov.in` origin. A signal named for the shape of
+`isGstAuthLandingRoute` requires the `GST Portal` origin. A signal named for the shape of
 the failure invited a conclusion about the cause.
 
-Consequence: a GSTR-3B run started while the tab sits on the GSTR-2B summary page stops with
-`wrong-origin-open-returns-dashboard` + `returns-dashboard-anchor-not-found`. Reproduced by running
-a GSTR-2B full year, then starting GSTR-3B without touching the portal tab. Present since at least
-v0.5.0; unchanged by any release since.
+Observed in the 2026-08-24 source-build capture: after a GSTR-2B full-year run left the selected tab on its summary page, starting a GSTR-3B run returned the listed blocked signals. Earlier releases and other environments have not been assessed.
 
 Two other portal-owned routes back appear on the same page and are **not yet characterised**:
 

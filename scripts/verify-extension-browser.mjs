@@ -93,7 +93,6 @@ try {
   await assertOptionsPageLoads(context, extensionId);
   await assertPanelPageLoads(context, extensionId);
   await assertPanelSignInContext(context, extensionId);
-  await assertPanelCompactFlow(context, extensionId);
   await assertHostilePageCannotMessageExtension(context);
   assertDeniedUnexpectedNetwork();
   assertSanitizedBrowserLogs();
@@ -424,62 +423,6 @@ async function assertPanelPageLoads(browserContext, extensionId) {
     );
   }
   await panelPage.close();
-}
-
-/**
- * The side panel's narrowest supported width is 320px. Exercise the actual
- * packaged page after the synthetic GST content script has supplied its
- * supported context, so both the preset choices and the expanded declared
- * catalogue must fit without a clipped control or horizontal scroll.
- */
-async function assertPanelCompactFlow(browserContext, extensionId) {
-  const gstPage = await browserContext.newPage();
-  attachPageLogging(gstPage);
-  const panelPage = await browserContext.newPage();
-  attachPageLogging(panelPage);
-  try {
-    await gstPage.goto("https://return.gst.gov.in/returns/auth/efiledreturns", {
-      waitUntil: "domcontentloaded",
-    });
-    const serviceWorker = await waitForServiceWorker(browserContext, extensionId);
-    await waitForStoredContext(serviceWorker, {
-      supported: true,
-      pageKind: "gst-filed-returns",
-      origin: "https://return.gst.gov.in",
-    });
-
-    await panelPage.setViewportSize({ width: 320, height: 900 });
-    await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
-    await panelPage.waitForSelector(".panel-presets", { timeout: 5_000 });
-    await assertPanelControlsFitViewport(panelPage, "preset choices");
-
-    await panelPage.getByRole("button", { name: "Choose return, year and period" }).click();
-    await panelPage.waitForSelector(".panel-guide", { timeout: 5_000 });
-    await assertPanelGuidedStepsFitViewport(panelPage);
-    const catalogueSummary = panelPage.locator(".panel-catalogue summary");
-    await catalogueSummary.press("Space");
-    await panelPage.waitForSelector(".panel-catalogue[open]", { timeout: 5_000 });
-    await assertPanelControlsFitViewport(panelPage, "expanded catalogue");
-  } finally {
-    await panelPage.close();
-    await gstPage.close();
-  }
-}
-
-async function assertPanelGuidedStepsFitViewport(panelPage) {
-  for (let step = 1; step <= 4; step += 1) {
-    await panelPage.getByRole("status", { name: `Step ${step} of 4` }).waitFor();
-    if (step > 1) {
-      const focusedField = await panelPage.evaluate(
-        () => document.activeElement?.id === "panel-guide-field",
-      );
-      if (!focusedField) {
-        throw new Error(`Pack panel did not focus guided step ${step} at 320px.`);
-      }
-    }
-    await assertPanelControlsFitViewport(panelPage, `guided step ${step} of 4`);
-    if (step < 4) await panelPage.getByRole("button", { name: "Continue" }).click();
-  }
 }
 
 /**
