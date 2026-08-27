@@ -1,5 +1,41 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 78 — retain normal browser-delivery reasons
+
+- Window: 2026-08-27 07:13–07:20 IST. This is a bounded lossy-surface correction; its actual
+  duration is recorded without an idle hold.
+- Picked: the normal browser-delivery producer has eight typed failure states, but its final flow
+  step replaced every one with a generated hyphen-expanded phrase. That hid the distinct recovery,
+  start, interruption, empty-file, confirmation, search and browser-safety facts from the user.
+- Discrimination: before the fix, a focused producer run failed all ten newly strengthened outcome
+  assertions because the false results carried no `safeMessage`. The first failure expected the exact
+  download-search explanation and received only a reason/signal result; the remaining failures
+  covered interruption, empty completion, both browser-safety dispositions, checkpoint failure,
+  timeout, and both start-rejection sources.
+- Changed: the download producer now owns static, action-oriented messages for its six local
+  download states and reuses the canonical artifact messages for the two browser-safety states. The
+  existing JSON and PDF adapters forward those messages; generic delivery copy remains only for
+  failures that have no typed producer message. A security-review correction made `start-rejected`
+  accurately cover both local Blob setup and browser-start rejection without claiming the browser
+  was the cause in every case.
+- Human-surface proof: a parameterized JSON flow-step matrix covers all eight reasons, exact message,
+  blocked state and preserved safe signals. No failure becomes downloaded or complete; checkpoint,
+  exact-ID, browser-safe/non-empty and retry behavior are unchanged.
+- Security review: final focused review PASS. No MV3 durability, target-bound evidence, downloads
+  API, storage, permission, CSP, content-script, network or remote-code regression found.
+- Gate: focused producer/adapter/checkpoint coverage passed 4 files and 106 tests. The full build,
+  serial suite, TypeScript, zero-warning ESLint, Prettier and package verifier passed. Exact final
+  Vitest footer:
+
+  ```text
+        Tests  2827 passed (2827)
+     Start at  07:17:23
+     Duration  154.84s (transform 2.52s, setup 0ms, import 12.38s, tests 126.22s, environment 299ms)
+  ```
+
+- Checkpoint: `dcb641c fix(downloads): retain browser delivery reasons`; post-commit preflight
+  passed. No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.
+
 ## Cycle 77 — retain local staging failure reasons
 
 - Window: 2026-08-27 07:05–07:12 IST. This is a bounded lossy-surface correction; its actual
