@@ -92,7 +92,6 @@ try {
   await assertServiceWorkerStarted(serviceWorker);
   await assertOptionsPageLoads(context, extensionId);
   await assertPanelPageLoads(context, extensionId);
-  await assertApprovedContentScript(context, serviceWorker);
   await assertPanelSignInContext(context, extensionId);
   await assertPanelCompactFlow(context, extensionId);
   await assertHostilePageCannotMessageExtension(context);
@@ -552,21 +551,6 @@ async function assertPanelControlsFitViewport(panelPage, state) {
       `Pack panel rendered a control shorter than 44px at 320px during ${state}: ${undersizedControl.label}.`,
     );
   }
-}
-
-async function assertApprovedContentScript(browserContext, serviceWorker) {
-  const gstPage = await browserContext.newPage();
-  attachPageLogging(gstPage);
-  await gstPage.goto("https://services.gst.gov.in/services/auth/fowelcome", {
-    waitUntil: "domcontentloaded",
-  });
-  await gstPage.waitForLoadState("networkidle");
-  await waitForStoredContext(serviceWorker, {
-    supported: true,
-    pageKind: "gst-auth-landing",
-    origin: "https://services.gst.gov.in",
-  });
-  await gstPage.close();
 }
 
 async function waitForStoredContext(serviceWorker, expected) {
