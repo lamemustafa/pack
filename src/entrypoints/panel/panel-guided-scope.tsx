@@ -40,7 +40,8 @@ export function PanelGuidedScope({
   const [view, setView] = React.useState<"presets" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
   const selectRef = React.useRef<HTMLSelectElement>(null);
-  const focusRequested = React.useRef(false);
+  const presetDoorRef = React.useRef<HTMLButtonElement>(null);
+  const focusTarget = React.useRef<"preset-door" | "select" | null>(null);
   const steps = panelGuidedSteps(scope);
   const step = steps[activeStep] ?? steps[0];
   const currentFinancialYear = getFiledReturnsFinancialYearOptions()[0];
@@ -48,15 +49,18 @@ export function PanelGuidedScope({
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
-    if (!focusRequested.current) return;
-    focusRequested.current = false;
-    selectRef.current?.focus();
-  }, [activeStep]);
+    // Request focus only after an action replaces the focused control.
+    const requestedTarget = focusTarget.current;
+    if (!requestedTarget) return;
+    focusTarget.current = null;
+    if (requestedTarget === "select") selectRef.current?.focus();
+    else presetDoorRef.current?.focus();
+  }, [activeStep, view]);
 
   if (!step) return null;
 
   const move = (offset: number) => {
-    focusRequested.current = true;
+    focusTarget.current = "select";
     setActiveStep((current) => Math.max(0, Math.min(steps.length - 1, current + offset)));
   };
 
@@ -113,7 +117,11 @@ export function PanelGuidedScope({
           <button
             className="panel-preset panel-preset-door"
             type="button"
-            onClick={() => setView("guided")}
+            ref={presetDoorRef}
+            onClick={() => {
+              focusTarget.current = "select";
+              setView("guided");
+            }}
           >
             <span>Choose return, year and period</span>
             <span aria-hidden="true">›</span>
@@ -174,8 +182,10 @@ export function PanelGuidedScope({
           className="panel-guide-back secondary"
           type="button"
           onClick={() => {
-            if (activeStep === 0) setView("presets");
-            else move(-1);
+            if (activeStep === 0) {
+              focusTarget.current = "preset-door";
+              setView("presets");
+            } else move(-1);
           }}
         >
           {activeStep === 0 ? "Back to presets" : "Back"}

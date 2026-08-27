@@ -181,9 +181,11 @@ describe("panel guided scope interaction", () => {
     dom.window.document.body.append(previousControl);
     previousControl.focus();
 
-    await mount({}, strict);
+    await mount({}, strict, false);
 
     expect(dom.window.document.activeElement).toBe(previousControl);
+    await clickButtonContaining("Choose return, year and period");
+    expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
     await clickButton("Continue");
     expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
     await clickButton("Back");
@@ -337,6 +339,46 @@ describe("panel guided scope interaction", () => {
     expect(focusEvents).toBe(1);
   });
 
+  it("returns focus to the custom-scope door when leaving the guided flow", async () => {
+    await mount();
+    expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
+
+    await clickButton("Back to presets");
+
+    const customScopeDoor = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("Choose return, year and period"));
+    expect(dom.window.document.activeElement).toBe(customScopeDoor);
+  });
+
+  it("places named recovery controls before blocked scope selection", async () => {
+    const interrupted = completedPanelSummary({
+      status: "blocked",
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: ["filed-returns-run-needs-review"],
+        safeMessage: "A previous run was interrupted. Reset it before starting another.",
+      },
+    });
+    await mount(
+      { overrides: { lastRunSummary: interrupted, scopedFlowSummary: interrupted } },
+      false,
+      false,
+    );
+
+    const recovery = container.querySelector(".recovery-details");
+    const presets = container.querySelector(".panel-presets");
+    expect(recovery?.querySelector("summary")?.textContent).toBe("Recovery options");
+    expect(recovery).not.toBeNull();
+    expect(presets).not.toBeNull();
+    if (!recovery || !presets) throw new Error("Expected recovery and presets to render.");
+    const following = (dom.window as unknown as { Node: { DOCUMENT_POSITION_FOLLOWING: number } })
+      .Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(recovery.compareDocumentPosition(presets) & following).toBe(following);
+  });
+
   it("binds every field to the announced step label and hint", async () => {
     const expectedSteps = [
       ["Return", "Choose one supported return for this run."],
@@ -360,9 +402,7 @@ describe("panel guided scope interaction", () => {
       expect(fieldLabel?.getAttribute("for")).toBe(field?.id);
       expect(field?.getAttribute("aria-describedby")).toBe(hintElement?.id);
       expect(hintElement?.textContent).toBe(hint);
-      expect(dom.window.document.activeElement).toBe(
-        index === 0 ? dom.window.document.body : field,
-      );
+      expect(dom.window.document.activeElement).toBe(field);
 
       if (index < expectedSteps.length - 1) await clickButton("Continue");
     }

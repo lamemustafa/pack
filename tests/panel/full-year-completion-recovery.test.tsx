@@ -39,7 +39,7 @@ describe("whole-panel unresolved completion recovery", () => {
       );
 
       expect(markup).toContain('aria-label="Full-year run paused at May"');
-      expect(markup).toContain("More options");
+      expect(markup).toContain("Recovery options");
       expect(markup).not.toContain("Download complete");
       expect(markup).not.toContain("Periods processed, ZIP unconfirmed");
       expect(markup).not.toContain("saved as one ZIP");
@@ -69,7 +69,7 @@ describe("whole-panel unresolved completion recovery", () => {
     );
 
     expect(markup.match(/class="inline-status-primary"/g)).toHaveLength(1);
-    expect(markup).toContain("More options");
+    expect(markup).toContain("Recovery options");
     expect(markup).not.toContain("Discard saved run");
     expect(markup).not.toContain("Cancel and reset");
   });

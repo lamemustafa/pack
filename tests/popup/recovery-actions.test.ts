@@ -40,6 +40,8 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain("Discard saved run");
     expect(markup).toContain("Discard saved run and start selected download");
     expect(markup).toContain("Saved run options");
+    expect(markup).toContain('role="group"');
+    expect(markup).toContain('aria-label="Filed return recovery actions"');
   });
 
   it("shows the same-account warning only for resume confirmation", () => {

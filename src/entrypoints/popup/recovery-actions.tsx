@@ -66,9 +66,13 @@ export function RecoveryActions({
       open={moreOpen}
       onToggle={(event) => setMoreOpen(event.currentTarget.open)}
     >
-      <summary>{collapsed ? "More options" : "Saved run options"}</summary>
+      <summary>{collapsed ? "Recovery options" : "Saved run options"}</summary>
       {moreOpen ? (
-        <div className="recovery-details-content" aria-label="Filed return recovery actions">
+        <div
+          className="recovery-details-content"
+          role="group"
+          aria-label="Filed return recovery actions"
+        >
           {runActive ? (
             <>
               <button type="button" disabled aria-describedby="recovery-run-active-reason">

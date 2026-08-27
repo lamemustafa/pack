@@ -141,6 +141,29 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 Why Pack paused: {summary?.flowStep.safeMessage}
               </p>
             ) : null}
+            {hasRecoveryActions(summary ?? null) ? (
+              <RecoveryActions
+                busy={pack.effectiveBusy}
+                collapsed
+                /*
+                 * Signed-in, not merely supported. The auth landing page is
+                 * `supported: true` -- that is how Pack offers to act on it -- so
+                 * gating on `portalReady` enabled portal-dependent recovery on a
+                 * signed-out tab. The background then discards saved recovery state
+                 * for a run it cannot continue, which is not recoverable afterwards.
+                 */
+                portalReady={portalSignedIn}
+                summary={summary}
+                onStartFresh={() => void pack.startFreshFiledReturnsFlow()}
+                onAcknowledgeInterruptedRun={() => void pack.acknowledgeInterruptedRun()}
+                onRetryFullFiscalYearTarget={() => void pack.retryFullFiscalYearTarget()}
+                onRetryTarget={() => void pack.retryFiledReturnsTarget()}
+                onResolveFullFiscalYearTarget={(resolution) =>
+                  void pack.resolveFullFiscalYearTarget(resolution)
+                }
+                onResolveTarget={(resolution) => void pack.resolveUnconfirmedDownload(resolution)}
+              />
+            ) : null}
             {running ? null : (
               <PanelGuidedScope
                 busy={pack.effectiveBusy}
@@ -157,30 +180,6 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         ) : (
           <ContextState status={presentation} onOpenPortal={openPortal} />
         )}
-
-        {hasRecoveryActions(summary ?? null) ? (
-          <RecoveryActions
-            busy={pack.effectiveBusy}
-            collapsed
-            /*
-             * Signed-in, not merely supported. The auth landing page is
-             * `supported: true` -- that is how Pack offers to act on it -- so
-             * gating on `portalReady` enabled portal-dependent recovery on a
-             * signed-out tab. The background then discards saved recovery state
-             * for a run it cannot continue, which is not recoverable afterwards.
-             */
-            portalReady={portalSignedIn}
-            summary={summary}
-            onStartFresh={() => void pack.startFreshFiledReturnsFlow()}
-            onAcknowledgeInterruptedRun={() => void pack.acknowledgeInterruptedRun()}
-            onRetryFullFiscalYearTarget={() => void pack.retryFullFiscalYearTarget()}
-            onRetryTarget={() => void pack.retryFiledReturnsTarget()}
-            onResolveFullFiscalYearTarget={(resolution) =>
-              void pack.resolveFullFiscalYearTarget(resolution)
-            }
-            onResolveTarget={(resolution) => void pack.resolveUnconfirmedDownload(resolution)}
-          />
-        ) : null}
       </div>
 
       <footer className="panel-foot">
