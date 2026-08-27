@@ -8,6 +8,8 @@ export const PACK_LOCAL_STORAGE_KEYS = {
   targetReview: "pack:filed-returns-target-review",
 } as const;
 
+export const FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX = "pack:filed-returns-plan:";
+
 export const PACK_SESSION_STORAGE_KEYS = {
   lastContext: "pack:last-context",
   lastFiledReturnsObservation: "pack:last-filed-returns-observation",

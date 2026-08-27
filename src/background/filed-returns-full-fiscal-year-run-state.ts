@@ -1,4 +1,5 @@
 import { browser } from "wxt/browser";
+import { FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX } from "./storage-keys";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
@@ -180,7 +181,7 @@ export function shouldPersistReconciledLedger(
   );
 }
 
-const PLAN_STORAGE_KEY_PREFIX = "pack:filed-returns-plan:";
+const PLAN_STORAGE_KEY_PREFIX = FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX;
 const PLAN_INDEX_SCHEMA_VERSION = "1.0";
 
 type PlanLedgerIndex = {

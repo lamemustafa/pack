@@ -239,6 +239,24 @@ describe("panel surface", () => {
     expect(markup).toContain("Sign in directly on the GST Portal.");
   });
 
+  it("keeps local recovery controls visible while the portal requires sign-in", () => {
+    const blockedRecovery = activePanelSummary("blocked");
+    blockedRecovery.flowStep.safeSignals = ["filed-returns-target-review-required"];
+    blockedRecovery.flowStep.safeMessage = "Pack needs a local recovery decision.";
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={controller({
+          context: { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
+          scopedFlowSummary: blockedRecovery,
+        })}
+      />,
+    );
+
+    expect(markup).toContain("Pack needs a local recovery decision.");
+    expect(markup).toContain("Recovery options");
+    expect(markup).not.toContain("Checking this tab");
+  });
+
   it("renders access denial without guessing whether sign-in or authorization caused it", () => {
     const markup = renderToStaticMarkup(
       <PanelSurface

@@ -132,9 +132,11 @@ export async function startFiledReturnsDownloadFlow(
   try {
     targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
   } catch {
-    return targetReviewStorageUnavailableResponse(scope);
+    return targetReviewStorageUnavailableResponse(scope, deps);
   }
-  if (targetReviewState.state === "malformed") return malformedTargetReviewResponse(scope);
+  if (targetReviewState.state === "malformed") {
+    return malformedTargetReviewResponse(scope, blockedScopeTotalPeriods(scope, deps));
+  }
   if (targetReviewState.state === "valid") {
     return responseForFiledReturnsTargetReview(targetReviewState.review);
   }
@@ -171,7 +173,7 @@ export async function startFiledReturnsDownloadFlow(
             scope,
             status: "blocked",
             completedPeriods: [],
-            totalPeriods: 12,
+            totalPeriods: blockedScopeTotalPeriods(scope, deps),
             flowStep,
           },
         };
@@ -202,7 +204,7 @@ export async function startFiledReturnsDownloadFlow(
             scope,
             status: "blocked",
             completedPeriods: [],
-            totalPeriods: 12,
+            totalPeriods: blockedScopeTotalPeriods(scope, deps),
             flowStep,
           },
         };
@@ -239,6 +241,7 @@ export async function startFiledReturnsDownloadFlow(
 
 function targetReviewStorageUnavailableResponse(
   scope: FiledReturnsDownloadScope,
+  deps: Pick<FiledReturnsFlowRunnerDeps, "now">,
 ): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
@@ -261,7 +264,7 @@ function targetReviewStorageUnavailableResponse(
       status: "blocked",
       completedPeriods: [],
       currentPeriod: scope.period,
-      totalPeriods: isFullFiscalYearScope(scope) ? 12 : 1,
+      totalPeriods: blockedScopeTotalPeriods(scope, deps),
       flowStep,
     },
   };
@@ -313,7 +316,9 @@ export async function retryFiledReturnsTargetDownloadFlow(
     const targetReview = await readFiledReturnsTargetReview(scope, deps);
     if (!targetReview) {
       const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
-      if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+      if (currentState.state === "malformed") {
+        return malformedTargetReviewResponse(scope, blockedScopeTotalPeriods(scope, deps));
+      }
       return currentState.state === "valid"
         ? responseForFiledReturnsTargetReview(currentState.review)
         : noTargetReviewResponse(scope);
@@ -333,14 +338,18 @@ export async function retryFiledReturnsTargetDownloadFlow(
       );
       if (!cleared) {
         const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
-        if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+        if (currentState.state === "malformed") {
+          return malformedTargetReviewResponse(scope, blockedScopeTotalPeriods(scope, deps));
+        }
         if (currentState.state === "valid") {
           return responseForFiledReturnsTargetReview(currentState.review);
         }
       }
     } else {
       const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
-      if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+      if (currentState.state === "malformed") {
+        return malformedTargetReviewResponse(scope, blockedScopeTotalPeriods(scope, deps));
+      }
       if (currentState.state === "valid") {
         return responseForFiledReturnsTargetReview(currentState.review);
       }
@@ -457,6 +466,15 @@ function blockedRetainedArtifactAcquisitionResponse(
     flowStep,
   };
   return { ok: true, flowStep, flowSummary };
+}
+
+function blockedScopeTotalPeriods(
+  scope: FiledReturnsDownloadScope,
+  deps: Pick<FiledReturnsFlowRunnerDeps, "now">,
+): number {
+  return isFullFiscalYearScope(scope)
+    ? getFiledReturnsFullFiscalYearPeriods(scope.financialYear, deps.now?.() ?? new Date()).length
+    : 1;
 }
 
 export async function resolveUnconfirmedFiledReturnsDownloadFlow(

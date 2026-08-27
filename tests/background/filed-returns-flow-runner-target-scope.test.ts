@@ -43,6 +43,11 @@ const activeRunMocks = vi.hoisted(() => ({
   releaseFiledReturnsRun: vi.fn(),
   startFiledReturnsRunLeaseRenewal: vi.fn(),
 }));
+const fullFiscalYearRunStateMocks = vi.hoisted(() => ({
+  readMalformedLedgerState: vi.fn(),
+  readPlanLedgersStorageState: vi.fn(),
+  readRetainedPlanLedgers: vi.fn(),
+}));
 
 vi.mock("../../src/background/filed-returns-target-review", async (importOriginal) => ({
   ...(await importOriginal<typeof FiledReturnsTargetReviewModule>()),
@@ -54,6 +59,15 @@ vi.mock("../../src/background/filed-returns-target-review", async (importOrigina
   resolveUnconfirmedFiledReturnsDownload: mocks.resolveUnconfirmedFiledReturnsDownload,
 }));
 vi.mock("../../src/background/filed-returns-active-run", () => activeRunMocks);
+vi.mock(
+  "../../src/background/filed-returns-full-fiscal-year-run-state",
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    readMalformedLedgerState: fullFiscalYearRunStateMocks.readMalformedLedgerState,
+    readPlanLedgersStorageState: fullFiscalYearRunStateMocks.readPlanLedgersStorageState,
+    readRetainedPlanLedgers: fullFiscalYearRunStateMocks.readRetainedPlanLedgers,
+  }),
+);
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
   createMalformedArtifactAcquisitionCheckpointReference:
     mocks.createMalformedArtifactAcquisitionCheckpointReference,
@@ -101,6 +115,12 @@ describe("filed returns retained target scoping", () => {
     activeRunMocks.acquireFiledReturnsRun.mockResolvedValue({ run: { id: "synthetic-run" } });
     activeRunMocks.releaseFiledReturnsRun.mockResolvedValue(undefined);
     activeRunMocks.startFiledReturnsRunLeaseRenewal.mockReturnValue(() => undefined);
+    fullFiscalYearRunStateMocks.readPlanLedgersStorageState.mockResolvedValue({
+      state: "valid",
+      ledgers: [],
+    });
+    fullFiscalYearRunStateMocks.readMalformedLedgerState.mockResolvedValue(null);
+    fullFiscalYearRunStateMocks.readRetainedPlanLedgers.mockResolvedValue([]);
   });
 
   it.each([
@@ -329,6 +349,62 @@ describe("filed returns retained target scoping", () => {
       throw new Error("Expected blocked fallback summary.");
     }
     expect(response.flowSummary?.totalPeriods).not.toBe(12);
+  });
+
+  it.each([
+    [
+      "target-review metadata is malformed",
+      () => {
+        mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValueOnce({
+          state: "malformed",
+        });
+      },
+    ],
+    [
+      "target-review storage is unavailable",
+      () => {
+        mocks.readCurrentFiledReturnsTargetReviewStorageState.mockRejectedValueOnce(
+          new Error("synthetic target-review read failure"),
+        );
+      },
+    ],
+    [
+      "the plan index is malformed",
+      () => {
+        fullFiscalYearRunStateMocks.readPlanLedgersStorageState.mockResolvedValueOnce({
+          state: "malformed",
+        });
+      },
+    ],
+    [
+      "the legacy ledger is malformed",
+      () => {
+        fullFiscalYearRunStateMocks.readMalformedLedgerState.mockResolvedValueOnce({});
+      },
+    ],
+  ])("derives %s full-year blocked progress from eligible periods", async (_label, arrange) => {
+    const now = new Date("2026-08-26T00:00:00.000Z");
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockResolvedValue([]);
+    arrange();
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      now: () => now,
+      storageKeys: {},
+    } as never);
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        status: "blocked",
+        totalPeriods: getFiledReturnsFullFiscalYearPeriods("2026-27", now).length,
+      },
+    });
   });
 
   it("does not scan retained checkpoints when another run already owns the start", async () => {

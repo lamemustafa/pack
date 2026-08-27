@@ -1489,6 +1489,7 @@ export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
 
 export function malformedTargetReviewResponse(
   scope: FiledReturnsDownloadScope,
+  totalPeriods = 1,
 ): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
@@ -1511,7 +1512,7 @@ export function malformedTargetReviewResponse(
       scope,
       status: "blocked",
       completedPeriods: [],
-      totalPeriods: 1,
+      totalPeriods,
       currentPeriod: scope.period,
       flowStep,
     },

@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import type { PackMessage } from "../../src/connectors/gst/messages";
 
 const mocks = vi.hoisted(() => ({
@@ -514,6 +515,122 @@ describe("popup background failure presentation", () => {
     await vi.waitFor(() => expect(controller?.lastRunSummary).toBeNull());
     // The scope is the user's own selection and must survive a clear.
     expect(controller?.scope).toEqual(chosenScope);
+    await act(async () => root?.unmount());
+  });
+
+  it("refreshes the visible summary when an indexed full-year ledger advances", async () => {
+    const initialSummary: FiledReturnsFlowSummary = {
+      scope: {
+        artifactType: "PDF" as const,
+        financialYear: "2026-27",
+        period: "FULL_FISCAL_YEAR" as const,
+        returnType: "GSTR-3B" as const,
+      },
+      status: "running" as const,
+      completedPeriods: [],
+      totalPeriods: 2,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-gstr3b-private-v0",
+        state: "user-action-required" as const,
+        safeSignals: ["full-fiscal-year-run-active"],
+        safeMessage: "Synthetic active run.",
+      },
+    };
+    const advancedSummary: FiledReturnsFlowSummary = {
+      ...initialSummary,
+      completedPeriods: ["April"],
+      targetEvidence: [
+        { period: "April", outcome: "saved" as const },
+        { period: "May", outcome: "running" as const },
+      ],
+    };
+    let currentSummary: FiledReturnsFlowSummary = initialSummary;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT")
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY")
+        return Promise.resolve({ ok: true, flowSummary: currentSummary });
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    currentSummary = advancedSummary;
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener({ "pack:filed-returns-plan:synthetic": { newValue: {} } }, "local"),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(controller?.lastRunSummary).toEqual(advancedSummary));
+    await act(async () => root?.unmount());
+  });
+
+  it("keeps a newer local-summary refresh when an earlier read resolves last", async () => {
+    const staleSummary: FiledReturnsFlowSummary = {
+      scope: {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "FULL_FISCAL_YEAR",
+        returnType: "GSTR-3B",
+      },
+      status: "running",
+      completedPeriods: [],
+      totalPeriods: 2,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-gstr3b-private-v0",
+        state: "user-action-required",
+        safeSignals: ["full-fiscal-year-run-active"],
+        safeMessage: "Synthetic stale run.",
+      },
+    };
+    const currentSummary: FiledReturnsFlowSummary = {
+      ...staleSummary,
+      completedPeriods: ["April"],
+    };
+    const summaryResolvers: Array<
+      (response: { ok: true; flowSummary: FiledReturnsFlowSummary }) => void
+    > = [];
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return new Promise<{ ok: true; flowSummary: FiledReturnsFlowSummary }>((resolve) =>
+          summaryResolvers.push(resolve),
+        );
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) => {
+        listener({ "pack:filed-returns-plan:synthetic-a": { newValue: {} } }, "local");
+        listener({ "pack:filed-returns-plan:synthetic-b": { newValue: {} } }, "local");
+      });
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(summaryResolvers).toHaveLength(2));
+
+    await act(async () => {
+      summaryResolvers[1]!({ ok: true, flowSummary: currentSummary });
+      await Promise.resolve();
+      summaryResolvers[0]!({ ok: true, flowSummary: staleSummary });
+      await Promise.resolve();
+    });
+
+    expect(controller?.lastRunSummary).toEqual(currentSummary);
     await act(async () => root?.unmount());
   });
 });

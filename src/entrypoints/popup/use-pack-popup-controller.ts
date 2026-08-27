@@ -14,7 +14,11 @@ import {
   DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   normaliseFiledReturnsScope,
 } from "../../connectors/gst/filed-returns-scope";
-import { PACK_SESSION_STORAGE_KEYS } from "../../background/storage-keys";
+import {
+  FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX,
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+} from "../../background/storage-keys";
 import {
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
@@ -31,6 +35,7 @@ export function usePackPopupController() {
     React.useState<FiledReturnsFlowSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
+  const summaryRefreshEpoch = React.useRef(0);
   // `actionError` is shared with flow actions, so a successful context refresh
   // must clear only an error the context read itself produced. Clearing it
   // unconditionally wiped an unrelated download failure whenever the panel
@@ -48,25 +53,28 @@ export function usePackPopupController() {
     [],
   );
   React.useEffect(() => {
+    const summaryEpoch = ++summaryRefreshEpoch.current;
     void Promise.all([
       sendPackMessage({ type: "PACK_GET_CONTEXT" }),
       sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
     ])
       .then(([contextResponse, summaryResponse]) => {
-        if (summaryResponse.ok) {
-          if ("flowSummary" in summaryResponse) {
-            const flowSummary = summaryResponse.flowSummary;
-            setFiledReturnsFlowSummary(flowSummary);
-            if (flowSummary) setScopeState(flowSummary.scope);
+        if (summaryEpoch === summaryRefreshEpoch.current) {
+          if (summaryResponse.ok) {
+            if ("flowSummary" in summaryResponse) {
+              const flowSummary = summaryResponse.flowSummary;
+              setFiledReturnsFlowSummary(flowSummary);
+              if (flowSummary) setScopeState(flowSummary.scope);
+            } else {
+              showActionError(UNEXPECTED_PACK_RESPONSE, "summary");
+            }
           } else {
-            showActionError(UNEXPECTED_PACK_RESPONSE, "summary");
+            showActionError(
+              summaryResponse.safeMessage ??
+                "Pack could not read saved local recovery state. Try again.",
+              "summary",
+            );
           }
-        } else {
-          showActionError(
-            summaryResponse.safeMessage ??
-              "Pack could not read saved local recovery state. Try again.",
-            "summary",
-          );
         }
 
         if (contextResponse.ok && "context" in contextResponse) {
@@ -135,27 +143,35 @@ export function usePackPopupController() {
    * storage listener: the user may be part-way through a selection when they come back, and
    * that selection is theirs, not the saved run's.
    */
-  const refreshFlowSummary = React.useCallback(async () => {
-    try {
-      const response = await sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
-      if (response.ok && "flowSummary" in response) {
-        setFiledReturnsFlowSummary(response.flowSummary ?? null);
-        if (actionErrorSource.current === "summary") {
-          actionErrorSource.current = null;
-          setActionError(null);
+  const refreshFlowSummary = React.useCallback(
+    async (adoptSummaryScope = false) => {
+      const refreshEpoch = ++summaryRefreshEpoch.current;
+      try {
+        const response = await sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
+        if (refreshEpoch !== summaryRefreshEpoch.current) return;
+        if (response.ok && "flowSummary" in response) {
+          setFiledReturnsFlowSummary(response.flowSummary ?? null);
+          if (adoptSummaryScope && response.flowSummary) setScopeState(response.flowSummary.scope);
+          if (actionErrorSource.current === "summary") {
+            actionErrorSource.current = null;
+            setActionError(null);
+          }
+          return;
         }
-        return;
+        showActionError(
+          response.ok
+            ? UNEXPECTED_PACK_RESPONSE
+            : (response.safeMessage ??
+                "Pack could not read saved local recovery state. Try again."),
+          "summary",
+        );
+      } catch {
+        if (refreshEpoch !== summaryRefreshEpoch.current) return;
+        showActionError("Pack could not read saved local recovery state. Try again.", "summary");
       }
-      showActionError(
-        response.ok
-          ? UNEXPECTED_PACK_RESPONSE
-          : (response.safeMessage ?? "Pack could not read saved local recovery state. Try again."),
-        "summary",
-      );
-    } catch {
-      showActionError("Pack could not read saved local recovery state. Try again.", "summary");
-    }
-  }, [showActionError]);
+    },
+    [showActionError],
+  );
 
   React.useEffect(() => {
     const onChanged = (
@@ -166,41 +182,35 @@ export function usePackPopupController() {
       // removal carries no `newValue`, so clearing local data left an already
       // open surface rendering a summary that no longer exists. The popup is
       // short-lived enough to have hidden this; the panel page is not.
-      if (
-        areaName !== "session" ||
-        !changes[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary]
-      ) {
+      const summaryChanged =
+        (areaName === "session" &&
+          Boolean(changes[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary])) ||
+        (areaName === "local" &&
+          [
+            PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
+            PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
+            PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedgerIndex,
+            PACK_LOCAL_STORAGE_KEYS.targetReview,
+          ].some((key) => Boolean(changes[key]))) ||
+        Object.keys(changes).some((key) => key.startsWith(FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX));
+      if (!summaryChanged) {
         return;
       }
-      void sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" })
-        .then((response) => {
-          if (!response.ok) {
-            showActionError(
-              response.safeMessage ?? "Pack could not read saved local recovery state. Try again.",
-              "summary",
-            );
-            return;
-          }
-          if (!("flowSummary" in response)) {
-            showActionError(UNEXPECTED_PACK_RESPONSE, "summary");
-            return;
-          }
-          setFiledReturnsFlowSummary(response.flowSummary ?? null);
-          // The scope is the user's own selection, so it is only adopted from a
-          // summary that exists; a clear must not silently reset what they chose.
-          if (response.flowSummary) setScopeState(response.flowSummary.scope);
-        })
-        .catch(() =>
-          showActionError("Pack could not read saved local recovery state. Try again.", "summary"),
-        );
+      // The run ledger is local and advances once per target. The session summary is
+      // terminal-only, so both must trigger the same canonical summary read.
+      void refreshFlowSummary(true);
     };
     browser.storage.onChanged.addListener(onChanged);
-    return () => browser.storage.onChanged.removeListener(onChanged);
-  }, [showActionError]);
+    return () => {
+      summaryRefreshEpoch.current += 1;
+      browser.storage.onChanged.removeListener(onChanged);
+    };
+  }, [refreshFlowSummary]);
 
   const applyFlowResponse = React.useCallback(
     (response: PackMessageResponse) => {
       if (response.ok && "flowStep" in response) {
+        summaryRefreshEpoch.current += 1;
         actionErrorSource.current = null;
         setActionError(null);
         if ("flowSummary" in response && response.flowSummary) {

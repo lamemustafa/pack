@@ -65,8 +65,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const runComplete = presentation.kind === "complete" && !hasRecoveryActions(summary ?? null);
 
   const showFlow =
-    (portalReady || canRetryFullFiscalYearZipWithoutPortal(summary) || terminalSummary) &&
-    !["access-denied", "loading", "session-expired", "unsupported"].includes(presentation.kind);
+    hasRecoveryActions(summary ?? null) ||
+    ((portalReady || canRetryFullFiscalYearZipWithoutPortal(summary) || terminalSummary) &&
+      !["access-denied", "loading", "session-expired", "unsupported"].includes(presentation.kind));
 
   const openPortal = () => void browser.tabs.create({ url: "https://www.gst.gov.in" });
 
@@ -103,7 +104,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               onRestartTarget={() => void pack.startFiledReturnsFlow()}
               onRetryFullFiscalYearTarget={() => void pack.retryFullFiscalYearTarget()}
               onRetryTarget={() => void pack.retryFiledReturnsTarget()}
-              portalReady={portalReady}
+              portalReady={portalSignedIn}
               presentation={presentation}
               summary={summary}
             />
