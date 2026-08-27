@@ -3005,3 +3005,26 @@ recovery state`, proving the response was silently discarded after context succe
 - Checkpoint: `0a36f56 test(package): require compact verifier invocations`; post-commit preflight
   passed. No product runtime, taxpayer data, persistence, permission, manifest, dependency, push or
   PR changed.
+
+## Cycle 94 — verify packaged guided-field focus
+
+- Window: 2026-08-27 08:55–08:59 IST. This is a bounded accessibility-verification correction;
+  its actual duration is recorded without an idle hold.
+- Picked: component coverage proves guided-step focus transfer, but the packaged 320px browser path
+  previously asserted only step status and geometry.
+- Changed: after every guided transition, the packaged verifier now requires the newly mounted
+  selection field to own focus before measuring its control geometry. The package-verifier contract
+  requires that focused-field assertion.
+- Gate: focused verifier coverage passed 1 file and 27 tests. Full build, serial suite, TypeScript,
+  zero-warning ESLint, Prettier, package verification and packaged browser verification passed.
+  Exact final Vitest footer:
+
+  ```text
+        Tests  2829 passed (2829)
+     Start at  08:56:15
+     Duration  156.28s (transform 2.51s, setup 0ms, import 12.70s, tests 126.97s, environment 304ms)
+  ```
+
+- Checkpoint: `92de101 test(panel): verify guided field focus`; post-commit preflight passed. This
+  is local synthetic packaged-browser verification, not live portal evidence. No product runtime,
+  taxpayer data, persistence, permission, manifest, dependency, push or PR changed.

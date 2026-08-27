@@ -2105,3 +2105,10 @@ Six additional mutation groups were run serially and restored with matching file
   WXT build, 152 test files and 2,829 tests, TypeScript, zero-warning ESLint, Prettier, package
   verification and packaged browser verification. The static contract now requires the compact
   sign-in and guided-state helpers to be invoked, not merely defined.
+
+### Cycle 94 — packaged guided-field focus
+
+- Focused package-verifier coverage passed 1 file and 27 tests. The full local synthetic gate passed
+  WXT build, 152 test files and 2,829 tests, TypeScript, zero-warning ESLint, Prettier, package
+  verification and packaged browser verification. Each newly mounted guided field now has packaged
+  320px focus evidence; this is not live portal evidence.
