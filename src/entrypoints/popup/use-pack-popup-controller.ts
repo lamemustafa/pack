@@ -19,6 +19,9 @@ import {
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
+
+const UNEXPECTED_PACK_RESPONSE = "Unexpected Pack response.";
+
 export function usePackPopupController() {
   const [scope, setScopeState] = React.useState<FiledReturnsDownloadScope>(
     DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
@@ -56,7 +59,7 @@ export function usePackPopupController() {
             setFiledReturnsFlowSummary(flowSummary);
             if (flowSummary) setScopeState(flowSummary.scope);
           } else {
-            showActionError("Unexpected Pack response.");
+            showActionError(UNEXPECTED_PACK_RESPONSE);
           }
         } else {
           showActionError(
@@ -70,7 +73,7 @@ export function usePackPopupController() {
         } else {
           showActionError(
             contextResponse.ok
-              ? "Unexpected Pack response."
+              ? UNEXPECTED_PACK_RESPONSE
               : (contextResponse.safeMessage ?? contextResponse.error),
           );
         }
@@ -106,7 +109,7 @@ export function usePackPopupController() {
         return;
       }
       showActionError(
-        response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+        response.ok ? UNEXPECTED_PACK_RESPONSE : (response.safeMessage ?? response.error),
         "context",
       );
     } catch {
@@ -138,7 +141,7 @@ export function usePackPopupController() {
             return;
           }
           if (!("flowSummary" in response)) {
-            showActionError("Unexpected Pack response.");
+            showActionError(UNEXPECTED_PACK_RESPONSE);
             return;
           }
           setFiledReturnsFlowSummary(response.flowSummary ?? null);
@@ -163,7 +166,7 @@ export function usePackPopupController() {
         }
       } else {
         showActionError(
-          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+          response.ok ? UNEXPECTED_PACK_RESPONSE : (response.safeMessage ?? response.error),
         );
       }
     },
@@ -207,7 +210,7 @@ export function usePackPopupController() {
         setFiledReturnsFlowSummary(null);
       } else {
         showActionError(
-          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+          response.ok ? UNEXPECTED_PACK_RESPONSE : (response.safeMessage ?? response.error),
         );
       }
     });
