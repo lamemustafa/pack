@@ -14,6 +14,10 @@
   the discrepancy under Uncertainty, including the evidence needed for an owner to resolve it.
 - Gate: `pnpm exec prettier --check VALIDATION.md PROGRESS.md`, `git diff --check` and worktree
   status passed before the documentation checkpoint.
+- Checkpoint sequencing: the required preflight immediately after the separate validation commit
+  correctly rejected the still-uncommitted progress record. After this record committed, preflight
+  passed on the clean tree; no test, build, type, lint or package gate was needed for docs-only
+  evidence.
 - Learned / next: a count mismatch must be attributed, not silently offset by unrelated new tests.
   Continue auditing a fresh human-visible state while retaining this owner-input boundary.
 
