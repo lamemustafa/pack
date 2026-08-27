@@ -158,7 +158,8 @@ pill-shaped except a format chip.
 
 - **Matrix cell** — 20px, 1px border, 2px radius. Five states: unselected, selected, saved,
   needs-review, unavailable. Unavailable is hatched, never merely greyed, and **must state its
-  reason** on hover; a disabled control that cannot say why is a defect.
+  reason** in visible text. A disabled control must programmatically reference that reason; hover
+  alone is not an accessible explanation.
 - **Ledger row** — 32px, bottom border only, header sticky on `surface-muted`. Columns: target,
   format, status, evidence.
 - **Status pill** — bordered rectangle, 2px radius, monospace, semantic triad. Never a bare colour.
