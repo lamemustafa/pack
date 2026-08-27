@@ -168,7 +168,7 @@ export async function triggerSelectedArtifacts({
       }
     : deps;
   const persistedProgress =
-    artifactTypes.length > 1 && !singlePeriodBundleLedgerId
+    artifactTypes.length > 1 && !singlePeriodBundleLedgerId && !deps.stageCapturedDownloads
       ? await readPersistedArtifactProgress(scope, artifactTypes, artifactDeps)
       : null;
   const completedArtifactTypes = new Set([
