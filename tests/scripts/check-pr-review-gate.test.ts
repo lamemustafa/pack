@@ -212,6 +212,29 @@ describe("PR review gate", () => {
     });
   });
 
+  it("fails closed when a durable disposition has no visible evidence", () => {
+    const result = runGateFixture("marker-only durable disposition", [
+      prFindingComment(),
+      {
+        ...durableDispositionComment("comment-1", "fixed"),
+        body: '<!-- review-gate-disposition:{"findingId":"comment-1","disposition":"fixed"} -->',
+      },
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("must include visible evidence");
+  });
+
+  it("requires a linked follow-up to appear in the PR body", () => {
+    const result = runGateFixture("unrecorded linked follow-up", [
+      prFindingComment(),
+      durableDispositionComment("comment-1", "linked-follow-up", "#999"),
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("must name its follow-up in the PR body");
+  });
+
   it.each([
     ["missing", "/tmp/pack-review-gate-state-does-not-exist.json"],
     [
@@ -1359,7 +1382,11 @@ function prFindingComment(
   };
 }
 
-function durableDispositionComment(findingId: string, disposition: string) {
+function durableDispositionComment(
+  findingId: string,
+  disposition: string,
+  followUp: string | null = null,
+) {
   return {
     id: `disposition-${findingId}`,
     url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-disposition-${findingId}`,
@@ -1368,7 +1395,13 @@ function durableDispositionComment(findingId: string, disposition: string) {
     minimizedReason: null,
     author: { login: "maintainer" },
     authorAssociation: "MEMBER",
-    body: `<!-- review-gate-disposition:${JSON.stringify({ findingId, disposition })} -->`,
+    body: `<!-- review-gate-disposition:${JSON.stringify({
+      findingId,
+      disposition,
+      ...(followUp ? { followUp } : {}),
+    })} -->
+
+Evidence: disposition reviewed by a maintainer.`,
   };
 }
 

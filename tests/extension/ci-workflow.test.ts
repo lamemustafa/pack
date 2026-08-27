@@ -78,6 +78,9 @@ describe("Pack CI workflow", () => {
 
     expect(trustedWorkflow).toContain("workflow_dispatch:");
     expect(trustedWorkflow).toContain('schedule:\n    - cron: "*/15 * * * *"');
+    expect(trustedWorkflow).toContain(
+      "concurrency:\n  group: review-gate-reconcile\n  cancel-in-progress: false",
+    );
     expect(trustedWorkflow).not.toContain("pull_request:");
     expect(trustedWorkflow).not.toContain("pull_request_review:");
     expect(trustedWorkflow).not.toContain("pull_request_review_comment:");

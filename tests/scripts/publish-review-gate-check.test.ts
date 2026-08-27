@@ -145,6 +145,23 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
+  it("ignores a durable check state written for another pull request", () => {
+    const foreignState = reviewStateWithDeletedFinding(2);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      foreignState,
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=success");
+    expect(publicationText).not.toContain("comment-deleted-after-observation");
+  });
+
   it("publishes action required when durable-state lookup exhausts retries", () => {
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
@@ -299,12 +316,12 @@ function pull(
   };
 }
 
-function reviewStateWithDeletedFinding() {
+function reviewStateWithDeletedFinding(prNumber = 1) {
   return (
     "review-gate-state/v1\n" +
     JSON.stringify({
       version: 1,
-      prNumber: 1,
+      prNumber,
       findings: [
         {
           commentId: "comment-deleted-after-observation",
