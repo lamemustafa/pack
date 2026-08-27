@@ -102,6 +102,13 @@ describe("panel surface", () => {
     );
   });
 
+  it("gives heading navigation a first-level panel name", () => {
+    const markup = renderToStaticMarkup(<PanelSurface pack={controller()} />);
+
+    expect(markup).toContain('role="heading" aria-level="1"');
+    expect(markup).toContain('aria-level="1">Pack</span>');
+  });
+
   // A finished run is history. Left expanded it pushed the presets four
   // sections down at 320px, so every new run began by scrolling past the
   // last one, and the custom door -- further down still -- took a second

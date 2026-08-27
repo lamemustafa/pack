@@ -81,7 +81,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
           squeezed into one wordmark asset. */}
       <header className="panel-head">
         <img className="panel-mark" src="/brand/pack-mark.svg" alt="" aria-hidden="true" />
-        <span className="panel-name">Pack</span>
+        <span className="panel-name" role="heading" aria-level={1}>
+          Pack
+        </span>
         <span className="panel-publisher">ComplyEaze</span>
       </header>
       <p className={portalSignedIn ? "panel-source panel-source-live" : "panel-source"}>
