@@ -22,6 +22,7 @@ export function panelController(overrides: Partial<PackPanelController> = {}): P
     effectiveBusy: null,
     lastRunSummary: null,
     recoverySummary: null,
+    refreshFlowSummary: async () => undefined,
     refreshPortalContext: async () => undefined,
     resolveFullFiscalYearTarget: async () => undefined,
     resolveUnconfirmedDownload: async () => undefined,
