@@ -93,7 +93,8 @@ export function PanelGuidedScope({
                 >
                   <span>{preset.label}</span>
                   <span className="panel-preset-count">
-                    {preset.periodCount} {preset.periodCount === 1 ? "period" : "periods"} · one ZIP
+                    {preset.periodCount} {preset.periodCount === 1 ? "period" : "periods"} ·{" "}
+                    {preset.artifactLabel.toLowerCase()} · one ZIP
                   </span>
                 </button>
                 {disabledReason ? (

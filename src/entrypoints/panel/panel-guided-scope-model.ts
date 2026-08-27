@@ -1,7 +1,9 @@
 import type { FiledReturnsDownloadScope } from "../../connectors/gst/filed-returns-contracts";
 import type { FiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifact-types";
+import { filedReturnsArtifactLabel } from "../../connectors/gst/filed-returns-artifacts";
 import {
   filedReturnsCapability,
+  filedReturnsOfferedArtifacts,
   supportedFiledReturnsCatalogueEntries,
   type SupportedReturnTypeCapability,
   type FiledReturnsPeriodicity,
@@ -42,6 +44,9 @@ type PresetCatalogueEntry = {
 
 export interface PanelFullFiscalYearPreset {
   readonly label: string;
+  /** What the preset will actually fetch. The card stated period count and one
+   *  ZIP but never the format, which is the most consequential fact about it. */
+  readonly artifactLabel: string;
   readonly periodCount: number;
   readonly scope: FiledReturnsDownloadScope;
 }
@@ -61,18 +66,25 @@ export function panelFullFiscalYearPresets(
 
   return catalogue.flatMap(({ returnType, capability }) => {
     if (!capability.fullFiscalYear) return [];
-    const defaultArtifactType = Object.keys(capability.artifacts)[0] as
-      FiledReturnsArtifactType | undefined;
-    if (!defaultArtifactType) return [];
+    // A preset exists to remove a decision. Taking whichever artifact happened to
+    // be listed first in the catalogue made that decision silently: "This year's
+    // GSTR-2B" fetched a summary PDF while the return offers three formats.
+    // Where a return offers more than one, the preset takes all of them; a
+    // narrower choice lives on the guided path.
+    const offered = filedReturnsOfferedArtifacts(returnType);
+    const presetArtifactType: FiledReturnsArtifactType | undefined =
+      offered.length > 1 ? "PDF_AND_EXCEL" : offered[0];
+    if (!presetArtifactType) return [];
     return [
       {
         label: `This year's ${capability.label}`,
+        artifactLabel: filedReturnsArtifactLabel(presetArtifactType, returnType),
         periodCount,
         scope: {
           financialYear,
           period: FULL_FISCAL_YEAR_PERIOD,
           returnType,
-          artifactType: defaultArtifactType,
+          artifactType: presetArtifactType,
         },
       },
     ];

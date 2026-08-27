@@ -497,3 +497,14 @@ html[data-pack-surface="panel"] body {
 .evidence-needs-review .evidence-outcome {
   color: var(--pack-warning-fg);
 }
+
+/* A finished run folds away so the presets stay reachable at 320px. */
+.panel-finished-run > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--pack-link);
+  padding: 6px 0;
+}
+.panel-finished-run[open] > summary {
+  margin-bottom: 4px;
+}

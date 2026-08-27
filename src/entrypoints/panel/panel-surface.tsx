@@ -64,6 +64,10 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const terminalSummary = Boolean(
     summary && ["complete", "partial", "blocked", "cancelled"].includes(summary.status),
   );
+  // Only a clean completion collapses its history. A run that needs review keeps
+  // every row visible -- an exception must never be behind a disclosure.
+  const runComplete = presentation.kind === "complete" && !hasRecoveryActions(summary ?? null);
+
   const showFlow =
     (portalReady || canRetryFullFiscalYearZipWithoutPortal(summary) || terminalSummary) &&
     !["access-denied", "loading", "unsupported", "session-expired"].includes(presentation.kind);
@@ -115,8 +119,23 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 the recovery controls stay actionable -- reading the scoped one
                 here hid the per-period evidence at exactly the moment it
                 explains what those controls are for. */}
-            <PanelRunProgress summary={summary ?? null} />
-            <TargetEvidence summary={summary ?? null} />
+            {/* A finished run is history, not the current context. Left expanded
+                it pushed the presets four sections down, so every new run began
+                by scrolling past the last one, and the custom door -- further
+                down still -- was harder to find than the presets. Only a clean
+                completion folds away; anything needing review stays open. */}
+            {runComplete ? (
+              <details className="panel-finished-run">
+                <summary>Show what this run saved</summary>
+                <PanelRunProgress summary={summary ?? null} />
+                <TargetEvidence summary={summary ?? null} />
+              </details>
+            ) : (
+              <>
+                <PanelRunProgress summary={summary ?? null} />
+                <TargetEvidence summary={summary ?? null} />
+              </>
+            )}
             {hasRecoveryActions(summary ?? null) ? (
               <p className="panel-recovery-reason">
                 Why Pack paused: {summary?.flowStep.safeMessage}
