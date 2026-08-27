@@ -2040,3 +2040,14 @@ Six additional mutation groups were run serially and restored with matching file
   triggering. Privacy and security reviews passed after a privacy-requested window-focus coverage
   closure; the final serial gate passed 152 files and 2,837 tests with no storage, target-binding,
   download-evidence, MV3 or sensitive-data regression.
+
+### Cycle 84 — legacy staging ownership reduction
+
+- Caller tracing removed the obsolete artifact-progress reserve/clear exports and their eight
+  self-only tests. The live selected-artifact flow continues to use the scope-bound durable bundle
+  ledger; local-data recovery and target review retain the artifact-progress staging reader.
+- The fixed-point import scan found no orphaned former export and confirms the active replacement.
+  Security review closed after the matching reduction-plan update. Focused recovery coverage passed
+  5 files and 168 tests; the final serial suite passed 152 files and 2,829 tests, an exact eight-test
+  decrease attributable to the deleted self-only tests. No persisted schema, download evidence, MV3,
+  permission, host or CSP behavior changed.

@@ -2789,3 +2789,34 @@ recovery state`, proving the response was silently discarded after context succe
 
 - Checkpoint: `2b29693 fix(recovery): retain GST tab focus failures`; post-commit preflight passed.
   No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.
+
+## Cycle 84 — remove legacy staging ownership exports
+
+- Window: 2026-08-27 08:04–08:15 IST. This is a bounded code-reduction and test-quality cycle;
+  its actual duration is recorded without an idle hold.
+- Picked and measured: the artifact-progress module still exported an older staging reserve/clear
+  pair. Exact caller tracing found the old pair had no production importer and was exercised only by
+  its own isolated test block. The live selected-artifact path instead imports the scope-bound bundle
+  ledger reservation, which persists and validates the selected scope before continuing.
+- Changed: removed the dead duplicate exports and their eight self-only tests, along with now-unused
+  mock scaffolding and one import. The reader that local-data recovery and target review depend on
+  remains. The reduction-plan note now records this completed duplicate removal instead of claiming
+  two active exports.
+- Fixed-point and review: exact symbol/import scans after deletion found only the live bundle-ledger
+  reservation and the artifact-progress reader's production importers. Security review initially
+  found the stale reduction-plan sentence, then PASSed after its correction; it confirmed no storage,
+  target-binding, download, manifest, CSP, permission or content-script change.
+- Gate: focused artifact-progress, bundle-ledger, selected-artifact, local-data and target-review
+  coverage passed 5 files and 168 tests. The full build, serial suite, TypeScript, zero-warning
+  ESLint, Prettier and package verifier passed. The suite count decreased by exactly the eight
+  removed self-only tests. Exact final Vitest footer:
+
+  ```text
+        Tests  2829 passed (2829)
+     Start at  08:12:39
+     Duration  156.28s (transform 2.63s, setup 0ms, import 12.74s, tests 126.94s, environment 296ms)
+  ```
+
+- Checkpoint: `5ca319d refactor(recovery): remove legacy staging ownership exports`; post-commit
+  preflight passed. No live portal, taxpayer data, manifest, permission, dependency, push or PR
+  changed.
