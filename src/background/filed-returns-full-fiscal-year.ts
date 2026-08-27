@@ -67,6 +67,7 @@ import {
   exportFullFiscalYearZip,
   reconcileFullFiscalYearZipDownload,
 } from "./filed-returns-full-fiscal-year-zip";
+import { getFullFiscalYearTabSessionId } from "./filed-returns-active-tab";
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
@@ -317,13 +318,21 @@ export async function startFullFiscalYearDownloadFlow(
 
   await persistLedger(deps, ledger);
 
-  // An explicitly confirmed resume may cross a browser restart. Its old tab
-  // session marker cannot be used as an authority for the first retry, so the
-  // single-period flow selects and durably pins a current GST tab before work.
+  // An explicitly confirmed resume may cross a browser restart. Rebind only
+  // when that durable tab-session marker differs from this browser session;
+  // a matching marker must retain its original tab binding.
+  const currentTabSessionId =
+    options.allowExistingLedgerResume &&
+    ledger.portalTabId !== undefined &&
+    ledger.portalTabSessionId !== undefined
+      ? await getFullFiscalYearTabSessionId()
+      : null;
   let mustRebindPortalTab =
     options.allowExistingLedgerResume &&
     ledger.portalTabId !== undefined &&
-    ledger.portalTabSessionId !== undefined;
+    ledger.portalTabSessionId !== undefined &&
+    currentTabSessionId !== null &&
+    currentTabSessionId !== ledger.portalTabSessionId;
 
   while (true) {
     const nextTarget = nextRunnableFullFiscalYearTarget(ledger);

@@ -3,6 +3,10 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsTargetReview,
 } from "../../src/connectors/gst/filed-returns-contracts";
+import {
+  FULL_FISCAL_YEAR_PERIOD,
+  getFiledReturnsFullFiscalYearPeriods,
+} from "../../src/connectors/gst/filed-returns-scope";
 import type * as FiledReturnsTargetReviewModule from "../../src/background/filed-returns-target-review";
 
 const mocks = vi.hoisted(() => ({
@@ -295,6 +299,36 @@ describe("filed returns retained target scoping", () => {
       },
     });
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
+  it("derives blocked full-year fallback progress from eligible periods", async () => {
+    const now = new Date("2026-08-26T00:00:00.000Z");
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockRejectedValueOnce(
+      new Error("synthetic retained-checkpoint read failure"),
+    );
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      now: () => now,
+      storageKeys: {},
+    } as never);
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        status: "blocked",
+        totalPeriods: getFiledReturnsFullFiscalYearPeriods("2026-27", now).length,
+      },
+    });
+    if (!response.ok || !("flowSummary" in response) || !response.flowSummary) {
+      throw new Error("Expected blocked fallback summary.");
+    }
+    expect(response.flowSummary?.totalPeriods).not.toBe(12);
   });
 
   it("does not scan retained checkpoints when another run already owns the start", async () => {

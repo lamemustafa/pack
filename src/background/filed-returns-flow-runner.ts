@@ -9,7 +9,10 @@ import type {
   PackMessage,
   PackMessageResponse,
 } from "../connectors/gst/messages";
-import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
+import {
+  getFiledReturnsFullFiscalYearPeriods,
+  isFullFiscalYearScope,
+} from "../connectors/gst/filed-returns-scope";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   acquireFiledReturnsRun,
@@ -357,19 +360,23 @@ async function surfaceRetainedArtifactAcquisitionReview(
   try {
     checkpoints = await readArtifactAcquisitionCheckpoints();
   } catch {
-    return blockedRetainedArtifactAcquisitionResponse(requestedScope, {
-      connectorId: "gst",
-      scopeId: "gst-filed-returns-private-v0",
-      state: "blocked",
-      safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
-      safeMessage:
-        "Pack could not read retained local artifact recovery and will not start another portal action.",
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-        message: "Try again after local recovery state is available.",
-        canResume: true,
+    return blockedRetainedArtifactAcquisitionResponse(
+      requestedScope,
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
+        safeMessage:
+          "Pack could not read retained local artifact recovery and will not start another portal action.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Try again after local recovery state is available.",
+          canResume: true,
+        },
       },
-    });
+      deps,
+    );
   }
   for (const checkpoint of checkpoints) {
     if (checkpoint.state === "malformed") continue;
@@ -392,7 +399,7 @@ async function surfaceRetainedArtifactAcquisitionReview(
     const summary = await persistFiledReturnsTargetReview(target, flowStep, deps);
     return summary
       ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
-      : blockedRetainedArtifactAcquisitionResponse(requestedScope, flowStep);
+      : blockedRetainedArtifactAcquisitionResponse(requestedScope, flowStep, deps);
   }
   const malformedCheckpoint = checkpoints.find((checkpoint) => checkpoint.state === "malformed");
   if (!malformedCheckpoint || malformedCheckpoint.state !== "malformed") return null;
@@ -400,14 +407,18 @@ async function surfaceRetainedArtifactAcquisitionReview(
     malformedCheckpoint.key,
   );
   if (!malformedCheckpointReference) {
-    return blockedRetainedArtifactAcquisitionResponse(requestedScope, {
-      connectorId: "gst",
-      scopeId: "gst-filed-returns-private-v0",
-      state: "blocked",
-      safeSignals: ["artifact-acquisition-malformed-reference-unavailable"],
-      safeMessage:
-        "Pack found malformed retained artifact recovery but could not prepare its local review safely.",
-    });
+    return blockedRetainedArtifactAcquisitionResponse(
+      requestedScope,
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["artifact-acquisition-malformed-reference-unavailable"],
+        safeMessage:
+          "Pack found malformed retained artifact recovery but could not prepare its local review safely.",
+      },
+      deps,
+    );
   }
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
@@ -427,19 +438,22 @@ async function surfaceRetainedArtifactAcquisitionReview(
   });
   return summary
     ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
-    : blockedRetainedArtifactAcquisitionResponse(requestedScope, flowStep);
+    : blockedRetainedArtifactAcquisitionResponse(requestedScope, flowStep, deps);
 }
 
 function blockedRetainedArtifactAcquisitionResponse(
   scope: FiledReturnsDownloadScope,
   flowStep: PortalFlowStepResult,
+  deps: FiledReturnsFlowRunnerDeps,
 ): PackMessageResponse {
   const flowSummary: FiledReturnsFlowSummary = {
     scope,
     status: "blocked",
     completedPeriods: [],
     currentPeriod: scope.period,
-    totalPeriods: isFullFiscalYearScope(scope) ? 12 : 1,
+    totalPeriods: isFullFiscalYearScope(scope)
+      ? getFiledReturnsFullFiscalYearPeriods(scope.financialYear, deps.now?.() ?? new Date()).length
+      : 1,
     flowStep,
   };
   return { ok: true, flowStep, flowSummary };
