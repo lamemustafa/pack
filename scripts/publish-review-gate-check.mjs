@@ -136,19 +136,25 @@ function loadLatestDurableReviewState(pr) {
     ),
   );
   const commits = flattenPages(commitPages);
+  const forcePushedPriorShas = loadForcePushedPriorShas(pr.number);
+  const candidateShas = new Set(forcePushedPriorShas);
   const candidates = [];
 
   for (const commit of commits) {
     if (!/^[0-9a-f]{40}$/iu.test(commit?.sha ?? "")) {
       throw new Error("durable review-state commit metadata is incomplete");
     }
+    candidateShas.add(commit.sha);
+  }
+
+  for (const sha of candidateShas) {
     const checkPages = JSON.parse(
       runGithub(
         [
           "api",
           "--paginate",
           "--slurp",
-          `repos/${repo}/commits/${commit.sha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=all&per_page=100`,
+          `repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=all&per_page=100`,
         ],
         "durable review-state lookup",
       ),
@@ -171,10 +177,40 @@ function loadLatestDurableReviewState(pr) {
   }
 
   if (candidates.length === 0) {
+    if (forcePushedPriorShas.length > 0) {
+      throw new Error("force-push discontinuity left no reachable durable review state");
+    }
     return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
   }
   candidates.sort((left, right) => right.completedAt - left.completedAt);
   return candidates[0].state;
+}
+
+function loadForcePushedPriorShas(prNumber) {
+  const timelinePages = JSON.parse(
+    runGithub(
+      [
+        "api",
+        "--paginate",
+        "--slurp",
+        "-H",
+        "Accept: application/vnd.github+json",
+        `repos/${repo}/issues/${prNumber}/timeline?per_page=100`,
+      ],
+      "force-push discontinuity discovery",
+    ),
+  );
+  const priorShas = [];
+
+  for (const event of flattenPages(timelinePages)) {
+    if (event?.event !== "head_ref_force_pushed") continue;
+    if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
+      throw new Error("force-push event has no valid prior head SHA");
+    }
+    priorShas.push(event.before_commit_id);
+  }
+
+  return [...new Set(priorShas)];
 }
 
 function flattenPages(value) {
