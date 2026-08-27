@@ -513,6 +513,23 @@ describe("Pack local data clearing", () => {
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 
+  it("keeps local state when retained artifact-acquisition recovery cannot be read", async () => {
+    browserMocks.storage.session.get.mockRejectedValueOnce(
+      new Error("synthetic retained-checkpoint read failure"),
+    );
+    const background = await import("../../src/entrypoints/background");
+
+    const response = await background.clearPackLocalData();
+
+    expect(response).toEqual({
+      ok: false,
+      error:
+        "Pack could not verify retained artifact recovery. Retry clearing local data before removing saved state.",
+    });
+    expect(browserMocks.storage.session.clear).not.toHaveBeenCalled();
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
   it("recovers an explicit local-data reset from malformed staging metadata", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "pack:single-period-staging" ? { [key]: { schemaVersion: "unexpected" } } : {},

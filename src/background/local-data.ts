@@ -45,7 +45,17 @@ export async function clearPackLocalDataWithRecoveryGuard(
 async function clearPackLocalDataWithinOperation(
   deps: PackLocalDataDeps,
 ): Promise<PackMessageResponse> {
-  if (await hasUnresolvedFiledReturnsRecoveryState(deps)) {
+  let hasUnresolvedRecoveryState: boolean;
+  try {
+    hasUnresolvedRecoveryState = await hasUnresolvedFiledReturnsRecoveryState(deps);
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Pack could not verify retained artifact recovery. Retry clearing local data before removing saved state.",
+    };
+  }
+  if (hasUnresolvedRecoveryState) {
     return {
       ok: false,
       error:
