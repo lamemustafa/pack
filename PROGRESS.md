@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 68 — surface malformed saved-summary responses
+
+- Window: 2026-08-27 06:28–06:32 IST. This is a bounded lossy-surface correction; its actual
+  duration is recorded without an idle hold.
+- Picked: the mount read named a failed saved-summary response, but a response marked successful
+  without the required `flowSummary` field fell through silently. The equivalent storage-change
+  path already reports that shape as an unexpected Pack response.
+- Measured before: the new mount regression failed against the prior source with
+  `expected null to be 'Unexpected Pack response.'`, proving the malformed response produced no
+  visible action error even though portal context had loaded.
+- Changed: the mount handler now distinguishes a valid saved-summary payload, a failed response and
+  a malformed successful response. The last case retains the existing user-visible
+  `Unexpected Pack response.` diagnostic instead of silently rendering as healthy. Valid summary
+  loading and the specific safe-message failure path are unchanged.
+- Gate: focused controller/panel coverage passed 3 files and 46 tests. The full build, serial suite,
+  TypeScript, zero-warning ESLint, Prettier, package verifier and diff check passed. Exact final
+  Vitest footer:
+
+  ```text
+        Tests  2811 passed (2811)
+     Start at  06:29:06
+     Duration  153.70s (transform 2.48s, setup 0ms, import 12.32s, tests 125.45s, environment 8ms)
+  ```
+
+- Checkpoint: `514f95c fix(popup): surface malformed summary responses`; post-commit
+  `pnpm workflow:preflight` passed. No target binding, download evidence, identity guard,
+  persistence field, portal action, manifest, live/authenticated GST qualification, release claim,
+  push or PR action changed.
+- Learned / next: a success discriminator alone is not enough at a typed message boundary; required
+  payload fields must be treated as part of the human-visible result. Continue this audit one message
+  boundary at a time rather than widening generic catch behavior.
+
 ## Cycle 67 — remove unused summary projections
 
 - Window: 2026-08-27 06:22–06:27 IST. This is a bounded code-reduction checkpoint; its actual
