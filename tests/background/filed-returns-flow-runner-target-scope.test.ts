@@ -119,6 +119,45 @@ describe("filed returns retained target scoping", () => {
     expect(response).toMatchObject({ flowStep: { safeSignals: ["retained-gstr2b-review"] } });
   });
 
+  it("returns a blocked reason when target-review storage cannot be read before a start", async () => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockRejectedValueOnce(
+      new Error("synthetic target-review read failure"),
+    );
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      storageKeys: {},
+    } as never);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: ["filed-returns-target-review-storage-unavailable"],
+        safeMessage:
+          "Pack could not read saved target recovery and will not start another portal action.",
+        state: "blocked",
+        userAction: {
+          canResume: true,
+          message: "Try again after local recovery state is available.",
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+      flowSummary: {
+        completedPeriods: [],
+        currentPeriod: "June",
+        scope: requestedScope,
+        status: "blocked",
+        totalPeriods: 1,
+      },
+    });
+    expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
   it("keeps the retained review bound to its own GSTR-2B bundle target", async () => {
     const response = await startFiledReturnsDownloadFlow(retainedScope, {
       storageKeys: {},

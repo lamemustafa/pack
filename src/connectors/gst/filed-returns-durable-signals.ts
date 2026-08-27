@@ -227,6 +227,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-returns-target-manually-observed",
   "filed-returns-target-bound-candidate-window-interrupted",
   "filed-returns-target-review-clear-failed",
+  "filed-returns-target-review-storage-unavailable",
   ...FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES.map(
     filedReturnsTargetReviewClearFailureSignal,
   ),

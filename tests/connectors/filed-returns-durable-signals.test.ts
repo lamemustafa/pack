@@ -197,6 +197,12 @@ describe("filed-return durable signal contract", () => {
     expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
   });
 
+  it("retains the fixed target-review storage-unavailable signal", () => {
+    const signals = ["filed-returns-target-review-storage-unavailable"];
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
+  });
+
   it("retains every bounded artifact-checkpoint clear failure reason", () => {
     const signals = ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS.map(
       artifactAcquisitionCheckpointClearFailureSignal,

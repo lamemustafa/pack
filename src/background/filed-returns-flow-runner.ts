@@ -124,7 +124,12 @@ export async function startFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
-  const targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+  let targetReviewState;
+  try {
+    targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+  } catch {
+    return targetReviewStorageUnavailableResponse(scope);
+  }
   if (targetReviewState.state === "malformed") return malformedTargetReviewResponse(scope);
   if (targetReviewState.state === "valid") {
     return responseForFiledReturnsTargetReview(targetReviewState.review);
@@ -226,6 +231,36 @@ export async function startFiledReturnsDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+function targetReviewStorageUnavailableResponse(
+  scope: FiledReturnsDownloadScope,
+): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: "gst-filed-returns-private-v0",
+    state: "blocked",
+    safeSignals: ["filed-returns-target-review-storage-unavailable"],
+    safeMessage:
+      "Pack could not read saved target recovery and will not start another portal action.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Try again after local recovery state is available.",
+      canResume: true,
+    },
+  };
+  return {
+    ok: true,
+    flowStep,
+    flowSummary: {
+      scope,
+      status: "blocked",
+      completedPeriods: [],
+      currentPeriod: scope.period,
+      totalPeriods: isFullFiscalYearScope(scope) ? 12 : 1,
+      flowStep,
+    },
+  };
 }
 
 export async function retryFullFiscalYearTargetDownloadFlow(
