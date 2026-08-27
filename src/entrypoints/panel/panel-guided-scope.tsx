@@ -11,7 +11,10 @@ import {
 } from "../../connectors/gst/filed-returns-capabilities";
 import { getFiledReturnsFinancialYearOptions } from "../../connectors/gst/filed-returns-scope";
 import { ScopeFormAction } from "../popup/components";
-import { getScopeMatchedFiledReturnsSummary } from "../popup/flow-summary";
+import {
+  canRetryFullFiscalYearZipWithoutPortal,
+  getScopeMatchedFiledReturnsSummary,
+} from "../popup/flow-summary";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import {
   panelFullFiscalYearPresets,
@@ -49,8 +52,12 @@ export function PanelGuidedScope({
   const focusTarget = React.useRef<"preset-door" | "select" | null>(null);
   const steps = panelGuidedSteps(scope);
   const step = steps[activeStep] ?? steps[0];
-  const currentFinancialYear = getFiledReturnsFinancialYearOptions()[0];
-  const [presetAsOf, setPresetAsOf] = React.useState(() => new Date());
+  const [, refreshPresetSnapshot] = React.useState(0);
+  // The panel can stay mounted while a new period becomes eligible. Read the
+  // financial year and its period plan from the same render-time snapshot so
+  // a focus-driven parent refresh cannot combine a current FY with old periods.
+  const presetAsOf = new Date();
+  const currentFinancialYear = getFiledReturnsFinancialYearOptions(presetAsOf)[0];
   const presets = currentFinancialYear
     ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
     : [];
@@ -111,7 +118,7 @@ export function PanelGuidedScope({
                       currentPreset.scope.financialYear !== preset.scope.financialYear ||
                       currentPreset.scope.artifactType !== preset.scope.artifactType
                     ) {
-                      setPresetAsOf(new Date());
+                      refreshPresetSnapshot((current) => current + 1);
                       return;
                     }
                     onScopeChange(preset.scope);
@@ -159,7 +166,7 @@ export function PanelGuidedScope({
   const scopeExternalBlock = savedRunForScope ? null : externalBlock;
   const guidedExternalBlock =
     scopeExternalBlock ??
-    (portalSignedIn
+    (portalSignedIn || canRetryFullFiscalYearZipWithoutPortal(scopeSummary)
       ? null
       : { disabled: true as const, label: "Open a signed-in GST Portal tab to continue." });
 

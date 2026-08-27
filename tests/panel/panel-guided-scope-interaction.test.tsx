@@ -382,6 +382,21 @@ describe("panel guided scope interaction", () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
+  it("refreshes empty presets when a long-lived panel gains its first eligible period", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-01T06:00:00.000Z"));
+    await mountGuidedScope({ portalSignedIn: true, savedRun: null });
+    expect(container.querySelectorAll(".panel-preset-list button")).toHaveLength(0);
+
+    vi.setSystemTime(new Date("2026-05-31T06:00:00.000Z"));
+    await act(async () => {
+      root?.render(<GuidedScopeHarness portalSignedIn savedRun={null} />);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelectorAll(".panel-preset-list button").length).toBeGreaterThan(0);
+  });
+
   it("derives preset period counts from the fiscal-year planner as time changes", () => {
     const financialYear = "2026-27";
     const beforeMorePeriodsAreEligible = new Date("2026-08-26T00:00:00.000Z");
