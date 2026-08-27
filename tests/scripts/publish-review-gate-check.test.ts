@@ -125,6 +125,55 @@ describe("PR-head Review gate check publisher", () => {
     ).toBe(true);
   });
 
+  it("walks a force-pushed prior head ancestry to retain an older durable state", () => {
+    const orphanedSha = "b".repeat(40);
+    const intermediateSha = "c".repeat(40);
+    const anchorSha = "d".repeat(40);
+    const durableState = reviewStateWithDeletedFinding();
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [anchorSha]: durableState },
+      [forcePushEvent(orphanedSha)],
+      { [orphanedSha]: [intermediateSha], [intermediateSha]: [anchorSha] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(publication?.join(" ")).toContain("conclusion=failure");
+    expect(calls.some((call) => call.join(" ").includes(`commits/${anchorSha}/check-runs?`))).toBe(
+      true,
+    );
+  });
+
+  it("fails closed rather than exceeding the durable-history lookup bound", () => {
+    const history = Array.from({ length: 20 }, (_, index) => index.toString(16).padStart(40, "0"));
+    const parents = Object.fromEntries(
+      [headSha, ...history].map((sha, index, all) => [sha, all[index + 1] ? [all[index + 1]] : []]),
+    );
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      null,
+      [],
+      parents,
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const stateLookups = calls.filter((call) => call.join(" ").includes("/check-runs?"));
+
+    expect(result.status).toBe(0);
+    expect(stateLookups).toHaveLength(20);
+    expect(publication?.join(" ")).toContain("conclusion=action_required");
+  }, 10_000);
+
   it("fails closed when a force-push leaves no durable state reachable", () => {
     const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
@@ -200,6 +249,32 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
+  it("fails closed when the next durable state exceeds the check-run text bound", () => {
+    const fixture = cleanReviewFixture();
+    fixture.data.repository.pullRequest.comments.nodes = Array.from(
+      { length: 700 },
+      (_, index) => ({
+        id: `comment-${index}`,
+        isMinimized: false,
+        minimizedReason: null,
+        author: { login: "chatgpt-codex-connector" },
+        createdAt: "2026-08-17T12:00:00Z",
+        body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Finding.",
+      }),
+    );
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      fixture,
+      [{ status: 0 }],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(publication?.join(" ")).toContain("conclusion=action_required");
+    expect(publication?.join(" ")).not.toContain("output[text]");
+  });
+
   it("preserves the event gate's current-head review wait for scheduled evaluation", () => {
     const script = readFileSync(scriptPath, "utf8");
     expect(script).toMatch(/"--wait-head-review-ms",\s*"180000"/u);
@@ -220,6 +295,7 @@ function runScript(
   durableResponses: Array<{ status: number; stderr?: string }> = [{ status: 0 }],
   durableStates: Record<string, string> | null = null,
   timeline: unknown[] = [],
+  parents: Record<string, string[]> = {},
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -255,6 +331,7 @@ function runScript(
         ),
         FAKE_DURABLE_RESPONSES: JSON.stringify(durableResponses),
         FAKE_TIMELINE: JSON.stringify(timeline),
+        FAKE_PARENTS: JSON.stringify(parents),
       },
     },
   );
@@ -275,6 +352,11 @@ else if (text.includes("/pulls/") && text.includes("/commits?")) {
 }
 else if (text.includes("/issues/") && text.includes("/timeline?")) {
   process.stdout.write(JSON.stringify([JSON.parse(process.env.FAKE_TIMELINE)]));
+}
+else if (text.match(/\\/commits\\/[a-f0-9]{40}$/i)) {
+  const sha = text.match(/commits\\/([a-f0-9]{40})$/i)?.[1];
+  const parents = sha ? JSON.parse(process.env.FAKE_PARENTS)[sha] ?? [] : [];
+  process.stdout.write(JSON.stringify({ parents: parents.map((parentSha) => ({ sha: parentSha })) }));
 }
 else if (text.includes("/check-runs?")) {
   const attempts = calls.filter((call) => call.join(" ").includes("/check-runs?")).length;
@@ -346,6 +428,14 @@ const cleanReviewFixture = () => ({
         headRefName: "tapish-codex/test",
         headRepository: { nameWithOwner: "lamemustafa/pack" },
         headRefOid: headSha,
+        comments: {
+          nodes: [],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+        reviewThreads: {
+          nodes: [],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
         reviews: {
           nodes: [
             {

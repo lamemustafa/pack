@@ -235,6 +235,17 @@ describe("PR review gate", () => {
     expect(result.stderr).toContain("must name its follow-up in the PR body");
   });
 
+  it("does not treat a longer issue reference as the named linked follow-up", () => {
+    const result = runGateFixture(
+      "partial linked follow-up reference",
+      [prFindingComment(), durableDispositionComment("comment-1", "linked-follow-up", "#12")],
+      packPrBody() + String.fromCharCode(10) + "#123",
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("must name its follow-up in the PR body");
+  });
+
   it.each([
     ["missing", "/tmp/pack-review-gate-state-does-not-exist.json"],
     [
@@ -1401,15 +1412,16 @@ function durableDispositionComment(
       ...(followUp ? { followUp } : {}),
     })} -->
 
-Evidence: disposition reviewed by a maintainer.`,
+Evidence: disposition reviewed by a maintainer.${followUp ? ` Follow-up: ${followUp}.` : ""}`,
   };
 }
 
-function runGateFixture(name: string, comments: unknown[]) {
+function runGateFixture(name: string, comments: unknown[], body = packPrBody()) {
   const fixture = writeFixture(
     `pr-finding-${name.replaceAll(" ", "-")}`,
     reviewFixture({
       headRefOid: "head-sha",
+      body,
       comments,
       reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
     }),
