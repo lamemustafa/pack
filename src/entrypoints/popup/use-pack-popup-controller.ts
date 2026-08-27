@@ -16,8 +16,6 @@ import {
 } from "../../connectors/gst/filed-returns-scope";
 import { PACK_SESSION_STORAGE_KEYS } from "../../background/storage-keys";
 import {
-  getFiledReturnsCompletionStatus,
-  getFiledReturnsSummaryHeading,
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
@@ -322,7 +320,6 @@ export function usePackPopupController() {
     [applyFlowResponse, getFullFiscalYearRecoveryPayload, withBusy],
   );
 
-  const completionStatus = getFiledReturnsCompletionStatus(scope, filedReturnsFlowSummary);
   const recoverySummary = hasUnresolvedFiledReturnsRecovery(filedReturnsFlowSummary)
     ? filedReturnsFlowSummary
     : null;
@@ -331,14 +328,10 @@ export function usePackPopupController() {
     setScopeState(nextScope);
   }, []);
   const scopedFlowSummary = getScopeMatchedFiledReturnsSummary(scope, filedReturnsFlowSummary);
-  const summaryHeading = scopedFlowSummary
-    ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
-    : null;
   const effectiveBusy = scopedFlowSummary?.status === "complete" ? null : busy;
   return {
     acknowledgeInterruptedRun,
     actionError,
-    completionStatus,
     context,
     effectiveBusy,
     lastRunSummary: filedReturnsFlowSummary,
@@ -354,7 +347,6 @@ export function usePackPopupController() {
     setScope,
     startFiledReturnsFlow,
     startFreshFiledReturnsFlow,
-    summaryHeading,
   };
 }
 
