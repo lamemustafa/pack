@@ -351,6 +351,7 @@ async function assertOptionsPageLoads(browserContext, extensionId) {
 async function assertPanelPageLoads(browserContext, extensionId) {
   const panelPage = await browserContext.newPage();
   attachPageLogging(panelPage);
+  await panelPage.setViewportSize({ width: 320, height: 900 });
   await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
   await panelPage.waitForLoadState("domcontentloaded");
   await panelPage.waitForSelector(".panel-shell", { timeout: 5_000 });
@@ -376,6 +377,7 @@ async function assertPanelPageLoads(browserContext, extensionId) {
         : null;
     return {
       title: document.title,
+      viewportWidth: window.innerWidth,
       shellRect: document.querySelector(".panel-shell")?.getBoundingClientRect().toJSON(),
       shellText: document.querySelector(".panel-shell")?.textContent ?? "",
       hasContextState: Boolean(document.querySelector(".context-state")),
@@ -409,9 +411,10 @@ async function assertPanelPageLoads(browserContext, extensionId) {
   if (!panelState.hasContextState) {
     throw new Error("Pack panel did not render its context state.");
   }
+  await assertPanelControlsFitViewport(panelPage, "checking or unavailable context");
   if (
     !panelState.shellRect ||
-    panelState.shellRect.width < 300 ||
+    panelState.shellRect.width < Math.min(300, panelState.viewportWidth - 32) ||
     panelState.shellRect.height < 180
   ) {
     throw new Error(

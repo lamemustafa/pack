@@ -479,7 +479,7 @@ describe("extension package verifier", () => {
     // would fail on a wide panel rather than catch anything.
     expect(script).toContain("markPainted");
     expect(script).toContain("naturalWidth");
-    expect(script).toContain("shellRect.width < 300");
+    expect(script).toContain("shellRect.width < Math.min(300, panelState.viewportWidth - 32)");
     expect(script).toContain("https://services.gst.gov.in/services/auth/fowelcome");
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
     expect(script).toContain("chrome-extension://${extensionId}/panel.html");
