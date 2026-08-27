@@ -1,5 +1,22 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 74 — surface rejected options reviewer requests
+
+- Window: 2026-08-27 06:51–06:56 IST. The options probe and last-manifest requests each rejected
+  without a visible status; their new rendered regressions failed with the initial storage copy and
+  unhandled `worker unavailable` rejections.
+- Changed: both handlers now catch rejection and render specific synthetic-local retry messages.
+  Focused options tests passed 2 files and 10 tests; the full gate passed. Exact final Vitest footer:
+
+  ```text
+        Tests  2815 passed (2815)
+     Start at  06:52:47
+     Duration  155.48s (transform 2.53s, setup 0ms, import 12.43s, tests 126.80s, environment 291ms)
+  ```
+
+- Checkpoint: `efe68cd fix(options): surface rejected reviewer requests`; post-commit preflight
+  passed. No sensitive data, storage schema, target/download guard, live portal, push or PR changed.
+
 ## Cycle 73 — surface options local-data clear failures
 
 - Window: 2026-08-27 06:45–06:50 IST. This is a bounded lossy-surface correction; its actual
