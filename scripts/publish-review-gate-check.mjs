@@ -13,6 +13,8 @@ import {
 
 const CHECK_RUN_NAME = "Review gate (scheduled)";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
+const MAX_DURABLE_HISTORY_NODES = 20;
+const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
 const EXIT_VERDICTS = new Map([
   [0, { conclusion: "success", title: "Scheduled review gate passed" }],
   [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
@@ -129,25 +131,18 @@ function evaluatePullRequest(pr) {
 }
 
 function loadLatestDurableReviewState(pr) {
-  const commitPages = JSON.parse(
-    runGithub(
-      ["api", "--paginate", "--slurp", `repos/${repo}/pulls/${pr.number}/commits?per_page=100`],
-      "durable review-state commit discovery",
-    ),
-  );
-  const commits = flattenPages(commitPages);
   const forcePushedPriorShas = loadForcePushedPriorShas(pr.number);
-  const candidateShas = new Set(forcePushedPriorShas);
+  const pendingShas = [pr.head.sha, ...forcePushedPriorShas];
+  const visitedShas = new Set();
   const candidates = [];
 
-  for (const commit of commits) {
-    if (!/^[0-9a-f]{40}$/iu.test(commit?.sha ?? "")) {
-      throw new Error("durable review-state commit metadata is incomplete");
+  while (pendingShas.length > 0) {
+    if (visitedShas.size >= MAX_DURABLE_HISTORY_NODES) {
+      throw new Error("durable review-state history exceeded the safe lookup bound");
     }
-    candidateShas.add(commit.sha);
-  }
-
-  for (const sha of candidateShas) {
+    const sha = pendingShas.shift();
+    if (!/^[0-9a-f]{40}$/iu.test(sha ?? "") || visitedShas.has(sha)) continue;
+    visitedShas.add(sha);
     const checkPages = JSON.parse(
       runGithub(
         [
@@ -174,6 +169,22 @@ function loadLatestDurableReviewState(pr) {
           candidates.push({ completedAt, state: check.output.text });
         }
       }
+    }
+
+    const commit = JSON.parse(
+      runGithub(
+        ["api", "repos/" + repo + "/commits/" + sha],
+        "durable review-state ancestry lookup",
+      ),
+    );
+    if (!Array.isArray(commit?.parents)) {
+      throw new Error("durable review-state commit ancestry is incomplete");
+    }
+    for (const parent of commit.parents) {
+      if (!/^[0-9a-f]{40}$/iu.test(parent?.sha ?? "")) {
+        throw new Error("durable review-state parent metadata is incomplete");
+      }
+      if (!visitedShas.has(parent.sha)) pendingShas.push(parent.sha);
     }
   }
 
@@ -233,7 +244,11 @@ function flattenPages(value) {
 function serialiseNextReviewState(path) {
   const state = readFileSync(path, "utf8");
   if (!state) throw new Error("review evaluator did not write durable state");
-  return `${DURABLE_REVIEW_STATE_PREFIX}${state}`;
+  const serialised = DURABLE_REVIEW_STATE_PREFIX + state;
+  if (Buffer.byteLength(serialised, "utf8") > MAX_DURABLE_REVIEW_STATE_BYTES) {
+    throw new Error("durable review state exceeds the safe publication bound");
+  }
+  return serialised;
 }
 
 function publishCheck(headSha, exitCode, reviewState = null) {

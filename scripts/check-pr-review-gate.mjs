@@ -291,12 +291,17 @@ function readTrustedDurableDisposition(comment, prBody) {
     value.disposition === "linked-follow-up" &&
     (typeof value.followUp !== "string" ||
       value.followUp.length === 0 ||
-      !evidence.includes(value.followUp) ||
-      !String(prBody ?? "").includes(value.followUp))
+      !includesExactFollowUpReference(evidence, value.followUp) ||
+      !includesExactFollowUpReference(String(prBody ?? ""), value.followUp))
   ) {
     failEvaluation("A linked follow-up disposition must name its follow-up in the PR body.");
   }
   return value;
+}
+
+function includesExactFollowUpReference(text, reference) {
+  const escaped = reference.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp("(^|[^\\w])" + escaped + "(?!\\w)", "u").test(text);
 }
 
 function writeDurableReviewState(filePath, reviewState) {
