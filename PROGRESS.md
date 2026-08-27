@@ -1,5 +1,31 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 76 — announce options action status
+
+- Window: 2026-08-27 06:58–07:03 IST. This is a bounded accessibility correction; its actual
+  duration is recorded without an idle hold.
+- Picked: options actions change the visible status text, but the paragraph had no live-region
+  semantics, leaving keyboard and screen-reader users without an announcement of a local action's
+  result.
+- Discrimination: the new rendered-options regression first failed with
+  `expected undefined to be 'polite'`, proving the status region was absent rather than merely
+  untested.
+- Changed: the single existing options status paragraph is now a polite `status` live region. It
+  preserves all existing local-only success, rejection, cancellation and failure text without adding
+  controls, storage, permissions or portal behavior.
+- UI hardening: the Impeccable detector reported an empty finding set for the changed options source.
+- Gate: focused options/probe coverage passed 2 files and 11 tests. The full build, serial suite,
+  TypeScript, zero-warning ESLint, Prettier and package verifier passed. Exact final Vitest footer:
+
+  ```text
+        Tests  2816 passed (2816)
+     Start at  07:00:08
+     Duration  155.06s (transform 2.49s, setup 0ms, import 12.42s, tests 126.25s, environment 263ms)
+  ```
+
+- Checkpoint: `89248d6 fix(options): announce action status`; post-commit preflight passed. No
+  sensitive data, storage schema, target/download guard, live portal, push or PR changed.
+
 ## Cycle 75 — audit folder-access probe reason retention
 
 - Window: 2026-08-27 06:56–06:58 IST. This is a quiet lossy-surface audit; its actual duration is
