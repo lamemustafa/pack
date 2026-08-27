@@ -7,7 +7,12 @@ on:
 
 permissions:
   contents: read
+  issues: read
   pull-requests: read
+
+concurrency:
+  group: review-gate-reconcile
+  cancel-in-progress: false
 
 jobs:
   scheduled-review-gate:
@@ -16,6 +21,7 @@ jobs:
     timeout-minutes: 14
     permissions:
       contents: read
+      issues: read
       pull-requests: read
       checks: write
 
