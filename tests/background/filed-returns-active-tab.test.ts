@@ -33,7 +33,7 @@ describe("required GST tab", () => {
 
     const result = await getRequiredGstTab(getActiveGstTab, 41);
 
-    expect(result?.tab.id).toBe(41);
+    expect(result).toMatchObject({ state: "ready", tab: { id: 41 } });
     expect(getActiveGstTab).not.toHaveBeenCalled();
     expect(browserMocks.tabs.update).toHaveBeenCalledWith(41, { active: true });
   });
@@ -42,7 +42,7 @@ describe("required GST tab", () => {
     browserMocks.tabs.get.mockRejectedValue(new Error("No tab with id: 41"));
     const getActiveGstTab = vi.fn();
 
-    await expect(getRequiredGstTab(getActiveGstTab, 41)).resolves.toBeNull();
+    await expect(getRequiredGstTab(getActiveGstTab, 41)).resolves.toEqual({ state: "unavailable" });
     expect(getActiveGstTab).not.toHaveBeenCalled();
     expect(browserMocks.tabs.update).not.toHaveBeenCalled();
   });
@@ -55,7 +55,7 @@ describe("required GST tab", () => {
     });
     const getActiveGstTab = vi.fn(async () => null);
 
-    await expect(getRequiredGstTab(getActiveGstTab, 41)).resolves.toBeNull();
+    await expect(getRequiredGstTab(getActiveGstTab, 41)).resolves.toEqual({ state: "unavailable" });
     expect(getActiveGstTab).not.toHaveBeenCalled();
     expect(browserMocks.tabs.update).not.toHaveBeenCalled();
   });
@@ -68,7 +68,7 @@ describe("required GST tab", () => {
 
     await expect(
       getRequiredGstTab(getActiveGstTab, 41, "saved-browser-session-marker"),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({ state: "unavailable" });
     expect(browserMocks.tabs.get).not.toHaveBeenCalled();
     expect(getActiveGstTab).not.toHaveBeenCalled();
   });

@@ -78,6 +78,21 @@ describe("single-period tab identity blocks", () => {
     assertImmediateAndPersistedMessagesMatch(response);
   });
 
+  it("retains a pinned plan when its tab-session storage cannot be read", async () => {
+    browserMocks.storage.session.get.mockRejectedValueOnce(new Error("session unavailable"));
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(scope, deps(), {
+      requiredPortalTabId: 42,
+      requiredPortalTabSessionId: "saved-browser-session-marker",
+    });
+
+    expect(response).toMatchObject({
+      flowStep: { safeSignals: ["full-fiscal-year-gst-tab-session-unavailable"] },
+    });
+    expect(browserMocks.tabs.get).not.toHaveBeenCalled();
+    assertImmediateAndPersistedMessagesMatch(response);
+  });
+
   it("blocks before target work when portal-owned dashboard navigation is refused", async () => {
     const openReturnsDashboardWithPortalAnchor = vi.fn(async () => "not-found" as const);
     const sendMessageToTabWithInjection = vi.fn();

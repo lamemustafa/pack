@@ -4,22 +4,26 @@ import { PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
 
 export type ActiveGstTab = Browser.tabs.Tab & { id: number };
 
+export type RequiredGstTabResult =
+  | { state: "ready"; tab: ActiveGstTab }
+  | { state: "tab-session-unavailable" }
+  | { state: "unavailable" };
+
 export async function getRequiredGstTab(
   getActiveGstTab: () => Promise<ActiveGstTab | null>,
   requiredTabId?: number,
   requiredTabSessionId?: string,
-): Promise<{ tab: ActiveGstTab } | null> {
-  if (
-    requiredTabSessionId !== undefined &&
-    (await getFullFiscalYearTabSessionId()) !== requiredTabSessionId
-  ) {
-    return null;
+): Promise<RequiredGstTabResult> {
+  if (requiredTabSessionId !== undefined) {
+    const currentTabSessionId = await getFullFiscalYearTabSessionId();
+    if (currentTabSessionId === null) return { state: "tab-session-unavailable" };
+    if (currentTabSessionId !== requiredTabSessionId) return { state: "unavailable" };
   }
   const activeTab =
     requiredTabId === undefined ? await getActiveGstTab() : await getPinnedGstTab(requiredTabId);
-  if (!activeTab) return null;
+  if (!activeTab) return { state: "unavailable" };
   await focusTab(activeTab);
-  return { tab: activeTab };
+  return { state: "ready", tab: activeTab };
 }
 
 export async function getFullFiscalYearTabSessionId(): Promise<string | null> {

@@ -118,12 +118,15 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
         )
       : recoveryResponse;
   }
-  const activeTab = await getRequiredGstTab(
+  const requiredTab = await getRequiredGstTab(
     deps.getActiveGstTab,
     options.requiredPortalTabId,
     options.requiredPortalTabSessionId,
   );
-  if (!activeTab) {
+  if (requiredTab.state !== "ready") {
+    if (requiredTab.state === "tab-session-unavailable") {
+      return tabSessionUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
+    }
     if (
       options.requiredPortalTabId !== undefined ||
       options.requiredPortalTabSessionId !== undefined
@@ -174,31 +177,11 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
       shouldPersistSinglePeriodSummary,
     );
   }
+  const activeTab = requiredTab;
   if (options.onPortalTabSelected) {
     const tabSessionId = await getFullFiscalYearTabSessionId();
     if (!tabSessionId) {
-      return withPersistedSinglePeriodSummary(
-        scope,
-        {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: filedReturnScopeId(scope.returnType),
-            state: "blocked",
-            safeSignals: ["full-fiscal-year-gst-tab-session-unavailable"],
-            safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
-              "full-fiscal-year-gst-tab-session-unavailable",
-            ]),
-            userAction: {
-              type: "RETRY_PORTAL_GENERATION",
-              message: "Try again with the GST Portal tab open in the foreground.",
-              canResume: true,
-            },
-          },
-        },
-        deps,
-        shouldPersistSinglePeriodSummary,
-      );
+      return tabSessionUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
     }
     await options.onPortalTabSelected(activeTab.tab.id, tabSessionId);
   }
@@ -247,6 +230,35 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   );
 }
 
+function tabSessionUnavailableResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+  shouldPersistSinglePeriodSummary: boolean,
+): Promise<PackMessageResponse> {
+  return withPersistedSinglePeriodSummary(
+    scope,
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-gst-tab-session-unavailable"],
+        safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+          "full-fiscal-year-gst-tab-session-unavailable",
+        ]),
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Try again with the GST Portal tab open in the foreground.",
+          canResume: true,
+        },
+      },
+    },
+    deps,
+    shouldPersistSinglePeriodSummary,
+  );
+}
+
 async function blockedWrongOriginResponse(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
@@ -289,7 +301,13 @@ async function waitForReturnsOrigin(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
-    if (activeTab?.tab.id === tabId && isReturnsOrigin(activeTab.tab.url)) return true;
+    if (
+      activeTab.state === "ready" &&
+      activeTab.tab.id === tabId &&
+      isReturnsOrigin(activeTab.tab.url)
+    ) {
+      return true;
+    }
     await delay(250);
   }
   return false;
