@@ -8,6 +8,19 @@ import {
 } from "./filed-returns-target-review";
 import { reconcileFiledReturnsTargetDownload } from "./filed-returns-target-download-recovery";
 import { PACK_LOCAL_STORAGE_KEYS, PACK_SESSION_STORAGE_KEYS } from "./storage-keys";
+import {
+  extensionBlobUrlFingerprint,
+  extensionOwnedCreationIds,
+  liveInlineObservationIds,
+  pendingExtensionDownloadUrls,
+  terminalChangesAwaitingPersistence,
+} from "./download-observation-ownership";
+
+export {
+  beginLiveFiledReturnsDownloadObservation,
+  beginPendingExtensionDownloadUrl,
+  extensionBlobUrlFingerprint,
+} from "./download-observation-ownership";
 
 interface DownloadChangedEvent {
   addListener(listener: (delta: DownloadDelta) => void): void;
@@ -38,49 +51,7 @@ export interface DurableDownloadReconcilerDeps extends Omit<
   reconcilePersistedFullFiscalYearZip?: () => Promise<boolean>;
 }
 
-const liveInlineObservationIds = new Set<number>();
-const extensionOwnedCreationIds = new Set<number>();
 const extensionBlobCreationCandidates = new Set<number>();
-const terminalChangesAwaitingPersistence = new Set<number>();
-const pendingExtensionDownloadUrls = new Set<string>();
-
-/**
- * Produces a non-reversible local correlation value for an extension Blob URL.
- * The raw URL stays in memory only; the selected-ZIP recovery checkpoint stores
- * this digest so a restarted MV3 worker can still match its onCreated event.
- */
-export async function extensionBlobUrlFingerprint(url: string): Promise<string | null> {
-  if (!url.startsWith("blob:")) return null;
-  try {
-    const bytes = new TextEncoder().encode(url);
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
-      "",
-    );
-  } catch {
-    return null;
-  }
-}
-
-/** Keeps the global listener from racing the flow that already owns this exact ID. */
-export function beginLiveFiledReturnsDownloadObservation(downloadId: number): () => void {
-  if (!Number.isSafeInteger(downloadId) || downloadId < 0) return () => undefined;
-  extensionOwnedCreationIds.delete(downloadId);
-  terminalChangesAwaitingPersistence.delete(downloadId);
-  liveInlineObservationIds.add(downloadId);
-  return () => {
-    liveInlineObservationIds.delete(downloadId);
-    extensionOwnedCreationIds.delete(downloadId);
-    terminalChangesAwaitingPersistence.delete(downloadId);
-  };
-}
-
-/** Registers one extension Blob URL for the brief onCreated-to-ID-persistence gap. */
-export function beginPendingExtensionDownloadUrl(url: string): () => void {
-  if (!url.startsWith("blob:chrome-extension://")) return () => undefined;
-  pendingExtensionDownloadUrls.add(url);
-  return () => pendingExtensionDownloadUrls.delete(url);
-}
 
 /**
  * Reconciles only a persisted target-review download ID. It is safe

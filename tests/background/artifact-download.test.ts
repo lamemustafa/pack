@@ -10,6 +10,11 @@ vi.mock("../../src/background/filed-returns-durable-download-reconciler", () => 
   extensionBlobUrlFingerprint: vi.fn(),
 }));
 
+vi.mock("../../src/background/download-observation-ownership", () => ({
+  beginLiveFiledReturnsDownloadObservation:
+    durableObserverMocks.beginLiveFiledReturnsDownloadObservation,
+}));
+
 import { downloadAcquiredArtifact } from "../../src/background/artifact-download";
 
 const listeners = new Set<(delta: { id: number }) => void>();

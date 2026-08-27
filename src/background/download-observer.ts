@@ -4,7 +4,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type { DownloadObservationContext } from "./download-correlation";
-import { beginLiveFiledReturnsDownloadObservation } from "./filed-returns-durable-download-reconciler";
+import { beginLiveFiledReturnsDownloadObservation } from "./download-observation-ownership";
 import {
   completedObservation,
   downloadInProgress,
