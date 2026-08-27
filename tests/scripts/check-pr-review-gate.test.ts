@@ -225,6 +225,32 @@ describe("PR review gate", () => {
     expect(result.stderr).toContain("must include visible evidence");
   });
 
+  it("rejects unlinked prose as evidence for a terminal disposition", () => {
+    const disposition = durableDispositionComment("comment-1", "fixed");
+    disposition.body = `<!-- review-gate-disposition:${JSON.stringify({
+      findingId: "comment-1",
+      disposition: "fixed",
+    })} -->
+
+Evidence: noted.`;
+    const result = runGateFixture("unlinked terminal disposition", [
+      prFindingComment(),
+      disposition,
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("finding-linked, disposition-specific visible evidence");
+  });
+
+  it("requires reasoning when rejecting a durable finding", () => {
+    const disposition = durableDispositionComment("comment-1", "rejected");
+    disposition.body = disposition.body.replace(/\nReasoning:.*$/u, "");
+    const result = runGateFixture("unreasoned rejection", [prFindingComment(), disposition]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("finding-linked, disposition-specific visible evidence");
+  });
+
   it("requires a linked follow-up to appear in the PR body", () => {
     const result = runGateFixture("unrecorded linked follow-up", [
       prFindingComment(),
@@ -1412,7 +1438,9 @@ function durableDispositionComment(
       ...(followUp ? { followUp } : {}),
     })} -->
 
-Evidence: disposition reviewed by a maintainer.${followUp ? ` Follow-up: ${followUp}.` : ""}`,
+Finding: ${findingId}
+Disposition: ${disposition}
+Evidence: reviewed against the source and current behaviour.${disposition === "rejected" ? "\nReasoning: source evidence disproves the finding." : ""}${followUp ? `\nFollow-up: ${followUp}` : ""}`,
   };
 }
 

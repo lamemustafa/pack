@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -73,7 +73,7 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication).toContain(`head_sha=${"2".repeat(40)}`);
   });
 
-  it("retains a deleted finding when durable state is anchored to the current head", () => {
+  it("prefers durable state anchored to the current head", () => {
     const orphanedSha = "b".repeat(40);
     const durableState = reviewStateWithDeletedFinding();
     const { result, calls } = runScript(
@@ -94,7 +94,7 @@ describe("PR-head Review gate check publisher", () => {
     expect(stateLookup?.join(" ")).toContain("check_name=Review%20gate%20(scheduled)");
     expect(
       calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
-    ).toBe(true);
+    ).toBe(false);
     expect(calls.some((call) => call.join(" ").includes("issues/1/timeline?"))).toBe(true);
     expect(publicationText).toContain("conclusion=failure");
     expect(publicationText).toContain("output[text]=review-gate-state/v1");
@@ -150,11 +150,34 @@ describe("PR-head Review gate check publisher", () => {
     );
   });
 
+  it("returns current-head durable state before traversing ordinary PR ancestry", () => {
+    const firstParentSha = "b".repeat(40);
+    const durableState = reviewStateWithDeletedFinding();
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      durableState,
+      [{ status: 0 }],
+      null,
+      [],
+      { [headSha]: [firstParentSha] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const stateLookups = calls.filter((call) => call.join(" ").includes("/check-runs?"));
+
+    expect(result.status).toBe(0);
+    expect(stateLookups).toHaveLength(1);
+    expect(calls.some((call) => call.join(" ").includes(`commits/${firstParentSha}`))).toBe(false);
+    expect(publication?.join(" ")).toContain("conclusion=failure");
+  });
+
   it("fails closed rather than exceeding the durable-history lookup bound", () => {
     const history = Array.from({ length: 20 }, (_, index) => index.toString(16).padStart(40, "0"));
     const parents: Record<string, string[]> = {};
-    for (const [index, sha] of [headSha, ...history].entries()) {
-      const parent = [headSha, ...history][index + 1];
+    for (const [index, sha] of history.entries()) {
+      const parent = history[index + 1];
       parents[sha] = parent === undefined ? [] : [parent];
     }
     const { result, calls } = runScript(
@@ -165,7 +188,7 @@ describe("PR-head Review gate check publisher", () => {
       null,
       [{ status: 0 }],
       null,
-      [],
+      [forcePushEvent(history[0]!)],
       parents,
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
@@ -349,7 +372,7 @@ function runScript(
       },
     },
   );
-  const calls = readFileSync(callsPath, "utf8");
+  const calls = existsSync(callsPath) ? readFileSync(callsPath, "utf8") : "[]";
   return { result, calls: JSON.parse(calls) as string[][] };
 }
 
