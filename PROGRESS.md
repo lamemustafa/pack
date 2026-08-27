@@ -1,5 +1,20 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 57 — audit guided-panel navigation while an action is active
+
+- Window: 2026-08-27 05:36–05:38 IST. This is a quiet keyboard/screen-reader audit, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: guided-panel Back and Continue controls do not have their own busy disable state, which
+  initially looked like it could let a user hide an in-flight final action by changing guide steps.
+- Measured: `PanelSurface` derives `running` from the effective busy state or an active summary and
+  removes the entire `PanelGuidedScope` while true. The guide navigation therefore cannot be
+  interactive during the action; its field-level busy prop is not a competing live control surface.
+- Result: no source change. Adding another busy reason to unmounted navigation would be dead UI and
+  duplicate the existing action/status state. Guided interaction and panel-surface suites passed
+  2 files and 34 tests; `git diff --check` and worktree status were clean.
+- Learned / next: trace the parent visibility guard before adding per-control disabling. Continue
+  the accessibility audit on a control that remains mounted in its potentially disabled state.
+
 ## Cycle 56 — retain specific flow-rejection reasons in the popup
 
 - Window: 2026-08-27 05:31–05:36 IST. This is a short lossy-surface test-quality checkpoint; its
