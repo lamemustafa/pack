@@ -173,6 +173,34 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).toContain("conclusion=failure");
   });
 
+  it("seeds a clean durable state for an unforced first run", () => {
+    const firstParentSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      null,
+      [],
+      { [headSha]: [firstParentSha] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const stateLookups = calls.filter((call) => call.join(" ").includes("/check-runs?"));
+
+    expect(result.status).toBe(0);
+    expect(stateLookups).toHaveLength(1);
+    expect(calls.some((call) => call.includes(`repos/lamemustafa/pack/commits/${headSha}`))).toBe(
+      false,
+    );
+    expect(
+      calls.some((call) => call.includes(`repos/lamemustafa/pack/commits/${firstParentSha}`)),
+    ).toBe(false);
+    expect(publication?.join(" ")).toContain("conclusion=success");
+    expect(publication?.join(" ")).toContain("output[text]=review-gate-state/v1");
+  });
+
   it("prefers the newest force-push state anchor", () => {
     const olderSha = "b".repeat(40);
     const newerSha = "c".repeat(40);
