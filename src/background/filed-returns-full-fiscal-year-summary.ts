@@ -203,10 +203,14 @@ export function summariseFullFiscalYearLedger(
     );
   }
   if (ledger.status === "running") {
-    if (
-      ledger.targets.some((target) => target.status === "running") &&
-      isFullFiscalYearLedgerStale(ledger, now)
-    ) {
+    // Deliberately not gated on a target being `running`. A run also goes stale in the
+    // window after one target finishes and before the next is marked running -- which is
+    // where a dead runner most often leaves it -- and requiring a running target there
+    // meant the ledger reported itself active forever, with no age at which that changed.
+    // Every other verdict for a running ledger (unconfirmed download, ZIP phase, an
+    // action-required target, resume confirmation) is already settled above, so what
+    // reaches here is a run that claims to be progressing and demonstrably is not.
+    if (isFullFiscalYearLedgerStale(ledger, now)) {
       const displayLedger: FiledReturnsFullFiscalYearLedger = {
         ...ledger,
         status: "blocked",

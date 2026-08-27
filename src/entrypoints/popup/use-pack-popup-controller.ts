@@ -117,6 +117,37 @@ export function usePackPopupController() {
     }
   }, [showActionError]);
 
+  /**
+   * Re-reads the saved run without touching the scope.
+   *
+   * The storage listener below answers every change to the summary, which covers a run that
+   * is progressing. It cannot cover a run that has stopped: a stall writes nothing, so the
+   * event that would prompt a re-read is exactly the event a stall withholds. The background
+   * decides staleness from elapsed time and will report an interrupted run the moment it is
+   * asked -- so returning to this page has to ask, or the panel keeps rendering "Run in
+   * progress" for a run that ended, under a promise that retry controls arrive on their own.
+   *
+   * Deliberately does not adopt `scope` from the response, unlike the mount effect and the
+   * storage listener: the user may be part-way through a selection when they come back, and
+   * that selection is theirs, not the saved run's.
+   */
+  const refreshFlowSummary = React.useCallback(async () => {
+    try {
+      const response = await sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
+      if (response.ok && "flowSummary" in response) {
+        setFiledReturnsFlowSummary(response.flowSummary ?? null);
+        return;
+      }
+      showActionError(
+        response.ok
+          ? UNEXPECTED_PACK_RESPONSE
+          : (response.safeMessage ?? "Pack could not read saved local recovery state. Try again."),
+      );
+    } catch {
+      showActionError("Pack could not read saved local recovery state. Try again.");
+    }
+  }, [showActionError]);
+
   React.useEffect(() => {
     const onChanged = (
       changes: Record<string, Browser.storage.StorageChange>,
@@ -343,6 +374,7 @@ export function usePackPopupController() {
     effectiveBusy,
     lastRunSummary: filedReturnsFlowSummary,
     recoverySummary,
+    refreshFlowSummary,
     refreshPortalContext,
     resolveFullFiscalYearTarget,
     resolveUnconfirmedDownload,

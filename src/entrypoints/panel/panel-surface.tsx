@@ -46,7 +46,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
   const running = pack.effectiveBusy !== null || summary?.status === "running";
 
-  usePortalContextRefresh(pack.refreshPortalContext);
+  useRefreshOnReturn(pack.refreshPortalContext, pack.refreshFlowSummary);
 
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy);
@@ -219,7 +219,7 @@ function PanelRunProgress({ summary }: { summary: FiledReturnsFlowSummary | null
 }
 
 /**
- * Keeps the panel's portal context current for as long as the page stays open.
+ * Keeps the panel's portal context and saved run current for as long as the page stays open.
  *
  * The popup cannot go stale: it is torn down the moment the user looks away. This surface
  * is an ordinary extension page, so the user opens the GST tab, signs in, navigates, and
@@ -230,11 +230,18 @@ function PanelRunProgress({ summary }: { summary: FiledReturnsFlowSummary | null
  * A GST tab changed in a *different* window while this page stays focused raises no such
  * event. That case is left to the user's next interaction rather than answered with a poll.
  */
-function usePortalContextRefresh(refresh: () => Promise<void>) {
+function useRefreshOnReturn(
+  refreshPortalContext: () => Promise<void>,
+  refreshFlowSummary: () => Promise<void>,
+) {
   useReturnToPage(
     React.useCallback(() => {
-      void refresh();
-    }, [refresh]),
+      void refreshPortalContext();
+      // The saved run is re-read here for the same reason the portal context is, and one
+      // reason more: a run that has stopped emits no storage change, so this is the only
+      // moment the panel learns that the background now calls it interrupted.
+      void refreshFlowSummary();
+    }, [refreshPortalContext, refreshFlowSummary]),
   );
 }
 
