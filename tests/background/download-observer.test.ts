@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   beginLiveFiledReturnsDownloadObservation: vi.fn(() => vi.fn()),
 }));
 
-vi.mock("../../src/background/filed-returns-durable-download-reconciler", () => ({
+vi.mock("../../src/background/download-observation-ownership", () => ({
   beginLiveFiledReturnsDownloadObservation: mocks.beginLiveFiledReturnsDownloadObservation,
 }));
 
