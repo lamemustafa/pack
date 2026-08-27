@@ -1,5 +1,39 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 66 — remove the unused observation refresh projection
+
+- Window: 2026-08-27 06:16–06:21 IST. This is a bounded duplicate-fact/code-reduction checkpoint;
+  its actual duration is recorded without an idle hold.
+- Picked: after Cycle 65 removed the unused `status` projection, the hook still requested and stored
+  a filed-returns observation that no live panel consumer rendered or read.
+- Measured before: the Graphify graph is absent in this worktree, so exact importer tracing was used.
+  `PACK_GET_FILED_RETURNS_OBSERVATION` had one hook caller; the hook state, returned field and panel
+  test fixture were its only consumers. The background handler and message contract remain untouched.
+- Discrimination: a focused regression first failed against the prior hook because the mount sent the
+  unused observation request. The assertion was: `expected "vi.fn()" to not be called with arguments`.
+  Restoring the normal source before the final gate makes that test pass, so it will catch a reintroduced
+  mount refresh rather than merely checking a type shape.
+- Changed: the hook now requests only portal context and the saved flow summary, and no longer stores
+  or returns an observation that the panel does not render. It preserves the background observation
+  message/handler for other extension callers; no target binding, download evidence, identity guard,
+  persisted field, portal action or manifest surface changed.
+- Gate: focused controller/panel coverage passed 3 files and 45 tests; TypeScript and diff checks
+  passed. The full build, serial suite, zero-warning ESLint, Prettier and package verifier passed.
+  Exact final Vitest footer:
+
+  ```text
+        Tests  2818 passed (2818)
+     Start at  06:17:54
+     Duration  154.59s (transform 2.59s, setup 0ms, import 12.57s, tests 125.96s, environment 8ms)
+  ```
+
+- Checkpoint: `fca9de3 refactor(popup): remove unused observation refresh`; post-commit
+  `pnpm workflow:preflight` passed. No live/authenticated GST qualification, release claim, push or
+  PR action was made.
+- Learned / next: an eagerly refreshed value is still duplicate work when it has no render consumer.
+  Trace the remaining returned popup values and any now-test-only presentation helpers one at a time;
+  do not remove a background message contract without an authorized cross-boundary review.
+
 ## Cycle 65 — remove the unused controller status projection
 
 - Window: 2026-08-27 06:10–06:15 IST. This is a bounded duplicate-fact/code-reduction checkpoint;
