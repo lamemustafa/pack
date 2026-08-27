@@ -73,6 +73,77 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication).toContain(`head_sha=${"2".repeat(40)}`);
   });
 
+  it("publishes trusted durable state for a finding deleted after observation", () => {
+    const durableState =
+      "review-gate-state/v1\n" +
+      JSON.stringify({
+        version: 1,
+        prNumber: 1,
+        findings: [
+          {
+            commentId: "comment-deleted-after-observation",
+            author: "chatgpt-codex-connector",
+            createdAt: "2026-08-17T12:00:00Z",
+            disposition: "open",
+          },
+        ],
+      });
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      durableState,
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const stateLookup = calls.find((call) => call.join(" ").includes("/check-runs?"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(stateLookup?.join(" ")).toContain("check_name=Review%20gate%20(scheduled)");
+    expect(publicationText).toContain("conclusion=failure");
+    expect(publicationText).toContain("output[text]=review-gate-state/v1");
+    expect(publicationText).toContain("comment-deleted-after-observation");
+  });
+
+  it("publishes action required when durable-state lookup exhausts retries", () => {
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [
+        { status: 1, stderr: "gh: HTTP 503\n" },
+        { status: 1, stderr: "gh: HTTP 503\n" },
+      ],
+    );
+    const stateLookups = calls.filter((call) => call.join(" ").includes("/check-runs?"));
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(stateLookups).toHaveLength(2);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("publishes action required for malformed durable state", () => {
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      "review-gate-state/v1\nnot-json",
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
   it("preserves the event gate's current-head review wait for scheduled evaluation", () => {
     const script = readFileSync(scriptPath, "utf8");
     expect(script).toMatch(/"--wait-head-review-ms",\s*"180000"/u);
@@ -89,6 +160,8 @@ function runScript(
   pulls: unknown[] = [],
   fixture: unknown = {},
   responses: Array<{ status: number; stderr?: string }> = [{ status: 0 }],
+  durableState: string | null = null,
+  durableResponses: Array<{ status: number; stderr?: string }> = [{ status: 0 }],
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -105,7 +178,7 @@ function runScript(
       "https://github.com/lamemustafa/pack/actions/runs/1",
       ...modeArgs,
       "--retry-attempts",
-      String(responses.length),
+      String(Math.max(responses.length, durableResponses.length)),
       "--retry-backoff-ms",
       "0",
     ],
@@ -119,6 +192,8 @@ function runScript(
         FAKE_FIXTURE: JSON.stringify(fixture),
         FAKE_PULLS: JSON.stringify([pulls]),
         FAKE_RESPONSES: JSON.stringify(responses),
+        FAKE_DURABLE_STATE: durableState ?? "",
+        FAKE_DURABLE_RESPONSES: JSON.stringify(durableResponses),
       },
     },
   );
@@ -133,6 +208,19 @@ const calls = existsSync(process.env.FAKE_CALLS) ? JSON.parse(readFileSync(proce
 calls.push(args); writeFileSync(process.env.FAKE_CALLS, JSON.stringify(calls), "utf8");
 const text = args.join(" ");
 if (text.includes("pulls?state=open")) process.stdout.write(process.env.FAKE_PULLS);
+else if (text.includes("/pulls/") && text.includes("/commits?")) {
+  const pulls = JSON.parse(process.env.FAKE_PULLS).flat();
+  process.stdout.write(JSON.stringify([pulls.map((pull) => ({ sha: pull.head.sha }))]));
+}
+else if (text.includes("/check-runs?")) {
+  const attempts = calls.filter((call) => call.join(" ").includes("/check-runs?")).length;
+  const responses = JSON.parse(process.env.FAKE_DURABLE_RESPONSES);
+  const response = responses[Math.min(attempts - 1, responses.length - 1)];
+  if (response.stderr) process.stderr.write(response.stderr);
+  if (response.status) process.exit(response.status);
+  const state = process.env.FAKE_DURABLE_STATE;
+  process.stdout.write(JSON.stringify([{ check_runs: state ? [{ name: "Review gate (scheduled)", completed_at: "2026-08-17T12:00:00Z", output: { text: state } }] : [] }]));
+}
 else if (text.includes("graphql")) {
   const fixture = JSON.parse(process.env.FAKE_FIXTURE);
   const number = Number(args.find((arg) => arg.startsWith("number="))?.split("=")[1]);

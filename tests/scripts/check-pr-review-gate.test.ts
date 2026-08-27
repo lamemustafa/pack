@@ -48,6 +48,207 @@ describe("PR review gate", () => {
     }
   });
 
+  it("keeps a durably observed finding blocking after its source comment is deleted", () => {
+    const fixture = writeFixture(
+      "durably-observed-deleted-finding",
+      reviewFixture({
+        headRefOid: "head-sha",
+        comments: [],
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+    const state = writeFixture("durable-review-state", {
+      version: 1,
+      prNumber: 14,
+      findings: [
+        {
+          commentId: "comment-deleted-after-observation",
+          author: "chatgpt-codex-connector",
+          createdAt: "2026-08-17T12:00:00Z",
+          disposition: "open",
+        },
+      ],
+    });
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixture,
+        "--review-state",
+        state,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Durably observed PR-level review findings");
+  });
+
+  it("keeps Hide → Resolved durable after the source comment is deleted", () => {
+    const resolvedFixture = writeFixture(
+      "resolved-durable-finding",
+      reviewFixture({
+        headRefOid: "head-sha",
+        comments: [prFindingComment({ isMinimized: true, minimizedReason: "resolved" })],
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+    const statePath = writeFixture("open-durable-finding", {
+      version: 1,
+      prNumber: 14,
+      findings: [
+        {
+          commentId: "comment-1",
+          author: "chatgpt-codex-connector",
+          createdAt: "2026-08-17T12:00:00Z",
+          disposition: "open",
+        },
+      ],
+    });
+    const nextStatePath = statePath.replace(".json", ".next.json");
+
+    const resolved = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        resolvedFixture,
+        "--review-state",
+        statePath,
+        "--write-review-state",
+        nextStatePath,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(resolved.status).toBe(0);
+    expect(JSON.parse(readFileSync(nextStatePath, "utf8"))).toMatchObject({
+      findings: [expect.objectContaining({ commentId: "comment-1", disposition: "resolved" })],
+    });
+
+    const deleted = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        writeFixture(
+          "deleted-resolved-finding",
+          reviewFixture({
+            headRefOid: "head-sha",
+            comments: [],
+            reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+          }),
+        ),
+        "--review-state",
+        nextStatePath,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(deleted.status).toBe(0);
+  });
+
+  it("persists a trusted fixed disposition after the source finding is deleted", () => {
+    const statePath = writeFixture("open-finding-for-fixed-disposition", {
+      version: 1,
+      prNumber: 14,
+      findings: [
+        {
+          commentId: "comment-deleted-after-observation",
+          author: "chatgpt-codex-connector",
+          createdAt: "2026-08-17T12:00:00Z",
+          disposition: "open",
+        },
+      ],
+    });
+    const nextStatePath = statePath.replace(".json", ".fixed.json");
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        writeFixture(
+          "deleted-finding-fixed-disposition",
+          reviewFixture({
+            headRefOid: "head-sha",
+            comments: [durableDispositionComment("comment-deleted-after-observation", "fixed")],
+            reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+          }),
+        ),
+        "--review-state",
+        statePath,
+        "--write-review-state",
+        nextStatePath,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(readFileSync(nextStatePath, "utf8"))).toMatchObject({
+      findings: [
+        expect.objectContaining({
+          commentId: "comment-deleted-after-observation",
+          disposition: "fixed",
+        }),
+      ],
+    });
+  });
+
+  it.each([
+    ["missing", "/tmp/pack-review-gate-state-does-not-exist.json"],
+    [
+      "malformed",
+      writeFixture("malformed-durable-state", {
+        version: 1,
+        prNumber: 14,
+        findings: [{ commentId: "comment-1", disposition: "open" }],
+      }),
+    ],
+  ])("fails closed for %s durable review state", (_name, statePath) => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        writeFixture(
+          "review-state-validation",
+          reviewFixture({
+            headRefOid: "head-sha",
+            reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+          }),
+        ),
+        "--review-state",
+        statePath,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("Review gate could not evaluate");
+  });
+
   it("evaluates PR-level findings from paginated fixture pages", () => {
     const fixturePath = writeFixture("paginated-pr-level-findings", {
       pages: [
@@ -1155,6 +1356,19 @@ function prFindingComment(
     minimizedReason,
     author: { login: author },
     body,
+  };
+}
+
+function durableDispositionComment(findingId: string, disposition: string) {
+  return {
+    id: `disposition-${findingId}`,
+    url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-disposition-${findingId}`,
+    createdAt: "2026-08-17T12:30:00Z",
+    isMinimized: false,
+    minimizedReason: null,
+    author: { login: "maintainer" },
+    authorAssociation: "MEMBER",
+    body: `<!-- review-gate-disposition:${JSON.stringify({ findingId, disposition })} -->`,
   };
 }
 
