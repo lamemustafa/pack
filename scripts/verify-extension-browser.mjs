@@ -456,6 +456,7 @@ async function assertPanelCompactFlow(browserContext, extensionId) {
 
     await panelPage.getByRole("button", { name: "Choose return, year and period" }).click();
     await panelPage.waitForSelector(".panel-guide", { timeout: 5_000 });
+    await assertPanelGuidedStepsFitViewport(panelPage);
     const catalogueSummary = panelPage.locator(".panel-catalogue summary");
     await catalogueSummary.press("Space");
     await panelPage.waitForSelector(".panel-catalogue[open]", { timeout: 5_000 });
@@ -463,6 +464,14 @@ async function assertPanelCompactFlow(browserContext, extensionId) {
   } finally {
     await panelPage.close();
     await gstPage.close();
+  }
+}
+
+async function assertPanelGuidedStepsFitViewport(panelPage) {
+  for (let step = 1; step <= 4; step += 1) {
+    await panelPage.getByRole("status", { name: `Step ${step} of 4` }).waitFor();
+    await assertPanelControlsFitViewport(panelPage, `guided step ${step} of 4`);
+    if (step < 4) await panelPage.getByRole("button", { name: "Continue" }).click();
   }
 }
 

@@ -483,6 +483,8 @@ describe("extension package verifier", () => {
     expect(script).toContain("https://services.gst.gov.in/services/auth/fowelcome");
     expect(script).toContain("assertPanelSignInContext");
     expect(script).toContain('"sign-in context"');
+    expect(script).toContain("assertPanelGuidedStepsFitViewport");
+    expect(script).toContain("guided step ${step} of 4");
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
     expect(script).toContain("chrome-extension://${extensionId}/panel.html");
     expect(script).toContain('waitForEvent("serviceworker"');
