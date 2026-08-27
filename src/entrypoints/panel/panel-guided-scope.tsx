@@ -319,7 +319,7 @@ function CatalogueGroup({
             <li key={returnType}>
               <span>{capability.label}</span>
               <span>
-                {sentenceCase(capability.periodicity)}
+                {capability.cadenceLabel ?? sentenceCase(capability.periodicity)}
                 {capability.supportStatus === "supported"
                   ? ` · ${artifactLabels.join(" · ")}`
                   : null}

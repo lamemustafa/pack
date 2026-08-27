@@ -49,11 +49,23 @@ export function canonicalFullFiscalYearPlanPeriods(
 }
 
 export function hasCanonicalFullFiscalYearTargetPlan(
-  ledger: Pick<FiledReturnsFullFiscalYearLedger, "planVersion" | "targetPlan" | "targets">,
+  ledger: Pick<
+    FiledReturnsFullFiscalYearLedger,
+    "eligibleThrough" | "planVersion" | "scope" | "targetPlan" | "targets"
+  >,
 ): boolean {
   if (ledger.planVersion !== FULL_FISCAL_YEAR_PLAN_VERSION) return false;
   if (!ledger.targetPlan || ledger.targetPlan.length === 0) return false;
-  return targetsMatchRecordedPlan(ledger.targets, ledger.targetPlan);
+  const canonicalPeriods = canonicalFullFiscalYearPlanPeriods(
+    ledger.scope.financialYear,
+    ledger.eligibleThrough,
+  );
+  return Boolean(
+    canonicalPeriods &&
+    ledger.targetPlan.length === canonicalPeriods.length &&
+    ledger.targetPlan.every((target, index) => target.period === canonicalPeriods[index]) &&
+    targetsMatchRecordedPlan(ledger.targets, ledger.targetPlan),
+  );
 }
 
 function hasLegacyCanonicalFullFiscalYearTargetPrefix(

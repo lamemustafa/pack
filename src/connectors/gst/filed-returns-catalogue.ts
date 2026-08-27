@@ -17,6 +17,7 @@ export type FiledReturnsPeriodicity = (typeof FILED_RETURNS_PERIODICITIES)[numbe
 export type FiledReturnsSupportStatus = "supported" | "unsupported";
 
 interface CatalogueCapability {
+  readonly cadenceLabel?: string;
   readonly label: string;
   readonly periodicity: FiledReturnsPeriodicity;
   readonly supportStatus: FiledReturnsSupportStatus;
@@ -61,6 +62,7 @@ const PORTAL_DATA: ArtifactCapability = {
  */
 export const FILED_RETURNS_CAPABILITIES = {
   "GSTR-3B": {
+    cadenceLabel: "Monthly or quarterly, as set on the GST Portal",
     label: "GSTR-3B",
     periodicity: "monthly",
     supportStatus: "supported",

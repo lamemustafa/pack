@@ -59,7 +59,9 @@ describe("panel guided scope", () => {
   it("shows concrete artifact availability for every supported catalogue row", () => {
     const markup = renderCatalogue();
 
-    expect(markup).toContain("Monthly · Filed return (PDF) · Portal data (JSON)");
+    expect(markup).toContain(
+      "Monthly or quarterly, as set on the GST Portal · Filed return (PDF) · Portal data (JSON)",
+    );
     expect(markup).toContain("Monthly · Summary (PDF) · E-invoice details (Excel)");
     expect(markup).toContain("Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)");
   });
@@ -74,7 +76,10 @@ describe("panel guided scope", () => {
   });
 
   it.each([
-    ["GSTR-3B", "Monthly · Filed return (PDF) · Portal data (JSON)"],
+    [
+      "GSTR-3B",
+      "Monthly or quarterly, as set on the GST Portal · Filed return (PDF) · Portal data (JSON)",
+    ],
     ["GSTR-1", "Monthly · Summary (PDF) · E-invoice details (Excel)"],
     ["GSTR-2B", "Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)"],
     ["GSTR-9", "Annual"],

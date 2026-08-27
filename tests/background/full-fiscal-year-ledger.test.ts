@@ -678,7 +678,18 @@ describe("full fiscal year ledger", () => {
         targetPlan: planned.targetPlan?.slice(0, 2),
       }),
     ).toBe(false);
-    expect(isFullFiscalYearLedger({ ...planned, eligibleThrough: "May" })).toBe(true);
+    const targetPlan = planned.targetPlan;
+    expect(targetPlan).toBeDefined();
+    if (!targetPlan) throw new Error("Expected a recorded target plan.");
+    const shortenedButMatchingPlan = {
+      ...planned,
+      targetPlan: targetPlan.slice(0, 2),
+      targets: planned.targets.slice(0, 2),
+    };
+    expect(hasCanonicalFullFiscalYearTargetPlan(shortenedButMatchingPlan)).toBe(false);
+    expect(isFullFiscalYearLedger(shortenedButMatchingPlan)).toBe(false);
+    expect(canCompleteFullFiscalYearLedger(shortenedButMatchingPlan)).toBe(false);
+    expect(isFullFiscalYearLedger({ ...planned, eligibleThrough: "May" })).toBe(false);
   });
 
   it("recovers an incomplete legacy target prefix but never treats it as complete", () => {
