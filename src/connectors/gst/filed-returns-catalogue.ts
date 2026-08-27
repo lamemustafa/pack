@@ -87,6 +87,7 @@ export const FILED_RETURNS_CAPABILITIES = {
     runNotes: {},
   },
   "GSTR-1": {
+    cadenceLabel: "Monthly (quarterly filing is not currently supported by Pack)",
     label: "GSTR-1",
     periodicity: "monthly",
     supportStatus: "supported",

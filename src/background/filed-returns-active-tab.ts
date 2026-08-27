@@ -14,6 +14,7 @@ export async function getRequiredGstTab(
   getActiveGstTab: () => Promise<ActiveGstTab | null>,
   requiredTabId?: number,
   requiredTabSessionId?: string,
+  focus = true,
 ): Promise<RequiredGstTabResult> {
   if (requiredTabSessionId !== undefined) {
     const currentTabSessionId = await getFullFiscalYearTabSessionId();
@@ -23,12 +24,18 @@ export async function getRequiredGstTab(
   const activeTab =
     requiredTabId === undefined ? await getActiveGstTab() : await getPinnedGstTab(requiredTabId);
   if (!activeTab) return { state: "unavailable" };
-  try {
-    await focusTab(activeTab);
-  } catch {
-    return { state: "tab-focus-unavailable" };
+  if (focus) {
+    try {
+      await focusRequiredGstTab(activeTab);
+    } catch {
+      return { state: "tab-focus-unavailable" };
+    }
   }
   return { state: "ready", tab: activeTab };
+}
+
+export async function focusRequiredGstTab(tab: ActiveGstTab): Promise<void> {
+  await focusTab(tab);
 }
 
 export async function getFullFiscalYearTabSessionId(): Promise<string | null> {

@@ -9,7 +9,11 @@ import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst
 import { canonicalDurableSummaryMessage } from "../connectors/gst/filed-returns-durable-status";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
-import { getFullFiscalYearTabSessionId, getRequiredGstTab } from "./filed-returns-active-tab";
+import {
+  focusRequiredGstTab,
+  getFullFiscalYearTabSessionId,
+  getRequiredGstTab,
+} from "./filed-returns-active-tab";
 import {
   clickReturnsDashboardAnchorFromTab,
   verifyCurrentContentScriptFromTab,
@@ -124,6 +128,7 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     deps.getActiveGstTab,
     options.requiredPortalTabId,
     options.requiredPortalTabSessionId,
+    options.onPortalTabSelected === undefined,
   );
   if (requiredTab.state !== "ready") {
     if (requiredTab.state === "tab-focus-unavailable") {
@@ -189,6 +194,11 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
       return tabSessionUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
     }
     await options.onPortalTabSelected(activeTab.tab.id, tabSessionId);
+    try {
+      await focusRequiredGstTab(activeTab.tab);
+    } catch {
+      return tabFocusUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
+    }
   }
 
   if (scope.returnType === "GSTR-3B" && !isReturnsOrigin(activeTab.tab.url)) {

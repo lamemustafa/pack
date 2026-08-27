@@ -164,10 +164,15 @@ export function panelGuidedSteps(
       hint: "Pack keeps each run within one financial year.",
       label: "Financial year",
       value: scope.financialYear,
-      options: getFiledReturnsFinancialYearOptions(asOf).map((financialYear) => ({
-        value: financialYear,
-        label: financialYear,
-      })),
+      options: getFiledReturnsFinancialYearOptions(asOf)
+        .filter(
+          (financialYear) =>
+            getFiledReturnsScopePeriodOptions(financialYear, asOf, scope.returnType).length > 0,
+        )
+        .map((financialYear) => ({
+          value: financialYear,
+          label: financialYear,
+        })),
     },
     {
       key: "period",

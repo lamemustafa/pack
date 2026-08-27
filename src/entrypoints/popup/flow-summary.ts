@@ -2,7 +2,10 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
 } from "../../connectors/gst/filed-returns-contracts";
-import { normaliseFiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifacts";
+import {
+  concreteFiledReturnsArtifactTypesForSelection,
+  normaliseFiledReturnsArtifactType,
+} from "../../connectors/gst/filed-returns-artifacts";
 import { FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS } from "../../connectors/gst/filed-returns-durable-signals";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import { canReconcileFiledReturnsTarget } from "./run-summary";
@@ -116,9 +119,34 @@ export function hasConfirmedSinglePeriodBrowserDownload(
 ): boolean {
   if (!summary || summary.scope.period === FULL_FISCAL_YEAR_PERIOD) return false;
   const signals = new Set(summary.flowStep.safeSignals);
-  return (
+  if (
     signals.has("single-period-zip-downloaded") ||
     (signals.has("browser-download-completed") && signals.has("browser-download-non-empty"))
+  ) {
+    return true;
+  }
+
+  const diagnostics = [
+    ...(summary.flowStep.downloadDiagnostic ? [summary.flowStep.downloadDiagnostic] : []),
+    ...(summary.flowStep.downloadDiagnostics ?? []),
+  ];
+  return concreteFiledReturnsArtifactTypesForSelection(
+    summary.scope.returnType,
+    summary.scope.artifactType,
+  ).every((artifactType) =>
+    diagnostics.some(
+      (diagnostic) =>
+        diagnostic.actionId.length > 0 &&
+        diagnostic.artifactType === artifactType &&
+        diagnostic.byteCountClass === "non-empty" &&
+        typeof diagnostic.downloadId === "number" &&
+        Number.isSafeInteger(diagnostic.downloadId) &&
+        diagnostic.downloadId >= 0 &&
+        diagnostic.financialYear === summary.scope.financialYear &&
+        diagnostic.period === summary.scope.period &&
+        diagnostic.returnType === summary.scope.returnType &&
+        diagnostic.status === "downloaded",
+    ),
   );
 }
 

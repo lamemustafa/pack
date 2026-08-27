@@ -39,9 +39,9 @@ export function usePackPopupController() {
   // only by the context path went stale: a later flow failure replaced the
   // message without clearing the marker, so the next successful refresh cleared
   // a flow error it did not own and hid a live diagnostic.
-  const actionErrorSource = React.useRef<"context" | "flow" | null>(null);
+  const actionErrorSource = React.useRef<"action" | "context" | "summary" | null>(null);
   const showActionError = React.useCallback(
-    (message: string, source: "context" | "flow" = "flow") => {
+    (message: string, source: "action" | "context" | "summary" = "action") => {
       actionErrorSource.current = source;
       setActionError(message);
     },
@@ -59,12 +59,13 @@ export function usePackPopupController() {
             setFiledReturnsFlowSummary(flowSummary);
             if (flowSummary) setScopeState(flowSummary.scope);
           } else {
-            showActionError(UNEXPECTED_PACK_RESPONSE);
+            showActionError(UNEXPECTED_PACK_RESPONSE, "summary");
           }
         } else {
           showActionError(
             summaryResponse.safeMessage ??
               "Pack could not read saved local recovery state. Try again.",
+            "summary",
           );
         }
 
@@ -75,10 +76,13 @@ export function usePackPopupController() {
             contextResponse.ok
               ? UNEXPECTED_PACK_RESPONSE
               : (contextResponse.safeMessage ?? contextResponse.error),
+            "context",
           );
         }
       })
-      .catch(() => showActionError("Pack could not read the current GST Portal state. Try again."));
+      .catch(() =>
+        showActionError("Pack could not read the current GST Portal state. Try again.", "context"),
+      );
   }, [showActionError]);
 
   /**
@@ -136,15 +140,20 @@ export function usePackPopupController() {
       const response = await sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
       if (response.ok && "flowSummary" in response) {
         setFiledReturnsFlowSummary(response.flowSummary ?? null);
+        if (actionErrorSource.current === "summary") {
+          actionErrorSource.current = null;
+          setActionError(null);
+        }
         return;
       }
       showActionError(
         response.ok
           ? UNEXPECTED_PACK_RESPONSE
           : (response.safeMessage ?? "Pack could not read saved local recovery state. Try again."),
+        "summary",
       );
     } catch {
-      showActionError("Pack could not read saved local recovery state. Try again.");
+      showActionError("Pack could not read saved local recovery state. Try again.", "summary");
     }
   }, [showActionError]);
 
@@ -168,11 +177,12 @@ export function usePackPopupController() {
           if (!response.ok) {
             showActionError(
               response.safeMessage ?? "Pack could not read saved local recovery state. Try again.",
+              "summary",
             );
             return;
           }
           if (!("flowSummary" in response)) {
-            showActionError(UNEXPECTED_PACK_RESPONSE);
+            showActionError(UNEXPECTED_PACK_RESPONSE, "summary");
             return;
           }
           setFiledReturnsFlowSummary(response.flowSummary ?? null);
@@ -180,7 +190,9 @@ export function usePackPopupController() {
           // summary that exists; a clear must not silently reset what they chose.
           if (response.flowSummary) setScopeState(response.flowSummary.scope);
         })
-        .catch(() => showActionError("Pack could not read saved local recovery state. Try again."));
+        .catch(() =>
+          showActionError("Pack could not read saved local recovery state. Try again.", "summary"),
+        );
     };
     browser.storage.onChanged.addListener(onChanged);
     return () => browser.storage.onChanged.removeListener(onChanged);
