@@ -1,6 +1,6 @@
 import React from "react";
 import { browser } from "wxt/browser";
-import type { PortalContext, PortalObservation } from "../../core/contracts";
+import type { PortalContext } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
@@ -26,8 +26,6 @@ export function usePackPopupController() {
     DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   );
   const [context, setContext] = React.useState<PortalContext | null>(null);
-  const [filedReturnsObservation, setFiledReturnsObservation] =
-    React.useState<PortalObservation | null>(null);
   const [filedReturnsFlowSummary, setFiledReturnsFlowSummary] =
     React.useState<FiledReturnsFlowSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -51,13 +49,9 @@ export function usePackPopupController() {
   React.useEffect(() => {
     void Promise.all([
       sendPackMessage({ type: "PACK_GET_CONTEXT" }),
-      sendPackMessage({ type: "PACK_GET_FILED_RETURNS_OBSERVATION" }),
       sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
     ])
-      .then(([contextResponse, observationResponse, summaryResponse]) => {
-        if (observationResponse.ok && "observation" in observationResponse) {
-          setFiledReturnsObservation(observationResponse.observation);
-        }
+      .then(([contextResponse, summaryResponse]) => {
         if (summaryResponse.ok && "flowSummary" in summaryResponse) {
           const flowSummary = summaryResponse.flowSummary;
           setFiledReturnsFlowSummary(flowSummary);
@@ -164,9 +158,6 @@ export function usePackPopupController() {
         if ("flowSummary" in response && response.flowSummary) {
           setFiledReturnsFlowSummary(response.flowSummary);
           setScopeState(response.flowSummary.scope);
-        }
-        if ("observation" in response) {
-          setFiledReturnsObservation(response.observation);
         }
       } else {
         showActionError(
@@ -350,7 +341,6 @@ export function usePackPopupController() {
     completionStatus,
     context,
     effectiveBusy,
-    filedReturnsObservation,
     lastRunSummary: filedReturnsFlowSummary,
     recoverySummary,
     refreshPortalContext,

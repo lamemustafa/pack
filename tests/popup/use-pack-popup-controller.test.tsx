@@ -74,6 +74,16 @@ describe("popup background failure presentation", () => {
     });
   });
 
+  it("does not refresh an observation the panel does not render", () => {
+    expect(mocks.sendMessage).not.toHaveBeenCalledWith({
+      type: "PACK_GET_FILED_RETURNS_OBSERVATION",
+    });
+    expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "PACK_GET_CONTEXT" });
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
+    });
+  });
+
   it("keeps a flow failure when a later context refresh succeeds", async () => {
     mocks.sendMessage.mockImplementation((message: PackMessage) =>
       message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"

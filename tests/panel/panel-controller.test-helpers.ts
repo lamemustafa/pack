@@ -21,7 +21,6 @@ export function panelController(overrides: Partial<PackPanelController> = {}): P
     completionStatus: null,
     context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
     effectiveBusy: null,
-    filedReturnsObservation: null,
     lastRunSummary: null,
     recoverySummary: null,
     refreshPortalContext: async () => undefined,
