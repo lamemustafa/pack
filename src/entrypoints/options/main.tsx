@@ -52,6 +52,8 @@ export function OptionsPage() {
           response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
         );
       }
+    } catch {
+      setStatus("Pack could not start the synthetic download probe. Try again.");
     } finally {
       setBusy(null);
     }
@@ -105,6 +107,8 @@ export function OptionsPage() {
           response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
         );
       }
+    } catch {
+      setStatus("Pack could not load the last synthetic demo manifest. Try again.");
     } finally {
       setBusy(null);
     }

@@ -41,4 +41,24 @@ describe("options local-data failure presentation", () => {
     expect(document.body.textContent).toContain("Pack could not clear local data. Try again.");
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "PACK_CLEAR_LOCAL_DATA" });
   });
+
+  it.each([
+    ["Probe data URL download", "Pack could not start the synthetic download probe. Try again."],
+    [
+      "Last synthetic demo manifest",
+      "Pack could not load the last synthetic demo manifest. Try again.",
+    ],
+  ])("keeps a rejected %s request visible", async (label, expectedStatus) => {
+    const button = Array.from(document.querySelectorAll("button")).find(
+      (candidate) => candidate.textContent === label,
+    );
+    if (!button) throw new Error(`Expected the ${label} action.`);
+
+    await act(async () => {
+      button.click();
+      await Promise.resolve();
+    });
+
+    expect(document.body.textContent).toContain(expectedStatus);
+  });
 });
