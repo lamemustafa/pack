@@ -22,7 +22,7 @@ import { observeBrowserDownloadById } from "./download-observer";
 import {
   beginPendingExtensionDownloadUrl,
   extensionBlobUrlFingerprint,
-} from "./filed-returns-durable-download-reconciler";
+} from "./download-observation-ownership";
 import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 import { classifyRequestedFilenameOutcome } from "./download-filename-comparison";

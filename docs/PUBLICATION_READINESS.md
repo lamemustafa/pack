@@ -113,7 +113,7 @@ summary` sheet stating the portal's own availability totals and the GSTR-3B
 - [x] Full Apache-2.0 license text.
 - [x] NOTICE file with trademark and government-affiliation disclaimers.
 - [x] SECURITY.md with private disclosure route and sensitive-data handling.
-- [x] CONTRIBUTING.md with privacy invariants and DCO sign-off.
+- [x] CONTRIBUTING.md with privacy invariants and contribution/licensing guidance.
 - [x] CODE_OF_CONDUCT.md.
 - [x] TRADEMARKS.md.
 - [x] CHANGELOG.md initial v0.1.0 entry.

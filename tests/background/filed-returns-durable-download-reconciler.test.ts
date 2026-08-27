@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsTargetReview } from "../../src/connectors/gst/filed-returns-contracts";
+import * as ownership from "../../src/background/download-observation-ownership";
 import {
   beginPendingExtensionDownloadUrl,
   extensionBlobUrlFingerprint,
@@ -59,6 +60,35 @@ function downloadsWithState(state: string): {
 }
 
 describe("durable filed-return download reconciler", () => {
+  it("shares leaf ownership with the reconciler's existing exports and listener", async () => {
+    expect(beginLiveFiledReturnsDownloadObservation).toBe(
+      ownership.beginLiveFiledReturnsDownloadObservation,
+    );
+    expect(beginPendingExtensionDownloadUrl).toBe(ownership.beginPendingExtensionDownloadUrl);
+    expect(extensionBlobUrlFingerprint).toBe(ownership.extensionBlobUrlFingerprint);
+
+    const fixture = downloadsWithState("complete");
+    const reconcileFullFiscalYearZip = vi.fn(async () => true);
+    const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
+      readCurrentReview: async () => null,
+      reconcileFullFiscalYearZip,
+      storageKeys: {},
+    });
+    const endObservation = ownership.beginLiveFiledReturnsDownloadObservation(41);
+    try {
+      fixture.emit({ id: 41, state: { current: "complete" } });
+      await Promise.resolve();
+      expect(reconcileFullFiscalYearZip).not.toHaveBeenCalled();
+
+      endObservation();
+      fixture.emit({ id: 41, state: { current: "complete" } });
+      await vi.waitFor(() => expect(reconcileFullFiscalYearZip).toHaveBeenCalledWith(41));
+    } finally {
+      endObservation();
+      dispose();
+    }
+  });
+
   it("reconciles a persisted exact ID only after a terminal browser state", async () => {
     const fixture = downloadsWithState("complete");
     const reconcile = vi.fn(async () => undefined);
