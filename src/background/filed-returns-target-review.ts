@@ -455,6 +455,30 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     }
     if (
       resolution === "cancelled" &&
+      hasArtifactAcquisitionRecoverySignal(review.safeSignals) &&
+      !review.artifactAcquisitionCompletion
+    ) {
+      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (cancellation.state === "completed") {
+        const restoredCompletion = await persistArtifactAcquisitionCompletion(
+          deps.storageKeys.completion,
+          scope,
+          cancellation.evidence,
+          deps.now?.() ?? new Date(),
+          copyFiledReturnsDownloadDiagnosticState(review),
+        );
+        if (restoredCompletion) {
+          await browser.storage.local.remove(key);
+          return {
+            ok: true,
+            flowStep: restoredCompletion.flowStep,
+            flowSummary: restoredCompletion,
+          };
+        }
+      }
+    }
+    if (
+      resolution === "cancelled" &&
       review.artifactAcquisitionCompletion &&
       hasArtifactAcquisitionRecoverySignal(review.safeSignals)
     ) {
