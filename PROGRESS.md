@@ -2934,3 +2934,26 @@ recovery state`, proving the response was silently discarded after context succe
 - Checkpoint: `56d7a89 test(panel): verify compact sign-in context`; post-commit preflight passed.
   This is local synthetic packaged-browser verification, not a live portal qualification. No
   product runtime, taxpayer data, persistence, permission, manifest, dependency, push or PR changed.
+
+## Cycle 91 — verify compact guided selection states
+
+- Window: 2026-08-27 08:42–08:48 IST. This is a bounded responsive-verification correction; its
+  actual duration is recorded without an idle hold.
+- Picked: the packaged browser opened the guide and expanded its catalogue at 320px but did not
+  traverse the four return, financial-year, period and file selection states that precede it.
+- Changed: the verifier now advances through every guided step, waits for the named live progress
+  status at each transition, and applies the no-horizontal-scroll, no-clipped-control and
+  minimum-touch-target checks before continuing. Its static contract test requires that traversal.
+- Gate: focused verifier coverage passed 1 file and 27 tests. Full build, serial suite, TypeScript,
+  zero-warning ESLint, Prettier, package verification and packaged browser verification passed.
+  Exact final Vitest footer:
+
+  ```text
+        Tests  2829 passed (2829)
+     Start at  08:43:12
+     Duration  155.86s (transform 2.48s, setup 0ms, import 12.81s, tests 126.40s, environment 284ms)
+  ```
+
+- Checkpoint: `f928856 test(panel): verify compact guided states`; post-commit preflight passed.
+  This is local synthetic packaged-browser verification, not a live portal qualification. No
+  product runtime, taxpayer data, persistence, permission, manifest, dependency, push or PR changed.
