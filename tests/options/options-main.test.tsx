@@ -27,6 +27,10 @@ describe("options local-data failure presentation", () => {
     await act(async () => root.unmount());
   });
 
+  it("announces options action status to assistive technology", () => {
+    expect(document.querySelector('[role="status"]')?.getAttribute("aria-live")).toBe("polite");
+  });
+
   it("keeps a rejected local-data clear request visible", async () => {
     const clearButton = Array.from(document.querySelectorAll("button")).find(
       (button) => button.textContent === "Clear local Pack data",

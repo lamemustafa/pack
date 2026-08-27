@@ -142,7 +142,9 @@ export function OptionsPage() {
           <h1>Pack Options</h1>
         </div>
       </header>
-      <p>{status}</p>
+      <p role="status" aria-live="polite">
+        {status}
+      </p>
       <section className="actions" aria-label="Pack reviewer demo tools">
         <button
           type="button"
