@@ -260,7 +260,7 @@ export function isGstSignInRequired(context: PortalContext | null | undefined): 
 
 function isSessionExpired(context: PortalContext | null, summary: FiledReturnsFlowSummary | null) {
   return (
-    context?.requiredAction?.type === "LOGIN" ||
+    isGstSignInRequired(context) ||
     summary?.flowStep.state === "login-required" ||
     summary?.flowStep.safeSignals.includes("gst-login-tab-opened")
   );

@@ -66,7 +66,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const showFlow =
     (portalReady || canRetryFullFiscalYearZipWithoutPortal(summary) || terminalSummary) &&
-    !["access-denied", "loading", "unsupported"].includes(presentation.kind);
+    !["access-denied", "loading", "session-expired", "unsupported"].includes(presentation.kind);
 
   const openPortal = () => void browser.tabs.create({ url: "https://www.gst.gov.in" });
 

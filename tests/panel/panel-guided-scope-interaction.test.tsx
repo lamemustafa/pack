@@ -246,7 +246,7 @@ describe("panel guided scope interaction", () => {
     }
   });
 
-  it("requires an authenticated GST tab before enabling a preset", async () => {
+  it("renders the sign-in recovery state instead of preset controls on the authentication landing page", async () => {
     await mount(
       {
         overrides: {
@@ -257,12 +257,12 @@ describe("panel guided scope interaction", () => {
       false,
     );
 
-    const presets = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
+    expect(container.querySelectorAll(".panel-preset-list button")).toHaveLength(0);
+    expect(container.textContent).toContain("Sign in on GST Portal");
+    expect(container.textContent).toContain("Sign in directly on the GST Portal.");
+    expect(container.querySelector<HTMLButtonElement>(".context-state-action")?.textContent).toBe(
+      "Open GST Portal sign-in",
     );
-    expect(presets.length).toBeGreaterThan(0);
-    expect(presets.every((preset) => preset.disabled)).toBe(true);
-    expect(container.textContent).toContain("Open a signed-in GST Portal tab to continue.");
   });
 
   it("does not enable a different preset while its saved run needs recovery", async () => {

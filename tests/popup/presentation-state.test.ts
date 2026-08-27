@@ -27,6 +27,19 @@ describe("popup presentation state", () => {
     expect(state.body).toContain("filed returns");
   });
 
+  it("treats a supported authentication landing page as signed out without a required action", () => {
+    const state = getPopupPresentationState(
+      { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
+      null,
+      null,
+    );
+
+    expect(state).toMatchObject({
+      kind: "session-expired",
+      title: "Sign in on GST Portal",
+    });
+  });
+
   it("renders a blocked run message on an unsupported active tab", () => {
     const state = getPopupPresentationState(unsupportedContext(), blockedSummary(), null);
 
