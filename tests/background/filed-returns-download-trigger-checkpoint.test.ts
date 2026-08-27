@@ -56,6 +56,49 @@ const RETAINED_TERMINAL_DELIVERY_FAILURES = [
   "search-unavailable",
 ] as const;
 
+const BROWSER_DOWNLOAD_FAILURES = [
+  [
+    "checkpoint-failed",
+    "Pack started the browser download but could not save its exact recovery record. Check browser Downloads before retrying.",
+    [],
+  ],
+  [
+    "start-rejected",
+    "Pack could not start the local filed-return download. Check browser Downloads, then retry.",
+    [],
+  ],
+  [
+    "interrupted",
+    "The browser interrupted the filed-return download, so Pack did not mark the target saved. Check browser Downloads before retrying.",
+    [],
+  ],
+  [
+    "empty",
+    "The browser completed an empty filed-return download, so Pack did not mark the target saved.",
+    [],
+  ],
+  [
+    "timeout",
+    "Pack could not confirm the exact browser download result, so it did not mark the target saved. Check browser Downloads before retrying.",
+    [],
+  ],
+  [
+    "search-unavailable",
+    "Pack could not query the exact browser download, so it did not mark the target saved. Check browser Downloads before retrying.",
+    ["browser-download-search-unavailable"],
+  ],
+  [
+    "danger-unconfirmed",
+    "The browser has not classified this filed-return download as safe, so Pack did not mark the target saved. Check browser Downloads before retrying.",
+    ["browser-download-danger-unknown"],
+  ],
+  [
+    "danger-rejected",
+    "The browser did not classify this filed-return download as safe, so Pack did not mark the target saved. Review the item in browser Downloads before deciding whether to retry.",
+    ["browser-download-danger-rejected"],
+  ],
+] as const;
+
 describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
   beforeEach(() => {
     for (const key of Object.keys(mocks.session)) delete mocks.session[key];
@@ -83,6 +126,40 @@ describe("GSTR-3B artifact acquisition checkpoint cleanup", () => {
 
       expect(response).toMatchObject({ flowStep: { state: "blocked" } });
       expect(mocks.session).toEqual({});
+    },
+  );
+
+  it.each(BROWSER_DOWNLOAD_FAILURES)(
+    "renders the %s browser-delivery reason as a distinct blocked human-readable result",
+    async (reason, safeMessage, safeSignals) => {
+      mocks.downloadAcquiredArtifact.mockResolvedValueOnce({
+        ok: false,
+        reason,
+        safeMessage,
+        safeSignals: [...safeSignals],
+      });
+      const response = await triggerAndObserveFiledReturnDownload({
+        activePeriod: "May",
+        artifactType: "JSON",
+        deps: {
+          sendMessageToTabWithInjection: vi.fn(async () => acquiredJson()),
+          storageKeys: {},
+        },
+        scope: { ...scope, artifactType: "JSON" },
+        tabId: 17,
+      });
+
+      expect(response).toMatchObject({
+        flowStep: {
+          state: "blocked",
+          safeMessage,
+          safeSignals: expect.arrayContaining([
+            "artifact-acquisition-failed",
+            `artifact-${reason}`,
+            ...safeSignals,
+          ]),
+        },
+      });
     },
   );
 

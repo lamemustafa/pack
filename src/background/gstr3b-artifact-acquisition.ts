@@ -104,6 +104,7 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
       : {
           ok: false,
           reason: delivery.reason,
+          ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
           safeSignals: delivery.safeSignals,
         };
   } finally {

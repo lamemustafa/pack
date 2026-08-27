@@ -82,7 +82,12 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
         safeSignals: delivery.safeSignals,
         ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
       }
-    : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
+    : {
+        ok: false,
+        reason: delivery.reason,
+        ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
+        safeSignals: delivery.safeSignals,
+      };
 }
 
 /**
