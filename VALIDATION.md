@@ -39,6 +39,15 @@
 
 ## Outcome
 
+### Cycle 82 — pre-start target-review storage block
+
+- A target-review storage read failure at the initial start boundary now projects a fixed blocked
+  flow step and scope-bound summary before run acquisition. The popup can render that summary; no
+  portal action, download or new persisted data results from the failure.
+- The regression first rejected from the runner. Restored focused proof asserts the exact safe copy,
+  action, requested scope, zero completions and no dispatch. Privacy and security follow-up reviews
+  passed, and the final full gate passed 152 files and 2,832 tests.
+
 ### Cycle 81 — local-data recovery-read safety
 
 - Clear local Pack data now returns an exact, fixed recovery-verification error when its retained

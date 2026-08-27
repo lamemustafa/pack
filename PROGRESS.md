@@ -1,5 +1,36 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 82 — retain target-review storage failures
+
+- Window: 2026-08-27 07:45–07:53 IST. This is a bounded fail-closed start-boundary correction; its
+  actual duration is recorded without an idle hold.
+- Picked: a new filed-return start reads the retained target-review record before acquiring a run.
+  Its storage exception escaped to the popup's generic background-service fallback, despite Pack
+  knowing that it could not safely determine whether a retained target must block a new action.
+- Discrimination: before the fix, the new regression rejected with a synthetic target-review read
+  failure. No run was acquired and no single-period flow started, but no structured blocked response
+  reached the presentation layer.
+- Changed: the pre-acquisition read now returns a fixed blocked signal, explanation and retry-only
+  action. Privacy review found that a flow step alone would be invisible to the popup controller, so
+  the corrected response also carries a scope-bound blocked summary with zero completions; it is
+  transient only and adds no persisted field. The fixed signal joins the existing closed durable
+  vocabulary. Actual malformed and valid review outcomes retain their existing paths.
+- Reviews: privacy PASS after the summary correction; security PASS. Both confirmed the static copy
+  contains no recovered error or taxpayer/session material, and the response returns before run
+  acquisition, portal actions, or download evidence logic.
+- Gate: focused runner/signal coverage passed 2 files and 86 tests. The full build, serial suite,
+  TypeScript, zero-warning ESLint, Prettier and package verifier passed after the summary correction.
+  Exact final Vitest footer:
+
+  ```text
+        Tests  2832 passed (2832)
+     Start at  07:49:44
+     Duration  155.03s (transform 2.49s, setup 0ms, import 12.58s, tests 125.77s, environment 276ms)
+  ```
+
+- Checkpoint: `d3c8fbf fix(recovery): retain target-review storage failures`; post-commit preflight
+  passed. No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.
+
 ## Cycle 81 — retain local-clear recovery failures
 
 - Window: 2026-08-27 07:39–07:45 IST. This is a bounded destructive-action safety correction; its
