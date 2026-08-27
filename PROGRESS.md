@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 69 — cover malformed controller response actions
+
+- Window: 2026-08-27 06:33–06:37 IST. This is a bounded test-quality checkpoint; its actual duration
+  is recorded without an idle hold.
+- Picked: after Cycle 68 exposed a malformed mount response, the remaining controller branches for a
+  successful response without its required payload needed direct proof: flow start/retry handling,
+  interrupted-run acknowledgement and storage-triggered summary refresh.
+- Measured before: all three branches already selected the shared `Unexpected Pack response.`
+  diagnostic, but no test exercised them as a set. Existing tests covered specific safe rejections,
+  which would not catch a malformed success response taking a different silent path.
+- Changed: one focused controller test now drives each live branch and asserts that the human-visible
+  action error remains the generic malformed-response diagnostic. A temporary acknowledgement mutation
+  to `Malformed acknowledgement response.` failed that test with the expected/received mismatch, then
+  was restored before the final gate; the test therefore distinguishes its named branch rather than
+  merely observing an action completed.
+- Gate: focused controller coverage passed 13 tests. The full build, serial suite, TypeScript,
+  zero-warning ESLint, Prettier, package verifier and diff check passed. Exact final Vitest footer:
+
+  ```text
+        Tests  2812 passed (2812)
+     Start at  06:33:58
+     Duration  153.85s (transform 2.48s, setup 0ms, import 12.44s, tests 125.38s, environment 8ms)
+  ```
+
+- Checkpoint: `cf3fd50 test(popup): cover malformed response actions`; post-commit
+  `pnpm workflow:preflight` passed. No production behavior, target binding, download evidence,
+  identity guard, persistence field, portal action, manifest, live/authenticated GST qualification,
+  release claim, push or PR action changed.
+- Learned / next: response-shape coverage must include successful malformed payloads, not only error
+  responses. The controller surface is now bounded; choose a separate lossy-surface or catalogue
+  boundary rather than adding redundant permutations here.
+
 ## Cycle 68 — surface malformed saved-summary responses
 
 - Window: 2026-08-27 06:28–06:32 IST. This is a bounded lossy-surface correction; its actual
