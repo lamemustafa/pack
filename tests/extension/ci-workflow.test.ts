@@ -85,7 +85,7 @@ describe("Pack CI workflow", () => {
     expect(trustedWorkflow).not.toContain("EVENT_NAME: ${{ github.event_name }}");
     expect(trustedWorkflow.match(/checks: write/g)).toHaveLength(1);
     expect(trustedWorkflow).toMatch(
-      /scheduled-review-gate:[\s\S]*?permissions:\n\s+contents: read\n\s+pull-requests: read\n\s+checks: write/,
+      /scheduled-review-gate:[\s\S]*?permissions:\n\s+contents: read\n\s+issues: read\n\s+pull-requests: read\n\s+checks: write/,
     );
     expect(trustedWorkflow).not.toContain("statuses: write");
     expect(trustedWorkflow).toContain("GH_TOKEN: ${{ github.token }}");
