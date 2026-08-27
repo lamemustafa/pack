@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 72 — centralize malformed popup response copy
+
+- Window: 2026-08-27 06:41–06:45 IST. This is a bounded duplicate-fact refactor; its actual duration
+  is recorded without an idle hold.
+- Picked: Cycle 68–69 established `Unexpected Pack response.` as the controller's user-visible
+  malformed-success contract. Exact tracing found six spelling copies inside its five response
+  boundaries, so a later wording correction could diverge by action type.
+- Measured: the focused current-state reader tests passed 2 files and 112 tests, but their scope is
+  targeted interrupted/competing-summary cases and does not discharge VALIDATION's broad aggregate
+  consistency uncertainty. Separately, popup controller and panel tests exercise malformed mount,
+  context, flow, acknowledgement and summary-refresh responses.
+- Changed: one private module constant now owns the controller's malformed-response message, and all
+  six local branches reference it. The options page retains its separate copies for a later bounded
+  audit; no cross-entrypoint copy module was invented without a demonstrated shared lifecycle.
+- Gate: focused controller/panel coverage passed 3 files and 47 tests. The full build, serial suite,
+  TypeScript, zero-warning ESLint, Prettier, package verifier and diff check passed. Exact final
+  Vitest footer:
+
+  ```text
+        Tests  2812 passed (2812)
+     Start at  06:41:48
+     Duration  153.98s (transform 2.46s, setup 0ms, import 12.29s, tests 125.91s, environment 8ms)
+  ```
+
+- Checkpoint: `d8e8077 refactor(popup): centralize malformed response copy`; post-commit
+  `pnpm workflow:preflight` passed. No target binding, download evidence, identity guard,
+  persistence field, portal action, manifest, live/authenticated GST qualification, release claim,
+  push or PR action changed.
+- Learned / next: scope a duplicate to the component that owns its behavior before extracting a
+  cross-surface abstraction. The options response boundary is independent and must be measured on
+  its own terms before sharing any copy.
+
 ## Cycle 71 — reconcile full-year cleanup visibility uncertainty
 
 - Window: 2026-08-27 06:39–06:41 IST. This is an evidence/documentation checkpoint; its actual
