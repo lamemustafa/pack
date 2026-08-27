@@ -1,5 +1,35 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 65 — remove the unused controller status projection
+
+- Window: 2026-08-27 06:10–06:15 IST. This is a bounded duplicate-fact/code-reduction checkpoint;
+  its actual duration is recorded without an idle hold.
+- Picked: repeated controller literals suggested that the returned `status` field might be a stale
+  projection rather than a human-visible surface. It was written on context reads, flow responses
+  and action errors, alongside the actual `actionError` and flow-summary UI state.
+- Measured: Graphify is installed but this worktree has no graph data, so exact importer tracing was
+  used. `PanelSurface`, the only production hook consumer, reads presentation, summary, busy and
+  action-error fields but never `pack.status`; the only remaining `status` fixture was the shared
+  synthetic panel controller. No source read consumes the returned field.
+- Changed: removed the unused React state, all seven writes, the returned field and its test-fixture
+  value. This deletes duplicate stale messages without changing the actual context, flow-summary or
+  safe-error projections that the panel renders.
+- Gate: focused controller/panel/guided-scope renders passed 3 files and 44 tests. Build,
+  TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and `git diff --check`
+  passed. Exact Vitest footer:
+
+  ```text
+       Tests  2817 passed (2817)
+    Start at  06:11:15
+    Duration  154.58s (transform 2.52s, setup 0ms, import 12.49s, tests 125.96s, environment 8ms)
+  ```
+
+- Checkpoints: `cec3921 refactor(popup): remove unused controller status`; the progress record
+  follows in a separate documentation checkpoint. No live/authenticated GST qualification, release
+  claim, push or PR action was made.
+- Learned / next: a value returned from a live hook can still be dead if its only consumer surface
+  ignores it. Continue the duplicate-fact audit from live render consumers, not state writers.
+
 ## Cycle 64 — audit disabled-control descriptions across the panel
 
 - Window: 2026-08-27 06:06–06:10 IST. This is a quiet keyboard/screen-reader audit; its actual
