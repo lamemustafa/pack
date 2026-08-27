@@ -277,6 +277,34 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).not.toContain("older-anchor");
   });
 
+  it("searches newer force-push ancestry before older anchors", () => {
+    const newerSha = "b".repeat(40);
+    const newerAncestorSha = "c".repeat(40);
+    const olderSha = "d".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [newerAncestorSha]: reviewStateWithDeletedFinding(1, "newer-ancestor-state"),
+        [olderSha]: reviewStateWithDeletedFinding(1, "older-anchor-state"),
+      },
+      [
+        forcePushEvent(olderSha, "2026-08-17T12:00:00Z"),
+        forcePushEvent(newerSha, "2026-08-17T12:01:00Z"),
+      ],
+      { [newerSha]: [newerAncestorSha] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(publication?.join(" ")).toContain("newer-ancestor-state");
+    expect(publication?.join(" ")).not.toContain("older-anchor-state");
+  });
+
   it("fails closed rather than exceeding the durable-history lookup bound", () => {
     const history = Array.from({ length: 20 }, (_, index) => index.toString(16).padStart(40, "0"));
     const parents: Record<string, string[]> = {};

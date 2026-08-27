@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 const rootDir = process.cwd();
 const scriptPath = path.join(rootDir, "scripts", "check-pr-review-gate.mjs");
+const formatterPath = path.join(rootDir, "scripts", "format-review-gate-disposition.mjs");
 
 describe("PR review gate", () => {
   it("fetches the minimization reason on initial and paginated PR comments", () => {
@@ -210,6 +212,84 @@ describe("PR review gate", () => {
         }),
       ],
     });
+  });
+
+  it("reopens a terminal disposition when its visible finding changes", () => {
+    const priorBody = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Old ask.";
+    const priorFingerprint = createHash("sha256").update(priorBody, "utf8").digest("hex");
+    const statePath = writeFixture("terminal-disposition-for-changed-finding", {
+      version: 1,
+      prNumber: 14,
+      findings: [
+        {
+          commentId: "comment-1",
+          author: "chatgpt-codex-connector",
+          createdAt: "2026-08-17T12:00:00Z",
+          disposition: "fixed",
+          dispositionCommentId: "disposition-comment-1",
+          sourceFingerprint: priorFingerprint,
+          dispositionSourceFingerprint: priorFingerprint,
+        },
+      ],
+    });
+    const nextStatePath = statePath.replace(".json", ".next.json");
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        writeFixture(
+          "changed-finding-after-disposition",
+          reviewFixture({
+            headRefOid: "head-sha",
+            comments: [
+              prFindingComment({
+                body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) New ask.",
+              }),
+              durableDispositionComment("comment-1", "fixed"),
+            ],
+            reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+          }),
+        ),
+        "--review-state",
+        statePath,
+        "--write-review-state",
+        nextStatePath,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(readFileSync(nextStatePath, "utf8"))).toMatchObject({
+      findings: [expect.objectContaining({ commentId: "comment-1", disposition: "open" })],
+    });
+  });
+
+  it("formats a supported terminal disposition", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        formatterPath,
+        "--finding-id",
+        "comment-1",
+        "--disposition",
+        "fixed",
+        "--evidence",
+        "verified",
+        "--source-body",
+        "finding body",
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("review-gate-disposition");
+    expect(result.stdout).toContain("Finding: comment-1");
+    expect(result.stdout).toContain("Source fingerprint:");
   });
 
   it("fails closed when a stored disposition is edited after observation", () => {
