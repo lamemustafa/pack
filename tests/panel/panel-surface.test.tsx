@@ -102,6 +102,19 @@ describe("panel surface", () => {
     );
   });
 
+  // A finished run is history. Left expanded it pushed the presets four
+  // sections down at 320px, so every new run began by scrolling past the
+  // last one, and the custom door -- further down still -- took a second
+  // run to find. Only a clean completion folds; an exception never does.
+  it("folds a finished run away so the chooser stays reachable", () => {
+    const markup = renderToStaticMarkup(
+      <PanelSurface pack={controller({ scopedFlowSummary: completedSummary() })} />,
+    );
+
+    expect(markup).toContain("panel-finished-run");
+    expect(markup).toContain("Show what this run saved");
+  });
+
   it("renders a completed run instead of dropping silently back to the chooser", () => {
     const markup = renderToStaticMarkup(
       <PanelSurface pack={controller({ scopedFlowSummary: completedSummary() })} />,
