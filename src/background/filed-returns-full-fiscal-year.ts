@@ -317,6 +317,14 @@ export async function startFullFiscalYearDownloadFlow(
 
   await persistLedger(deps, ledger);
 
+  // An explicitly confirmed resume may cross a browser restart. Its old tab
+  // session marker cannot be used as an authority for the first retry, so the
+  // single-period flow selects and durably pins a current GST tab before work.
+  let mustRebindPortalTab =
+    options.allowExistingLedgerResume &&
+    ledger.portalTabId !== undefined &&
+    ledger.portalTabSessionId !== undefined;
+
   while (true) {
     const nextTarget = nextRunnableFullFiscalYearTarget(ledger);
     if (!nextTarget) return completeRun(deps, ledger);
@@ -346,7 +354,7 @@ export async function startFullFiscalYearDownloadFlow(
       },
       {
         onPortalTabSelected: async (tabId, tabSessionId) => {
-          if (ledger.portalTabId !== undefined) return;
+          if (ledger.portalTabId !== undefined && !mustRebindPortalTab) return;
           ledger = {
             ...ledger,
             portalTabId: tabId,
@@ -355,9 +363,12 @@ export async function startFullFiscalYearDownloadFlow(
             updatedAt: (deps.now?.() ?? new Date()).toISOString(),
           };
           await persistLedger(deps, ledger);
+          mustRebindPortalTab = false;
         },
         persistSinglePeriodSummary: false,
-        ...(ledger.portalTabId !== undefined && ledger.portalTabSessionId !== undefined
+        ...(!mustRebindPortalTab &&
+        ledger.portalTabId !== undefined &&
+        ledger.portalTabSessionId !== undefined
           ? {
               requiredPortalTabId: ledger.portalTabId,
               requiredPortalTabSessionId: ledger.portalTabSessionId,

@@ -277,6 +277,11 @@ describe("filed returns retained target scoping", () => {
     } as never);
 
     expect(response).toMatchObject({
+      flowSummary: {
+        scope: requestedScope,
+        status: "blocked",
+        totalPeriods: 1,
+      },
       flowStep: {
         safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
         state: "blocked",

@@ -1,5 +1,6 @@
 import type {
   FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type {
@@ -356,22 +357,19 @@ async function surfaceRetainedArtifactAcquisitionReview(
   try {
     checkpoints = await readArtifactAcquisitionCheckpoints();
   } catch {
-    return {
-      ok: true,
-      flowStep: {
-        connectorId: "gst",
-        scopeId: "gst-filed-returns-private-v0",
-        state: "blocked",
-        safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
-        safeMessage:
-          "Pack could not read retained local artifact recovery and will not start another portal action.",
-        userAction: {
-          type: "RETRY_PORTAL_GENERATION",
-          message: "Try again after local recovery state is available.",
-          canResume: true,
-        },
+    return blockedRetainedArtifactAcquisitionResponse(requestedScope, {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-private-v0",
+      state: "blocked",
+      safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
+      safeMessage:
+        "Pack could not read retained local artifact recovery and will not start another portal action.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Try again after local recovery state is available.",
+        canResume: true,
       },
-    };
+    });
   }
   for (const checkpoint of checkpoints) {
     if (checkpoint.state === "malformed") continue;
@@ -394,7 +392,7 @@ async function surfaceRetainedArtifactAcquisitionReview(
     const summary = await persistFiledReturnsTargetReview(target, flowStep, deps);
     return summary
       ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
-      : { ok: true, flowStep };
+      : blockedRetainedArtifactAcquisitionResponse(requestedScope, flowStep);
   }
   const malformedCheckpoint = checkpoints.find((checkpoint) => checkpoint.state === "malformed");
   if (!malformedCheckpoint || malformedCheckpoint.state !== "malformed") return null;
@@ -402,17 +400,14 @@ async function surfaceRetainedArtifactAcquisitionReview(
     malformedCheckpoint.key,
   );
   if (!malformedCheckpointReference) {
-    return {
-      ok: true,
-      flowStep: {
-        connectorId: "gst",
-        scopeId: "gst-filed-returns-private-v0",
-        state: "blocked",
-        safeSignals: ["artifact-acquisition-malformed-reference-unavailable"],
-        safeMessage:
-          "Pack found malformed retained artifact recovery but could not prepare its local review safely.",
-      },
-    };
+    return blockedRetainedArtifactAcquisitionResponse(requestedScope, {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-private-v0",
+      state: "blocked",
+      safeSignals: ["artifact-acquisition-malformed-reference-unavailable"],
+      safeMessage:
+        "Pack found malformed retained artifact recovery but could not prepare its local review safely.",
+    });
   }
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
@@ -432,7 +427,22 @@ async function surfaceRetainedArtifactAcquisitionReview(
   });
   return summary
     ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
-    : { ok: true, flowStep };
+    : blockedRetainedArtifactAcquisitionResponse(requestedScope, flowStep);
+}
+
+function blockedRetainedArtifactAcquisitionResponse(
+  scope: FiledReturnsDownloadScope,
+  flowStep: PortalFlowStepResult,
+): PackMessageResponse {
+  const flowSummary: FiledReturnsFlowSummary = {
+    scope,
+    status: "blocked",
+    completedPeriods: [],
+    currentPeriod: scope.period,
+    totalPeriods: isFullFiscalYearScope(scope) ? 12 : 1,
+    flowStep,
+  };
+  return { ok: true, flowStep, flowSummary };
 }
 
 export async function resolveUnconfirmedFiledReturnsDownloadFlow(

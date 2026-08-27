@@ -204,6 +204,42 @@ describe("full-year Start preserves existing recovery", () => {
     );
   });
 
+  it("rebinds a prior browser tab pin before an explicitly validated retry acts", async () => {
+    const ledger = makeCompletedRecoveryLedger("pending");
+    storage.local.ledger = ledger;
+    const preparation = await prepareFullFiscalYearTargetRetry(
+      {
+        ledgerId: ledger.ledgerId,
+        targetId: ledger.targets[0]!.targetId,
+        expectedRevision: ledger.revision!,
+      },
+      deps,
+    );
+    expect(preparation.ok).toBe(true);
+    if (!preparation.ok) throw new Error("Expected canonical retry preparation.");
+    storage.local.ledger = {
+      ...preparation.ledger,
+      portalTabId: 41,
+      portalTabSessionId: "prior-browser-session",
+    };
+    const runSinglePeriod = vi.fn(async (_scope, _deps, options) => {
+      expect(options?.requiredPortalTabId).toBeUndefined();
+      expect(options?.requiredPortalTabSessionId).toBeUndefined();
+      await options?.onPortalTabSelected?.(73, "current-browser-session");
+      expect(storage.local.ledger).toMatchObject({
+        portalTabId: 73,
+        portalTabSessionId: "current-browser-session",
+      });
+      return { ok: false as const, error: "Synthetic stop." };
+    });
+
+    await startFullFiscalYearDownloadFlow(RECOVERY_SCOPE, deps, runSinglePeriod, {
+      allowExistingLedgerResume: true,
+    });
+
+    expect(runSinglePeriod).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["ledger", "target", "revision", "running"] as const)(
     "preserves the %s retry guard",
     async (guard) => {

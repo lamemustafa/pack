@@ -382,6 +382,22 @@ describe("panel guided scope interaction", () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
+  it("refreshes a stale preset instead of starting the prior fiscal year after rollover", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2027-03-31T18:29:00.000Z"));
+    const onStart = vi.fn();
+    await mount({ onStart }, false, false);
+    const preset = Array.from(container.querySelectorAll<HTMLButtonElement>(".panel-preset")).find(
+      (candidate) => candidate.textContent?.includes("This year's GSTR-3B"),
+    );
+    expect(preset).toBeDefined();
+
+    vi.setSystemTime(new Date("2027-03-31T18:31:00.000Z"));
+    await act(async () => preset?.dispatchEvent(realmEvent("click")));
+
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
   it("refreshes empty presets when a long-lived panel gains its first eligible period", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-01T06:00:00.000Z"));

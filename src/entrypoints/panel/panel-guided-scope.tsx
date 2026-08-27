@@ -108,10 +108,14 @@ export function PanelGuidedScope({
                     disabledReason ? `preset-${preset.scope.returnType}-reason` : undefined
                   }
                   onClick={() => {
-                    const currentPreset = panelFullFiscalYearPresets(
-                      preset.scope.financialYear,
-                      new Date(),
-                    ).find((candidate) => candidate.scope.returnType === preset.scope.returnType);
+                    const currentAsOf = new Date();
+                    const currentFinancialYear =
+                      getFiledReturnsFinancialYearOptions(currentAsOf)[0];
+                    const currentPreset = currentFinancialYear
+                      ? panelFullFiscalYearPresets(currentFinancialYear, currentAsOf).find(
+                          (candidate) => candidate.scope.returnType === preset.scope.returnType,
+                        )
+                      : undefined;
                     if (
                       !currentPreset ||
                       currentPreset.periodCount !== preset.periodCount ||
