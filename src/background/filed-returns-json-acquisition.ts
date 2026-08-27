@@ -12,7 +12,7 @@ type JsonAcquisitionResult =
       safeMessage?: string;
       safeSignals: string[];
     }
-  | { ok: false; reason: string; safeSignals: string[] };
+  | { ok: false; reason: string; safeMessage?: string; safeSignals: string[] };
 type MainWorldJsonCaptureResult = { ok: true; base64: string } | { ok: false; reason: string };
 
 export async function acquireFiledReturnJsonInMainWorld(input: {

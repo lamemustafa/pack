@@ -16,7 +16,7 @@ type Gstr3bPdfDeliveryResult =
       safeMessage?: string;
       safeSignals: string[];
     }
-  | { ok: false; reason: string; safeSignals: string[] };
+  | { ok: false; reason: string; safeMessage?: string; safeSignals: string[] };
 
 export async function acquireGstr3bPdfAfterPreflight(input: {
   deliver?: (input: { base64: string; mimeType: string }) => Promise<Gstr3bPdfDeliveryResult>;
@@ -101,7 +101,11 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
           safeSignals: [...captured.safeSignals, ...delivery.safeSignals],
           ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
         }
-      : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
+      : {
+          ok: false,
+          reason: delivery.reason,
+          safeSignals: delivery.safeSignals,
+        };
   } finally {
     safetyNet.remove();
   }
