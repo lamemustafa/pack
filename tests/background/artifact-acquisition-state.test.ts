@@ -619,6 +619,7 @@ describe("artifact acquisition checkpoint", () => {
     mocks.browser.downloads.search.mockResolvedValue([{ id: 9, state: "in_progress" }]);
 
     await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      reason: "checkpoint-invalid",
       state: "blocked",
     });
     expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
