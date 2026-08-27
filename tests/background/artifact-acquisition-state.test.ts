@@ -577,6 +577,73 @@ describe("artifact acquisition checkpoint", () => {
     });
   });
 
+  it("does not inspect a matching completed download from a forward-shaped checkpoint", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    mocks.session[key] = {
+      ...MAY_PDF,
+      armedAt: new Date().toISOString(),
+      downloadId: 9,
+      requestId: actionId(82),
+      schemaVersion: "2.0",
+      state: "download-observing",
+    };
+    mocks.browser.downloads.search.mockResolvedValue([
+      {
+        danger: "safe",
+        fileSize: 2_048,
+        id: 9,
+        mime: "application/pdf",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        state: "complete",
+      },
+    ]);
+
+    await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+    });
+    expect(mocks.session[key]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+    expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+  });
+
+  it("does not cancel a stale reused download ID from a forward-shaped checkpoint", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    mocks.session[key] = {
+      ...MAY_PDF,
+      armedAt: new Date().toISOString(),
+      downloadId: 9,
+      requestId: actionId(83),
+      schemaVersion: "2.0",
+      state: "download-observing",
+    };
+    mocks.browser.downloads.search.mockResolvedValue([{ id: 9, state: "in_progress" }]);
+
+    await expect(clearArtifactAcquisitionCheckpoints(MAY_PDF)).resolves.toEqual({
+      state: "blocked",
+    });
+    expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+    expect(mocks.browser.downloads.cancel).not.toHaveBeenCalled();
+    expect(mocks.session[key]).toEqual(expect.objectContaining({ downloadId: 9 }));
+  });
+
+  it("treats a parseable but noncanonical checkpoint timestamp as malformed", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    mocks.session[key] = {
+      ...MAY_PDF,
+      armedAt: "2026-05-01T05:30:00+05:30",
+      downloadId: 9,
+      requestId: actionId(84),
+      state: "download-observing",
+    };
+
+    await expect(reconcileArtifactAcquisitionCheckpoint(MAY_PDF)).resolves.toEqual({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-checkpoint-malformed"],
+    });
+    expect(mocks.session[key]).toEqual({ schemaVersion: "1.0", state: "malformed" });
+    expect(mocks.browser.downloads.search).not.toHaveBeenCalled();
+  });
+
   it("treats a present null checkpoint as malformed instead of retry-safe", async () => {
     const key = artifactAcquisitionCheckpointKey(MAY_PDF);
     mocks.session[key] = null;

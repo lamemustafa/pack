@@ -35,6 +35,15 @@ const MALFORMED_ARTIFACT_ACQUISITION_CHECKPOINT_SENTINEL = {
   schemaVersion: "1.0",
   state: "malformed",
 } as const;
+const ARTIFACT_ACQUISITION_CHECKPOINT_BASE_KEYS = [
+  "armedAt",
+  "artifactType",
+  "financialYear",
+  "period",
+  "requestId",
+  "returnType",
+  "state",
+] as const;
 
 export type ArtifactAcquisitionTarget = Pick<
   FiledReturnsDownloadScope,
@@ -641,21 +650,51 @@ function checkpointMatchesTarget(
 
 function isArtifactAcquisitionCheckpoint(input: unknown): input is ArtifactAcquisitionCheckpoint {
   if (!input || typeof input !== "object") return false;
-  const checkpoint = input as Partial<ArtifactAcquisitionCheckpoint>;
-  if (typeof checkpoint.armedAt !== "string" || typeof checkpoint.requestId !== "string") {
+  const checkpoint = input as Partial<ArtifactAcquisitionCheckpoint> & Record<string, unknown>;
+  if (
+    !hasOnlyKeys(
+      checkpoint,
+      checkpoint.state === "intent"
+        ? ARTIFACT_ACQUISITION_CHECKPOINT_BASE_KEYS
+        : [...ARTIFACT_ACQUISITION_CHECKPOINT_BASE_KEYS, "downloadId"],
+    ) ||
+    !checkpointTarget({
+      artifactType: checkpoint.artifactType,
+      financialYear: checkpoint.financialYear,
+      period: checkpoint.period,
+      returnType: checkpoint.returnType,
+    }) ||
+    !isCanonicalCheckpointTimestamp(checkpoint.armedAt) ||
+    typeof checkpoint.requestId !== "string"
+  ) {
     return false;
   }
   if (!["intent", "download-observing", "download-unconfirmed"].includes(checkpoint.state ?? "")) {
     return false;
   }
-  if (checkpoint.state === "intent") return checkpoint.downloadId === undefined;
-  return typeof checkpoint.downloadId === "number";
+  if (checkpoint.state === "intent") return true;
+  return (
+    typeof checkpoint.downloadId === "number" &&
+    Number.isSafeInteger(checkpoint.downloadId) &&
+    checkpoint.downloadId >= 0
+  );
 }
 
 function armedAtFromCheckpoint(input: unknown): string | null {
   if (!input || typeof input !== "object") return null;
   const armedAt = (input as { armedAt?: unknown }).armedAt;
-  return typeof armedAt === "string" && Number.isFinite(Date.parse(armedAt)) ? armedAt : null;
+  return isCanonicalCheckpointTimestamp(armedAt) ? armedAt : null;
+}
+
+function hasOnlyKeys(input: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(input).every((key) => allowed.has(key));
+}
+
+function isCanonicalCheckpointTimestamp(input: unknown): input is string {
+  if (typeof input !== "string" || input.length > 40) return false;
+  const parsed = Date.parse(input);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === input;
 }
 
 function isMalformedArtifactAcquisitionCheckpointSentinel(input: unknown): boolean {
