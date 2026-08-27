@@ -1,5 +1,28 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 70 — audit target-evidence reason retention
+
+- Window: 2026-08-27 06:37–06:39 IST. This is a quiet lossy-surface audit; its actual duration is
+  recorded without an idle hold.
+- Picked: target evidence intentionally carries a per-period outcome, not a free-text failure reason.
+  The audit checked whether that compact evidence surface caused a saved run's canonical safe message
+  to disappear from the complete panel.
+- Measured: PanelSurface passes the same recovery summary to TargetEvidence and InlineStatus. The
+  evidence list keeps all outcome categories distinct (saved, partly saved, captured, not filed,
+  review, running and pending), while InlineStatus owns the safe message. The panel evidence tests
+  assert the exact safe message alongside both populated and absent evidence cases.
+- Disproved change: temporarily removing the nearby `Why Pack paused:` copy did not make the focused
+  suite fail, because the canonical InlineStatus still rendered the safe message. The source was
+  restored; this proves the reason is retained for a human without pretending that two visible copies
+  are independent evidence.
+- Gate: restored target-evidence/panel coverage passed 3 files and 38 tests; diff check and worktree
+  status were clean. No product or test source change was retained, so Cycle 69's full gate remains
+  the applicable repository-wide evidence.
+- Learned / next: target outcomes are a deliberately smaller contract than a run reason, and the two
+  surfaces complement rather than substitute for each other. Move to a different boundary; do not add
+  a per-target reason field or duplicate test merely to force an already-retained message through a
+  second renderer.
+
 ## Cycle 69 — cover malformed controller response actions
 
 - Window: 2026-08-27 06:33–06:37 IST. This is a bounded test-quality checkpoint; its actual duration
