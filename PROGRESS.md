@@ -2848,3 +2848,35 @@ recovery state`, proving the response was silently discarded after context succe
   Downloads. The caller treats that reason as recovery-retaining and never marks the target saved.
 - Result: no source or test change is justified. The nested catch preserves the safer existing
   recovery record; replacing it with a generic signal would weaken the exact-ID recovery boundary.
+
+## Cycle 87 — verify compact checking context
+
+- Window: 2026-08-27 08:19–08:26 IST. This is a bounded responsive-verification correction; its
+  actual duration is recorded without an idle hold.
+- Picked and measured: the 320px packaged-browser proof covered presets and expanded catalogue but
+  not the initial checking or unavailable context. The existing panel-load assertion opened that
+  exact state at a wide viewport, leaving its narrow control geometry unverified.
+- Discrimination: moving that packaged state to 320px first failed at the verifier's fixed 300px
+  shell minimum. The panel correctly reserves 16px gutters on both sides, yielding a 288px shell;
+  the control-fit assertions already proved it was not clipped. The failure identified a verifier
+  assumption, not a panel layout regression.
+- Changed: the packaged verifier now opens the initial context state at 320px and applies the same
+  no-horizontal-scroll, no-clipped-control and minimum-touch-target checks. Its usable-shell
+  threshold is viewport-aware while preserving the 300px check at wider widths. The verifier guard
+  test now requires that expression.
+- UI audit: Impeccable product-surface guidance confirmed the restrained, task-first panel register
+  and focused the check on response geometry and control affordances rather than visual restyling.
+  No production panel, portal, persistence, permission or manifest behavior changed.
+- Gate: the focused verifier guard passed 1 file and 27 tests. The first full run correctly failed
+  only because that guard expected the retired fixed-width expression; after updating it, the full
+  build, serial suite, TypeScript, zero-warning ESLint, Prettier, package verifier and packaged
+  browser verifier passed. Exact final Vitest footer:
+
+  ```text
+        Tests  2829 passed (2829)
+     Start at  08:23:10
+     Duration  155.86s (transform 2.53s, setup 0ms, import 12.71s, tests 126.54s, environment 293ms)
+  ```
+
+- Checkpoint: `e0727ad test(panel): verify compact context state`; post-commit preflight passed.
+  No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.

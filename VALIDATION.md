@@ -2064,3 +2064,11 @@ Six additional mutation groups were run serially and restored with matching file
 - A failed fallback checkpoint preserves the original exact-ID intent and returns the fixed
   checkpoint-failed recovery message; it does not grant completion or retry authority from an
   unrecorded browser outcome. No change was retained.
+
+### Cycle 87 — compact initial context
+
+- The packaged browser verifier now checks the initial checking/unavailable panel context at 320px
+  for horizontal overflow, clipped controls and sub-44px controls. Its shell-width lower bound now
+  respects the documented horizontal gutters at the narrow viewport while retaining the wider-layout
+  threshold. The complete gate passed 152 files and 2,829 tests, package verification and packaged
+  browser verification; this is local synthetic verification, not a live portal qualification.
