@@ -1837,6 +1837,85 @@ describe("full fiscal-year recovery", () => {
     );
   });
 
+  it("keeps a resumed GSTR-2B all-formats target blocked until both remaining artifacts are staged", async () => {
+    const now = new Date("2026-06-24T00:00:00.000Z");
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-2B" as const,
+    };
+    const ledger = createFullFiscalYearLedger(
+      scope,
+      now,
+      getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now),
+    );
+    const firstTarget = ledger.targets[0]!;
+    ledger.status = "running";
+    ledger.targets[0] = {
+      ...firstTarget,
+      safeSignals: canonicalDurableTargetStatus(
+        {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: firstTarget.financialYear,
+          period: firstTarget.period,
+          returnType: "GSTR-2B",
+        },
+        "blocked",
+        ["full-fiscal-year-opfs-staged:PDF"],
+      ).safeSignals,
+    };
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+    const runSinglePeriod = vi.fn(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "synthetic-gstr2b-all-formats-retry",
+        state: "downloaded" as const,
+        safeSignals: [
+          "filed-return-artifact-downloaded:EXCEL",
+          "full-fiscal-year-opfs-staged:EXCEL",
+        ],
+        safeMessage: "Synthetic Excel staged; JSON remains unresolved.",
+      },
+    }));
+
+    const response = await startFullFiscalYearDownloadFlow(
+      scope,
+      { ...recoveryDeps(), now: () => now } as never,
+      runSinglePeriod,
+      { allowExistingLedgerResume: true },
+    );
+
+    expect(runSinglePeriod).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifactType: "PDF_AND_EXCEL",
+        period: "April",
+        returnType: "GSTR-2B",
+      }),
+      expect.anything(),
+      expect.objectContaining({ persistSinglePeriodSummary: false }),
+    );
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-artifact-staging-incomplete",
+          "full-fiscal-year-artifact-not-staged:JSON",
+        ]),
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({
+        targets: expect.arrayContaining([
+          expect.objectContaining({ period: "April", status: "blocked" }),
+        ]),
+      }),
+    });
+  });
+
   it("resets one recoverable target for retry and clears legacy single-period review state", async () => {
     mockLocalStorageGet({
       "full-year-ledger": createRecoveryLedger({ revision: 2 }),

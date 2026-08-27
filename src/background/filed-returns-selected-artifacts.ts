@@ -170,7 +170,7 @@ export async function triggerSelectedArtifacts({
       }
     : deps;
   let persistedProgress = null;
-  if (artifactTypes.length > 1 && !singlePeriodBundleLedgerId) {
+  if (artifactTypes.length > 1 && !singlePeriodBundleLedgerId && !deps.stageCapturedDownloads) {
     persistedProgress = await readPersistedArtifactProgress(scope, artifactTypes, artifactDeps);
     if (persistedProgress?.state === "blocked") {
       return artifactProgressBlockedResponse(scope, persistedProgress.reason);

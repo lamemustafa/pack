@@ -209,76 +209,6 @@ describe("GSTR-2B all-format selection", () => {
   });
 
   it.each([
-    [
-      "read failure",
-      () =>
-        mocks.readPersistedArtifactProgress.mockResolvedValueOnce({
-          reason: "storage-read-failed",
-          state: "blocked",
-        }),
-      "filed-return-artifact-progress-storage-read-failed",
-      "Pack could not read retained selected-file progress, so it did not inspect or act on the GST Portal tab.",
-    ],
-    [
-      "malformed state",
-      () =>
-        mocks.readPersistedArtifactProgress.mockResolvedValueOnce({
-          reason: "malformed-summary",
-          state: "blocked",
-        }),
-      "filed-return-artifact-progress-malformed-summary",
-      "Pack found retained selected-file progress it could not validate, so it did not inspect or act on the GST Portal tab.",
-    ],
-    [
-      "canonical write failure",
-      () =>
-        mocks.readPersistedArtifactProgress.mockResolvedValueOnce({
-          reason: "storage-write-failed",
-          state: "blocked",
-        }),
-      "filed-return-artifact-progress-storage-write-failed",
-      "Pack could not verify retained selected-file progress in session storage, so it did not inspect or act on the GST Portal tab.",
-    ],
-  ] as const)(
-    "blocks before a portal action when retained progress has a %s",
-    async (_label, arrange, safeSignal, safeMessage) => {
-      arrange();
-      const scope = {
-        artifactType: "PDF_AND_EXCEL" as const,
-        financialYear: "2026-27",
-        period: "June",
-        returnType: "GSTR-1" as const,
-      };
-
-      const response = await triggerSelectedArtifacts({
-        activeFinancialYear: scope.financialYear,
-        activePeriod: scope.period,
-        deps: {
-          stageCapturedDownloads: { ledgerId: "full-year-synthetic" },
-          storageKeys: {
-            completion: "completion",
-            fullFiscalYearLedger: "ledger",
-            observation: "observation",
-          },
-        } as never,
-        scope,
-        tabId: 17,
-      });
-
-      expect(response).toMatchObject({
-        flowStep: {
-          safeMessage,
-          safeSignals: [safeSignal],
-          state: "blocked",
-          userAction: { canResume: false },
-        },
-      });
-      expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
-      expect(mocks.gstr1VisibleScopeMismatchResponse).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
     ["GSTR-1 PDF", { artifactType: "PDF", returnType: "GSTR-1" }],
     ["GSTR-3B PDF", { artifactType: "PDF", returnType: "GSTR-3B" }],
     ["GSTR-2B JSON", { artifactType: "JSON", returnType: "GSTR-2B" }],
@@ -551,6 +481,51 @@ describe("GSTR-2B all-format selection", () => {
     expect(response).toMatchObject({
       flowStep: { state: "downloaded" },
     });
+  });
+
+  it("does not reuse direct-download progress while staging a fiscal-year artifact ledger", async () => {
+    mocks.readPersistedArtifactProgress.mockResolvedValue({
+      completedArtifactTypes: ["PDF"],
+      flowStep: downloaded("PDF").flowStep as PortalFlowStepResult,
+      state: "ready",
+    });
+    mocks.triggerAndObserveFiledReturnDownload
+      .mockResolvedValueOnce(downloaded("PDF"))
+      .mockResolvedValueOnce(downloaded("EXCEL"))
+      .mockResolvedValueOnce(downloaded("JSON"));
+
+    await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        stageCapturedDownloads: { bundleKind: "full-fiscal-year", ledgerId: "full-year-synthetic" },
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      tabId: 17,
+    });
+
+    expect(mocks.readPersistedArtifactProgress).not.toHaveBeenCalled();
+    expect(
+      mocks.triggerAndObserveFiledReturnDownload.mock.calls.map(([input]) => input.artifactType),
+    ).toEqual(gstr2bAllFormatsArtifacts);
+    expect(
+      mocks.triggerAndObserveFiledReturnDownload.mock.calls.map(
+        ([input]) => input.deps.stageCapturedDownloads,
+      ),
+    ).toEqual([
+      { bundleKind: "full-fiscal-year", ledgerId: "full-year-synthetic" },
+      { bundleKind: "full-fiscal-year", ledgerId: "full-year-synthetic" },
+      { bundleKind: "full-fiscal-year", ledgerId: "full-year-synthetic" },
+    ]);
   });
 
   it("routes an ambiguous acquisition failure to review instead of exporting a partial ZIP", async () => {

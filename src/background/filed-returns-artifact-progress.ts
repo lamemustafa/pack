@@ -18,7 +18,6 @@ import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-du
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isCanonicalSinglePeriodLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
-import { parseDurableFiledReturnsFlowSummary } from "./filed-returns-durable-summary";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   persistCanonicalFiledReturnsFlowSummary,
@@ -167,13 +166,15 @@ export async function readPersistedArtifactProgress(
   if (retainedFailureReason) {
     return { reason: retainedFailureReason, state: "blocked" };
   }
-  const summary = parsePersistedPartialSummary(storageState.summary);
-  if (!summary || summary.status !== "partial") return null;
-  if (!sameFiledReturnsScope(summary.scope, scope)) return null;
-
-  const completedArtifactTypes = downloadedArtifactTypes(summary.flowStep.safeSignals).filter(
-    (artifactType) => artifactTypes.includes(artifactType),
-  );
+  const summary = storageState.summary;
+  const completedArtifactTypes =
+    summary.status === "partial" &&
+    sameFiledReturnsScope(summary.scope, scope) &&
+    isValidFiledReturnsDownloadDiagnosticState(summary.flowStep, summary.scope)
+      ? downloadedArtifactTypes(summary.flowStep.safeSignals).filter((artifactType) =>
+          artifactTypes.includes(artifactType),
+        )
+      : completedConcreteArtifactTypeForSelection(summary, scope, artifactTypes);
   if (completedArtifactTypes.length === 0) return null;
   return { completedArtifactTypes, flowStep: summary.flowStep, state: "ready" };
 }
@@ -260,13 +261,28 @@ export function combineDownloadedArtifactFlowSteps(
   };
 }
 
-function parsePersistedPartialSummary(input: unknown): FiledReturnsFlowSummary | null {
-  const summary = parseDurableFiledReturnsFlowSummary(input);
-  if (!summary || summary.status !== "partial") return null;
-  if (!isValidFiledReturnsDownloadDiagnosticState(summary.flowStep, summary.scope)) {
-    return null;
+function completedConcreteArtifactTypeForSelection(
+  summary: FiledReturnsFlowSummary,
+  scope: FiledReturnsDownloadScope,
+  artifactTypes: readonly FiledReturnsConcreteArtifactType[],
+): FiledReturnsConcreteArtifactType[] {
+  const artifactType = summary.scope.artifactType;
+  if (
+    summary.status !== "complete" ||
+    summary.flowStep.state !== "downloaded" ||
+    !summary.flowStep.safeSignals.includes("artifact-acquisition-download-reconciled") ||
+    !summary.artifactAcquisitionCompletion ||
+    summary.artifactAcquisitionCompletion.length !== 1 ||
+    !artifactType ||
+    !artifactTypes.includes(artifactType as FiledReturnsConcreteArtifactType) ||
+    summary.scope.financialYear !== scope.financialYear ||
+    summary.scope.period !== scope.period ||
+    summary.scope.returnType !== scope.returnType
+  ) {
+    return [];
   }
-  return summary;
+  const [evidence] = summary.artifactAcquisitionCompletion;
+  return evidence?.artifactType === artifactType ? [artifactType] : [];
 }
 
 function downloadedArtifactTypes(

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import {
   DEFAULT_GH_RETRY_ATTEMPTS,
@@ -9,6 +12,9 @@ import {
 } from "./lib/github-cli-retry.mjs";
 
 const CHECK_RUN_NAME = "Review gate (scheduled)";
+const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
+const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
+const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
 const EXIT_VERDICTS = new Map([
   [0, { conclusion: "success", title: "Scheduled review gate passed" }],
   [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
@@ -71,41 +77,220 @@ function reconcileOpenPullRequests() {
   }
 
   for (const pr of selected) {
-    publishCheck(pr.head.sha, evaluatePullRequest(pr));
+    const evaluation = evaluatePullRequest(pr);
+    publishCheck(pr.head.sha, evaluation.exitCode, evaluation.reviewState);
   }
 
   console.log(`Scheduled Review gate evaluated ${selected.length} pull request(s).`);
 }
 
 function evaluatePullRequest(pr) {
+  const stateDirectory = mkdtempSync(join(tmpdir(), "pack-review-gate-state-"));
+  const previousStatePath = join(stateDirectory, "previous.json");
+  const nextStatePath = join(stateDirectory, "next.json");
   const evaluator = fileURLToPath(new URL("./check-pr-review-gate.mjs", import.meta.url));
-  const result = spawnSync(
-    process.execPath,
-    [
-      evaluator,
-      "--repo",
-      repo,
-      "--pr",
-      String(pr.number),
-      "--strict-head-review",
-      "--required-review-author",
-      "chatgpt-codex-connector",
-      "--wait-head-review-ms",
-      "180000",
-      "--poll-interval-ms",
-      "10000",
-      "--allow-missing-head-review",
-      "--expected-head-oid",
-      pr.head.sha,
-    ],
-    { encoding: "utf8", env: process.env },
-  );
-  if (result.stdout) process.stdout.write(result.stdout);
-  if (result.stderr) process.stderr.write(result.stderr);
-  return [0, 1, 2].includes(result.status) ? result.status : 2;
+  try {
+    writeFileSync(previousStatePath, loadLatestDurableReviewState(pr), "utf8");
+    const result = spawnSync(
+      process.execPath,
+      [
+        evaluator,
+        "--repo",
+        repo,
+        "--pr",
+        String(pr.number),
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+        "--wait-head-review-ms",
+        "180000",
+        "--poll-interval-ms",
+        "10000",
+        "--allow-missing-head-review",
+        "--expected-head-oid",
+        pr.head.sha,
+        "--review-state",
+        previousStatePath,
+        "--write-review-state",
+        nextStatePath,
+      ],
+      { encoding: "utf8", env: process.env },
+    );
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    const exitCode = [0, 1, 2].includes(result.status) ? result.status : 2;
+    const reviewState = exitCode === 2 ? null : serialiseNextReviewState(nextStatePath);
+    return { exitCode, reviewState };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(`Review gate durable state could not evaluate: ${detail}`);
+    return { exitCode: 2, reviewState: null };
+  } finally {
+    rmSync(stateDirectory, { force: true, recursive: true });
+  }
 }
 
-function publishCheck(headSha, exitCode) {
+function loadLatestDurableReviewState(pr) {
+  const forcePushedPriorShas = loadForcePushedPriorShas(pr.number);
+  const currentPrShas = loadCurrentPrCommitShas(pr);
+  const currentPrShaSet = new Set(currentPrShas);
+  const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
+  const visitedShas = new Set();
+  const visitedForcePushHistoryShas = new Set();
+
+  while (pendingShas.length > 0) {
+    const sha = pendingShas.shift();
+    if (!/^[0-9a-f]{40}$/iu.test(sha ?? "") || visitedShas.has(sha)) continue;
+    if (
+      !currentPrShaSet.has(sha) &&
+      visitedForcePushHistoryShas.size >= MAX_DURABLE_FORCE_PUSH_HISTORY_NODES
+    ) {
+      throw new Error("durable force-push history exceeded the safe lookup bound");
+    }
+    visitedShas.add(sha);
+    if (!currentPrShaSet.has(sha)) visitedForcePushHistoryShas.add(sha);
+    const checkPages = JSON.parse(
+      runGithub(
+        [
+          "api",
+          "--paginate",
+          "--slurp",
+          `repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=all&per_page=100`,
+        ],
+        "durable review-state lookup",
+      ),
+    );
+    for (const page of flattenPages(checkPages)) {
+      for (const check of page?.check_runs ?? []) {
+        if (
+          check?.name === CHECK_RUN_NAME &&
+          typeof check.output?.text === "string" &&
+          check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) &&
+          durableReviewStateBelongsToPr(check.output.text, pr.number)
+        ) {
+          return check.output.text;
+        }
+      }
+    }
+
+    if (currentPrShaSet.has(sha)) continue;
+
+    const commit = JSON.parse(
+      runGithub(
+        ["api", "repos/" + repo + "/commits/" + sha],
+        "durable review-state ancestry lookup",
+      ),
+    );
+    if (!Array.isArray(commit?.parents)) {
+      throw new Error("durable review-state commit ancestry is incomplete");
+    }
+    for (const parent of commit.parents) {
+      if (!/^[0-9a-f]{40}$/iu.test(parent?.sha ?? "")) {
+        throw new Error("durable review-state parent metadata is incomplete");
+      }
+      if (!visitedShas.has(parent.sha)) pendingShas.unshift(parent.sha);
+    }
+  }
+
+  if (forcePushedPriorShas.length > 0) {
+    throw new Error("force-push discontinuity left no reachable durable review state");
+  }
+  return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
+}
+
+function loadCurrentPrCommitShas(pr) {
+  const commitPages = JSON.parse(
+    runGithub(
+      ["api", "--paginate", "--slurp", `repos/${repo}/pulls/${pr.number}/commits?per_page=100`],
+      "current pull request history discovery",
+    ),
+  );
+  const shas = [];
+  const seenShas = new Set();
+  for (const commit of flattenPages(commitPages)) {
+    if (!/^[0-9a-f]{40}$/iu.test(commit?.sha ?? "")) {
+      throw new Error("current pull request history has an invalid commit SHA");
+    }
+    if (!seenShas.has(commit.sha)) {
+      seenShas.add(commit.sha);
+      shas.push(commit.sha);
+    }
+  }
+  if (!seenShas.has(pr.head.sha)) {
+    throw new Error("current pull request history does not contain the PR head");
+  }
+  return [pr.head.sha, ...shas.reverse().filter((sha) => sha !== pr.head.sha)];
+}
+
+function durableReviewStateBelongsToPr(state, expectedPrNumber) {
+  let parsed;
+  try {
+    parsed = JSON.parse(state.slice(DURABLE_REVIEW_STATE_PREFIX.length));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error("durable review state is malformed: " + detail);
+  }
+  return parsed?.version === 1 && parsed.prNumber === expectedPrNumber;
+}
+
+function loadForcePushedPriorShas(prNumber) {
+  const timelinePages = JSON.parse(
+    runGithub(
+      [
+        "api",
+        "--paginate",
+        "--slurp",
+        "-H",
+        "Accept: application/vnd.github+json",
+        `repos/${repo}/issues/${prNumber}/timeline?per_page=100`,
+      ],
+      "force-push discontinuity discovery",
+    ),
+  );
+  const priorHeads = new Map();
+
+  for (const event of flattenPages(timelinePages)) {
+    if (event?.event !== "head_ref_force_pushed") continue;
+    if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
+      throw new Error("force-push event has no valid prior head SHA");
+    }
+    const createdAt = Date.parse(event.created_at ?? "");
+    if (!Number.isFinite(createdAt)) {
+      throw new Error("force-push event has no valid creation timestamp");
+    }
+    const existing = priorHeads.get(event.before_commit_id);
+    if (!existing || createdAt > existing.createdAt) {
+      priorHeads.set(event.before_commit_id, { sha: event.before_commit_id, createdAt });
+    }
+  }
+
+  const orderedPriorHeads = [...priorHeads.values()].sort(
+    (left, right) => right.createdAt - left.createdAt,
+  );
+  for (let index = 1; index < orderedPriorHeads.length; index += 1) {
+    if (orderedPriorHeads[index - 1].createdAt === orderedPriorHeads[index].createdAt) {
+      throw new Error("force-push events have ambiguous chronological ordering");
+    }
+  }
+  return orderedPriorHeads.map(({ sha }) => sha);
+}
+
+function flattenPages(value) {
+  if (!Array.isArray(value)) throw new Error("GitHub API returned malformed pagination data");
+  return value.flat();
+}
+
+function serialiseNextReviewState(path) {
+  const state = readFileSync(path, "utf8");
+  if (!state) throw new Error("review evaluator did not write durable state");
+  const serialised = DURABLE_REVIEW_STATE_PREFIX + state;
+  if (Buffer.byteLength(serialised, "utf8") > MAX_DURABLE_REVIEW_STATE_BYTES) {
+    throw new Error("durable review state exceeds the safe publication bound");
+  }
+  return serialised;
+}
+
+function publishCheck(headSha, exitCode, reviewState = null) {
   const verdict = EXIT_VERDICTS.get(exitCode);
   if (!/^[0-9a-f]{40}$/iu.test(headSha)) fail("--head-sha must be a full commit SHA.");
   if (!verdict) fail("--exit-code must be 0, 1, or 2.");
@@ -124,6 +309,7 @@ function publishCheck(headSha, exitCode) {
     "output[title]": verdict.title,
     "output[summary]": summary,
   };
+  if (reviewState) fields["output[text]"] = reviewState;
   const formArgs = Object.entries(fields).flatMap(([name, value]) => ["-f", `${name}=${value}`]);
   runGithub(
     [
