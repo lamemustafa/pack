@@ -394,10 +394,12 @@ reviewed persistence and failure contracts.
 - Cycle 18 does not certify general aggregate/target completion consistency. Its controls separate
   ledger-read acceptance from session-summary rejection; the cross-reader consistency audit is a
   named follow-up, not hidden inside the filename-copy approval.
-- Cycle 19 does not resolve the full-year cleanup status gap: current synthetic producer output
-  can reach a panel with no inline status or recovery details. The count removal does not alter
-  those shapes. Cleanup action labels and retention after changing the selection also need their
-  own bounded audit; no new action authority is approved here.
+- Cycle 71 rechecked the former full-year cleanup visibility gap against the current synthetic
+  producer, durable parser and full panel. All three cleanup phases render a polite inline status
+  with the exact safe message in both no-portal and unsupported contexts, while retaining no
+  recovery action or start-fresh authority. This resolves the narrow missing-status claim only;
+  it does not qualify normal-workflow provenance, authenticated portal behavior, browser restart
+  handling, or any new cleanup action authority.
 - End-of-Cycle-19 triage prioritized recovery-preserving agreement between stored-state readers.
   Independent source review and isolated dependency-stubbed probes support that follow-up;
   its normal-workflow origin and live behavior remain unqualified. It is not part of the

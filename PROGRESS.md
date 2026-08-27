@@ -1,5 +1,27 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 71 — reconcile full-year cleanup visibility uncertainty
+
+- Window: 2026-08-27 06:39–06:41 IST. This is an evidence/documentation checkpoint; its actual
+  duration is recorded without an idle hold.
+- Picked: VALIDATION's Cycle 19 uncertainty still claimed that synthetic full-year cleanup summaries
+  could reach the panel without inline status or recovery details. It was a named task, not a stable
+  current-state assertion.
+- Measured: the current cleanup-status matrix produces each downloaded, no-artifacts and legacy
+  cleanup phase through the producer (and, where supported, durable parsing), then renders the full
+  panel in no-portal and unsupported contexts. Each case is blocked, carries the local-cleanup
+  signal, has no recovery/start-fresh authority, and renders a polite `Saved run needs attention`
+  inline status containing the canonical safe message.
+- Changed: updated only the stale uncertainty statement. It now records that the narrow synthetic
+  missing-status gap is resolved while retaining the normal-workflow, authenticated-portal,
+  browser-restart and action-authority non-claims. No production or test source changed.
+- Gate: focused cleanup/flow-summary/panel-evidence coverage passed 3 files and 30 tests; diff check
+  and worktree status were clean before the documentation checkpoint. No full gate was rerun because
+  this cycle retained no product/test behavior change.
+- Learned / next: a previous uncertainty needs re-measurement before it can remain a present-tense
+  boundary. Continue with a separate unresolved item rather than treating synthetic panel visibility
+  as proof of live cleanup workflow provenance.
+
 ## Cycle 70 — audit target-evidence reason retention
 
 - Window: 2026-08-27 06:37–06:39 IST. This is a quiet lossy-surface audit; its actual duration is
