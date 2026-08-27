@@ -1,5 +1,20 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 55 — mutate-check saved-file evidence counting
+
+- Window: 2026-08-27 05:29–05:31 IST. This is a quiet test-quality checkpoint, not a
+  cadence-qualifying 45–75-minute cycle; its actual duration is recorded without an idle hold.
+- Picked: per-target evidence must distinguish periods finished without a filed artifact from files
+  whose browser download Pack can positively prove.
+- Measured: temporarily counting `not-filed` outcomes as saved made the focused UI test fail. The
+  rendered status changed from one of three saved to three of three saved even though only one
+  actual file had correlated download evidence.
+- Result: no source change. The strict saved-only count was restored before the focused rerun; the
+  target-evidence suite passed 1 file and 6 tests, with `git diff --check` and worktree status
+  clean. This preserves fail-closed completion wording.
+- Learned / next: the named count test catches the exact misleading aggregate it describes. Keep
+  sampling boundaries where product text could imply stronger download proof than the runtime has.
+
 ## Cycle 54 — bound the 320px rendered-panel verification gap
 
 - Window: 2026-08-27 05:28–05:30 IST. This is a quiet panel-state audit, not a
