@@ -2909,3 +2909,28 @@ recovery state`, proving the response was silently discarded after context succe
   Existing component coverage remains the current proof for the access-blocked rendering; do not
   claim packaged-browser geometry coverage until the verifier can exercise the actual side-panel
   surface without changing the active-tab selection contract.
+
+## Cycle 90 — verify compact sign-in terminal context
+
+- Window: 2026-08-27 08:37–08:43 IST. This is a bounded responsive-verification correction; its
+  actual duration is recorded without an idle hold.
+- Picked: the signed-out GST landing context follows the same terminal presentation path as the
+  access-blocked state but remains an actionable GST tab, so the packaged verifier can represent it
+  without the invalid normal-tab approximation identified in Cycle 89.
+- Changed: the synthetic packaged run now opens the panel at 320px after that context is observed,
+  requires the terminal heading and its sign-in action, and applies the existing no-horizontal-scroll,
+  no-clipped-control and minimum-touch-target assertions. The static package-verifier contract now
+  requires that coverage.
+- Gate: focused verifier coverage passed 1 file and 27 tests. Full build, serial suite, TypeScript,
+  zero-warning ESLint, Prettier, package verification and packaged browser verification passed.
+  Exact final Vitest footer:
+
+  ```text
+        Tests  2829 passed (2829)
+     Start at  08:38:41
+     Duration  156.15s (transform 2.54s, setup 0ms, import 12.61s, tests 126.85s, environment 297ms)
+  ```
+
+- Checkpoint: `56d7a89 test(panel): verify compact sign-in context`; post-commit preflight passed.
+  This is local synthetic packaged-browser verification, not a live portal qualification. No
+  product runtime, taxpayer data, persistence, permission, manifest, dependency, push or PR changed.

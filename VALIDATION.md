@@ -2077,3 +2077,10 @@ Six additional mutation groups were run serially and restored with matching file
 
 - The disabled guided-select branch is not user-reachable: a busy controller replaces the guided
   surface before it mounts. The candidate accessibility fix was not retained.
+
+### Cycle 90 — compact sign-in terminal context
+
+- Focused package-verifier coverage passed 1 file and 27 tests. The full local synthetic gate passed
+  WXT build, 152 test files and 2,829 tests, TypeScript, zero-warning ESLint, Prettier, package
+  verification and packaged browser verification. The panel's 320px sign-in terminal state now has
+  packaged-browser geometry and action visibility coverage; this is not live portal evidence.
