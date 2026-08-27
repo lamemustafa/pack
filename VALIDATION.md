@@ -39,6 +39,16 @@
 
 ## Outcome
 
+### Cycle 79 — pinned tab-session storage distinction
+
+- A pinned full-year continuation now keeps session-storage unavailability distinct from an actual
+  missing, changed or navigated-away tab. The former persists the existing retryable
+  `full-fiscal-year-gst-tab-session-unavailable` outcome without focusing or looking up any tab;
+  the latter retains the existing fail-closed clear-plan outcome.
+- The regression first failed on the old flattened pinned-tab signal. Restored focused proof passed
+  2 files and 8 tests; the complete gate passed 152 files and 2,828 tests. A focused security review
+  found no target-binding, MV3, storage, permission, CSP or download-evidence regression.
+
 Pack now has one nine-row filed-return catalogue as the canonical source for each row's label,
 support status, periodicity and artifact availability. Only its three supported rows enter the
 runtime return-type union and form controls. The six declared-but-unsupported rows remain readable

@@ -1,5 +1,39 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 79 — retain tab-session storage failures
+
+- Window: 2026-08-27 07:21–07:32 IST. This is a bounded lossy-surface correction; its actual
+  duration is recorded without an idle hold.
+- Picked: full-year continuation validates both a pinned browser tab and its stored session marker.
+  A session-storage read failure was flattened into the unavailable-pinned-tab outcome, whose remedy
+  tells the user to discard a saved plan even though Pack had not learned that the tab changed.
+- Discrimination: before the fix, the new pinned-plan regression failed with expected
+  `full-fiscal-year-gst-tab-session-unavailable` and received
+  `full-fiscal-year-pinned-gst-tab-unavailable`. It also proved the failure happened before a
+  browser tab lookup.
+- Changed: required-tab selection now distinguishes ready, unavailable and tab-session-unavailable
+  states. Only the storage-unavailable state reuses the existing durable session-unavailable signal,
+  message and retry remedy; an actual marker mismatch or unavailable pinned tab retains the existing
+  fail-closed clear-plan outcome. The session-unavailable response is now shared with the existing
+  plan-creation storage failure so the canonical fact cannot drift.
+- Human-surface proof: the new flow test asserts the retained durable signal, immediate/persisted
+  message equality and absence of a pinned-tab lookup. The active-tab tests retain exact coverage
+  for ready, missing, navigated-away and changed-marker paths.
+- Security review: PASS. The reviewer found no MV3 durability, storage, permission, CSP,
+  content-script, target-binding or downloads regression; the unavailable session blocks before
+  lookup or focus and cannot select a replacement tab.
+- Gate: focused identity coverage passed 2 files and 8 tests. The full build, serial suite,
+  TypeScript, zero-warning ESLint, Prettier and package verifier passed. Exact final Vitest footer:
+
+  ```text
+        Tests  2828 passed (2828)
+     Start at  07:26:57
+     Duration  155.04s (transform 2.54s, setup 0ms, import 12.44s, tests 126.31s, environment 290ms)
+  ```
+
+- Checkpoint: `57bc98f fix(recovery): retain tab-session storage failures`; post-commit preflight
+  passed. No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.
+
 ## Cycle 78 — retain normal browser-delivery reasons
 
 - Window: 2026-08-27 07:13–07:20 IST. This is a bounded lossy-surface correction; its actual
