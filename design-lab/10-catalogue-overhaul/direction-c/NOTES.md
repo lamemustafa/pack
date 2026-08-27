@@ -21,12 +21,13 @@ There is no multi-select, month grid, batch promise or unsupported action.
 
 ## Catalogue contract
 
-One nine-row JavaScript catalogue drives both the supported return options and the read-only
+One eight-row JavaScript catalogue drives both the supported return options and the read-only
 Advanced register. The generic renderer does not branch on return IDs. The catalogue contains:
 
-- Supported monthly: GSTR-3B, GSTR-1 and GSTR-2B.
+- Supported GSTR-3B: monthly or quarterly as set on the GST Portal; supported monthly: GSTR-1 and
+  GSTR-2B.
 - Unsupported annual: GSTR-9 and GSTR-9C.
-- Unsupported quarterly: GSTR-4 and GSTR-4A.
+- Unsupported quarterly: GSTR-4A.
 - Unsupported monthly: IFF.
 - Unsupported with no period axis: Ledgers.
 

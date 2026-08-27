@@ -11,11 +11,13 @@ remains visible below it.
   controls.
 - Common case: 4 clicks when accepting the shown defaults (three Continue actions, then Start).
 - Exactly one return, financial year, period and artifact selection is present at every step.
-- The single nine-row `RETURN_CATALOGUE` feeds both the supported return select and the advanced
+- The historical nine-row `RETURN_CATALOGUE` note is superseded by the current eight-row catalogue,
+  which feeds both the supported return select and the advanced
   reference list. Period options derive from periodicity; artifact options come from the selected
   row. There is no return-specific rendering branch.
-- GSTR-3B, GSTR-1 and GSTR-2B are supported monthly rows. GSTR-9 and GSTR-9C are unsupported annual
-  rows; GSTR-4 and GSTR-4A unsupported quarterly rows; IFF an unsupported monthly row; Ledgers an
+- GSTR-3B is supported monthly or quarterly as set on the GST Portal; GSTR-1 and GSTR-2B are
+  supported monthly rows. GSTR-9 and GSTR-9C are unsupported annual
+  rows; GSTR-4A an unsupported quarterly row; IFF an unsupported monthly row; Ledgers an
   unsupported non-period row.
 - Unsupported rows are plain text behind the one advanced door. They are never `option`, button,
   link or disabled pseudo-control.

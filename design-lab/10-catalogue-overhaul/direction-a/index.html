@@ -649,13 +649,6 @@
           reason: "Declared only · annual flow is not supported",
         },
         {
-          id: "gstr-4",
-          label: "GSTR-4",
-          periodicity: "quarterly",
-          supported: false,
-          reason: "Declared only · quarterly flow is not supported",
-        },
-        {
           id: "gstr-4a",
           label: "GSTR-4A",
           periodicity: "quarterly",
@@ -799,8 +792,8 @@
         document.querySelector("#measure-overflow").textContent = hasOverflow ? "Detected" : "None";
       }
 
-      if (catalogue.length !== 9) {
-        throw new Error(`Catalogue must render exactly nine rows; received ${catalogue.length}.`);
+      if (catalogue.length !== 8) {
+        throw new Error(`Catalogue must render exactly eight rows; received ${catalogue.length}.`);
       }
 
       catalogue

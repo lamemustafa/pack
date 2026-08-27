@@ -78,9 +78,9 @@
   2 files and 8 tests; the complete gate passed 152 files and 2,828 tests. A focused security review
   found no target-binding, MV3, storage, permission, CSP or download-evidence regression.
 
-Pack now has one nine-row filed-return catalogue as the canonical source for each row's label,
+Pack now has one eight-row filed-return catalogue as the canonical source for each row's label,
 support status, periodicity and artifact availability. Only its three supported rows enter the
-runtime return-type union and form controls. The six declared-but-unsupported rows remain readable
+runtime return-type union and form controls. The five declared-but-unsupported rows remain readable
 catalogue information. A four-step side-panel guide derives its period axis from periodicity and
 retains one exact return/FY/period/artifact scope for the existing single-scope runtime.
 
@@ -140,13 +140,15 @@ was completely keyed by `monthly | quarterly | annual | none` while holding the 
 budget at four. A was faster but expanded to eight controls. C was fastest but its runnable scope
 was monthly-specific and its four-control self-report omitted the Advanced disclosure.
 
-Every prototype contained exactly nine catalogue rows: supported monthly GSTR-1, GSTR-3B and
-GSTR-2B; unsupported annual GSTR-9/GSTR-9C; unsupported quarterly GSTR-4/GSTR-4A; unsupported
-monthly IFF; and unsupported non-period Ledgers. Unsupported rows were never controls.
+The following prototype inventory is superseded. The current catalogue has eight rows: supported
+monthly GSTR-1 and GSTR-2B; supported GSTR-3B monthly or quarterly as set on the GST Portal;
+unsupported annual GSTR-9/GSTR-9C; unsupported quarterly
+GSTR-4A; unsupported monthly IFF; and unsupported non-period Ledgers. Unsupported rows are never
+controls.
 
 ## Catalogue and panel implementation
 
-- `filed-returns-catalogue.ts` owns the nine rows. The runtime union, capability lookups, select
+- `filed-returns-catalogue.ts` owns the eight rows. The runtime union, capability lookups, select
   options and catalogue disclosure derive from the same data rather than restating supported types.
 - `panel-guided-scope-model.ts` supplies complete periodicity-keyed copy and options. Monthly reuses
   the canonical captured-period helper; quarterly has Q1–Q4; annual has one FY option; `none` is
@@ -154,7 +156,7 @@ monthly IFF; and unsupported non-period Ledgers. Unsupported rows were never con
 - The side panel progressively discloses return, FY, period and artifact. One target review remains
   visible, including before the irreversible final action. The maximum is four operable controls,
   including the Advanced catalogue disclosure.
-- The nine-row catalogue is explanatory. Its six unsupported rows cannot become selects, buttons,
+- The eight-row catalogue is explanatory. Its five unsupported rows cannot become selects, buttons,
   links or runtime return values.
 - The obsolete preset component, preset snapshot machinery and two preset-only test files were
   deleted rather than retained as a second contract.
@@ -188,7 +190,7 @@ did not navigate or contact GST. At an exact 320 × 900 viewport:
 
 - Document and body width remained 320px in every measured state.
 - The final action named the exact scope: `Download July 2026-27 GSTR-3B PDF`.
-- The open catalogue contained 9 rows, 6 unsupported rows and 0 controls for unsupported rows.
+- The open catalogue contained 8 rows, 5 unsupported rows and 0 controls for unsupported rows.
 - Focused controls and the disclosure have a 44px minimum target; compact type has a 12px floor.
 
 This is packaged synthetic evidence, not authenticated portal qualification. Chromium semantics and
@@ -473,8 +475,9 @@ reviewed persistence and failure contracts.
 - Exact state inventory: loading, empty/ready, unsupported, access denied, downloading, partial,
   complete, unavailable, blocked, error and cancelled. Permanent component assertions now cover
   each family; cancelled confirmation no longer disappears when presentation returns to `ready`.
-- Exact catalogue inventory: supported monthly GSTR-3B, GSTR-1 and GSTR-2B; unsupported annual
-  GSTR-9 and GSTR-9C; unsupported quarterly GSTR-4 and GSTR-4A; unsupported monthly IFF; and
+- Exact catalogue inventory: supported GSTR-3B monthly or quarterly as set on the GST Portal;
+  supported monthly GSTR-1 and GSTR-2B; unsupported annual
+  GSTR-9 and GSTR-9C; unsupported quarterly GSTR-4A; unsupported monthly IFF; and
   unsupported non-periodic Ledgers. Every row's decision is pinned. Unsupported rows render zero
   controls and cannot enter runtime selection.
 - Access-denied boundary: the captured error route wins over a stale filed-returns page title, but
@@ -594,7 +597,7 @@ reviewed persistence and failure contracts.
 
 ### Cycle 6 — catalogue density and scanning
 
-- Preserved contract: all nine canonical catalogue entries render; supported return selection
+- Preserved contract: all eight canonical catalogue entries render; supported return selection
   remains exactly GSTR-3B, GSTR-1 and GSTR-2B; every available artifact label and every unavailable
   periodicity remains visible; unavailable rows contain no control.
 - Discrimination evidence: before implementation, the focused grouping test failed with:

@@ -11,13 +11,13 @@ scope, matching the runtime's one-scope message contract.
 - Default view: three outcome buttons and one advanced door — four controls total.
 - Common case: choose a recipe, confirm the preselected scope, press **Prepare this file** — two
   clicks. FY and period remain visible and editable before the action.
-- Advanced: **Browse all return types** reveals all nine rows. Only supported rows are buttons;
+- Advanced: **Browse all return types** reveals all eight rows. Only supported rows are buttons;
   declared-but-unsupported rows are explanatory, non-interactive items.
 - The prototype stops at the portal boundary and explicitly says no file was requested or saved.
 
 ## Catalogue proof
 
-One `catalogue` array contains exactly nine rows. Both the three recipe buttons and the advanced
+One `catalogue` array contains exactly eight rows. Both the three recipe buttons and the advanced
 catalogue are derived from it. `renderCatalogueRow()` handles every return; there is no switch or
 if-chain keyed to a return name. Period choices are keyed only by the row's declared periodicity.
 
