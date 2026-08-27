@@ -6,6 +6,7 @@ export type ActiveGstTab = Browser.tabs.Tab & { id: number };
 
 export type RequiredGstTabResult =
   | { state: "ready"; tab: ActiveGstTab }
+  | { state: "tab-focus-unavailable" }
   | { state: "tab-session-unavailable" }
   | { state: "unavailable" };
 
@@ -22,7 +23,11 @@ export async function getRequiredGstTab(
   const activeTab =
     requiredTabId === undefined ? await getActiveGstTab() : await getPinnedGstTab(requiredTabId);
   if (!activeTab) return { state: "unavailable" };
-  await focusTab(activeTab);
+  try {
+    await focusTab(activeTab);
+  } catch {
+    return { state: "tab-focus-unavailable" };
+  }
   return { state: "ready", tab: activeTab };
 }
 

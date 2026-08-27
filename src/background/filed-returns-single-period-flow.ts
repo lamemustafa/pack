@@ -124,6 +124,9 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
     options.requiredPortalTabSessionId,
   );
   if (requiredTab.state !== "ready") {
+    if (requiredTab.state === "tab-focus-unavailable") {
+      return tabFocusUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
+    }
     if (requiredTab.state === "tab-session-unavailable") {
       return tabSessionUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
     }
@@ -246,6 +249,35 @@ function tabSessionUnavailableResponse(
         safeSignals: ["full-fiscal-year-gst-tab-session-unavailable"],
         safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
           "full-fiscal-year-gst-tab-session-unavailable",
+        ]),
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Try again with the GST Portal tab open in the foreground.",
+          canResume: true,
+        },
+      },
+    },
+    deps,
+    shouldPersistSinglePeriodSummary,
+  );
+}
+
+function tabFocusUnavailableResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+  shouldPersistSinglePeriodSummary: boolean,
+): Promise<PackMessageResponse> {
+  return withPersistedSinglePeriodSummary(
+    scope,
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: ["filed-returns-gst-tab-focus-unavailable"],
+        safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+          "filed-returns-gst-tab-focus-unavailable",
         ]),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",

@@ -213,6 +213,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-returns-target-local-cleanup-required",
   "filed-returns-download-search-unavailable",
   "filed-returns-download-state-unknown",
+  "filed-returns-gst-tab-focus-unavailable",
   "filed-returns-heading",
   "filed-returns-opfs-clear-failed",
   "filed-returns-opfs-clear-offscreen-unreachable",

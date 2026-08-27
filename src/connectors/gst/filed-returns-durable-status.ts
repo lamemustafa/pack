@@ -80,6 +80,7 @@ type DurableMessageKey =
   | "target-review"
   | "target-running"
   | "target-scheduled-downtime"
+  | "target-tab-focus-unavailable"
   | "target-system-error";
 
 export function canonicalDurableTargetStatus(
@@ -429,6 +430,9 @@ function messageKeyForTarget(
   if (signals.includes("full-fiscal-year-gst-tab-session-unavailable")) {
     return "full-year-tab-session-unavailable";
   }
+  if (signals.includes("filed-returns-gst-tab-focus-unavailable")) {
+    return "target-tab-focus-unavailable";
+  }
   if (signals.includes("filed-returns-target-manually-observed")) return "target-manually-observed";
   if (hasCleanupFailureSignal(signals)) {
     return "target-cleanup-blocked";
@@ -532,6 +536,9 @@ function messageKeyForSummary(
   }
   if (blockingRecoveryKey) return blockingRecoveryKey;
   if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
+  if (signals.includes("filed-returns-gst-tab-focus-unavailable")) {
+    return "target-tab-focus-unavailable";
+  }
   if (signals.includes("filed-returns-target-review-required")) return "target-review";
   if (status === "blocked" || status === "partial") {
     const portalAvailabilityKey = portalAvailabilityMessageKey(signals);
@@ -647,6 +654,8 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "target-review": `Pack could not verify the browser download for ${period}. Check Downloads before retrying or cancelling this target.`,
     "target-running": `Checking ${period}.`,
     "target-scheduled-downtime": FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE,
+    "target-tab-focus-unavailable":
+      "Pack could not focus the selected GST Portal tab and will not start another portal action.",
     "target-system-error": FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE,
   };
   return messages[key];

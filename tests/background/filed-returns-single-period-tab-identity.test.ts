@@ -65,6 +65,33 @@ describe("single-period tab identity blocks", () => {
     assertImmediateAndPersistedMessagesMatch(response);
   });
 
+  it("keeps the immediate tab-focus block equal to its persisted summary message", async () => {
+    browserMocks.tabs.update.mockRejectedValueOnce(new Error("synthetic focus failure"));
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(scope, deps());
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeMessage:
+          "Pack could not focus the selected GST Portal tab and will not start another portal action.",
+        safeSignals: ["filed-returns-gst-tab-focus-unavailable"],
+      },
+    });
+    assertImmediateAndPersistedMessagesMatch(response);
+  });
+
+  it("does not start portal work when the selected tab window cannot be focused", async () => {
+    browserMocks.windows.update.mockRejectedValueOnce(new Error("synthetic window focus failure"));
+
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(scope, deps());
+
+    expect(response).toMatchObject({
+      flowStep: { safeSignals: ["filed-returns-gst-tab-focus-unavailable"] },
+    });
+    expect(flowMocks.triggerSelectedArtifacts).not.toHaveBeenCalled();
+    assertImmediateAndPersistedMessagesMatch(response);
+  });
+
   it("keeps the immediate tab-session block equal to its persisted summary message", async () => {
     browserMocks.storage.session.get.mockRejectedValueOnce(new Error("session unavailable"));
 
@@ -131,6 +158,7 @@ function deps() {
       id: 17,
       incognito: false,
       url: "not-a-supported-gst-tab",
+      windowId: 9,
     }),
     storageKeys: {
       completion: "completion",

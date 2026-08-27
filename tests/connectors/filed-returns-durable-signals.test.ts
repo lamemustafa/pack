@@ -203,6 +203,12 @@ describe("filed-return durable signal contract", () => {
     expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
   });
 
+  it("retains the fixed GST tab-focus-unavailable signal", () => {
+    const signals = ["filed-returns-gst-tab-focus-unavailable"];
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
+  });
+
   it("retains every bounded artifact-checkpoint clear failure reason", () => {
     const signals = ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS.map(
       artifactAcquisitionCheckpointClearFailureSignal,
