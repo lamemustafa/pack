@@ -287,6 +287,11 @@ function readTrustedDurableDisposition(comment, prBody) {
   ) {
     failEvaluation("A trusted durable disposition marker has an unsupported shape.");
   }
+  if (!hasFindingLinkedDispositionEvidence(evidence, value)) {
+    failEvaluation(
+      "A trusted durable disposition must include finding-linked, disposition-specific visible evidence.",
+    );
+  }
   if (
     value.disposition === "linked-follow-up" &&
     (typeof value.followUp !== "string" ||
@@ -297,6 +302,30 @@ function readTrustedDurableDisposition(comment, prBody) {
     failEvaluation("A linked follow-up disposition must name its follow-up in the PR body.");
   }
   return value;
+}
+
+function hasFindingLinkedDispositionEvidence(evidence, disposition) {
+  return (
+    includesVisibleEvidenceField(evidence, "Finding", disposition.findingId) &&
+    includesVisibleEvidenceField(evidence, "Disposition", disposition.disposition) &&
+    hasNonEmptyVisibleEvidenceField(evidence, "Evidence") &&
+    (disposition.disposition !== "rejected" ||
+      hasNonEmptyVisibleEvidenceField(evidence, "Reasoning"))
+  );
+}
+
+function includesVisibleEvidenceField(text, fieldName, value) {
+  const escapedFieldName = fieldName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(
+    "(?:^|\\n)\\s*" + escapedFieldName + "\\s*:\\s*" + escapedValue + "\\s*(?:$|\\n)",
+    "u",
+  ).test(text);
+}
+
+function hasNonEmptyVisibleEvidenceField(text, fieldName) {
+  const escapedFieldName = fieldName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp("(?:^|\\n)\\s*" + escapedFieldName + "\\s*:\\s*\\S[^\\n]*", "u").test(text);
 }
 
 function includesExactFollowUpReference(text, reference) {

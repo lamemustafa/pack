@@ -134,7 +134,6 @@ function loadLatestDurableReviewState(pr) {
   const forcePushedPriorShas = loadForcePushedPriorShas(pr.number);
   const pendingShas = [pr.head.sha, ...forcePushedPriorShas];
   const visitedShas = new Set();
-  const candidates = [];
 
   while (pendingShas.length > 0) {
     if (visitedShas.size >= MAX_DURABLE_HISTORY_NODES) {
@@ -162,11 +161,7 @@ function loadLatestDurableReviewState(pr) {
           check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) &&
           durableReviewStateBelongsToPr(check.output.text, pr.number)
         ) {
-          const completedAt = Date.parse(check.completed_at ?? "");
-          if (!Number.isFinite(completedAt)) {
-            throw new Error("durable review state has no valid completion timestamp");
-          }
-          candidates.push({ completedAt, state: check.output.text });
+          return check.output.text;
         }
       }
     }
@@ -188,14 +183,10 @@ function loadLatestDurableReviewState(pr) {
     }
   }
 
-  if (candidates.length === 0) {
-    if (forcePushedPriorShas.length > 0) {
-      throw new Error("force-push discontinuity left no reachable durable review state");
-    }
-    return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
+  if (forcePushedPriorShas.length > 0) {
+    throw new Error("force-push discontinuity left no reachable durable review state");
   }
-  candidates.sort((left, right) => right.completedAt - left.completedAt);
-  return candidates[0].state;
+  return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
 }
 
 function durableReviewStateBelongsToPr(state, expectedPrNumber) {
