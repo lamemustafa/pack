@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 73 — surface options local-data clear failures
+
+- Window: 2026-08-27 06:45–06:50 IST. This is a bounded lossy-surface correction; its actual
+  duration is recorded without an idle hold.
+- Picked: the options `Clear local Pack data` action had a `finally` block but no rejection handler,
+  so a failed background request cleared its busy state while leaving the prior status visible.
+- Discrimination: the new rendered-options regression failed on the old path with no safe status and
+  an unhandled `worker unavailable` rejection. It expected the local-data retry message and received
+  the initial storage description instead.
+- Changed: the options component now catches that rejected request and renders the local-only retry
+  message before clearing busy state. It is exported for direct DOM testing; the normal entrypoint
+  still mounts it only when its root exists. No storage clear semantics, persisted field, target or
+  download guard changed.
+- UI hardening: followed the product-register error-state guidance; the local Impeccable detector
+  reported no findings for this surface. The new copy is operational, specific and retryable without
+  exposing sensitive data.
+- Gate: focused options tests passed 2 files and 8 tests. The full build, serial suite, TypeScript,
+  zero-warning ESLint, Prettier, package verifier and diff check passed. Exact final Vitest footer:
+
+  ```text
+        Tests  2813 passed (2813)
+     Start at  06:47:17
+     Duration  154.44s (transform 2.50s, setup 0ms, import 12.37s, tests 125.84s, environment 292ms)
+  ```
+
+- Baseline: the new real regression test brings both the tracked tree and final suite to 152 test
+  files, resolving the current objective-count gap without claiming to reconstruct an unknown
+  historical test.
+- Checkpoint: `2d0356d fix(options): surface local-data clear failures`; post-commit
+  `pnpm workflow:preflight` passed. No live/authenticated GST qualification, release claim, push or
+  PR action was made.
+
 ## Cycle 72 — centralize malformed popup response copy
 
 - Window: 2026-08-27 06:41–06:45 IST. This is a bounded duplicate-fact refactor; its actual duration

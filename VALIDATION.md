@@ -379,13 +379,10 @@ reviewed persistence and failure contracts.
 
 ## Uncertainty and non-claims
 
-- Cycle 63 reconciled the objective's static 152-test-file baseline against the current tree. The
-  current tracked-test-file count is 151 and the full Vitest gate likewise reports 151 files. A
-  reachability-history count from `master` through current `HEAD` observed 124, 125, 126, 127, 131,
-  134, 137, 124, 128, 147, 149, 150 and 151 test files; it never observed 152. The missing baseline
-  file is therefore not identified by current branch evidence. No test was recreated or removed:
-  restoring an unknown test would be ungrounded coverage, not a repair. This baseline discrepancy
-  remains an honest documentation gap until the owner supplies the baseline revision or test name.
+- Cycle 63 found no historical revision with the objective's 152-file baseline, so it did not invent
+  an unknown test. Cycle 73 adds a genuine options failure regression and the current tracked tree
+  and full Vitest gate now both report 152 test files. This resolves the present baseline-count gap;
+  the original historical 152nd test is still not identified and no claim is made that it was restored.
 - Live authenticated GST behaviour is unverified by design. No runtime, download, selector or
   portal claim is inferred from synthetic tests or packaged-browser layout evidence.
 - The catalogued annual, quarterly and non-period returns remain unsupported. Their data shapes and
