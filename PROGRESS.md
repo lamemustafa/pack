@@ -1,5 +1,43 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 60 — require browser evidence before single-period saved copy
+
+- Window: 2026-08-27 05:48–05:55 IST. This is a focused correction to a user-visible financial
+  completion claim; its actual duration is recorded without an idle hold.
+- Picked: the panel’s shared presentation state called every complete single-period run “saved by
+  your browser”, while the pack-summary card already withheld that claim without a completed,
+  non-empty browser-download signal. Both messages render for the same run, so an unconfirmed run
+  could contradict itself on screen.
+- Measured before: importer tracing confirmed `PanelSurface` feeds the shared presentation into
+  `InlineStatus` and renders `PackSummary` alongside it. The prior inline branch then discarded a
+  cautious presentation body and restored the unsupported single-file saved claim.
+- Changed: one popup-bound confirmation predicate now drives the pack card, presentation state,
+  and inline status. A complete single-period run without positive evidence now says browser
+  download unconfirmed and directs the user to Browser Downloads; it retains the existing specific
+  filename-override copy, and confirmed runs still say saved. Existing GST-owned filename-override
+  signal names are reused rather than duplicated.
+- Discrimination: temporarily making the shared predicate always true failed 7 focused assertions:
+  the inline status again announced the selected file saved, the presentation state returned the
+  success state, and five existing pack-summary cases falsely claimed a save. The signal predicate
+  was restored before final gates.
+- Required review: Pack privacy review PASS found no credential/session, taxpayer-data, storage,
+  network, permission, selector, or public-claim expansion. It confirmed the reused values are
+  fixed existing signal names and no filename or portal value reaches the UI.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2816 passed (2816)
+    Start at  05:51:34
+    Duration  154.02s (transform 2.47s, setup 0ms, import 12.40s, tests 125.48s, environment 8ms)
+  ```
+
+- Checkpoints: `603c676 fix(popup): require download evidence for saved copy`; the progress record
+  follows in a separate documentation checkpoint. No live/authenticated GST qualification, release
+  claim, push or PR action was made.
+- Learned / next: terminal status alone is not delivery evidence. Trace all co-rendered summary and
+  status copy as one surface, then continue the lossy-surface audit with a different terminal path.
+
 ## Cycle 59 — mutate-check untrusted summary-period counts
 
 - Window: 2026-08-27 05:41–05:46 IST. This is a short test-quality checkpoint; its actual
