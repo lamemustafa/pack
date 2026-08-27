@@ -1,5 +1,38 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 77 — retain local staging failure reasons
+
+- Window: 2026-08-27 07:05–07:12 IST. This is a bounded lossy-surface correction; its actual
+  duration is recorded without an idle hold.
+- Picked: a rejected local fiscal-year staging-worker request was flattened to
+  `delivery-unconfirmed`, and every known local staging category was then flattened by the final
+  GSTR-3B presentation adapter into a generated reason phrase instead of the canonical actionable
+  message.
+- Discrimination: the new rejection regression first received `artifact-delivery-unconfirmed` and
+  `Pack did not save the verified filed-return artifact: delivery unconfirmed.`. After requiring the
+  canonical message for all known staging outcomes, the pre-fix focused run failed six assertions:
+  blob URL, invalid data URL, unavailable local storage, staging write, invalid worker response and
+  rejected worker request each received the generated delivery phrase rather than its distinct local
+  staging explanation.
+- Changed: only local staging failures now carry their canonical safe message through the JSON and
+  GSTR-3B PDF adapters. A rejected worker request becomes the existing `offscreen-unreachable`
+  reason; known worker result categories retain their existing typed reasons. Normal browser-download
+  failures still use the prior generic delivery fallback. Every changed outcome remains blocked, has
+  no download identity or completion state, and adds no action or persisted field.
+- Security review: final focused review PASS. It found no MV3, permission, CSP, persistence,
+  completion-evidence, target-binding, downloads-API, content-script or remote-code regression.
+- Gate: focused staging/summary coverage passed 2 files and 145 tests. The full build, serial suite,
+  TypeScript, zero-warning ESLint, Prettier and package verifier passed. Exact final Vitest footer:
+
+  ```text
+        Tests  2817 passed (2817)
+     Start at  07:08:56
+     Duration  155.27s (transform 2.54s, setup 0ms, import 12.49s, tests 126.46s, environment 296ms)
+  ```
+
+- Checkpoint: `3fccdc7 fix(recovery): retain local staging failure reasons`; post-commit preflight
+  passed. No live portal, GST data, manifest, permission, dependency, push or PR changed.
+
 ## Cycle 76 — announce options action status
 
 - Window: 2026-08-27 06:58–07:03 IST. This is a bounded accessibility correction; its actual
