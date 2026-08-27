@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import {
   DEFAULT_GH_RETRY_ATTEMPTS,
@@ -9,6 +12,7 @@ import {
 } from "./lib/github-cli-retry.mjs";
 
 const CHECK_RUN_NAME = "Review gate (scheduled)";
+const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const EXIT_VERDICTS = new Map([
   [0, { conclusion: "success", title: "Scheduled review gate passed" }],
   [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
@@ -71,41 +75,120 @@ function reconcileOpenPullRequests() {
   }
 
   for (const pr of selected) {
-    publishCheck(pr.head.sha, evaluatePullRequest(pr));
+    const evaluation = evaluatePullRequest(pr);
+    publishCheck(pr.head.sha, evaluation.exitCode, evaluation.reviewState);
   }
 
   console.log(`Scheduled Review gate evaluated ${selected.length} pull request(s).`);
 }
 
 function evaluatePullRequest(pr) {
+  const stateDirectory = mkdtempSync(join(tmpdir(), "pack-review-gate-state-"));
+  const previousStatePath = join(stateDirectory, "previous.json");
+  const nextStatePath = join(stateDirectory, "next.json");
   const evaluator = fileURLToPath(new URL("./check-pr-review-gate.mjs", import.meta.url));
-  const result = spawnSync(
-    process.execPath,
-    [
-      evaluator,
-      "--repo",
-      repo,
-      "--pr",
-      String(pr.number),
-      "--strict-head-review",
-      "--required-review-author",
-      "chatgpt-codex-connector",
-      "--wait-head-review-ms",
-      "180000",
-      "--poll-interval-ms",
-      "10000",
-      "--allow-missing-head-review",
-      "--expected-head-oid",
-      pr.head.sha,
-    ],
-    { encoding: "utf8", env: process.env },
-  );
-  if (result.stdout) process.stdout.write(result.stdout);
-  if (result.stderr) process.stderr.write(result.stderr);
-  return [0, 1, 2].includes(result.status) ? result.status : 2;
+  try {
+    writeFileSync(previousStatePath, loadLatestDurableReviewState(pr), "utf8");
+    const result = spawnSync(
+      process.execPath,
+      [
+        evaluator,
+        "--repo",
+        repo,
+        "--pr",
+        String(pr.number),
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+        "--wait-head-review-ms",
+        "180000",
+        "--poll-interval-ms",
+        "10000",
+        "--allow-missing-head-review",
+        "--expected-head-oid",
+        pr.head.sha,
+        "--review-state",
+        previousStatePath,
+        "--write-review-state",
+        nextStatePath,
+      ],
+      { encoding: "utf8", env: process.env },
+    );
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    const exitCode = [0, 1, 2].includes(result.status) ? result.status : 2;
+    const reviewState = exitCode === 2 ? null : serialiseNextReviewState(nextStatePath);
+    return { exitCode, reviewState };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(`Review gate durable state could not evaluate: ${detail}`);
+    return { exitCode: 2, reviewState: null };
+  } finally {
+    rmSync(stateDirectory, { force: true, recursive: true });
+  }
 }
 
-function publishCheck(headSha, exitCode) {
+function loadLatestDurableReviewState(pr) {
+  const commitPages = JSON.parse(
+    runGithub(
+      ["api", "--paginate", "--slurp", `repos/${repo}/pulls/${pr.number}/commits?per_page=100`],
+      "durable review-state commit discovery",
+    ),
+  );
+  const commits = flattenPages(commitPages);
+  const candidates = [];
+
+  for (const commit of commits) {
+    if (!/^[0-9a-f]{40}$/iu.test(commit?.sha ?? "")) {
+      throw new Error("durable review-state commit metadata is incomplete");
+    }
+    const checkPages = JSON.parse(
+      runGithub(
+        [
+          "api",
+          "--paginate",
+          "--slurp",
+          `repos/${repo}/commits/${commit.sha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=all&per_page=100`,
+        ],
+        "durable review-state lookup",
+      ),
+    );
+    for (const page of flattenPages(checkPages)) {
+      for (const check of page?.check_runs ?? []) {
+        if (
+          check?.name === CHECK_RUN_NAME &&
+          typeof check.output?.text === "string" &&
+          check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX)
+        ) {
+          const completedAt = Date.parse(check.completed_at ?? "");
+          if (!Number.isFinite(completedAt)) {
+            throw new Error("durable review state has no valid completion timestamp");
+          }
+          candidates.push({ completedAt, state: check.output.text });
+        }
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
+    return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
+  }
+  candidates.sort((left, right) => right.completedAt - left.completedAt);
+  return candidates[0].state;
+}
+
+function flattenPages(value) {
+  if (!Array.isArray(value)) throw new Error("GitHub API returned malformed pagination data");
+  return value.flat();
+}
+
+function serialiseNextReviewState(path) {
+  const state = readFileSync(path, "utf8");
+  if (!state) throw new Error("review evaluator did not write durable state");
+  return `${DURABLE_REVIEW_STATE_PREFIX}${state}`;
+}
+
+function publishCheck(headSha, exitCode, reviewState = null) {
   const verdict = EXIT_VERDICTS.get(exitCode);
   if (!/^[0-9a-f]{40}$/iu.test(headSha)) fail("--head-sha must be a full commit SHA.");
   if (!verdict) fail("--exit-code must be 0, 1, or 2.");
@@ -124,6 +207,7 @@ function publishCheck(headSha, exitCode) {
     "output[title]": verdict.title,
     "output[summary]": summary,
   };
+  if (reviewState) fields["output[text]"] = reviewState;
   const formArgs = Object.entries(fields).flatMap(([name, value]) => ["-f", `${name}=${value}`]);
   runGithub(
     [
