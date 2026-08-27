@@ -1,8 +1,11 @@
 import type { PortalContext } from "../../core/contracts";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import {
   canRetryFullFiscalYearZipWithoutPortal,
   getFullFiscalYearCleanupCopy,
+  hasConfirmedSinglePeriodBrowserDownload,
+  hasFiledReturnsDownloadFilenameOverride,
 } from "./flow-summary";
 
 export type PopupPresentationKind =
@@ -98,6 +101,20 @@ export function getPopupPresentationState(
         icon: "!",
         kind: "unavailable",
         title: "Download saved with one unavailable file",
+        tone: "warning",
+      };
+    }
+    if (
+      !hasConfirmedSinglePeriodBrowserDownload(summary) &&
+      !hasFiledReturnsDownloadFilenameOverride(summary) &&
+      !isFullFiscalYearSummary(summary)
+    ) {
+      return {
+        badge: "Download unconfirmed",
+        body: "Pack finished this run, but has not confirmed your browser saved the selected file. Check Browser Downloads.",
+        icon: "!",
+        kind: "complete",
+        title: "Browser download not confirmed",
         tone: "warning",
       };
     }
@@ -198,6 +215,10 @@ export function getPopupPresentationState(
     title: "GST Portal page detected",
     tone: "ready",
   };
+}
+
+function isFullFiscalYearSummary(summary: FiledReturnsFlowSummary): boolean {
+  return summary.scope.period === FULL_FISCAL_YEAR_PERIOD;
 }
 
 function getUnsupportedContextState(context: PortalContext): PopupPresentationState {

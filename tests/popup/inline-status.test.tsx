@@ -70,6 +70,23 @@ function fullYearSummary(safeSignals: string[]): FiledReturnsFlowSummary {
   };
 }
 
+function singlePeriodSummary(safeSignals: string[]): FiledReturnsFlowSummary {
+  return {
+    scope: { financialYear: "2025-26", period: "May", returnType: "GSTR-3B", artifactType: "PDF" },
+    status: "complete",
+    completedPeriods: ["May"],
+    totalPeriods: 1,
+    updatedAt: "2026-08-21T00:00:00.000Z",
+    flowStep: {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      state: "downloaded",
+      safeSignals,
+      safeMessage: "Single-period run finished.",
+    },
+  };
+}
+
 describe("full-year completion claim", () => {
   it("does not claim the ZIP was saved when no download was correlated", () => {
     // A full-year run completes when every PERIOD is positive. That state cannot
@@ -134,6 +151,51 @@ describe("full-year completion claim", () => {
 
     expect(markup).toContain("12 periods saved as one ZIP");
     expect(markup).not.toContain("ZIP unconfirmed");
+  });
+});
+
+describe("single-period completion claim", () => {
+  it("does not claim a selected file was saved without positive browser evidence", () => {
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Download unconfirmed",
+          body: "Pack finished this run, but has not confirmed your browser saved the selected file. Check Browser Downloads.",
+          icon: "!",
+          kind: "complete",
+          title: "Browser download not confirmed",
+          tone: "warning",
+        }}
+        summary={singlePeriodSummary([])}
+      />,
+    );
+
+    expect(markup).toContain("Browser download not confirmed");
+    expect(markup).toContain("has not confirmed your browser saved the selected file");
+    expect(markup).not.toContain("The selected file was saved by your browser.");
+  });
+
+  it("claims a selected file was saved after positive browser evidence", () => {
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={completePresentation}
+        summary={singlePeriodSummary(["browser-download-completed", "browser-download-non-empty"])}
+      />,
+    );
+
+    expect(markup).toContain("The selected file was saved by your browser.");
   });
 });
 

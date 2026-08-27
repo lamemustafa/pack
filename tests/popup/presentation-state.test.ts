@@ -117,6 +117,31 @@ describe("popup presentation state", () => {
       title: "Pack could not finish that action",
     });
   });
+
+  it("does not claim an unconfirmed single-period completion was saved", () => {
+    const state = getPopupPresentationState(supportedContext(), completeSummary(), null);
+
+    expect(state).toMatchObject({
+      badge: "Download unconfirmed",
+      body: "Pack finished this run, but has not confirmed your browser saved the selected file. Check Browser Downloads.",
+      title: "Browser download not confirmed",
+      tone: "warning",
+    });
+  });
+
+  it("keeps the completion claim after positive single-period download evidence", () => {
+    const state = getPopupPresentationState(
+      supportedContext(),
+      summary("complete", ["browser-download-completed", "browser-download-non-empty"]),
+      null,
+    );
+
+    expect(state).toMatchObject({
+      badge: "Complete",
+      body: "The selected files were saved by your browser.",
+      tone: "success",
+    });
+  });
 });
 
 function supportedContext(): PortalContext {

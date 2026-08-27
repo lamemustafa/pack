@@ -3,6 +3,7 @@ import type {
   FiledReturnsFlowSummary,
 } from "../../connectors/gst/filed-returns-contracts";
 import { normaliseFiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifacts";
+import { FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS } from "../../connectors/gst/filed-returns-durable-signals";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import { canReconcileFiledReturnsTarget } from "./run-summary";
 
@@ -101,6 +102,35 @@ export function hasPersistedFullFiscalYearZipDownloadId(
   return Boolean(
     isAmbiguousFullFiscalYearZipHandoff(summary) &&
     summary?.flowStep.safeSignals.includes("full-fiscal-year-zip-phase:download-observing"),
+  );
+}
+
+/**
+ * A complete single-period run is not itself evidence that the browser saved a file.
+ * This is deliberately a presentation predicate: the background retains the stricter
+ * target-bound diagnostics it needs for recovery, while these surfaces only decide
+ * whether they may describe the browser handoff as confirmed.
+ */
+export function hasConfirmedSinglePeriodBrowserDownload(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  if (!summary || summary.scope.period === FULL_FISCAL_YEAR_PERIOD) return false;
+  const signals = new Set(summary.flowStep.safeSignals);
+  return (
+    signals.has("single-period-zip-downloaded") ||
+    (signals.has("browser-download-completed") && signals.has("browser-download-non-empty"))
+  );
+}
+
+export function hasFiledReturnsDownloadFilenameOverride(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  return Boolean(
+    summary?.flowStep.safeSignals.some((signal) =>
+      FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS.includes(
+        signal as (typeof FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS)[number],
+      ),
+    ),
   );
 }
 

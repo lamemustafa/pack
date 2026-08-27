@@ -6,6 +6,8 @@ import type { PopupPresentationState } from "./presentation-state";
 import { canReconcileFiledReturnsTarget, RunProgress } from "./run-summary";
 import {
   getFullFiscalYearCleanupCopy,
+  hasConfirmedSinglePeriodBrowserDownload,
+  hasFiledReturnsDownloadFilenameOverride,
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
@@ -163,9 +165,7 @@ function getInlineStatusCopy(
   if (presentation.kind === "complete") {
     const periods = summary?.completedPeriods.length ?? 0;
     const isFullYear = summary?.scope.period === FULL_FISCAL_YEAR_PERIOD;
-    const filenameOverridden =
-      summary?.flowStep.safeSignals.includes("download-filename-overridden") ||
-      summary?.flowStep.safeSignals.includes("zip-download-filename-overridden");
+    const filenameOverridden = hasFiledReturnsDownloadFilenameOverride(summary);
     /**
      * A full-year run carries two separate facts, and `status: "complete"` only
      * knows the first: every period was fetched. `canCompleteFullFiscalYearLedger`
@@ -177,6 +177,14 @@ function getInlineStatusCopy(
      * same had the ZIP never arrived.
      */
     const zipConfirmed = summary?.flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
+    if (!isFullYear && !filenameOverridden && !hasConfirmedSinglePeriodBrowserDownload(summary)) {
+      return {
+        body: presentation.body,
+        icon: "!",
+        title: presentation.title,
+        tone: "warning",
+      };
+    }
     // A run where every period was positively not-filed produces no ZIP BY
     // DESIGN and says so through its own signal. Treating that absence as an
     // unconfirmed download would send the user hunting in Downloads for a file

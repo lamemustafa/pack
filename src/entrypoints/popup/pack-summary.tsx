@@ -11,6 +11,7 @@ import {
   isFullFiscalYearScope,
 } from "../../connectors/gst/filed-returns-scope";
 import {
+  hasConfirmedSinglePeriodBrowserDownload,
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
@@ -55,10 +56,7 @@ export function PackSummary({
 
 function getSinglePeriodMeta(summary: FiledReturnsFlowSummary | null): string {
   const signals = new Set(summary?.flowStep.safeSignals ?? []);
-  if (
-    signals.has("single-period-zip-downloaded") ||
-    (signals.has("browser-download-completed") && signals.has("browser-download-non-empty"))
-  ) {
+  if (hasConfirmedSinglePeriodBrowserDownload(summary)) {
     return "Saved by your browser";
   }
   if (signals.has("filed-return-positively-not-filed")) return "No browser download needed";
