@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import {
   DEFAULT_GH_RETRY_ATTEMPTS,
@@ -199,10 +198,9 @@ function readDurableReviewState(filePath, expectedPrNumber) {
       (["fixed", "stale", "rejected", "linked-follow-up"].includes(finding.disposition) &&
         (typeof finding.dispositionCommentId !== "string" ||
           finding.dispositionCommentId.length === 0)) ||
-      (finding.sourceFingerprint !== undefined &&
-        !isFindingFingerprint(finding.sourceFingerprint)) ||
-      (finding.dispositionSourceFingerprint !== undefined &&
-        !isFindingFingerprint(finding.dispositionSourceFingerprint)) ||
+      (finding.sourceRevision !== undefined && !isValidTimestamp(finding.sourceRevision)) ||
+      (finding.dispositionSourceRevision !== undefined &&
+        !isValidTimestamp(finding.dispositionSourceRevision)) ||
       findingIds.has(finding.commentId)
     ) {
       failEvaluation("Durable review state contains an invalid finding.");
@@ -231,14 +229,14 @@ function reconcileDurableReviewState(reviewState, pr) {
 
   for (const comment of pr.comments.nodes.filter(isPrFindingComment)) {
     const existing = findings.get(comment.id);
-    const sourceFingerprint = fingerprintFinding(comment);
+    const sourceRevision = readSourceRevision(comment);
     const retainsTerminalDisposition =
-      existing?.dispositionCommentId && existing.dispositionSourceFingerprint === sourceFingerprint;
+      existing?.dispositionCommentId && existing.dispositionSourceRevision === sourceRevision;
     findings.set(comment.id, {
       commentId: comment.id,
       author: normaliseAuthorLogin(comment.author?.login),
       createdAt: existing?.createdAt ?? comment.createdAt,
-      sourceFingerprint,
+      sourceRevision,
       disposition:
         comment.isMinimized && comment.minimizedReason === RESOLVED_MINIMIZED_REASON
           ? "resolved"
@@ -248,13 +246,13 @@ function reconcileDurableReviewState(reviewState, pr) {
       ...(retainsTerminalDisposition
         ? {
             dispositionCommentId: existing.dispositionCommentId,
-            dispositionSourceFingerprint: existing.dispositionSourceFingerprint,
+            dispositionSourceRevision: existing.dispositionSourceRevision,
           }
         : existing?.dispositionCommentId
           ? {
               dispositionCommentId: existing.dispositionCommentId,
-              ...(existing.dispositionSourceFingerprint
-                ? { dispositionSourceFingerprint: existing.dispositionSourceFingerprint }
+              ...(existing.dispositionSourceRevision
+                ? { dispositionSourceRevision: existing.dispositionSourceRevision }
                 : {}),
             }
           : {}),
@@ -270,32 +268,31 @@ function reconcileDurableReviewState(reviewState, pr) {
     }
     if (
       finding.dispositionCommentId === comment.id &&
-      (!finding.sourceFingerprint ||
-        finding.dispositionSourceFingerprint !== finding.sourceFingerprint)
+      (!finding.sourceRevision || finding.dispositionSourceRevision !== finding.sourceRevision)
     ) {
       continue;
     }
+    if (!finding.sourceRevision || disposition.sourceRevision !== finding.sourceRevision) continue;
     findings.set(disposition.findingId, {
       ...finding,
       disposition: disposition.disposition,
       dispositionCommentId: comment.id,
-      ...(finding.sourceFingerprint
-        ? { dispositionSourceFingerprint: finding.sourceFingerprint }
-        : {}),
+      dispositionSourceRevision: finding.sourceRevision,
     });
   }
 
   return { version: 1, prNumber, findings: [...findings.values()] };
 }
 
-function fingerprintFinding(comment) {
-  return createHash("sha256")
-    .update(String(comment.body ?? ""), "utf8")
-    .digest("hex");
+function readSourceRevision(comment) {
+  if (!isValidTimestamp(comment.updatedAt)) {
+    failEvaluation("A visible PR-level finding has no valid GitHub update timestamp.");
+  }
+  return comment.updatedAt;
 }
 
-function isFindingFingerprint(value) {
-  return typeof value === "string" && /^[0-9a-f]{64}$/iu.test(value);
+function isValidTimestamp(value) {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
 
 function validatePersistedDurableDispositions(reviewState, pr) {
@@ -344,6 +341,7 @@ function readTrustedDurableDisposition(comment, prBody) {
     !value ||
     typeof value.findingId !== "string" ||
     value.findingId.length === 0 ||
+    !isValidTimestamp(value.sourceRevision) ||
     !["fixed", "stale", "rejected", "linked-follow-up"].includes(value.disposition)
   ) {
     failEvaluation("A trusted durable disposition marker has an unsupported shape.");
@@ -369,6 +367,7 @@ function hasFindingLinkedDispositionEvidence(evidence, disposition) {
   return (
     includesVisibleEvidenceField(evidence, "Finding", disposition.findingId) &&
     includesVisibleEvidenceField(evidence, "Disposition", disposition.disposition) &&
+    includesVisibleEvidenceField(evidence, "Source revision", disposition.sourceRevision) &&
     hasNonEmptyVisibleEvidenceField(evidence, "Evidence") &&
     (disposition.disposition !== "rejected" ||
       hasNonEmptyVisibleEvidenceField(evidence, "Reasoning"))
@@ -614,7 +613,7 @@ function fetchReviewGraphPage() {
     "-F",
     `number=${prNumber}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid comments(first:100){pageInfo{hasNextPage endCursor} nodes{id url createdAt isMinimized minimizedReason authorAssociation author{login} body}} reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
+    "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){body headRefName baseRefName headRepository{nameWithOwner} headRefOid comments(first:100){pageInfo{hasNextPage endCursor} nodes{id url createdAt updatedAt isMinimized minimizedReason authorAssociation author{login} body}} reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{url author{login} body}}}} reviews(first:100){pageInfo{hasNextPage endCursor} nodes{state submittedAt url author{login} commit{oid}}}}}}",
   ];
   return runJson(commandArgs);
 }
@@ -633,7 +632,7 @@ function fetchCommentsGraphPage(after) {
     "-F",
     `after=${after}`,
     "-f",
-    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){comments(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id url createdAt isMinimized minimizedReason authorAssociation author{login} body}}}}}",
+    "query=query($owner:String!,$name:String!,$number:Int!,$after:String!){repository(owner:$owner,name:$name){pullRequest(number:$number){comments(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id url createdAt updatedAt isMinimized minimizedReason authorAssociation author{login} body}}}}}",
   ]);
 }
 

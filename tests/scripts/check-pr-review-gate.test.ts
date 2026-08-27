@@ -1,5 +1,4 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,6 +7,7 @@ import { describe, expect, it } from "vitest";
 const rootDir = process.cwd();
 const scriptPath = path.join(rootDir, "scripts", "check-pr-review-gate.mjs");
 const formatterPath = path.join(rootDir, "scripts", "format-review-gate-disposition.mjs");
+const packageScripts = JSON.parse(readFileSync(path.join(rootDir, "package.json"), "utf8")).scripts;
 
 describe("PR review gate", () => {
   it("fetches the minimization reason on initial and paginated PR comments", () => {
@@ -67,6 +67,7 @@ describe("PR review gate", () => {
           commentId: "comment-deleted-after-observation",
           author: "chatgpt-codex-connector",
           createdAt: "2026-08-17T12:00:00Z",
+          sourceRevision: "2026-08-17T12:00:00Z",
           disposition: "open",
         },
       ],
@@ -173,6 +174,7 @@ describe("PR review gate", () => {
           commentId: "comment-deleted-after-observation",
           author: "chatgpt-codex-connector",
           createdAt: "2026-08-17T12:00:00Z",
+          sourceRevision: "2026-08-17T12:00:00Z",
           disposition: "open",
         },
       ],
@@ -215,8 +217,7 @@ describe("PR review gate", () => {
   });
 
   it("reopens a terminal disposition when its visible finding changes", () => {
-    const priorBody = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Old ask.";
-    const priorFingerprint = createHash("sha256").update(priorBody, "utf8").digest("hex");
+    const priorRevision = "2026-08-17T12:00:00Z";
     const statePath = writeFixture("terminal-disposition-for-changed-finding", {
       version: 1,
       prNumber: 14,
@@ -227,8 +228,8 @@ describe("PR review gate", () => {
           createdAt: "2026-08-17T12:00:00Z",
           disposition: "fixed",
           dispositionCommentId: "disposition-comment-1",
-          sourceFingerprint: priorFingerprint,
-          dispositionSourceFingerprint: priorFingerprint,
+          sourceRevision: priorRevision,
+          dispositionSourceRevision: priorRevision,
         },
       ],
     });
@@ -249,6 +250,7 @@ describe("PR review gate", () => {
             comments: [
               prFindingComment({
                 body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) New ask.",
+                updatedAt: "2026-08-17T13:00:00Z",
               }),
               durableDispositionComment("comment-1", "fixed"),
             ],
@@ -270,6 +272,9 @@ describe("PR review gate", () => {
   });
 
   it("formats a supported terminal disposition", () => {
+    expect(packageScripts["review:format-disposition"]).toBe(
+      "node scripts/format-review-gate-disposition.mjs",
+    );
     const result = spawnSync(
       process.execPath,
       [
@@ -280,8 +285,8 @@ describe("PR review gate", () => {
         "fixed",
         "--evidence",
         "verified",
-        "--source-body",
-        "finding body",
+        "--source-revision",
+        "2026-08-17T12:00:00Z",
       ],
       { cwd: rootDir, encoding: "utf8" },
     );
@@ -289,7 +294,7 @@ describe("PR review gate", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("review-gate-disposition");
     expect(result.stdout).toContain("Finding: comment-1");
-    expect(result.stdout).toContain("Source fingerprint:");
+    expect(result.stdout).toContain("Source revision:");
   });
 
   it("fails closed when a stored disposition is edited after observation", () => {
@@ -356,6 +361,7 @@ describe("PR review gate", () => {
     disposition.body = `<!-- review-gate-disposition:${JSON.stringify({
       findingId: "comment-1",
       disposition: "fixed",
+      sourceRevision: "2026-08-17T12:00:00Z",
     })} -->
 
 Evidence: noted.`;
@@ -1525,6 +1531,7 @@ function prFindingComment(
     minimizedReason?: string | null;
     author?: string;
     body?: string;
+    updatedAt?: string;
   } = {},
 ) {
   const {
@@ -1533,11 +1540,13 @@ function prFindingComment(
     minimizedReason = null,
     author = "chatgpt-codex-connector[bot]",
     body = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Fix this.",
+    updatedAt = "2026-08-17T12:00:00Z",
   } = options;
   return {
     id,
     url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-${id}`,
     createdAt: "2026-08-17T12:00:00Z",
+    updatedAt,
     isMinimized,
     minimizedReason,
     author: { login: author },
@@ -1554,6 +1563,7 @@ function durableDispositionComment(
     id: `disposition-${findingId}`,
     url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-disposition-${findingId}`,
     createdAt: "2026-08-17T12:30:00Z",
+    updatedAt: "2026-08-17T12:30:00Z",
     isMinimized: false,
     minimizedReason: null,
     author: { login: "maintainer" },
@@ -1561,11 +1571,13 @@ function durableDispositionComment(
     body: `<!-- review-gate-disposition:${JSON.stringify({
       findingId,
       disposition,
+      sourceRevision: "2026-08-17T12:00:00Z",
       ...(followUp ? { followUp } : {}),
     })} -->
 
 Finding: ${findingId}
 Disposition: ${disposition}
+Source revision: 2026-08-17T12:00:00Z
 Evidence: reviewed against the source and current behaviour.${disposition === "rejected" ? "\nReasoning: source evidence disproves the finding." : ""}${followUp ? `\nFollow-up: ${followUp}` : ""}`,
   };
 }
