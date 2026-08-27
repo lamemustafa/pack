@@ -221,6 +221,7 @@ function findDurablyObservedBlockingComments(reviewState, comments) {
 }
 
 function reconcileDurableReviewState(reviewState, pr) {
+  validatePersistedDurableDispositions(reviewState, pr);
   const findings = new Map(reviewState.findings.map((finding) => [finding.commentId, finding]));
 
   for (const comment of pr.comments.nodes.filter(isPrFindingComment)) {
@@ -251,6 +252,22 @@ function reconcileDurableReviewState(reviewState, pr) {
   }
 
   return { version: 1, prNumber, findings: [...findings.values()] };
+}
+
+function validatePersistedDurableDispositions(reviewState, pr) {
+  const commentsById = new Map(pr.comments.nodes.map((comment) => [comment.id, comment]));
+  for (const finding of reviewState.findings) {
+    if (!finding.dispositionCommentId) continue;
+    const comment = commentsById.get(finding.dispositionCommentId);
+    const disposition = comment && readTrustedDurableDisposition(comment, pr.body);
+    if (
+      !disposition ||
+      disposition.findingId !== finding.commentId ||
+      disposition.disposition !== finding.disposition
+    ) {
+      failEvaluation("A stored durable disposition no longer has matching visible evidence.");
+    }
+  }
 }
 
 function readTrustedDurableDisposition(comment, prBody) {

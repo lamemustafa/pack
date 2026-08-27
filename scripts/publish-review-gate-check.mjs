@@ -214,17 +214,32 @@ function loadForcePushedPriorShas(prNumber) {
       "force-push discontinuity discovery",
     ),
   );
-  const priorShas = [];
+  const priorHeads = new Map();
 
   for (const event of flattenPages(timelinePages)) {
     if (event?.event !== "head_ref_force_pushed") continue;
     if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
       throw new Error("force-push event has no valid prior head SHA");
     }
-    priorShas.push(event.before_commit_id);
+    const createdAt = Date.parse(event.created_at ?? "");
+    if (!Number.isFinite(createdAt)) {
+      throw new Error("force-push event has no valid creation timestamp");
+    }
+    const existing = priorHeads.get(event.before_commit_id);
+    if (!existing || createdAt > existing.createdAt) {
+      priorHeads.set(event.before_commit_id, { sha: event.before_commit_id, createdAt });
+    }
   }
 
-  return [...new Set(priorShas)];
+  const orderedPriorHeads = [...priorHeads.values()].sort(
+    (left, right) => right.createdAt - left.createdAt,
+  );
+  for (let index = 1; index < orderedPriorHeads.length; index += 1) {
+    if (orderedPriorHeads[index - 1].createdAt === orderedPriorHeads[index].createdAt) {
+      throw new Error("force-push events have ambiguous chronological ordering");
+    }
+  }
+  return orderedPriorHeads.map(({ sha }) => sha);
 }
 
 function flattenPages(value) {
