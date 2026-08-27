@@ -722,6 +722,86 @@ Evidence: noted.`;
     ).toThrow(/No review was found for current head/);
   });
 
+  it("accepts a trusted clean current-head Codex top-level report in strict mode", () => {
+    const headRefOid = "0123456789abcdef0123456789abcdef01234567";
+    const fixturePath = writeFixture(
+      "current-head-clean-codex-top-level-report",
+      reviewFixture({
+        headRefOid,
+        body: packPrBody(),
+        comments: [
+          prFindingComment({
+            author: "chatgpt-codex-connector",
+            body: "Codex Review: Didn't find any major issues. Swish!\n\n**Reviewed commit:** `0123456789`",
+          }),
+        ],
+        reviews: [],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("PR review gate passed");
+  });
+
+  it.each([
+    ["stale commit", "chatgpt-codex-connector", "abcdef0123", undefined],
+    ["wrong author", "external-reviewer", "0123456789", undefined],
+    ["non-clean wording", "chatgpt-codex-connector", "0123456789", "Codex Review: Found an issue."],
+  ])("rejects a %s top-level report in strict mode", (_label, author, reviewedCommit, heading) => {
+    const headRefOid = "0123456789abcdef0123456789abcdef01234567";
+    const fixturePath = writeFixture(
+      `untrusted-clean-top-level-${_label.replaceAll(" ", "-")}`,
+      reviewFixture({
+        headRefOid,
+        body: packPrBody(),
+        comments: [
+          prFindingComment({
+            author,
+            body: `${heading ?? "Codex Review: Didn't find any major issues. Swish!"}\n\n**Reviewed commit:** \`${reviewedCommit}\``,
+          }),
+        ],
+        reviews: [],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("No review was found for current head");
+  });
+
   it("does not let another author satisfy strict mode without an explicit author", () => {
     const fixturePath = writeFixture(
       "other-author-current-head-review",
