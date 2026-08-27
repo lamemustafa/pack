@@ -93,6 +93,7 @@ try {
   await assertOptionsPageLoads(context, extensionId);
   await assertPanelPageLoads(context, extensionId);
   await assertApprovedContentScript(context, serviceWorker);
+  await assertPanelSignInContext(context, extensionId);
   await assertPanelCompactFlow(context, extensionId);
   await assertHostilePageCannotMessageExtension(context);
   assertDeniedUnexpectedNetwork();
@@ -459,6 +460,39 @@ async function assertPanelCompactFlow(browserContext, extensionId) {
     await catalogueSummary.press("Space");
     await panelPage.waitForSelector(".panel-catalogue[open]", { timeout: 5_000 });
     await assertPanelControlsFitViewport(panelPage, "expanded catalogue");
+  } finally {
+    await panelPage.close();
+    await gstPage.close();
+  }
+}
+
+/**
+ * The authenticated landing route is supported enough to remain the selected
+ * GST tab, but without its authenticated markers it must render the terminal
+ * sign-in state rather than a ready chooser. Check that packaged path at the
+ * side panel's narrowest supported width.
+ */
+async function assertPanelSignInContext(browserContext, extensionId) {
+  const gstPage = await browserContext.newPage();
+  attachPageLogging(gstPage);
+  const panelPage = await browserContext.newPage();
+  attachPageLogging(panelPage);
+  try {
+    await gstPage.goto("https://services.gst.gov.in/services/auth/fowelcome", {
+      waitUntil: "domcontentloaded",
+    });
+    const serviceWorker = await waitForServiceWorker(browserContext, extensionId);
+    await waitForStoredContext(serviceWorker, {
+      supported: true,
+      pageKind: "gst-auth-landing",
+      origin: "https://services.gst.gov.in",
+    });
+
+    await panelPage.setViewportSize({ width: 320, height: 900 });
+    await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
+    await panelPage.getByRole("heading", { name: "Sign in on GST Portal" }).waitFor();
+    await panelPage.getByRole("button", { name: "Open GST Portal sign-in" }).waitFor();
+    await assertPanelControlsFitViewport(panelPage, "sign-in context");
   } finally {
     await panelPage.close();
     await gstPage.close();
