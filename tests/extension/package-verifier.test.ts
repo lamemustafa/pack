@@ -485,6 +485,7 @@ describe("extension package verifier", () => {
     expect(script).toContain('"sign-in context"');
     expect(script).toContain("await assertPanelGuidedStepsFitViewport(panelPage)");
     expect(script).toContain("guided step ${step} of 4");
+    expect(script).toContain('document.activeElement?.id === "panel-guide-field"');
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
     expect(script).toContain("chrome-extension://${extensionId}/panel.html");
     expect(script).toContain('waitForEvent("serviceworker"');

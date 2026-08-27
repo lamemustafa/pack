@@ -469,6 +469,14 @@ async function assertPanelCompactFlow(browserContext, extensionId) {
 async function assertPanelGuidedStepsFitViewport(panelPage) {
   for (let step = 1; step <= 4; step += 1) {
     await panelPage.getByRole("status", { name: `Step ${step} of 4` }).waitFor();
+    if (step > 1) {
+      const focusedField = await panelPage.evaluate(
+        () => document.activeElement?.id === "panel-guide-field",
+      );
+      if (!focusedField) {
+        throw new Error(`Pack panel did not focus guided step ${step} at 320px.`);
+      }
+    }
     await assertPanelControlsFitViewport(panelPage, `guided step ${step} of 4`);
     if (step < 4) await panelPage.getByRole("button", { name: "Continue" }).click();
   }
