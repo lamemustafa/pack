@@ -5,7 +5,7 @@ import {
   scopeIdForVisibleReturnLabel,
 } from "../connectors/gst/filed-returns-observer-scope";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "../connectors/gst/filed-returns-observer-signals";
-import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
+import { supportedFiledReturnsCatalogueEntries } from "../connectors/gst/filed-returns-capabilities";
 import type {
   FiledReturnsObservation,
   FiledReturnsObservationState,
@@ -33,13 +33,10 @@ const OBSERVATION_STATES = new Set<FiledReturnsObservationState>([
   "wrong-page",
 ]);
 
-const OBSERVATION_RETURN_TYPES = [
-  "GSTR-3B",
-  "GSTR-1",
-  "GSTR-2B",
-] as const satisfies readonly FiledReturnsReturnType[];
 const OBSERVATION_SCOPE_IDS = new Set<FiledReturnsObservation["scopeId"]>(
-  OBSERVATION_RETURN_TYPES.map(scopeIdForVisibleReturnLabel),
+  supportedFiledReturnsCatalogueEntries().map(
+    (entry) => entry.capability.scopeId as FiledReturnsObservation["scopeId"],
+  ),
 );
 
 const OBSERVATION_SIGNALS = new Set<string>(FILED_RETURNS_OBSERVATION_SIGNALS);

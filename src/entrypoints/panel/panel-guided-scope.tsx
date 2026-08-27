@@ -157,6 +157,11 @@ export function PanelGuidedScope({
   const savedRunForScope = getScopeMatchedFiledReturnsSummary(scope, savedRun);
   const scopeSummary = savedRunForScope ?? flowSummary;
   const scopeExternalBlock = savedRunForScope ? null : externalBlock;
+  const guidedExternalBlock =
+    scopeExternalBlock ??
+    (portalSignedIn
+      ? null
+      : { disabled: true as const, label: "Open a signed-in GST Portal tab to continue." });
 
   return (
     <section className="panel-guide" aria-labelledby="panel-guide-title">
@@ -225,7 +230,7 @@ export function PanelGuidedScope({
           <ScopeFormAction
             busy={busy}
             context={context}
-            externalBlock={scopeExternalBlock}
+            externalBlock={guidedExternalBlock}
             flowSummary={scopeSummary}
             scope={scope}
             onStart={() => onStart(scope)}

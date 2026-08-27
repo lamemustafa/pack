@@ -14,6 +14,7 @@ vi.mock("wxt/browser", () => ({
 }));
 
 import { PanelSurface, type PackPanelController } from "../../src/entrypoints/panel/panel-surface";
+import { PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
 import { panelFullFiscalYearPresets } from "../../src/entrypoints/panel/panel-guided-scope-model";
 import {
   PANEL_TEST_SCOPE,
@@ -48,6 +49,32 @@ function Harness({
         startFiledReturnsFlow: async (requestedScope) => onStart(requestedScope ?? scope),
         ...overrides,
       })}
+    />
+  );
+}
+
+function GuidedScopeHarness({
+  onStart = () => undefined,
+  portalSignedIn,
+  savedRun,
+}: {
+  onStart?: (scope: FiledReturnsDownloadScope) => void;
+  portalSignedIn: boolean;
+  savedRun: FiledReturnsFlowSummary | null;
+}) {
+  const [scope, setScope] = React.useState<FiledReturnsDownloadScope>(PANEL_TEST_SCOPE);
+  return (
+    <PanelGuidedScope
+      busy={null}
+      context={{ connectorId: "gst", pageKind: "gst-auth-landing", supported: true }}
+      externalBlock={null}
+      flowSummary={savedRun}
+      portalSignedIn={portalSignedIn}
+      savedRun={savedRun}
+      scope={scope}
+      scopeLockedForReview={false}
+      onScopeChange={setScope}
+      onStart={onStart}
     />
   );
 }
@@ -115,6 +142,14 @@ async function mount(
     await Promise.resolve();
   });
   if (openGuide) await clickButtonContaining("Choose return, year and period");
+}
+
+async function mountGuidedScope(props: React.ComponentProps<typeof GuidedScopeHarness>) {
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<GuidedScopeHarness {...props} />);
+    await Promise.resolve();
+  });
 }
 
 async function clickButton(label: string) {
@@ -263,6 +298,27 @@ describe("panel guided scope interaction", () => {
     expect(container.querySelector<HTMLButtonElement>(".context-state-action")?.textContent).toBe(
       "Open GST Portal sign-in",
     );
+  });
+
+  it("keeps the final guided action disabled until the portal is signed in", async () => {
+    const onStart = vi.fn();
+    await mountGuidedScope({
+      onStart,
+      portalSignedIn: false,
+      savedRun: completedPanelSummary(),
+    });
+
+    await clickButtonContaining("Choose return, year and period");
+    await clickButton("Continue");
+    await clickButton("Continue");
+    await clickButton("Continue");
+
+    const action = container.querySelector<HTMLButtonElement>(".popup-action-area .primary-action");
+    expect(action).not.toBeNull();
+    expect(action?.disabled).toBe(true);
+    expect(container.textContent).toContain("Open a signed-in GST Portal tab to continue.");
+    await act(async () => action?.dispatchEvent(realmEvent("click")));
+    expect(onStart).not.toHaveBeenCalled();
   });
 
   it("does not enable a different preset while its saved run needs recovery", async () => {
