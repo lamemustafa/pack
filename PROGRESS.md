@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 59 — mutate-check untrusted summary-period counts
+
+- Window: 2026-08-27 05:41–05:46 IST. This is a short test-quality checkpoint; its actual
+  duration is recorded without an idle hold.
+- Picked: `PackSummary` renders a parsed period count supplied through a safe signal only when it
+  is an integer in the declared 0–36 range, but the existing test sampled only a valid count.
+- Measured before: `fixedCountSignal` already falls back to the honest “summary included” wording
+  for malformed counts. The focused pack-summary suite had no regression coverage for negative,
+  above-range, or non-numeric signal payloads.
+- Changed: added parameterized coverage for `-1`, `37`, and non-numeric counts. Each requires the
+  generic summary-included wording and forbids the untrusted count from reaching the visible pack
+  summary. No production behavior, persistence, portal action, download evidence, or public copy
+  changed.
+- Discrimination: temporarily removing the 0–36 bounds made the test fail for `-1` and `37`; the
+  rendered summary incorrectly stated “summary for -1 periods” and “summary for 37 periods”. The
+  source bound was restored before final gates.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2812 passed (2812)
+    Start at  05:42:23
+    Duration  154.64s (transform 2.51s, setup 0ms, import 12.52s, tests 125.95s, environment 8ms)
+  ```
+
+- Checkpoints: `9467803 test(popup): bound summary period count`; the progress record follows in a
+  separate documentation checkpoint. No live/authenticated GST qualification, release claim, push
+  or PR action was made.
+- Learned / next: the visible summary correctly fails closed on malformed structured metadata, and
+  the test now proves its numerical range rather than merely a happy-path parse. Continue the
+  duplicate-fact audit on a fresh module.
+
 ## Cycle 58 — make the disabled-state design rule screen-reader complete
 
 - Window: 2026-08-27 05:38–05:41 IST. This is a short documentation/accessibility checkpoint;
