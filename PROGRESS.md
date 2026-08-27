@@ -1,5 +1,22 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 63 — reconcile the test-file baseline discrepancy
+
+- Window: 2026-08-27 06:04–06:08 IST. This is a quiet evidence audit; its actual duration is
+  recorded without an idle hold.
+- Picked: the objective’s static baseline names 152 test files, while every current full Vitest gate
+  reports 151. A higher assertion count does not explain one missing test file.
+- Measured: the current tracked test-file count is 151 and matches Vitest. A count over every
+  reachable branch tree from `master` to `HEAD` observed 124, 125, 126, 127, 131, 134, 137, 124,
+  128, 147, 149, 150 and 151 files; no reachable tree contains 152.
+- Result: no source or test change. The evidence does not identify a removed test to restore, and
+  recreating an unknown baseline test would create ungrounded coverage. `VALIDATION.md` now records
+  the discrepancy under Uncertainty, including the evidence needed for an owner to resolve it.
+- Gate: `pnpm exec prettier --check VALIDATION.md PROGRESS.md`, `git diff --check` and worktree
+  status passed before the documentation checkpoint.
+- Learned / next: a count mismatch must be attributed, not silently offset by unrelated new tests.
+  Continue auditing a fresh human-visible state while retaining this owner-input boundary.
+
 ## Cycle 62 — audit scoped portal-independent cleanup eligibility
 
 - Window: 2026-08-27 06:01–06:04 IST. This is a quiet guard audit; its actual duration is
