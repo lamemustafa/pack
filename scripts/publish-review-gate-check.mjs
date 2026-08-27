@@ -166,6 +166,10 @@ function loadLatestDurableReviewState(pr) {
       }
     }
 
+    if (forcePushedPriorShas.length === 0) {
+      return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
+    }
+
     const commit = JSON.parse(
       runGithub(
         ["api", "repos/" + repo + "/commits/" + sha],
