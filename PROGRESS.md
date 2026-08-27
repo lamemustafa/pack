@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 61 — retain interrupted-run acknowledgement reasons
+
+- Window: 2026-08-27 05:56–06:00 IST. This is a short lossy-surface regression checkpoint; its
+  actual duration is recorded without an idle hold.
+- Picked: `acknowledgeInterruptedRun` handles its message response directly instead of going through
+  the shared flow-response helper, so it needed its own proof that a specific safe rejection still
+  reaches the controller’s user-visible error state.
+- Measured before: start-flow, context, refresh, and storage-change rejections had safe-message
+  regressions, but acknowledgement did not. Its source correctly preferred `safeMessage`; the
+  gap was evidence, not a production change.
+- Changed: added an acknowledgement rejection fixture with a specific safe message and generic
+  handler error. The controller must retain the specific safe message. No production behavior,
+  persistence, portal action, download evidence, or public copy changed.
+- Discrimination: temporarily preferring `response.error` in the acknowledgement branch made the
+  new test fail with `BACKGROUND_MESSAGE_HANDLER_FAILED` instead of “Pack could not clear the saved
+  run until its local state is checked.” The source preference was restored before final gates.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2817 passed (2817)
+    Start at  05:57:14
+    Duration  153.70s (transform 2.48s, setup 0ms, import 12.47s, tests 125.14s, environment 8ms)
+  ```
+
+- Checkpoints: `e6daad0 test(popup): retain interrupted-run safe rejection`; the progress record
+  follows in a separate documentation checkpoint. No live/authenticated GST qualification, release
+  claim, push or PR action was made.
+- Learned / next: direct message handlers are independent user-visible boundaries even when they
+  look structurally identical to a shared helper. Continue on a terminal path rather than adding
+  redundant start-flow coverage.
+
 ## Cycle 60 — require browser evidence before single-period saved copy
 
 - Window: 2026-08-27 05:48–05:55 IST. This is a focused correction to a user-visible financial
