@@ -66,7 +66,8 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const showFlow =
     hasRecoveryActions(summary ?? null) ||
-    ((portalReady || canRetryFullFiscalYearZipWithoutPortal(summary) || terminalSummary) &&
+    terminalSummary ||
+    ((portalReady || canRetryFullFiscalYearZipWithoutPortal(summary)) &&
       !["access-denied", "loading", "session-expired", "unsupported"].includes(presentation.kind));
 
   const openPortal = () => void browser.tabs.create({ url: "https://www.gst.gov.in" });
@@ -108,6 +109,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               presentation={presentation}
               summary={summary}
             />
+            {terminalSummary && presentation.kind === "session-expired" ? (
+              <p className="panel-recovery-reason">{summary?.flowStep.safeMessage}</p>
+            ) : null}
             {summary ? <PackSummary scope={pack.scope} summary={pack.scopedFlowSummary} /> : null}
             {/* Below the pack card, above the recovery actions: a reader who
                 sees "needs review" here is one row away from the control that

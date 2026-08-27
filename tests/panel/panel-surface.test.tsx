@@ -257,6 +257,22 @@ describe("panel surface", () => {
     expect(markup).not.toContain("Checking this tab");
   });
 
+  it("keeps a blocked terminal reason visible while the portal requires sign-in", () => {
+    const blockedSummary = activePanelSummary("blocked");
+    blockedSummary.flowStep.safeSignals = ["filed-returns-target-review-storage-unavailable"];
+    blockedSummary.flowStep.safeMessage = "Pack could not read saved recovery state.";
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={controller({
+          context: { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
+          scopedFlowSummary: blockedSummary,
+        })}
+      />,
+    );
+    expect(markup).toContain("Pack could not read saved recovery state.");
+    expect(markup).not.toContain("Checking this tab");
+  });
+
   it("renders access denial without guessing whether sign-in or authorization caused it", () => {
     const markup = renderToStaticMarkup(
       <PanelSurface

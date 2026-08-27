@@ -153,18 +153,27 @@ function evaluatePullRequestReviewState(pr) {
         isTrustedCurrentHeadCodexTopLevelReview(comment, pr.headRefOid),
       )
     : [];
-  const cleanTopLevelReviewAuthors = new Set(
-    cleanTopLevelReviews.map((comment) => normaliseAuthorLogin(comment.author?.login)),
-  );
+  const cleanTopLevelReviewCutoffs = new Map();
+  for (const comment of cleanTopLevelReviews) {
+    const author = normaliseAuthorLogin(comment.author?.login);
+    const cutoff = Date.parse(comment.updatedAt ?? "");
+    if (!Number.isFinite(cutoff)) continue;
+    cleanTopLevelReviewCutoffs.set(
+      author,
+      Math.max(cleanTopLevelReviewCutoffs.get(author) ?? 0, cutoff),
+    );
+  }
   const blockingReviews = Array.from(authorStates.entries())
     .map(([author, state]) => ({ author, review: state.blockingReview }))
     .filter(
       ({ author, review }) =>
         review &&
         !(
-          cleanTopLevelReviewAuthors.has(author) &&
+          cleanTopLevelReviewCutoffs.has(author) &&
           review.commit?.oid &&
-          review.commit.oid !== pr.headRefOid
+          review.commit.oid !== pr.headRefOid &&
+          Number.isFinite(Date.parse(review.submittedAt ?? "")) &&
+          Date.parse(review.submittedAt) < cleanTopLevelReviewCutoffs.get(author)
         ),
     )
     .map(({ review }) => review);

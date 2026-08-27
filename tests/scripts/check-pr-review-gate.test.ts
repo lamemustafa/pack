@@ -798,6 +798,49 @@ Evidence: noted.`;
     expect(result.stdout).toContain("PR review gate passed");
   });
 
+  it("keeps a stale request submitted after a clean Codex report blocking", () => {
+    const headRefOid = "0123456789abcdef0123456789abcdef01234567";
+    const fixturePath = writeFixture(
+      "later-stale-request-is-not-superseded",
+      reviewFixture({
+        headRefOid,
+        body: packPrBody(),
+        comments: [
+          prFindingComment({
+            author: "chatgpt-codex-connector",
+            updatedAt: "2026-06-25T00:00:00Z",
+            body: "Codex Review: Didn't find any major issues. Swish!\n\n**Reviewed commit:** `0123456789`",
+          }),
+        ],
+        reviews: [
+          review({
+            state: "CHANGES_REQUESTED",
+            commit: "old-sha",
+            submittedAt: "2026-06-26T00:00:00Z",
+          }),
+        ],
+      }),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Requested-changes reviews");
+  });
+
   it.each([
     ["current-head", "chatgpt-codex-connector", "0123456789abcdef0123456789abcdef01234567"],
     ["other-author stale", "external-reviewer", "old-sha"],

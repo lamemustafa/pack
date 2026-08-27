@@ -178,6 +178,13 @@ export function usePackPopupController() {
       changes: Record<string, Browser.storage.StorageChange>,
       areaName: string,
     ) => {
+      const activeRunChange = changes[PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun];
+      const leaseOnlyRemoval =
+        areaName === "local" &&
+        Object.keys(changes).length === 1 &&
+        activeRunChange !== undefined &&
+        !("newValue" in activeRunChange);
+      if (leaseOnlyRemoval) return;
       // Reacting to the key changing at all, not to it gaining a value: a
       // removal carries no `newValue`, so clearing local data left an already
       // open surface rendering a summary that no longer exists. The popup is
