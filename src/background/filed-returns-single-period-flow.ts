@@ -22,7 +22,6 @@ import {
   getFlowStepSettleMs,
   getResultRowNavigationSettleMs,
   isFiledReturnDownloadReady,
-  maxFlowStepsFor,
   persistFlowResponse,
   shouldContinueFlow,
 } from "./filed-returns-flow-runner-utils";
@@ -47,6 +46,9 @@ import {
   type Gstr1PeriodMismatchRecovery,
   type ReturnTypeMismatchRecovery,
 } from "./filed-returns-gstr1-period-mismatch-recovery";
+
+// The deadline is the product bound. This only stops a broken zero-delay response loop.
+const ZERO_DELAY_RUNAWAY_STEP_LIMIT = 10_000;
 
 const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
 
@@ -373,7 +375,8 @@ async function runSinglePeriodSteps(
   const stepDeadlineAt = stepStartedAt + flowStepDeadlineMs(deps);
   for (
     let attempt = 0;
-    attempt < maxFlowStepsFor(scope) && (deps.now?.() ?? new Date()).getTime() < stepDeadlineAt;
+    attempt < ZERO_DELAY_RUNAWAY_STEP_LIMIT &&
+    (deps.now?.() ?? new Date()).getTime() < stepDeadlineAt;
     attempt += 1
   ) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
@@ -594,7 +597,8 @@ async function waitForDetailReadyThenTrigger({
   const stepDeadlineAt = stepStartedAt + flowStepDeadlineMs(deps);
   for (
     let attempt = 0;
-    attempt < maxFlowStepsFor(scope) && (deps.now?.() ?? new Date()).getTime() < stepDeadlineAt;
+    attempt < ZERO_DELAY_RUNAWAY_STEP_LIMIT &&
+    (deps.now?.() ?? new Date()).getTime() < stepDeadlineAt;
     attempt += 1
   ) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);

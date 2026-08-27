@@ -235,7 +235,7 @@ describe("panel surface", () => {
 
     expect(markup).toContain("Open a signed-in GST Portal tab");
     expect(markup).not.toContain("GST portal · signed in");
-    expect(markup).toContain("Sign in on GST Portal");
+    expect(markup).toContain("Open a signed-in GST Portal tab to continue.");
   });
 
   it("renders access denial without guessing whether sign-in or authorization caused it", () => {

@@ -173,6 +173,7 @@ describe("panel guided scope interaction", () => {
   afterEach(async () => {
     if (root) await act(async () => root?.unmount());
     root = null;
+    vi.useRealTimers();
   });
 
   it.each([false, true])("preserves existing focus on mount (StrictMode: %s)", async (strict) => {
@@ -245,6 +246,52 @@ describe("panel guided scope interaction", () => {
     }
   });
 
+  it("requires an authenticated GST tab before enabling a preset", async () => {
+    await mount(
+      {
+        overrides: {
+          context: { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
+        },
+      },
+      false,
+      false,
+    );
+
+    const presets = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
+    );
+    expect(presets.length).toBeGreaterThan(0);
+    expect(presets.every((preset) => preset.disabled)).toBe(true);
+    expect(container.textContent).toContain("Open a signed-in GST Portal tab to continue.");
+  });
+
+  it("does not enable a different preset while its saved run needs recovery", async () => {
+    const onStart = vi.fn();
+    const retained = completedPanelSummary({
+      status: "blocked",
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: ["filed-returns-run-needs-review"],
+        safeMessage: "A saved run needs review.",
+      },
+    });
+    await mount(
+      { onStart, overrides: { lastRunSummary: retained, scopedFlowSummary: retained } },
+      false,
+      false,
+    );
+
+    const otherPreset = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-preset"),
+    ).find((preset) => preset.textContent?.includes("GSTR-2B"));
+    expect(otherPreset).toBeDefined();
+    expect(otherPreset?.disabled).toBe(true);
+    await act(async () => otherPreset?.dispatchEvent(realmEvent("click")));
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
   it("advertises the same planned period count that a preset starts", async () => {
     const started: FiledReturnsDownloadScope[] = [];
     await mount({ onStart: (scope) => started.push(scope) }, false, false);
@@ -261,6 +308,22 @@ describe("panel guided scope interaction", () => {
 
     expect(started).toHaveLength(1);
     expect(getFiledReturnsFullFiscalYearPeriods(started[0]!.financialYear).length).toBe(advertised);
+  });
+
+  it("refreshes a preset instead of starting a plan whose eligibility changed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const onStart = vi.fn();
+    await mount({ onStart }, false, false);
+    const preset = Array.from(container.querySelectorAll<HTMLButtonElement>(".panel-preset")).find(
+      (candidate) => candidate.textContent?.includes("This year's GSTR-3B"),
+    );
+    expect(preset).toBeDefined();
+
+    vi.setSystemTime(new Date("2027-02-26T00:00:00.000Z"));
+    await act(async () => preset?.dispatchEvent(realmEvent("click")));
+
+    expect(onStart).not.toHaveBeenCalled();
   });
 
   it("derives preset period counts from the fiscal-year planner as time changes", () => {
@@ -463,13 +526,13 @@ describe("panel guided scope interaction", () => {
       Array.from(container.querySelectorAll(".panel-catalogue h3"), (heading) =>
         heading.textContent?.trim(),
       ),
-    ).toEqual(["Available 3", "Not available in Pack 6"]);
+    ).toEqual(["Available 3", "Not available in Pack 5"]);
     expect(
       Array.from(
         container.querySelectorAll(".panel-catalogue ul"),
         (list) => list.querySelectorAll(":scope > li").length,
       ),
-    ).toEqual([3, 6]);
+    ).toEqual([3, 5]);
     expect(
       container.querySelectorAll(".panel-catalogue button, .panel-catalogue select"),
     ).toHaveLength(0);

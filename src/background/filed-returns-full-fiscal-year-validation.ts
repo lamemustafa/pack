@@ -56,6 +56,28 @@ export function hasCanonicalFullFiscalYearTargetPlan(
   return targetsMatchRecordedPlan(ledger.targets, ledger.targetPlan);
 }
 
+function hasLegacyCanonicalFullFiscalYearTargetPrefix(
+  ledger: Pick<
+    FiledReturnsFullFiscalYearLedger,
+    "eligibleThrough" | "planVersion" | "scope" | "targetPlan" | "targets"
+  >,
+): boolean {
+  if (
+    ledger.planVersion !== undefined ||
+    ledger.eligibleThrough !== undefined ||
+    ledger.targetPlan !== undefined
+  ) {
+    return false;
+  }
+  const maximumPeriods = canonicalFullFiscalYearPlanPeriods(ledger.scope.financialYear, "March");
+  return Boolean(
+    maximumPeriods &&
+    ledger.targets.length > 0 &&
+    ledger.targets.length <= maximumPeriods.length &&
+    ledger.targets.every((target, index) => target.period === maximumPeriods[index]),
+  );
+}
+
 export function isCanonicalFullFiscalYearPeriodPlan(
   financialYear: string,
   periods: readonly FiledReturnsMonth[],
@@ -238,20 +260,23 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
   ) {
     return false;
   }
-  // One accepted shape. Pack has never shipped, so no stored ledger predates the
-  // recorded plan; a record that is not this shape is damaged, and the existing
-  // malformed-ledger path already tells the reader how to clear it. Reading old
-  // shapes cost more than re-running a year: it forced a resume state that could
-  // not name a way out, and let a partial year satisfy completion.
-  if (
-    ledger.planVersion !== FULL_FISCAL_YEAR_PLAN_VERSION ||
-    ledger.eligibleThrough === undefined ||
-    !isTargetPlan(ledger.targetPlan) ||
-    !hasCanonicalFullFiscalYearTargetPlan(ledger as FiledReturnsFullFiscalYearLedger)
-  ) {
-    return false;
+  const hasRecordedPlan = ledger.planVersion !== undefined || ledger.eligibleThrough !== undefined;
+  if (hasRecordedPlan) {
+    return (
+      ledger.planVersion === FULL_FISCAL_YEAR_PLAN_VERSION &&
+      ledger.eligibleThrough !== undefined &&
+      isTargetPlan(ledger.targetPlan) &&
+      hasCanonicalFullFiscalYearTargetPlan(ledger as FiledReturnsFullFiscalYearLedger)
+    );
   }
-  return true;
+  // Legacy plans can be resumed, but never completed or zipped without the
+  // recorded target plan that proves their exact intended scope.
+  return (
+    ledger.status !== "complete" &&
+    ledger.zipPhase === undefined &&
+    ledger.zipDownloadAttempt === undefined &&
+    hasLegacyCanonicalFullFiscalYearTargetPrefix(ledger as FiledReturnsFullFiscalYearLedger)
+  );
 }
 
 function isValidZipDownloadAttempt(ledger: Partial<FiledReturnsFullFiscalYearLedger>): boolean {

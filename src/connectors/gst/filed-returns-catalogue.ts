@@ -162,12 +162,6 @@ export const FILED_RETURNS_CAPABILITIES = {
     supportStatus: "unsupported",
     artifacts: {},
   },
-  "GSTR-4": {
-    label: "GSTR-4",
-    periodicity: "quarterly",
-    supportStatus: "unsupported",
-    artifacts: {},
-  },
   "GSTR-4A": {
     label: "GSTR-4A",
     periodicity: "quarterly",

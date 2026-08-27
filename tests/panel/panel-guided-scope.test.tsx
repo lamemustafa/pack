@@ -16,7 +16,9 @@ function renderGuide() {
       context={{ connectorId: "gst", pageKind: "gst-filed-returns", supported: true }}
       externalBlock={null}
       flowSummary={null}
+      portalSignedIn
       scope={PANEL_TEST_SCOPE}
+      savedRun={null}
       scopeLockedForReview={false}
       onScopeChange={vi.fn()}
       onStart={vi.fn()}
@@ -49,7 +51,7 @@ describe("panel guided scope", () => {
     const markup = renderCatalogue();
     expect(markup).toContain("GSTR-9");
     expect(markup).toContain("Ledgers");
-    expect(markup).toContain("Not available in Pack <span>6</span>");
+    expect(markup).toContain("Not available in Pack <span>5</span>");
     expect(markup).toContain("<span>GSTR-9</span><span>Annual</span>");
     expect(markup).toContain("<span>Ledgers</span><span>None</span>");
   });
@@ -65,9 +67,9 @@ describe("panel guided scope", () => {
   it("groups availability once instead of repeating the same decision on every row", () => {
     const markup = renderCatalogue();
 
-    expect(markup).toContain("3 available · 6 unavailable");
+    expect(markup).toContain("3 available · 5 unavailable");
     expect(markup).toContain("Available <span>3</span>");
-    expect(markup).toContain("Not available in Pack <span>6</span>");
+    expect(markup).toContain("Not available in Pack <span>5</span>");
     expect(markup.match(/not available in Pack/gi)).toHaveLength(1);
   });
 
@@ -77,7 +79,6 @@ describe("panel guided scope", () => {
     ["GSTR-2B", "Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)"],
     ["GSTR-9", "Annual"],
     ["GSTR-9C", "Annual"],
-    ["GSTR-4", "Quarterly"],
     ["GSTR-4A", "Quarterly"],
     ["IFF", "Monthly"],
     ["Ledgers", "None"],

@@ -11,6 +11,7 @@ import {
 } from "../../connectors/gst/filed-returns-capabilities";
 import { getFiledReturnsFinancialYearOptions } from "../../connectors/gst/filed-returns-scope";
 import { ScopeFormAction } from "../popup/components";
+import { getScopeMatchedFiledReturnsSummary } from "../popup/flow-summary";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import {
   panelFullFiscalYearPresets,
@@ -23,6 +24,8 @@ export function PanelGuidedScope({
   context,
   externalBlock,
   flowSummary,
+  portalSignedIn,
+  savedRun,
   scope,
   scopeLockedForReview,
   onScopeChange,
@@ -32,6 +35,8 @@ export function PanelGuidedScope({
   context: PortalContext | null;
   externalBlock: { disabled: true; label: string } | null;
   flowSummary: FiledReturnsFlowSummary | null;
+  portalSignedIn: boolean;
+  savedRun: FiledReturnsFlowSummary | null;
   scope: FiledReturnsDownloadScope;
   scopeLockedForReview: boolean;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
@@ -45,7 +50,10 @@ export function PanelGuidedScope({
   const steps = panelGuidedSteps(scope);
   const step = steps[activeStep] ?? steps[0];
   const currentFinancialYear = getFiledReturnsFinancialYearOptions()[0];
-  const presets = currentFinancialYear ? panelFullFiscalYearPresets(currentFinancialYear) : [];
+  const [presetAsOf, setPresetAsOf] = React.useState(() => new Date());
+  const presets = currentFinancialYear
+    ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
+    : [];
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -70,17 +78,19 @@ export function PanelGuidedScope({
         <h2 id="panel-presets-title">What do you need?</h2>
         <div className="panel-preset-list">
           {presets.map((preset) => {
-            const startAction = getScopeFormStartAction(preset.scope, flowSummary, busy, true);
-            const portalReady = context?.supported === true;
+            const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
+            const summaryForPreset = savedRunForPreset ?? flowSummary;
+            const blockForPreset = savedRunForPreset ? null : externalBlock;
+            const startAction = getScopeFormStartAction(preset.scope, summaryForPreset, busy, true);
             const disabled =
-              !portalReady || externalBlock?.disabled === true || startAction.disabled;
+              !portalSignedIn || blockForPreset?.disabled === true || startAction.disabled;
             const disabledReason =
-              externalBlock?.label ??
+              blockForPreset?.label ??
               (startAction.disabled
                 ? startAction.label
-                : portalReady
+                : portalSignedIn
                   ? null
-                  : "Open GST Portal to continue.");
+                  : "Open a signed-in GST Portal tab to continue.");
             return (
               <React.Fragment key={preset.scope.returnType}>
                 <button
@@ -91,6 +101,19 @@ export function PanelGuidedScope({
                     disabledReason ? `preset-${preset.scope.returnType}-reason` : undefined
                   }
                   onClick={() => {
+                    const currentPreset = panelFullFiscalYearPresets(
+                      preset.scope.financialYear,
+                      new Date(),
+                    ).find((candidate) => candidate.scope.returnType === preset.scope.returnType);
+                    if (
+                      !currentPreset ||
+                      currentPreset.periodCount !== preset.periodCount ||
+                      currentPreset.scope.financialYear !== preset.scope.financialYear ||
+                      currentPreset.scope.artifactType !== preset.scope.artifactType
+                    ) {
+                      setPresetAsOf(new Date());
+                      return;
+                    }
                     onScopeChange(preset.scope);
                     onStart(preset.scope);
                   }}
@@ -130,6 +153,10 @@ export function PanelGuidedScope({
       </section>
     );
   }
+
+  const savedRunForScope = getScopeMatchedFiledReturnsSummary(scope, savedRun);
+  const scopeSummary = savedRunForScope ?? flowSummary;
+  const scopeExternalBlock = savedRunForScope ? null : externalBlock;
 
   return (
     <section className="panel-guide" aria-labelledby="panel-guide-title">
@@ -198,8 +225,8 @@ export function PanelGuidedScope({
           <ScopeFormAction
             busy={busy}
             context={context}
-            externalBlock={externalBlock}
-            flowSummary={flowSummary}
+            externalBlock={scopeExternalBlock}
+            flowSummary={scopeSummary}
             scope={scope}
             onStart={() => onStart(scope)}
           />

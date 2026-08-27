@@ -5,14 +5,13 @@ import {
 } from "../../src/connectors/gst/filed-returns-catalogue";
 
 // Periodicity is the fact the catalogue exists to carry. It is why a twelve
-// column month grid was abandoned: GSTR-9 is annual and GSTR-4 is quarterly, so
+// column month grid was abandoned: GSTR-9 is annual and GSTR-4A is quarterly, so
 // a month axis is only coherent for the three returns supported today. Before
 // this file, relabelling a quarterly return as monthly broke two tests.
 const EXPECTED_PERIODICITY: Record<string, string> = {
   "GSTR-3B": "monthly",
   "GSTR-1": "monthly",
   "GSTR-2B": "monthly",
-  "GSTR-4": "quarterly",
   "GSTR-4A": "quarterly",
   "GSTR-9": "annual",
   "GSTR-9C": "annual",

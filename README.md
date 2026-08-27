@@ -351,7 +351,11 @@ Pack uses Chrome extension storage only inside the current browser profile.
   year, period, return type and artifact type; target status, safe
   messages/signals, attempts, revisions, ZIP phase and timestamps. During a
   final ZIP handoff, it also records the ZIP request timestamp and, after
-  browser creation, the exact numeric browser download ID. Per-target
+  browser creation, the exact numeric browser download ID. After the first
+  portal-tab selection, it also records a bounded numeric portal tab ID and an
+  opaque extension-generated tab-session marker; both remain with that selected
+  ledger until it is replaced or cleared.
+  Per-target
   diagnostics may include an opaque action ID, the exact numeric browser
   download ID, endpoint and download-path classes, MIME and byte-count classes,
   and status and error classes;

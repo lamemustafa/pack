@@ -6,7 +6,6 @@ import { ContextState } from "../popup/context-state";
 import {
   canRetryFullFiscalYearZipWithoutPortal,
   getFullFiscalYearCleanupCopy,
-  getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
 } from "../popup/flow-summary";
 import { InlineStatus } from "../popup/inline-status";
@@ -50,9 +49,6 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy);
-  // Use the canonical scope matcher so the guide and the start guard cannot
-  // disagree about whether the saved run describes the visible target.
-  const savedRunIsThisScope = getScopeMatchedFiledReturnsSummary(pack.scope, savedRun) !== null;
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -70,7 +66,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const showFlow =
     (portalReady || canRetryFullFiscalYearZipWithoutPortal(summary) || terminalSummary) &&
-    !["access-denied", "loading", "unsupported", "session-expired"].includes(presentation.kind);
+    !["access-denied", "loading", "unsupported"].includes(presentation.kind);
 
   const openPortal = () => void browser.tabs.create({ url: "https://www.gst.gov.in" });
 
@@ -170,8 +166,10 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               <PanelGuidedScope
                 busy={pack.effectiveBusy}
                 context={pack.context}
-                externalBlock={savedRunIsThisScope ? null : savedRunBlock}
+                externalBlock={savedRunBlock}
                 flowSummary={pack.scopedFlowSummary}
+                portalSignedIn={portalSignedIn}
+                savedRun={savedRun}
                 scope={pack.scope}
                 scopeLockedForReview={pack.scopeLockedForReview}
                 onScopeChange={pack.setScope}

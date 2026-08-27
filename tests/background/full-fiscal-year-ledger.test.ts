@@ -681,6 +681,18 @@ describe("full fiscal year ledger", () => {
     expect(isFullFiscalYearLedger({ ...planned, eligibleThrough: "May" })).toBe(true);
   });
 
+  it("recovers an incomplete legacy target prefix but never treats it as complete", () => {
+    const planned = createLedger([["April", "blocked"]]);
+    const legacy = { ...planned };
+    delete legacy.planVersion;
+    delete legacy.eligibleThrough;
+    delete legacy.targetPlan;
+
+    expect(isFullFiscalYearLedger(legacy)).toBe(true);
+    expect(isFullFiscalYearLedger({ ...legacy, status: "complete" })).toBe(false);
+    expect(isFullFiscalYearLedger({ ...legacy, zipPhase: "export-pending" })).toBe(false);
+  });
+
   it("refuses to create a ledger from a noncanonical target list", () => {
     expect(() =>
       createFullFiscalYearLedger(
@@ -1053,7 +1065,7 @@ describe("full fiscal year ledger", () => {
   // text losing its remedy -- both derive from one source, so both drift
   // together and still agree. Every state that names a remedy needs a row here.
   it.each([
-    ["full-fiscal-year-pinned-gst-tab-unavailable", "Clear local Pack data"],
+    ["full-fiscal-year-pinned-gst-tab-unavailable", "Cancel and reset"],
     ["full-fiscal-year-gst-tab-session-unavailable", "open in the foreground"],
   ])("persists the specific remedy for %s", (signal, remedy) => {
     const ledger = createLedger([["April", "pending"]]);

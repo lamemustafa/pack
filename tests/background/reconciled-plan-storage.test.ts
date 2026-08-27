@@ -330,6 +330,17 @@ describe("reconciled indexed plan recovery", () => {
     expect(await readLedgerForScope(deps, replacement.scope)).toEqual(replacement);
   });
 
+  it("keeps a plan recoverable when removing its index cannot persist", async () => {
+    const ledger = settled("full-fiscal-year-00000031");
+    install(ledger);
+    mocks.local.set.mockRejectedValueOnce(new Error("synthetic index write failure"));
+
+    await expect(removeLedger(deps, ledger)).rejects.toThrow("synthetic index write failure");
+
+    expect(storage.local[filedReturnsPlanStorageKey(ledger.ledgerId)]).toEqual(ledger);
+    expect(await readLedgerForScope(deps, ledger.scope)).toEqual(ledger);
+  });
+
   it.each(RECOVERY_TARGET_STATUSES)(
     "does not overwrite a prior %s recovery plan",
     async (status) => {

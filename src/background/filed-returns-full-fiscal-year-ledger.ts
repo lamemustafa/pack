@@ -104,9 +104,40 @@ export function reconcileFullFiscalYearLedgerTargets(
   // The plan is fixed when the run is created and never grows, so periods are
   // not consulted here; `unplannedEligibleFullFiscalYearPeriods` reports the
   // divergence at completion instead. What remains is stamping the connector and
-  // extension versions a resumed run is actually executing under.
+  // extension versions a resumed run is actually executing under. A validated
+  // legacy prefix becomes an explicit v3 plan before any recovery action runs.
   void periods;
-  if (!hasCanonicalFullFiscalYearTargetPlan(ledger)) return ledger;
+  if (!hasCanonicalFullFiscalYearTargetPlan(ledger)) {
+    const targetPeriods = ledger.targets.map((target) => target.period) as FiledReturnsMonth[];
+    const eligibleThrough = targetPeriods.at(-1);
+    if (
+      ledger.planVersion !== undefined ||
+      ledger.eligibleThrough !== undefined ||
+      ledger.targetPlan !== undefined ||
+      !eligibleThrough ||
+      !isCanonicalFullFiscalYearPeriodPlan(ledger.scope.financialYear, targetPeriods)
+    ) {
+      return ledger;
+    }
+    const timestamp = now.toISOString();
+    return {
+      ...ledger,
+      revision: nextRevision(ledger),
+      planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+      eligibleThrough,
+      targetPlan: createFiledReturnsTargetPlan(
+        ledger.targets.map((target) => ({
+          financialYear: target.financialYear,
+          period: target.period,
+          returnType: target.returnType,
+          ...(target.artifactType ? { artifactType: target.artifactType } : {}),
+        })),
+      ),
+      connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
+      createdWithExtensionVersion: PACK_PRODUCT_VERSION,
+      lastReconciledAt: timestamp,
+    };
+  }
   const changed =
     ledger.connectorVersion !== GST_CONNECTOR_DESCRIPTOR.version ||
     ledger.createdWithExtensionVersion === undefined;

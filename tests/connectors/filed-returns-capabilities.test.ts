@@ -11,11 +11,11 @@ import {
 import { returnTypeOptions } from "../../src/entrypoints/popup/scope-form-model";
 
 describe("filed-return catalogue", () => {
-  it("declares one nine-row source with every axis shape", () => {
+  it("declares one eight-row source with every axis shape", () => {
     const entries = filedReturnsCatalogueEntries();
 
-    expect(entries).toHaveLength(9);
-    expect(new Set(entries.map((entry) => entry.returnType)).size).toBe(9);
+    expect(entries).toHaveLength(8);
+    expect(new Set(entries.map((entry) => entry.returnType)).size).toBe(8);
     expect(new Set(entries.map((entry) => entry.capability.periodicity))).toEqual(
       new Set(FILED_RETURNS_PERIODICITIES),
     );

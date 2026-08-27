@@ -401,8 +401,8 @@ export async function removeLedger(
   if (index.ledgerIdsByScope[scopeKey] === ledger.ledgerId) {
     delete index.ledgerIdsByScope[scopeKey];
   }
-  await browser.storage.local.remove(filedReturnsPlanStorageKey(ledger.ledgerId));
   await browser.storage.local.set({ [indexKey]: index });
+  await browser.storage.local.remove(filedReturnsPlanStorageKey(ledger.ledgerId));
   await removeMatchingLegacyLedger(deps, ledger);
 }
 

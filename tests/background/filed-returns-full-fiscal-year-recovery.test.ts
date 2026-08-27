@@ -608,6 +608,36 @@ describe("full fiscal-year recovery", () => {
     expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
   });
 
+  it("migrates an incomplete legacy ledger before presenting its recovery action", async () => {
+    const ledger = createHistoricalBlockedFilenameLedger();
+    delete ledger.planVersion;
+    delete ledger.eligibleThrough;
+    delete ledger.targetPlan;
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B" as const,
+    };
+
+    const response = await startFullFiscalYearDownloadFlow(scope, recoveryDeps() as never, vi.fn());
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.not.arrayContaining(["full-fiscal-year-target-plan-invalid"]),
+      },
+    });
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      "full-year-ledger": expect.objectContaining({
+        planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+        eligibleThrough: "April",
+        targetPlan: [expect.objectContaining({ period: "April" })],
+      }),
+    });
+  });
+
   it("keeps interrupted running historical targets non-retryable", async () => {
     const ledger = createRecoveryLedger({
       revision: 2,

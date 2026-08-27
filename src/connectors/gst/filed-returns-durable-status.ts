@@ -601,7 +601,7 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "full-year-interrupted": `Pack stopped before it could confirm ${period}. Check Downloads before retrying.`,
     "full-year-needs-action": `Pack needs an explicit recovery action before continuing ${period}.`,
     "full-year-pinned-tab-unavailable":
-      "Pack stopped because the GST Portal tab selected for this saved plan is no longer available. Use Clear local Pack data to discard the saved plan, then start this year again.",
+      "Pack stopped because the GST Portal tab selected for this saved plan is no longer available. Use Cancel and reset for this saved run, then start this year again.",
     "full-year-no-artifacts":
       "Pack completed the saved fiscal-year run. No ZIP was created because no filed-return artifacts were available for export.",
     "full-year-resume":
