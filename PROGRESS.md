@@ -2820,3 +2820,17 @@ recovery state`, proving the response was silently discarded after context succe
 - Checkpoint: `5ca319d refactor(recovery): remove legacy staging ownership exports`; post-commit
   preflight passed. No live portal, taxpayer data, manifest, permission, dependency, push or PR
   changed.
+
+## Cycle 85 — audit main-world execution failure retention
+
+- Window: 2026-08-27 08:15–08:17 IST. This is a quiet lossy-surface audit, not a cadence-qualifying
+  implementation cycle; its actual duration is recorded without an idle hold.
+- Picked: page-generated acquisition returns an empty low-level signal list when main-world
+  execution rejects, which initially appeared to lose the reason before a human could read it.
+- Measured: the acquisition's fixed reason enters the download trigger's blocked flow step, maps to
+  the canonical artifact-failure message, and is included in the retained-checkpoint decision. Its
+  focused acquisition test already distinguishes this outcome from portal generation timeout and
+  proves no browser download starts.
+- Result: no source or test change is justified. The specific reason already survives at the
+  user-facing and recovery boundaries; adding a second signal would duplicate the existing reason
+  contract. Continue the audit at a different catch boundary.

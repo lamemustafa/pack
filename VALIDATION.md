@@ -2051,3 +2051,10 @@ Six additional mutation groups were run serially and restored with matching file
   5 files and 168 tests; the final serial suite passed 152 files and 2,829 tests, an exact eight-test
   decrease attributable to the deleted self-only tests. No persisted schema, download evidence, MV3,
   permission, host or CSP behavior changed.
+
+### Cycle 85 — main-world execution audit
+
+- The initially suspicious empty low-level signal list is not a lossy surface: its fixed execution
+  reason reaches the shared blocked message and retained-checkpoint rule. Existing focused coverage
+  distinguishes it from a portal generation timeout and verifies no browser download begins. No
+  change was retained.
