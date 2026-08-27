@@ -275,35 +275,17 @@ describe("PR-head Review gate check publisher", () => {
   });
 
   it("fails closed when the next durable state exceeds the check-run text bound", () => {
-    const baseFixture = cleanReviewFixture();
-    const fixture = {
-      ...baseFixture,
-      data: {
-        ...baseFixture.data,
-        repository: {
-          ...baseFixture.data.repository,
-          pullRequest: {
-            ...baseFixture.data.repository.pullRequest,
-            comments: {
-              ...baseFixture.data.repository.pullRequest.comments,
-              nodes: Array.from({ length: 700 }, (_, index) => ({
-                id: `comment-${index}`,
-                isMinimized: false,
-                minimizedReason: null,
-                author: { login: "chatgpt-codex-connector" },
-                createdAt: "2026-08-17T12:00:00Z",
-                body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Finding.",
-              })),
-            },
-          },
-        },
-      },
-    };
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
-      fixture,
+      cleanReviewFixture(),
       [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      null,
+      [],
+      {},
+      700,
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
 
@@ -333,6 +315,7 @@ function runScript(
   durableStates: Record<string, string> | null = null,
   timeline: unknown[] = [],
   parents: Record<string, string[]> = {},
+  syntheticFindingCount = 0,
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -369,6 +352,7 @@ function runScript(
         FAKE_DURABLE_RESPONSES: JSON.stringify(durableResponses),
         FAKE_TIMELINE: JSON.stringify(timeline),
         FAKE_PARENTS: JSON.stringify(parents),
+        FAKE_SYNTHETIC_FINDING_COUNT: String(syntheticFindingCount),
       },
     },
   );
@@ -407,8 +391,19 @@ else if (text.includes("/check-runs?")) {
 }
 else if (text.includes("graphql")) {
   const fixture = JSON.parse(process.env.FAKE_FIXTURE);
+  const syntheticFindingCount = Number(process.env.FAKE_SYNTHETIC_FINDING_COUNT);
   const number = Number(args.find((arg) => arg.startsWith("number="))?.split("=")[1]);
   const pull = JSON.parse(process.env.FAKE_PULLS).flat().find((item) => item.number === number);
+  if (syntheticFindingCount > 0) {
+    fixture.data.repository.pullRequest.comments.nodes = Array.from({ length: syntheticFindingCount }, (_, index) => ({
+      id: "comment-" + index,
+      isMinimized: false,
+      minimizedReason: null,
+      author: { login: "chatgpt-codex-connector" },
+      createdAt: "2026-08-17T12:00:00Z",
+      body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Finding.",
+    }));
+  }
   fixture.data.repository.pullRequest.headRefOid = pull.head.sha;
   fixture.data.repository.pullRequest.reviews.nodes[0].commit.oid = pull.head.sha;
   process.stdout.write(JSON.stringify(fixture));
