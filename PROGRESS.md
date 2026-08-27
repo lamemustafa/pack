@@ -2957,3 +2957,28 @@ recovery state`, proving the response was silently discarded after context succe
 - Checkpoint: `f928856 test(panel): verify compact guided states`; post-commit preflight passed.
   This is local synthetic packaged-browser verification, not a live portal qualification. No
   product runtime, taxpayer data, persistence, permission, manifest, dependency, push or PR changed.
+
+## Cycle 92 — remove duplicate packaged GST context probe
+
+- Window: 2026-08-27 08:46–08:51 IST. This is a bounded verifier reduction; its actual duration is
+  recorded without an idle hold.
+- Measured: the compact sign-in verifier already opens the synthetic GST landing page, waits for the
+  canonical context record, then checks the packaged terminal panel at 320px. The earlier standalone
+  content-script probe performed the same navigation and storage wait but produced no additional
+  assertion.
+- Changed: removed that duplicate probe and its call. The retained sign-in flow still proves the
+  packaged content-script observation before the terminal panel assertions, so no browser behavior
+  or coverage is lost.
+- Gate: focused verifier coverage passed 1 file and 27 tests. Full build, serial suite, TypeScript,
+  zero-warning ESLint, Prettier, package verification and packaged browser verification passed.
+  Exact final Vitest footer:
+
+  ```text
+        Tests  2829 passed (2829)
+     Start at  08:48:14
+     Duration  156.37s (transform 2.52s, setup 0ms, import 12.76s, tests 126.96s, environment 293ms)
+  ```
+
+- Checkpoint: `29f06a7 refactor(verify): remove duplicate GST context probe`; post-commit preflight
+  passed. No product runtime, taxpayer data, persistence, permission, manifest, dependency, push or
+  PR changed.

@@ -2091,3 +2091,10 @@ Six additional mutation groups were run serially and restored with matching file
   WXT build, 152 test files and 2,829 tests, TypeScript, zero-warning ESLint, Prettier, package
   verification and packaged browser verification. The browser now checks every guided field at 320px
   before expanding the catalogue; this is not live portal evidence.
+
+### Cycle 92 — duplicate context-probe reduction
+
+- Focused package-verifier coverage passed 1 file and 27 tests. The full local synthetic gate passed
+  WXT build, 152 test files and 2,829 tests, TypeScript, zero-warning ESLint, Prettier, package
+  verification and packaged browser verification. The retained compact sign-in path subsumes the
+  removed duplicate GST context probe; this is not live portal evidence.
