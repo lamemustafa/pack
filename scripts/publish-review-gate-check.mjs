@@ -132,7 +132,9 @@ function evaluatePullRequest(pr) {
 
 function loadLatestDurableReviewState(pr) {
   const forcePushedPriorShas = loadForcePushedPriorShas(pr.number);
-  const pendingShas = [pr.head.sha, ...forcePushedPriorShas];
+  const currentPrShas = loadCurrentPrCommitShas(pr);
+  const currentPrShaSet = new Set(currentPrShas);
+  const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
   const visitedShas = new Set();
 
   while (pendingShas.length > 0) {
@@ -166,9 +168,7 @@ function loadLatestDurableReviewState(pr) {
       }
     }
 
-    if (forcePushedPriorShas.length === 0) {
-      return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
-    }
+    if (currentPrShaSet.has(sha)) continue;
 
     const commit = JSON.parse(
       runGithub(
@@ -191,6 +191,30 @@ function loadLatestDurableReviewState(pr) {
     throw new Error("force-push discontinuity left no reachable durable review state");
   }
   return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
+}
+
+function loadCurrentPrCommitShas(pr) {
+  const commitPages = JSON.parse(
+    runGithub(
+      ["api", "--paginate", "--slurp", `repos/${repo}/pulls/${pr.number}/commits?per_page=100`],
+      "current pull request history discovery",
+    ),
+  );
+  const shas = [];
+  const seenShas = new Set();
+  for (const commit of flattenPages(commitPages)) {
+    if (!/^[0-9a-f]{40}$/iu.test(commit?.sha ?? "")) {
+      throw new Error("current pull request history has an invalid commit SHA");
+    }
+    if (!seenShas.has(commit.sha)) {
+      seenShas.add(commit.sha);
+      shas.push(commit.sha);
+    }
+  }
+  if (!seenShas.has(pr.head.sha)) {
+    throw new Error("current pull request history does not contain the PR head");
+  }
+  return [pr.head.sha, ...shas.reverse().filter((sha) => sha !== pr.head.sha)];
 }
 
 function durableReviewStateBelongsToPr(state, expectedPrNumber) {
