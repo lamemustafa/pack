@@ -13,7 +13,7 @@ import {
 
 const CHECK_RUN_NAME = "Review gate (scheduled)";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
-const MAX_DURABLE_HISTORY_NODES = 20;
+const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
 const EXIT_VERDICTS = new Map([
   [0, { conclusion: "success", title: "Scheduled review gate passed" }],
@@ -136,14 +136,19 @@ function loadLatestDurableReviewState(pr) {
   const currentPrShaSet = new Set(currentPrShas);
   const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
   const visitedShas = new Set();
+  const visitedForcePushHistoryShas = new Set();
 
   while (pendingShas.length > 0) {
-    if (visitedShas.size >= MAX_DURABLE_HISTORY_NODES) {
-      throw new Error("durable review-state history exceeded the safe lookup bound");
-    }
     const sha = pendingShas.shift();
     if (!/^[0-9a-f]{40}$/iu.test(sha ?? "") || visitedShas.has(sha)) continue;
+    if (
+      !currentPrShaSet.has(sha) &&
+      visitedForcePushHistoryShas.size >= MAX_DURABLE_FORCE_PUSH_HISTORY_NODES
+    ) {
+      throw new Error("durable force-push history exceeded the safe lookup bound");
+    }
     visitedShas.add(sha);
+    if (!currentPrShaSet.has(sha)) visitedForcePushHistoryShas.add(sha);
     const checkPages = JSON.parse(
       runGithub(
         [

@@ -224,6 +224,33 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).toContain("current-line-state");
   });
 
+  it("searches the complete current PR history before the force-push bound", () => {
+    const currentHistory = Array.from({ length: 21 }, (_, index) =>
+      index.toString(16).padStart(40, "0"),
+    );
+    const oldestSha = currentHistory[0]!;
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [oldestSha]: reviewStateWithDeletedFinding(1, "older-current-line-state") },
+      [],
+      {},
+      0,
+      { 1: [...currentHistory, headSha] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const stateLookups = calls.filter((call) => call.join(" ").includes("/check-runs?"));
+
+    expect(result.status).toBe(0);
+    expect(stateLookups).toHaveLength(22);
+    expect(publication?.join(" ")).toContain("conclusion=failure");
+    expect(publication?.join(" ")).toContain("older-current-line-state");
+  });
+
   it("prefers current-line state before an older force-push anchor", () => {
     const currentLineSha = "b".repeat(40);
     const orphanedSha = "c".repeat(40);
@@ -305,7 +332,7 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).not.toContain("older-anchor-state");
   });
 
-  it("fails closed rather than exceeding the durable-history lookup bound", () => {
+  it("fails closed rather than exceeding the force-push history lookup bound", () => {
     const history = Array.from({ length: 20 }, (_, index) => index.toString(16).padStart(40, "0"));
     const parents: Record<string, string[]> = {};
     for (const [index, sha] of history.entries()) {
@@ -327,7 +354,7 @@ describe("PR-head Review gate check publisher", () => {
     const stateLookups = calls.filter((call) => call.join(" ").includes("/check-runs?"));
 
     expect(result.status).toBe(0);
-    expect(stateLookups).toHaveLength(20);
+    expect(stateLookups).toHaveLength(21);
     expect(publication?.join(" ")).toContain("conclusion=action_required");
   }, 10_000);
 
