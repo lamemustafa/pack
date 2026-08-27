@@ -39,6 +39,16 @@
 
 ## Outcome
 
+### Cycle 80 — retained checkpoint storage-read block
+
+- A session-storage read failure before artifact-acquisition recovery inspection now returns a fixed
+  blocked response with an explicit retry-only remedy; it does not dispatch a portal action or
+  download, and cannot treat missing recovery state as safe.
+- The regression first rejected out of the runner. Restored focused proof covers the exact safe
+  signal, message, recovery action and no-new-start condition. Privacy and security reviews found no
+  sensitive data persistence, target-binding, MV3 or download-evidence regression. The final serial
+  suite passed 152 files and 2,829 tests.
+
 ### Cycle 79 — pinned tab-session storage distinction
 
 - A pinned full-year continuation now keeps session-storage unavailability distinct from an actual

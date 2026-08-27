@@ -1,5 +1,37 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 80 — retain artifact-acquisition storage failures
+
+- Window: 2026-08-27 07:29–07:39 IST. This is a bounded fail-closed recovery correction; its
+  actual duration is recorded without an idle hold.
+- Picked: the retained artifact-acquisition checkpoint is read before every new run so Pack cannot
+  repeat a browser action whose outcome is uncertain. Its session-storage read exception escaped the
+  runner, leaving no controlled blocked response for the human who initiated the action.
+- Discrimination: before the fix, the focused runner regression rejected with a synthetic
+  retained-checkpoint read failure instead of returning a blocked flow step. No new target start
+  was reached in the test setup, but the user-visible recovery reason was absent.
+- Changed: the retained-checkpoint boundary now catches only its storage-read failure and returns a
+  fixed blocked signal, explanation and retry-only action before any retained inspection, portal
+  action or download. The static signal is admitted to the existing closed durable vocabulary; no
+  error, storage key, URL, filename or portal content is retained. Successful inspection, malformed
+  checkpoint handling, target binding and all existing recovery actions are unchanged.
+- Review and test quality: privacy review found no data-exposure or storage-scope issue, then asked
+  for exact user-copy and recovery-action assertions; those assertions were added. Security review
+  PASS confirmed the failure stops before single-period/full-year dispatch and cannot bypass exact-ID
+  or non-empty download evidence.
+- Gate: focused runner/signal coverage passed 2 files and 84 tests. The full build, serial suite,
+  TypeScript, zero-warning ESLint, Prettier and package verifier passed; after strengthening the
+  focused assertion, the serial suite was rerun. Exact final Vitest footer:
+
+  ```text
+        Tests  2829 passed (2829)
+     Start at  07:35:58
+     Duration  154.84s (transform 2.55s, setup 0ms, import 12.56s, tests 125.70s, environment 296ms)
+  ```
+
+- Checkpoint: `18a4453 fix(recovery): retain checkpoint storage failures`; post-commit preflight
+  passed. No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.
+
 ## Cycle 79 — retain tab-session storage failures
 
 - Window: 2026-08-27 07:21–07:32 IST. This is a bounded lossy-surface correction; its actual
