@@ -2834,3 +2834,17 @@ recovery state`, proving the response was silently discarded after context succe
 - Result: no source or test change is justified. The specific reason already survives at the
   user-facing and recovery boundaries; adding a second signal would duplicate the existing reason
   contract. Continue the audit at a different catch boundary.
+
+## Cycle 86 — audit start-checkpoint fallback retention
+
+- Window: 2026-08-27 08:17–08:19 IST. This is a quiet fail-closed audit, not a cadence-qualifying
+  implementation cycle; its actual duration is recorded without an idle hold.
+- Picked: when a browser download starts but the initial exact-ID checkpoint write rejects, the
+  fallback write may also reject. The audit checked whether that second catch silently erased the
+  recovery reason or authorized a retry.
+- Measured: the original intent checkpoint is deliberately retained if the fallback cannot be
+  recorded. The boundary still waits for the in-flight browser result but discards it as authority,
+  then returns the fixed checkpoint-failed explanation instructing the person to inspect browser
+  Downloads. The caller treats that reason as recovery-retaining and never marks the target saved.
+- Result: no source or test change is justified. The nested catch preserves the safer existing
+  recovery record; replacing it with a generic signal would weaken the exact-ID recovery boundary.

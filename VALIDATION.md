@@ -2058,3 +2058,9 @@ Six additional mutation groups were run serially and restored with matching file
   reason reaches the shared blocked message and retained-checkpoint rule. Existing focused coverage
   distinguishes it from a portal generation timeout and verifies no browser download begins. No
   change was retained.
+
+### Cycle 86 — start-checkpoint fallback audit
+
+- A failed fallback checkpoint preserves the original exact-ID intent and returns the fixed
+  checkpoint-failed recovery message; it does not grant completion or retry authority from an
+  unrecorded browser outcome. No change was retained.
