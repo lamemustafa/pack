@@ -16,10 +16,7 @@ import {
 } from "../connectors/gst/filed-returns-artifact-progress-recovery";
 import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
-import {
-  createFiledReturnsLedgerId,
-  isCanonicalSinglePeriodLedgerId,
-} from "../connectors/gst/filed-returns-ledger-id";
+import { isCanonicalSinglePeriodLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 import { parseDurableFiledReturnsFlowSummary } from "./filed-returns-durable-summary";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
@@ -44,29 +41,6 @@ export class InvalidSinglePeriodStagingRecordError extends Error {
   }
 }
 
-export function createSinglePeriodBundleLedgerId(): string {
-  return createFiledReturnsLedgerId("single-period");
-}
-
-export async function reserveSinglePeriodBundleLedger(): Promise<string | null> {
-  let existing: SinglePeriodStagingRecord | null;
-  try {
-    existing = await readSinglePeriodStagingRecord();
-  } catch {
-    return null;
-  }
-  if (existing) return null;
-
-  const ledgerId = createSinglePeriodBundleLedgerId();
-  const record: SinglePeriodStagingRecord = { ledgerId, schemaVersion: "1.0" };
-  try {
-    await browser.storage.local.set({ [PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging]: record });
-    return ledgerId;
-  } catch {
-    return null;
-  }
-}
-
 export async function readSinglePeriodStagingRecord(): Promise<SinglePeriodStagingRecord | null> {
   const values = await browser.storage.local.get(PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging);
   const record = values[PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging];
@@ -80,23 +54,6 @@ export async function readSinglePeriodStagingRecord(): Promise<SinglePeriodStagi
     throw new InvalidSinglePeriodStagingRecordError(recoverableLedgerId);
   }
   return { ledgerId: recoverableLedgerId, schemaVersion: "1.0" };
-}
-
-export async function clearSinglePeriodStagingRecord(ledgerId: string): Promise<boolean> {
-  let record: SinglePeriodStagingRecord | null;
-  try {
-    record = await readSinglePeriodStagingRecord();
-  } catch {
-    return false;
-  }
-  if (!record) return true;
-  if (record.ledgerId !== ledgerId) return false;
-  try {
-    await browser.storage.local.remove(PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function recoverableSinglePeriodLedgerId(

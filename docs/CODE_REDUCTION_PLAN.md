@@ -79,8 +79,9 @@ This fix reduces defects more than lines. Some sites are legitimately different 
 one canonical clickable set plus a small number of _named, justified_ variants, and make every
 call site name which one it wants.
 
-`reserveSinglePeriodBundleLedger` is also exported from two modules
-(`filed-returns-single-period-bundle-ledger.ts:140` and `filed-returns-artifact-progress.ts:44`).
+The duplicate legacy `reserveSinglePeriodBundleLedger` export from
+`filed-returns-artifact-progress.ts` was removed in the 2026-08-27 reduction cycle after caller
+tracing confirmed that the live selected-artifact runner uses the scope-bound bundle-ledger export.
 
 ## 3. Full-fiscal-year cluster — 3,694 lines, 11 modules, never run
 

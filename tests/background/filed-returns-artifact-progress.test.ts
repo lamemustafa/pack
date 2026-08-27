@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  clearSinglePeriodStagingRecord,
   combineDownloadedArtifactFlowSteps,
   persistPartialArtifactSummary,
   readPersistedArtifactProgress,
-  reserveSinglePeriodBundleLedger,
 } from "../../src/background/filed-returns-artifact-progress";
 import {
   hasPositiveFiledReturnsDownloadEvidence,
@@ -18,21 +16,11 @@ import type {
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 
 const state = vi.hoisted(() => ({
-  local: {} as Record<string, unknown>,
   session: {} as Record<string, unknown>,
 }));
 
 const browserMocks = vi.hoisted(() => ({
   storage: {
-    local: {
-      get: vi.fn(async (key: string) => ({ [key]: state.local[key] })),
-      remove: vi.fn(async (key: string) => {
-        delete state.local[key];
-      }),
-      set: vi.fn(async (values: Record<string, unknown>) => {
-        Object.assign(state.local, values);
-      }),
-    },
     session: {
       get: vi.fn(async (key: string) => ({ [key]: state.session[key] })),
       remove: vi.fn(async (key: string) => {
@@ -45,147 +33,7 @@ const browserMocks = vi.hoisted(() => ({
   },
 }));
 
-const offscreenMocks = vi.hoisted(() => ({
-  clearOffscreenFiledReturnLedger: vi.fn<
-    () => Promise<
-      | { status: "cleared" }
-      | {
-          status: "failed";
-          errorCategory?:
-            | "clear-failed"
-            | "offscreen-response-invalid"
-            | "offscreen-unreachable"
-            | "opfs-unavailable";
-        }
-    >
-  >(async () => ({ status: "cleared" })),
-  closeOffscreenBlobDocument: vi.fn(async () => undefined),
-}));
-
 vi.mock("wxt/browser", () => ({ browser: browserMocks }));
-vi.mock("../../src/background/offscreen-blob-url", () => offscreenMocks);
-
-describe("single-period filed-return staging ownership", () => {
-  beforeEach(() => {
-    state.local = {};
-    state.session = {};
-    vi.clearAllMocks();
-    offscreenMocks.clearOffscreenFiledReturnLedger.mockResolvedValue({ status: "cleared" });
-  });
-
-  it("persists an opaque cleanup identity before returning a ledger id", async () => {
-    const requestedScope = {
-      financialYear: "2026-27",
-      period: "April",
-      returnType: "GSTR-2B",
-    } as const;
-    const ledgerId = await reserveSinglePeriodBundleLedger();
-
-    expect(ledgerId).not.toBeNull();
-    if (!ledgerId) return;
-    expect(ledgerId).toMatch(/^single-period:[a-zA-Z0-9._-]+$/);
-    expect(state.local["pack:single-period-staging"]).toEqual({
-      ledgerId,
-      schemaVersion: "1.0",
-    });
-    expect(ledgerId).not.toContain(requestedScope.returnType);
-    expect(ledgerId).not.toContain(requestedScope.financialYear);
-    expect(ledgerId.toLowerCase()).not.toContain(requestedScope.period.toLowerCase());
-  });
-
-  it("preserves retained staging instead of repeating portal artifacts after restart", async () => {
-    state.local["pack:single-period-staging"] = {
-      ledgerId: "single-period:aaaaaaaaaaaaaaaaaaaa",
-      schemaVersion: "1.0",
-    };
-
-    const ledgerId = await reserveSinglePeriodBundleLedger();
-
-    expect(ledgerId).toBeNull();
-    expect(offscreenMocks.clearOffscreenFiledReturnLedger).not.toHaveBeenCalled();
-    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
-    expect(state.local["pack:single-period-staging"]).toEqual({
-      ledgerId: "single-period:aaaaaaaaaaaaaaaaaaaa",
-      schemaVersion: "1.0",
-    });
-  });
-
-  it("does not let cleanup availability change retained staging ownership", async () => {
-    state.local["pack:single-period-staging"] = {
-      ledgerId: "single-period:aaaaaaaaaaaaaaaaaaaa",
-      schemaVersion: "1.0",
-    };
-    offscreenMocks.clearOffscreenFiledReturnLedger.mockResolvedValue({ status: "failed" });
-
-    const ledgerId = await reserveSinglePeriodBundleLedger();
-
-    expect(ledgerId).toBeNull();
-    expect(offscreenMocks.clearOffscreenFiledReturnLedger).not.toHaveBeenCalled();
-    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
-    expect(state.local["pack:single-period-staging"]).toEqual({
-      ledgerId: "single-period:aaaaaaaaaaaaaaaaaaaa",
-      schemaVersion: "1.0",
-    });
-  });
-
-  it("fails closed when durable staging ownership cannot be read", async () => {
-    browserMocks.storage.local.get.mockRejectedValueOnce(new Error("synthetic storage failure"));
-
-    await expect(reserveSinglePeriodBundleLedger()).resolves.toBeNull();
-    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
-  });
-
-  it("fails closed when durable staging ownership is malformed", async () => {
-    state.local["pack:single-period-staging"] = { schemaVersion: "unexpected" };
-
-    await expect(reserveSinglePeriodBundleLedger()).resolves.toBeNull();
-    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
-  });
-
-  it("fails closed when a current-schema staging id is not Pack-owned", async () => {
-    state.local["pack:single-period-staging"] = {
-      ledgerId: "untrusted-ledger",
-      schemaVersion: "1.0",
-    };
-
-    await expect(reserveSinglePeriodBundleLedger()).resolves.toBeNull();
-    expect(offscreenMocks.clearOffscreenFiledReturnLedger).not.toHaveBeenCalled();
-    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
-  });
-
-  it("removes only the record owned by the cleared ledger", async () => {
-    state.local["pack:single-period-staging"] = {
-      ledgerId: "single-period:bbbbbbbbbbbbbbbbbbbb",
-      schemaVersion: "1.0",
-    };
-
-    await expect(
-      clearSinglePeriodStagingRecord("single-period:eeeeeeeeeeeeeeeeeeee"),
-    ).resolves.toBe(false);
-    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
-
-    await expect(
-      clearSinglePeriodStagingRecord("single-period:bbbbbbbbbbbbbbbbbbbb"),
-    ).resolves.toBe(true);
-    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith("pack:single-period-staging");
-  });
-
-  it("does not report durable cleanup when the ownership record cannot be removed", async () => {
-    state.local["pack:single-period-staging"] = {
-      ledgerId: "single-period:bbbbbbbbbbbbbbbbbbbb",
-      schemaVersion: "1.0",
-    };
-    browserMocks.storage.local.remove.mockRejectedValueOnce(new Error("synthetic remove failure"));
-
-    await expect(
-      clearSinglePeriodStagingRecord("single-period:bbbbbbbbbbbbbbbbbbbb"),
-    ).resolves.toBe(false);
-    expect(state.local["pack:single-period-staging"]).toEqual({
-      ledgerId: "single-period:bbbbbbbbbbbbbbbbbbbb",
-      schemaVersion: "1.0",
-    });
-  });
-});
 
 describe("durable selected-artifact progress", () => {
   const scope: FiledReturnsDownloadScope = {
