@@ -1,5 +1,23 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 64 — audit disabled-control descriptions across the panel
+
+- Window: 2026-08-27 06:06–06:10 IST. This is a quiet keyboard/screen-reader audit; its actual
+  duration is recorded without an idle hold.
+- Picked: every disabled control must either name its current reason or point to visible reason
+  text. Static source review covered panel presets and guided scope, the shared scope action,
+  inline-status actions and recovery controls.
+- Measured: every conditional `aria-describedby` target is rendered in the same branch as its
+  disabled control. Preset, scope-action, inline portal-gate and recovery reason IDs are stable and
+  unique per mounted surface. The guided field always references its visible step hint; its busy
+  state is not live in `PanelSurface`, which unmounts the guide while a run is active. Controls that
+  remain mounted while busy expose their state through their accessible label (for example,
+  “Working…” or “Run in progress”) rather than an unresolved reference.
+- Result: no source change. Guided-scope interaction, recovery-action and inline-status suites
+  passed 3 files and 86 tests; `git diff --check` and worktree status were clean.
+- Learned / next: review a description relationship as conditional rendered DOM, not merely an ID
+  string. Continue the duplicate-fact audit on a module outside this action surface.
+
 ## Cycle 63 — reconcile the test-file baseline discrepancy
 
 - Window: 2026-08-27 06:04–06:08 IST. This is a quiet evidence audit; its actual duration is
