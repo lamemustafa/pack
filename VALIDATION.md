@@ -2028,3 +2028,15 @@ Six additional mutation groups were run serially and restored with matching file
   approximately 09:17–09:29 idle hold. Earlier checkpoint rounds 1–17 did not meet the requested
   cycle duration; their real timestamps remain visible. This record does not claim an unbroken
   compliant overnight cadence. The goal is not marked complete and the open owner boundaries remain.
+
+### Cycle 83 — GST tab-focus retention
+
+- A selected GST tab that cannot be brought to the foreground now yields a fixed blocked response
+  and canonical persisted summary, before any portal-owned navigation, artifact trigger or download
+  attempt. Tab-focus and containing-window-focus rejections share the same non-sensitive state;
+  unavailable-tab and unavailable-tab-session states retain their own existing outcomes.
+- The regression first rejected with a synthetic focus failure. Restored focused proof covers each
+  focus operation, the exact canonical message and its persisted projection, and absence of artifact
+  triggering. Privacy and security reviews passed after a privacy-requested window-focus coverage
+  closure; the final serial gate passed 152 files and 2,837 tests with no storage, target-binding,
+  download-evidence, MV3 or sensitive-data regression.

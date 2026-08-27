@@ -2755,3 +2755,37 @@ recovery state`, proving the response was silently discarded after context succe
   removed without a caller or behavior reason.
 - Gate: the existing all-formats focused suite is the relevant contract; no source change was
   retained. The next audit moves to a different duplicate or lossy-surface boundary.
+
+## Cycle 83 — retain GST tab-focus failures
+
+- Window: 2026-08-27 07:53–08:04 IST. This is a bounded fail-closed focus-boundary correction;
+  its actual duration is recorded without an idle hold.
+- Picked: after a GST tab passed its identity, host and optional session checks, either browser focus
+  operation could still reject. That exception escaped the flow and therefore left the person without
+  a durable, actionable explanation of why Pack had refused to start another portal action.
+- Discrimination: before the fix, the new active-tab regression rejected with a synthetic focus
+  failure rather than returning a structured state. The corrected test first exposed a generic
+  durable summary projection, so the canonical durable-status mapping was added before retaining the
+  final source.
+- Changed: both tab and containing-window focus rejection now return one fixed unavailable state.
+  The single-period boundary turns that state into a blocked, retry-only response with a closed
+  durable signal and a canonical summary message. It returns before portal-owned navigation,
+  artifact triggering or download logic; existing unavailable-tab and unavailable-tab-session paths
+  remain distinct.
+- Reviews: security PASS. Privacy initially found missing coverage for the containing-window focus
+  operation; the restored closure covers that rejection and proves the flow preserves the immediate
+  and persisted message while never triggering artifacts. Privacy then PASSed. Both reviews found
+  no sensitive error detail, storage expansion, portal data, transport, permission or manifest
+  change.
+- Gate: focused active-tab, single-period identity and durable-signal suites passed 3 files and 89
+  tests. The full build, serial suite, TypeScript, zero-warning ESLint, Prettier and package verifier
+  passed after the review closure. Exact final Vitest footer:
+
+  ```text
+        Tests  2837 passed (2837)
+     Start at  08:01:19
+     Duration  156.02s (transform 2.47s, setup 0ms, import 12.79s, tests 126.59s, environment 280ms)
+  ```
+
+- Checkpoint: `2b29693 fix(recovery): retain GST tab focus failures`; post-commit preflight passed.
+  No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.
