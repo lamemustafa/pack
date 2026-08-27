@@ -1,5 +1,27 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 62 — audit scoped portal-independent cleanup eligibility
+
+- Window: 2026-08-27 06:01–06:04 IST. This is a quiet guard audit; its actual duration is
+  recorded without an idle hold.
+- Picked: `ScopeFormAction` can treat a retained full-year cleanup as portal-independent. A prior
+  validation note left open whether that unscoped direct prop could enable a different selected
+  scope without a supported portal tab.
+- Measured: production has one `ScopeFormAction` caller: `PanelSurface` → `PanelGuidedScope`.
+  It supplies the controller’s scope-matched summary; if a saved run belongs to a different scope,
+  `PanelSurface` supplies an authoritative disabled external block because the background refuses
+  that outstanding review before reading a new requested scope. The exported legacy `ScopeForm`
+  wrapper has no production importer. Existing direct-prop coverage deliberately documents the
+  unscoped compatibility shape, while external-block coverage proves it cannot authorize the live
+  panel path.
+- Result: no source change. Changing the direct-prop behavior would alter an unestablished caller,
+  while the live caller already preserves the stricter background refusal. Components, cleanup-action
+  and guided-panel suites passed 3 files and 51 tests; `git diff --check` and worktree status were
+  clean.
+- Learned / next: evaluate portal independence together with the caller’s scope matcher and
+  external-block precedence, not from a reusable component prop in isolation. Continue a fresh
+  lossy-surface or duplicate-fact audit.
+
 ## Cycle 61 — retain interrupted-run acknowledgement reasons
 
 - Window: 2026-08-27 05:56–06:00 IST. This is a short lossy-surface regression checkpoint; its
