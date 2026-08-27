@@ -159,6 +159,32 @@ describe("popup background failure presentation", () => {
     await act(async () => root?.unmount());
   });
 
+  it("keeps a flow action's specific safe rejection visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack needs a saved-run check before continuing.",
+        });
+      }
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+
+    expect(controller?.actionError).toBe("Pack needs a saved-run check before continuing.");
+    await act(async () => root?.unmount());
+  });
+
   it("keeps a saved-summary read failure visible after context succeeds", async () => {
     await act(async () => root?.unmount());
     controller = null;
