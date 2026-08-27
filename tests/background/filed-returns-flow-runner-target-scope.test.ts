@@ -221,6 +221,38 @@ describe("filed returns retained target scoping", () => {
     expect(response).toMatchObject({ flowSummary: { status: "blocked" } });
   });
 
+  it("returns a blocked reason when retained checkpoint storage cannot be read", async () => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockRejectedValueOnce(
+      new Error("synthetic retained-checkpoint read failure"),
+    );
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      storageKeys: {},
+    } as never);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
+        state: "blocked",
+        safeMessage:
+          "Pack could not read retained local artifact recovery and will not start another portal action.",
+        userAction: {
+          canResume: true,
+          message: "Try again after local recovery state is available.",
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+    });
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
   it("does not scan retained checkpoints when another run already owns the start", async () => {
     const activeResponse = {
       ok: true as const,

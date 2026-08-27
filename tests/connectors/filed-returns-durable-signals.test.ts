@@ -187,6 +187,7 @@ describe("filed-return durable signal contract", () => {
   it("retains artifact acquisition recovery signals", () => {
     const signals = [
       "artifact-acquisition-checkpoint-malformed",
+      "artifact-acquisition-checkpoint-storage-unavailable",
       "artifact-acquisition-checkpoint-clear-failed",
       "artifact-acquisition-download-interrupted",
       "artifact-acquisition-download-reconciled",

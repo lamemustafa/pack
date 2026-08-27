@@ -317,7 +317,27 @@ async function surfaceRetainedArtifactAcquisitionReview(
   requestedScope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse | null> {
-  const checkpoints = await readArtifactAcquisitionCheckpoints();
+  let checkpoints;
+  try {
+    checkpoints = await readArtifactAcquisitionCheckpoints();
+  } catch {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
+        safeMessage:
+          "Pack could not read retained local artifact recovery and will not start another portal action.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Try again after local recovery state is available.",
+          canResume: true,
+        },
+      },
+    };
+  }
   for (const checkpoint of checkpoints) {
     if (checkpoint.state === "malformed") continue;
     const { target } = checkpoint;

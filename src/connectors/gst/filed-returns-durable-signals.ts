@@ -574,6 +574,7 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   // parseDurableFiledReturnsSignals and dropped, which is the one case the
   // recovery path exists to handle.
   "artifact-acquisition-checkpoint-malformed",
+  "artifact-acquisition-checkpoint-storage-unavailable",
   "artifact-acquisition-checkpoint-clear-failed",
   ...ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS.map(
     artifactAcquisitionCheckpointClearFailureSignal,
