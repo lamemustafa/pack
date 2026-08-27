@@ -481,9 +481,9 @@ describe("extension package verifier", () => {
     expect(script).toContain("naturalWidth");
     expect(script).toContain("shellRect.width < Math.min(300, panelState.viewportWidth - 32)");
     expect(script).toContain("https://services.gst.gov.in/services/auth/fowelcome");
-    expect(script).toContain("assertPanelSignInContext");
+    expect(script).toContain("await assertPanelSignInContext(context, extensionId)");
     expect(script).toContain('"sign-in context"');
-    expect(script).toContain("assertPanelGuidedStepsFitViewport");
+    expect(script).toContain("await assertPanelGuidedStepsFitViewport(panelPage)");
     expect(script).toContain("guided step ${step} of 4");
     expect(script).toContain("readLoadedExtensionIdFromPreferences");
     expect(script).toContain("chrome-extension://${extensionId}/panel.html");
