@@ -201,6 +201,55 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).toContain("output[text]=review-gate-state/v1");
   });
 
+  it("carries durable state forward across ordinary PR commits", () => {
+    const priorSha = "b".repeat(40);
+    const durableState = reviewStateWithDeletedFinding(1, "current-line-state");
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [priorSha]: durableState },
+      [],
+      {},
+      0,
+      { 1: [priorSha, headSha] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(publication?.join(" ")).toContain("conclusion=failure");
+    expect(publication?.join(" ")).toContain("current-line-state");
+  });
+
+  it("prefers current-line state before an older force-push anchor", () => {
+    const currentLineSha = "b".repeat(40);
+    const orphanedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [currentLineSha]: reviewStateWithDeletedFinding(1, "current-line-state"),
+        [orphanedSha]: reviewStateWithDeletedFinding(1, "orphaned-state"),
+      },
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      { 1: [currentLineSha, headSha] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(publication?.join(" ")).toContain("current-line-state");
+    expect(publication?.join(" ")).not.toContain("orphaned-state");
+  });
+
   it("prefers the newest force-push state anchor", () => {
     const olderSha = "b".repeat(40);
     const newerSha = "c".repeat(40);
@@ -371,6 +420,7 @@ function runScript(
   timeline: unknown[] = [],
   parents: Record<string, string[]> = {},
   syntheticFindingCount = 0,
+  prCommits: Record<number, string[]> | null = null,
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -408,6 +458,7 @@ function runScript(
         FAKE_TIMELINE: JSON.stringify(timeline),
         FAKE_PARENTS: JSON.stringify(parents),
         FAKE_SYNTHETIC_FINDING_COUNT: String(syntheticFindingCount),
+        FAKE_PR_COMMITS: JSON.stringify(prCommits),
       },
     },
   );
@@ -424,7 +475,11 @@ const text = args.join(" ");
 if (text.includes("pulls?state=open")) process.stdout.write(process.env.FAKE_PULLS);
 else if (text.includes("/pulls/") && text.includes("/commits?")) {
   const pulls = JSON.parse(process.env.FAKE_PULLS).flat();
-  process.stdout.write(JSON.stringify([pulls.map((pull) => ({ sha: pull.head.sha }))]));
+  const number = Number(text.match(/pulls\\/(\\d+)\\/commits\\?/i)?.[1]);
+  const configuredCommits = JSON.parse(process.env.FAKE_PR_COMMITS);
+  const pull = pulls.find((item) => item.number === number);
+  const shas = configuredCommits?.[number] ?? (pull ? [pull.head.sha] : []);
+  process.stdout.write(JSON.stringify([shas.map((sha) => ({ sha }))]));
 }
 else if (text.includes("/issues/") && text.includes("/timeline?")) {
   process.stdout.write(JSON.stringify([JSON.parse(process.env.FAKE_TIMELINE)]));
