@@ -2880,3 +2880,16 @@ recovery state`, proving the response was silently discarded after context succe
 
 - Checkpoint: `e0727ad test(panel): verify compact context state`; post-commit preflight passed.
   No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.
+
+## Cycle 88 — audit guided-scope busy accessibility
+
+- Window: 2026-08-27 08:27–08:29 IST. This is a quiet keyboard and screen-reader audit, not a
+  cadence-qualifying implementation cycle; its actual duration is recorded without an idle hold.
+- Picked: the guided select has a disabled branch that initially appeared to need a busy-specific
+  `aria-describedby` explanation.
+- Disproved assumption: a first regression could not open the guided flow while the controller was
+  busy. The panel deliberately replaces that surface before the guided select mounts, so the disabled
+  branch is not user-reachable. Existing enabled-field coverage already proves the active label and
+  hint resolve at every step.
+- Result: the temporary regression was removed; no production or test change is justified. Do not
+  add a busy reason to a control that cannot be exposed in that state.

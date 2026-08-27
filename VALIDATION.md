@@ -2072,3 +2072,8 @@ Six additional mutation groups were run serially and restored with matching file
   respects the documented horizontal gutters at the narrow viewport while retaining the wider-layout
   threshold. The complete gate passed 152 files and 2,829 tests, package verification and packaged
   browser verification; this is local synthetic verification, not a live portal qualification.
+
+### Cycle 88 — guided-scope busy audit
+
+- The disabled guided-select branch is not user-reachable: a busy controller replaces the guided
+  surface before it mounts. The candidate accessibility fix was not retained.
