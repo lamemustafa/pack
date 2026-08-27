@@ -1,5 +1,24 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 75 — audit folder-access probe reason retention
+
+- Window: 2026-08-27 06:56–06:58 IST. This is a quiet lossy-surface audit; its actual duration is
+  recorded without an idle hold.
+- Picked: the options folder-access action has a `finally` block, so it needed proof that a probe
+  failure cannot clear busy state while hiding why it stopped.
+- Measured: `runFileSystemAccessProbe` converts picker, stale-file, write/read/hash and cleanup
+  exceptions into one of its explicit `unsupported`, `cancelled` or `failed` results. The options
+  handler retains the result as a local summary with its exact safe signals, then renders a distinct
+  supported, unavailable, cancelled or failed status. The focused probe matrix covers cancellation,
+  readback failure, cleanup failure, foreign sentinel and owned-stale cleanup.
+- Changed: no source was retained. A generic outer catch would only duplicate a boundary already
+  totalled by the probe and would not preserve a more specific fact. Graphify has no local graph
+  index, so the bounded exact-source trace was used instead.
+- Gate: focused probe coverage was already present and the worktree was clean before this
+  documentation checkpoint. No full gate was rerun because no product or test behavior changed.
+- Learned / next: options message-RPC actions are a different boundary: audit their malformed
+  rejection fallback so an absent `safeMessage` cannot render nothing.
+
 ## Cycle 74 — surface rejected options reviewer requests
 
 - Window: 2026-08-27 06:51–06:56 IST. The options probe and last-manifest requests each rejected
