@@ -43,7 +43,7 @@ vi.mock("../../src/background/offscreen-blob-url", () => ({
 vi.mock("../../src/background/download-observer", () => ({
   observeBrowserDownloadById: mocks.observeBrowserDownloadById,
 }));
-vi.mock("../../src/background/filed-returns-durable-download-reconciler", () => ({
+vi.mock("../../src/background/download-observation-ownership", () => ({
   beginPendingExtensionDownloadUrl: vi.fn(() => () => undefined),
   extensionBlobUrlFingerprint: mocks.extensionBlobUrlFingerprint,
 }));

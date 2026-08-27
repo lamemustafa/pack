@@ -28,11 +28,6 @@ type ProjectCompilerOptions = {
 
 const UNREFERENCED_SOURCE_MODULE_ALLOWLIST: readonly UnreferencedSourceModuleAllowlistEntry[] = [
   {
-    path: "src/entrypoints/popup/run-evidence-panel.tsx",
-    reason:
-      "Unreached from all extension roots; tracked for dedicated product/cleanup review in #218.",
-  },
-  {
     path: "src/styles/popup-target-summary.css",
     reason: "Unreached stylesheet; tracked for dedicated cleanup review in #219.",
   },
