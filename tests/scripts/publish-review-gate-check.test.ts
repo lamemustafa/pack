@@ -152,9 +152,11 @@ describe("PR-head Review gate check publisher", () => {
 
   it("fails closed rather than exceeding the durable-history lookup bound", () => {
     const history = Array.from({ length: 20 }, (_, index) => index.toString(16).padStart(40, "0"));
-    const parents = Object.fromEntries(
-      [headSha, ...history].map((sha, index, all) => [sha, all[index + 1] ? [all[index + 1]] : []]),
-    );
+    const parents: Record<string, string[]> = {};
+    for (const [index, sha] of [headSha, ...history].entries()) {
+      const parent = [headSha, ...history][index + 1];
+      parents[sha] = parent === undefined ? [] : [parent];
+    }
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
@@ -250,18 +252,30 @@ describe("PR-head Review gate check publisher", () => {
   });
 
   it("fails closed when the next durable state exceeds the check-run text bound", () => {
-    const fixture = cleanReviewFixture();
-    fixture.data.repository.pullRequest.comments.nodes = Array.from(
-      { length: 700 },
-      (_, index) => ({
-        id: `comment-${index}`,
-        isMinimized: false,
-        minimizedReason: null,
-        author: { login: "chatgpt-codex-connector" },
-        createdAt: "2026-08-17T12:00:00Z",
-        body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Finding.",
-      }),
-    );
+    const baseFixture = cleanReviewFixture();
+    const fixture = {
+      ...baseFixture,
+      data: {
+        ...baseFixture.data,
+        repository: {
+          ...baseFixture.data.repository,
+          pullRequest: {
+            ...baseFixture.data.repository.pullRequest,
+            comments: {
+              ...baseFixture.data.repository.pullRequest.comments,
+              nodes: Array.from({ length: 700 }, (_, index) => ({
+                id: `comment-${index}`,
+                isMinimized: false,
+                minimizedReason: null,
+                author: { login: "chatgpt-codex-connector" },
+                createdAt: "2026-08-17T12:00:00Z",
+                body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Finding.",
+              })),
+            },
+          },
+        },
+      },
+    };
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
