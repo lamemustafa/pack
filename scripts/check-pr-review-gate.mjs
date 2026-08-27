@@ -237,7 +237,7 @@ function reconcileDurableReviewState(reviewState, pr) {
   }
 
   for (const comment of pr.comments.nodes) {
-    const disposition = readTrustedDurableDisposition(comment);
+    const disposition = readTrustedDurableDisposition(comment, pr.body);
     if (!disposition) continue;
     const finding = findings.get(disposition.findingId);
     if (!finding) {
@@ -253,7 +253,7 @@ function reconcileDurableReviewState(reviewState, pr) {
   return { version: 1, prNumber, findings: [...findings.values()] };
 }
 
-function readTrustedDurableDisposition(comment) {
+function readTrustedDurableDisposition(comment, prBody) {
   if (
     !TRUSTED_DISPOSITION_ASSOCIATIONS.has(comment.authorAssociation) ||
     !String(comment.body ?? "").includes(DURABLE_DISPOSITION_MARKER)
@@ -265,6 +265,10 @@ function readTrustedDurableDisposition(comment) {
   ];
   if (markers.length !== 1) {
     failEvaluation("A trusted durable disposition marker is malformed.");
+  }
+  const evidence = String(comment.body).replace(markers[0][0], "").trim();
+  if (!evidence) {
+    failEvaluation("A trusted durable disposition must include visible evidence.");
   }
 
   let value;
@@ -282,6 +286,15 @@ function readTrustedDurableDisposition(comment) {
     !["fixed", "stale", "rejected", "linked-follow-up"].includes(value.disposition)
   ) {
     failEvaluation("A trusted durable disposition marker has an unsupported shape.");
+  }
+  if (
+    value.disposition === "linked-follow-up" &&
+    (typeof value.followUp !== "string" ||
+      value.followUp.length === 0 ||
+      !evidence.includes(value.followUp) ||
+      !String(prBody ?? "").includes(value.followUp))
+  ) {
+    failEvaluation("A linked follow-up disposition must name its follow-up in the PR body.");
   }
   return value;
 }

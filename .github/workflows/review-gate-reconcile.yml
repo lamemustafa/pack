@@ -10,6 +10,10 @@ permissions:
   issues: read
   pull-requests: read
 
+concurrency:
+  group: review-gate-reconcile
+  cancel-in-progress: false
+
 jobs:
   scheduled-review-gate:
     name: Reconcile Review gate checks

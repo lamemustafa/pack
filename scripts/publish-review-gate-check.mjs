@@ -164,7 +164,8 @@ function loadLatestDurableReviewState(pr) {
         if (
           check?.name === CHECK_RUN_NAME &&
           typeof check.output?.text === "string" &&
-          check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX)
+          check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) &&
+          durableReviewStateBelongsToPr(check.output.text, pr.number)
         ) {
           const completedAt = Date.parse(check.completed_at ?? "");
           if (!Number.isFinite(completedAt)) {
@@ -184,6 +185,17 @@ function loadLatestDurableReviewState(pr) {
   }
   candidates.sort((left, right) => right.completedAt - left.completedAt);
   return candidates[0].state;
+}
+
+function durableReviewStateBelongsToPr(state, expectedPrNumber) {
+  let parsed;
+  try {
+    parsed = JSON.parse(state.slice(DURABLE_REVIEW_STATE_PREFIX.length));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error("durable review state is malformed: " + detail);
+  }
+  return parsed?.version === 1 && parsed.prNumber === expectedPrNumber;
 }
 
 function loadForcePushedPriorShas(prNumber) {
