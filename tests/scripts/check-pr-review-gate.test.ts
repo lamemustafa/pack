@@ -760,6 +760,94 @@ Evidence: noted.`;
     expect(result.stdout).toContain("PR review gate passed");
   });
 
+  it("clears a same-author stale requested-changes review with a trusted clean Codex report", () => {
+    const headRefOid = "0123456789abcdef0123456789abcdef01234567";
+    const fixturePath = writeFixture(
+      "clean-codex-report-supersedes-same-author-stale-request",
+      reviewFixture({
+        headRefOid,
+        body: packPrBody(),
+        comments: [
+          prFindingComment({
+            author: "chatgpt-codex-connector",
+            body: "Codex Review: Didn't find any major issues. Swish!\n\n**Reviewed commit:** `0123456789`",
+          }),
+        ],
+        reviews: [review({ state: "CHANGES_REQUESTED", commit: "old-sha" })],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("PR review gate passed");
+  });
+
+  it.each([
+    ["current-head", "chatgpt-codex-connector", "0123456789abcdef0123456789abcdef01234567"],
+    ["other-author stale", "external-reviewer", "old-sha"],
+  ])(
+    "keeps a %s requested-changes review blocking despite a clean Codex report",
+    (_label, author, requestedChangesCommit) => {
+      const headRefOid = "0123456789abcdef0123456789abcdef01234567";
+      const fixturePath = writeFixture(
+        `clean-codex-report-does-not-supersede-${_label.replaceAll(" ", "-")}-request`,
+        reviewFixture({
+          headRefOid,
+          body: packPrBody(),
+          comments: [
+            prFindingComment({
+              author: "chatgpt-codex-connector",
+              body: "Codex Review: Didn't find any major issues. Swish!\n\n**Reviewed commit:** `0123456789`",
+            }),
+          ],
+          reviews: [
+            review({
+              state: "CHANGES_REQUESTED",
+              commit: requestedChangesCommit,
+              author,
+            }),
+          ],
+        }),
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          scriptPath,
+          "--repo",
+          "lamemustafa/pack",
+          "--pr",
+          "14",
+          "--fixture",
+          fixturePath,
+          "--strict-head-review",
+          "--required-review-author",
+          "chatgpt-codex-connector",
+        ],
+        { cwd: rootDir, encoding: "utf8" },
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Requested-changes reviews");
+    },
+  );
+
   it.each([
     ["stale commit", "chatgpt-codex-connector", "abcdef0123", undefined],
     ["wrong author", "external-reviewer", "0123456789", undefined],

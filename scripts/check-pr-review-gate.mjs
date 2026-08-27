@@ -148,9 +148,26 @@ function evaluatePullRequestReviewState(pr) {
       CODEX_SEVERITY_BADGE_PATTERN.test(comment.body ?? ""),
   );
   const authorStates = reduceSubmittedCurrentHeadReviewsByAuthor(pr.reviews.nodes, pr.headRefOid);
-  const blockingReviews = Array.from(authorStates.values())
-    .map((state) => state.blockingReview)
-    .filter(Boolean);
+  const cleanTopLevelReviews = strictHeadReview
+    ? pr.comments.nodes.filter((comment) =>
+        isTrustedCurrentHeadCodexTopLevelReview(comment, pr.headRefOid),
+      )
+    : [];
+  const cleanTopLevelReviewAuthors = new Set(
+    cleanTopLevelReviews.map((comment) => normaliseAuthorLogin(comment.author?.login)),
+  );
+  const blockingReviews = Array.from(authorStates.entries())
+    .map(([author, state]) => ({ author, review: state.blockingReview }))
+    .filter(
+      ({ author, review }) =>
+        review &&
+        !(
+          cleanTopLevelReviewAuthors.has(author) &&
+          review.commit?.oid &&
+          review.commit.oid !== pr.headRefOid
+        ),
+    )
+    .map(({ review }) => review);
   const headReviews = Array.from(authorStates.values())
     .map((state) => state.latestCurrentHeadReview)
     .filter(Boolean)
@@ -159,11 +176,6 @@ function evaluatePullRequestReviewState(pr) {
         !requiredReviewAuthor ||
         normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
     );
-  const cleanTopLevelReviews = strictHeadReview
-    ? pr.comments.nodes.filter((comment) =>
-        isTrustedCurrentHeadCodexTopLevelReview(comment, pr.headRefOid),
-      )
-    : [];
   return {
     unresolvedThreads,
     blockingReviews,
