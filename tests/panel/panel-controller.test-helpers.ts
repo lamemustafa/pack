@@ -35,7 +35,6 @@ export function panelController(overrides: Partial<PackPanelController> = {}): P
     setScope: () => undefined,
     startFiledReturnsFlow: async () => undefined,
     startFreshFiledReturnsFlow: async () => undefined,
-    status: "GST context detected.",
     summaryHeading: null,
     ...overrides,
   };

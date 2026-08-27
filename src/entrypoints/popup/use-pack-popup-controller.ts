@@ -22,7 +22,6 @@ import {
   hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
 export function usePackPopupController() {
-  const [status, setStatus] = React.useState("Loading Pack context...");
   const [scope, setScopeState] = React.useState<FiledReturnsDownloadScope>(
     DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   );
@@ -46,7 +45,6 @@ export function usePackPopupController() {
     (message: string, source: "context" | "flow" = "flow") => {
       actionErrorSource.current = source;
       setActionError(message);
-      setStatus(message);
     },
     [],
   );
@@ -73,11 +71,6 @@ export function usePackPopupController() {
 
         if (contextResponse.ok && "context" in contextResponse) {
           setContext(contextResponse.context);
-          setStatus(
-            contextResponse.context?.supported
-              ? "GST context detected."
-              : "Pack is dormant until you start an action.",
-          );
         } else {
           showActionError(
             contextResponse.ok
@@ -114,11 +107,6 @@ export function usePackPopupController() {
           actionErrorSource.current = null;
           setActionError(null);
         }
-        setStatus(
-          response.context?.supported
-            ? "GST context detected."
-            : "Pack is dormant until you start an action.",
-        );
         return;
       }
       showActionError(
@@ -173,7 +161,6 @@ export function usePackPopupController() {
       if (response.ok && "flowStep" in response) {
         actionErrorSource.current = null;
         setActionError(null);
-        setStatus(response.flowStep.safeMessage);
         if ("flowSummary" in response && response.flowSummary) {
           setFiledReturnsFlowSummary(response.flowSummary);
           setScopeState(response.flowSummary.scope);
@@ -224,7 +211,6 @@ export function usePackPopupController() {
       if (response.ok && "flowStep" in response) {
         actionErrorSource.current = null;
         setActionError(null);
-        setStatus(response.flowStep.safeMessage);
         setFiledReturnsFlowSummary(null);
       } else {
         showActionError(
@@ -378,7 +364,6 @@ export function usePackPopupController() {
     setScope,
     startFiledReturnsFlow,
     startFreshFiledReturnsFlow,
-    status,
     summaryHeading,
   };
 }
