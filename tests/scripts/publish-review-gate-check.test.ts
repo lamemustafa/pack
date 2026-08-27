@@ -173,6 +173,33 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).toContain("conclusion=failure");
   });
 
+  it("prefers the newest force-push state anchor", () => {
+    const olderSha = "b".repeat(40);
+    const newerSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [olderSha]: reviewStateWithDeletedFinding(1, "older-anchor"),
+        [newerSha]: reviewStateWithDeletedFinding(1, "newer-anchor"),
+      },
+      [
+        forcePushEvent(olderSha, "2026-08-17T12:00:00Z"),
+        forcePushEvent(newerSha, "2026-08-17T12:01:00Z"),
+      ],
+      { [newerSha]: [], [olderSha]: [] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(publication?.join(" ")).toContain("newer-anchor");
+    expect(publication?.join(" ")).not.toContain("older-anchor");
+  });
+
   it("fails closed rather than exceeding the durable-history lookup bound", () => {
     const history = Array.from({ length: 20 }, (_, index) => index.toString(16).padStart(40, "0"));
     const parents: Record<string, string[]> = {};
@@ -430,7 +457,10 @@ function pull(
   };
 }
 
-function reviewStateWithDeletedFinding(prNumber = 1) {
+function reviewStateWithDeletedFinding(
+  prNumber = 1,
+  commentId = "comment-deleted-after-observation",
+) {
   return (
     "review-gate-state/v1\n" +
     JSON.stringify({
@@ -438,7 +468,7 @@ function reviewStateWithDeletedFinding(prNumber = 1) {
       prNumber,
       findings: [
         {
-          commentId: "comment-deleted-after-observation",
+          commentId,
           author: "chatgpt-codex-connector",
           createdAt: "2026-08-17T12:00:00Z",
           disposition: "open",
@@ -448,8 +478,12 @@ function reviewStateWithDeletedFinding(prNumber = 1) {
   );
 }
 
-function forcePushEvent(beforeCommitId: string) {
-  return { event: "head_ref_force_pushed", before_commit_id: beforeCommitId };
+function forcePushEvent(beforeCommitId: string, createdAt = "2026-08-17T12:00:00Z") {
+  return {
+    event: "head_ref_force_pushed",
+    before_commit_id: beforeCommitId,
+    created_at: createdAt,
+  };
 }
 
 const cleanReviewFixture = () => ({

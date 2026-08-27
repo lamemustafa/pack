@@ -212,6 +212,52 @@ describe("PR review gate", () => {
     });
   });
 
+  it("fails closed when a stored disposition is edited after observation", () => {
+    const statePath = writeFixture("fixed-disposition-with-edited-evidence", {
+      version: 1,
+      prNumber: 14,
+      findings: [
+        {
+          commentId: "comment-deleted-after-observation",
+          author: "chatgpt-codex-connector",
+          createdAt: "2026-08-17T12:00:00Z",
+          disposition: "fixed",
+          dispositionCommentId: "disposition-comment-deleted-after-observation",
+        },
+      ],
+    });
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        writeFixture(
+          "fixed-disposition-edited-after-observation",
+          reviewFixture({
+            headRefOid: "head-sha",
+            comments: [
+              {
+                ...durableDispositionComment("comment-deleted-after-observation", "fixed"),
+                body: "Evidence was edited after it was recorded.",
+              },
+            ],
+            reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+          }),
+        ),
+        "--review-state",
+        statePath,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("no longer has matching visible evidence");
+  });
+
   it("fails closed when a durable disposition has no visible evidence", () => {
     const result = runGateFixture("marker-only durable disposition", [
       prFindingComment(),
