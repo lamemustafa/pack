@@ -167,6 +167,53 @@ describe("popup background failure presentation", () => {
     await act(async () => root?.unmount());
   });
 
+  it("clears a recovered summary read without clearing a failed flow action", async () => {
+    let summaryReadFails = true;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return summaryReadFails
+          ? Promise.resolve({
+              ok: false,
+              error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+              safeMessage: "Pack could not read saved local recovery state. Try again.",
+            })
+          : Promise.resolve({ ok: true, flowSummary: null });
+      }
+      if (message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW") {
+        return Promise.reject(new Error("worker unavailable"));
+      }
+      return Promise.resolve({
+        ok: true,
+        context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+      });
+    });
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.actionError).toBe(
+      "Pack could not read saved local recovery state. Try again.",
+    );
+
+    summaryReadFails = false;
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.actionError).toBeNull();
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+    const flowFailure = "Pack could not reach the background service. Try the action again.";
+    expect(controller?.actionError).toBe(flowFailure);
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.actionError).toBe(flowFailure);
+    await act(async () => root?.unmount());
+  });
+
   it("keeps a flow failure that replaced an earlier context failure", async () => {
     // A context refresh fails FIRST and marks the error as its own, then a flow
     // action fails and replaces the message. A boolean the context path alone

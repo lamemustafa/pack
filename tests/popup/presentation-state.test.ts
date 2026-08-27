@@ -155,6 +155,21 @@ describe("popup presentation state", () => {
       tone: "success",
     });
   });
+
+  it("renders a complete positive not-filed result as unavailable, not a download warning", () => {
+    const state = getPopupPresentationState(
+      supportedContext(),
+      summary("complete", ["filed-return-positively-not-filed"]),
+      null,
+    );
+
+    expect(state).toMatchObject({
+      kind: "unavailable",
+      title: "No filed return for this period",
+      tone: "neutral",
+    });
+    expect(state.body).not.toContain("Browser Downloads");
+  });
 });
 
 function supportedContext(): PortalContext {

@@ -105,6 +105,30 @@ describe("single-period tab identity blocks", () => {
     assertImmediateAndPersistedMessagesMatch(response);
   });
 
+  it("persists the selected portal tab before focusing it", async () => {
+    let releasePin: (() => void) | undefined;
+    const pinWritten = new Promise<void>((resolve) => {
+      releasePin = resolve;
+    });
+    const onPortalTabSelected = vi.fn(async () => pinWritten);
+    const flow = startSinglePeriodFiledReturnsDownloadFlow(
+      scope,
+      {
+        ...deps(),
+        openReturnsDashboardWithPortalAnchor: vi.fn(async () => "not-found" as const),
+      },
+      { onPortalTabSelected },
+    );
+
+    await vi.waitFor(() => expect(onPortalTabSelected).toHaveBeenCalledTimes(1));
+    expect(browserMocks.tabs.update).not.toHaveBeenCalled();
+    expect(browserMocks.windows.update).not.toHaveBeenCalled();
+
+    releasePin?.();
+    await flow;
+    expect(browserMocks.tabs.update).toHaveBeenCalledWith(17, { active: true });
+  });
+
   it("retains a pinned plan when its tab-session storage cannot be read", async () => {
     browserMocks.storage.session.get.mockRejectedValueOnce(new Error("session unavailable"));
 

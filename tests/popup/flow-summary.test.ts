@@ -3,6 +3,7 @@ import {
   canRetryFiledReturnsTargetWithoutPortal,
   canRetryFullFiscalYearZipWithoutPortal,
   getScopeMatchedFiledReturnsSummary,
+  hasConfirmedSinglePeriodBrowserDownload,
   hasUnresolvedFiledReturnsRecovery,
   hasUnresolvedFiledReturnsTargetReview,
 } from "../../src/entrypoints/popup/flow-summary";
@@ -63,6 +64,59 @@ describe("popup filed returns flow summary", () => {
         COMPLETE_SUMMARY,
       ),
     ).toBe(COMPLETE_SUMMARY);
+  });
+
+  it("accepts only exact, non-empty diagnostic evidence for every selected artifact", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...COMPLETE_SUMMARY,
+      completedPeriods: ["May"],
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-1",
+      },
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "downloaded",
+        safeMessage: "Complete.",
+        safeSignals: [],
+        downloadDiagnostics: [diagnostic("PDF", 7), diagnostic("EXCEL", 8)],
+      },
+    };
+
+    expect(hasConfirmedSinglePeriodBrowserDownload(summary)).toBe(true);
+    expect(
+      hasConfirmedSinglePeriodBrowserDownload({
+        ...summary,
+        flowStep: { ...summary.flowStep, downloadDiagnostics: [diagnostic("PDF", 7)] },
+      }),
+    ).toBe(false);
+    expect(
+      hasConfirmedSinglePeriodBrowserDownload({
+        ...summary,
+        flowStep: {
+          ...summary.flowStep,
+          downloadDiagnostics: [
+            diagnostic("PDF", 7),
+            { ...diagnostic("EXCEL", 8), downloadId: -1 },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      hasConfirmedSinglePeriodBrowserDownload({
+        ...summary,
+        flowStep: {
+          ...summary.flowStep,
+          downloadDiagnostics: [
+            diagnostic("PDF", 7),
+            { ...diagnostic("EXCEL", 8), period: "April" },
+          ],
+        },
+      }),
+    ).toBe(false);
   });
 
   it("identifies an unresolved target review that must keep ownership of the scope", () => {
@@ -221,3 +275,24 @@ describe("popup filed returns flow summary", () => {
     expect(canRetryFiledReturnsTargetWithoutPortal(undefined)).toBe(false);
   });
 });
+
+function diagnostic(artifactType: "PDF" | "EXCEL", downloadId: number) {
+  return {
+    actionId: `action-${artifactType}`,
+    artifactType,
+    byteCountClass: "non-empty" as const,
+    downloadId,
+    downloadPathClass: "captured-portal-request-unknown" as const,
+    endpointClass:
+      artifactType === "PDF"
+        ? ("gstr1-pdf-portal-blob-captured-download" as const)
+        : ("gstr1-excel-portal-blob-captured-download" as const),
+    eventType: "filed-return-download-path" as const,
+    financialYear: "2025-26",
+    mimeClass: artifactType === "PDF" ? ("pdf" as const) : ("spreadsheet" as const),
+    period: "May",
+    returnType: "GSTR-1" as const,
+    schemaVersion: "1.0" as const,
+    status: "downloaded" as const,
+  };
+}

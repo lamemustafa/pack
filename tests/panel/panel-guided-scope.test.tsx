@@ -62,7 +62,9 @@ describe("panel guided scope", () => {
     expect(markup).toContain(
       "Monthly or quarterly, as set on the GST Portal · Filed return (PDF) · Portal data (JSON)",
     );
-    expect(markup).toContain("Monthly · Summary (PDF) · E-invoice details (Excel)");
+    expect(markup).toContain(
+      "Monthly (quarterly filing is not currently supported by Pack) · Summary (PDF) · E-invoice details (Excel)",
+    );
     expect(markup).toContain("Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)");
   });
 
@@ -80,7 +82,10 @@ describe("panel guided scope", () => {
       "GSTR-3B",
       "Monthly or quarterly, as set on the GST Portal · Filed return (PDF) · Portal data (JSON)",
     ],
-    ["GSTR-1", "Monthly · Summary (PDF) · E-invoice details (Excel)"],
+    [
+      "GSTR-1",
+      "Monthly (quarterly filing is not currently supported by Pack) · Summary (PDF) · E-invoice details (Excel)",
+    ],
     ["GSTR-2B", "Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)"],
     ["GSTR-9", "Annual"],
     ["GSTR-9C", "Annual"],
@@ -114,6 +119,14 @@ describe("panel guided scope", () => {
     });
     expect(steps[3]?.options.map((option) => option.value)).toContain("PDF");
     expect(steps[3]?.options.map((option) => option.value)).toContain("JSON");
+  });
+
+  it("withholds a new financial year until it has a selectable filed period", () => {
+    const steps = panelGuidedSteps(PANEL_TEST_SCOPE, new Date("2026-04-01T06:00:00.000Z"));
+    const financialYear = steps.find((step) => step.key === "financialYear");
+
+    expect(financialYear?.options.map((option) => option.value)).not.toContain("2026-27");
+    expect(financialYear?.options.map((option) => option.value)).toContain("2025-26");
   });
 
   it("derives every axis shape from periodicity rather than a return-name branch", () => {
