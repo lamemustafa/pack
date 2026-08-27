@@ -341,12 +341,20 @@ export async function startFullFiscalYearDownloadFlow(
     const previousTargetSafeSignals = nextTarget.safeSignals;
     let systemErrorPredecessor: FullFiscalYearSystemErrorPredecessor = "initial";
 
-    ledger = markFullFiscalYearTargetRunning(
-      ledger,
-      nextTarget.targetId,
-      deps.now?.() ?? new Date(),
-    );
-    await persistLedger(deps, ledger);
+    let targetMarkedRunning = false;
+    if (
+      !mustRebindPortalTab &&
+      ledger.portalTabId !== undefined &&
+      ledger.portalTabSessionId !== undefined
+    ) {
+      ledger = markFullFiscalYearTargetRunning(
+        ledger,
+        nextTarget.targetId,
+        deps.now?.() ?? new Date(),
+      );
+      await persistLedger(deps, ledger);
+      targetMarkedRunning = true;
+    }
 
     const response = await runSinglePeriod(
       retryScope,
@@ -373,6 +381,15 @@ export async function startFullFiscalYearDownloadFlow(
           };
           await persistLedger(deps, ledger);
           mustRebindPortalTab = false;
+          if (!targetMarkedRunning) {
+            ledger = markFullFiscalYearTargetRunning(
+              ledger,
+              nextTarget.targetId,
+              deps.now?.() ?? new Date(),
+            );
+            await persistLedger(deps, ledger);
+            targetMarkedRunning = true;
+          }
         },
         persistSinglePeriodSummary: false,
         ...(!mustRebindPortalTab &&
