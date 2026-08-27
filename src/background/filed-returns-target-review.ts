@@ -276,7 +276,7 @@ export async function clearFiledReturnsTargetReview(
  * clear its checkpoint. The local review outlives session storage, so it must
  * never remain able to contradict a completion the session record has proved.
  */
-export async function markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
+async function markTargetReviewArtifactAcquisitionCompletion(
   scope: FiledReturnsDownloadScope,
   evidence: readonly ArtifactAcquisitionCompletionEvidence[],
   deps: FiledReturnsTargetReviewDeps,
@@ -285,34 +285,44 @@ export async function markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
 > {
   const key = deps.storageKeys.targetReview;
   if (!key) return { state: "absent" };
-  return runTargetReviewMutationCriticalSection(async () => {
-    const storageState = await readTargetReviewStorageStateByKey(key);
-    if (storageState.state === "missing") return { state: "absent" };
-    if (storageState.state === "malformed") return { state: "blocked" };
-    // This single local record is already protecting a different target. It
-    // cannot carry this target's completion proof, so the caller must retain
-    // the matching active lease and session checkpoint rather than creating a
-    // transition window with no durable B-scope guard.
-    if (!sameFiledReturnsScope(storageState.review.scope, scope)) return { state: "blocked" };
-    const markedReview = {
-      ...storageState.review,
-      artifactAcquisitionCompletion: evidence.map(({ artifactType, downloadId, requestId }) => ({
-        artifactType,
-        downloadId,
-        requestId,
-      })),
-      revision: targetReviewRevision(storageState.review) + 1,
-      safeSignals: uniqueSafeSignals([
-        ...storageState.review.safeSignals,
-        "artifact-acquisition-completion-pending-summary",
-      ]),
-      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-    } satisfies FiledReturnsTargetReview;
-    const parsedReview = parseFiledReturnsTargetReview(markedReview);
-    if (!parsedReview) return { state: "blocked" };
-    await browser.storage.local.set({ [key]: parsedReview });
-    return { review: parsedReview, state: "marked" };
-  });
+  const storageState = await readTargetReviewStorageStateByKey(key);
+  if (storageState.state === "missing") return { state: "absent" };
+  if (storageState.state === "malformed") return { state: "blocked" };
+  // This single local record is already protecting a different target. It
+  // cannot carry this target's completion proof, so the caller must retain
+  // the matching active lease and session checkpoint rather than creating a
+  // transition window with no durable B-scope guard.
+  if (!sameFiledReturnsScope(storageState.review.scope, scope)) return { state: "blocked" };
+  const markedReview = {
+    ...storageState.review,
+    artifactAcquisitionCompletion: evidence.map(({ artifactType, downloadId, requestId }) => ({
+      artifactType,
+      downloadId,
+      requestId,
+    })),
+    revision: targetReviewRevision(storageState.review) + 1,
+    safeSignals: uniqueSafeSignals([
+      ...storageState.review.safeSignals,
+      "artifact-acquisition-completion-pending-summary",
+    ]),
+    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+  } satisfies FiledReturnsTargetReview;
+  const parsedReview = parseFiledReturnsTargetReview(markedReview);
+  if (!parsedReview) return { state: "blocked" };
+  await browser.storage.local.set({ [key]: parsedReview });
+  return { review: parsedReview, state: "marked" };
+}
+
+export async function markFiledReturnsTargetReviewArtifactAcquisitionCompletion(
+  scope: FiledReturnsDownloadScope,
+  evidence: readonly ArtifactAcquisitionCompletionEvidence[],
+  deps: FiledReturnsTargetReviewDeps,
+): Promise<
+  { state: "absent" } | { review: FiledReturnsTargetReview; state: "marked" } | { state: "blocked" }
+> {
+  return runTargetReviewMutationCriticalSection(() =>
+    markTargetReviewArtifactAcquisitionCompletion(scope, evidence, deps),
+  );
 }
 
 /** Reconciles one exact completed artifact checkpoint without repeating its portal click. */
@@ -455,30 +465,34 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     }
     if (
       resolution === "cancelled" &&
-      review.artifactAcquisitionCompletion &&
-      hasArtifactAcquisitionRecoverySignal(review.safeSignals)
+      hasArtifactAcquisitionRecoverySignal(review.safeSignals) &&
+      !review.artifactAcquisitionCompletion
     ) {
-      const artifacts = concreteFiledReturnsArtifactTypesForSelection(
-        scope.returnType,
-        scope.artifactType,
-      );
-      const [artifactType] = artifacts;
-      if (artifacts.length === 1 && artifactType) {
-        const inspection = await inspectArtifactAcquisitionCheckpoint({ ...scope, artifactType });
-        if (inspection.state === "completed" || inspection.state === "retry-safe") {
-          // A worker stop can retain the completed checkpoint, while a browser
-          // restart clears it. In either case, restore this parser-validated
-          // local completion marker before cancellation can replace the target.
-          const restoredCompletion = await persistArtifactAcquisitionCompletion(
+      const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (cancellation.state === "completed") {
+        // Local review storage must carry the exact proof before the session
+        // completion is written. An MV3 stop after the session write can leave
+        // this review behind; without the marker, a later cancellation could
+        // replace a proven download after its checkpoint is cleared.
+        const markedCompletion = await markTargetReviewArtifactAcquisitionCompletion(
+          scope,
+          cancellation.evidence,
+          deps,
+        );
+        if (markedCompletion.state !== "marked") return responseForFiledReturnsTargetReview(review);
+        let restoredCompletion: FiledReturnsFlowSummary | null;
+        try {
+          restoredCompletion = await persistArtifactAcquisitionCompletion(
             deps.storageKeys.completion,
             scope,
-            inspection.state === "completed"
-              ? [inspection.evidence]
-              : review.artifactAcquisitionCompletion,
+            cancellation.evidence,
             deps.now?.() ?? new Date(),
-            copyFiledReturnsDownloadDiagnosticState(review),
+            copyFiledReturnsDownloadDiagnosticState(markedCompletion.review),
           );
-          if (!restoredCompletion) return responseForFiledReturnsTargetReview(review);
+        } catch {
+          return responseForFiledReturnsTargetReview(markedCompletion.review);
+        }
+        if (restoredCompletion) {
           await browser.storage.local.remove(key);
           return {
             ok: true,
@@ -487,6 +501,43 @@ export async function resolveUnconfirmedFiledReturnsDownload(
           };
         }
       }
+    }
+    if (
+      resolution === "cancelled" &&
+      review.artifactAcquisitionCompletion &&
+      hasArtifactAcquisitionRecoverySignal(review.safeSignals)
+    ) {
+      const artifacts = concreteFiledReturnsArtifactTypesForSelection(
+        scope.returnType,
+        scope.artifactType,
+      );
+      const [artifactType] = artifacts;
+      if (artifacts.length !== 1 || !artifactType) {
+        return responseForFiledReturnsTargetReview(review);
+      }
+      const inspection = await inspectArtifactAcquisitionCheckpoint({ ...scope, artifactType });
+      if (inspection.state !== "completed" && inspection.state !== "retry-safe") {
+        return responseForFiledReturnsTargetReview(review);
+      }
+      // A worker stop can retain the completed checkpoint, while a browser
+      // restart clears it. In either case, restore this parser-validated local
+      // completion marker before cancellation can replace the target.
+      const restoredCompletion = await persistArtifactAcquisitionCompletion(
+        deps.storageKeys.completion,
+        scope,
+        inspection.state === "completed"
+          ? [inspection.evidence]
+          : review.artifactAcquisitionCompletion,
+        deps.now?.() ?? new Date(),
+        copyFiledReturnsDownloadDiagnosticState(review),
+      );
+      if (!restoredCompletion) return responseForFiledReturnsTargetReview(review);
+      await browser.storage.local.remove(key);
+      return {
+        ok: true,
+        flowStep: restoredCompletion.flowStep,
+        flowSummary: restoredCompletion,
+      };
     }
     const hasCleanupFailure = hasSinglePeriodCleanupFailure(review.safeSignals);
     if (hasCleanupFailure && resolution !== "cancelled") {
@@ -867,6 +918,7 @@ function sameArtifactAcquisitionCompletion(
     left.every(
       (entry, index) =>
         entry.artifactType === right[index]?.artifactType &&
+        entry.downloadId === right[index]?.downloadId &&
         entry.requestId === right[index]?.requestId,
     )
   );
