@@ -183,7 +183,7 @@ function loadLatestDurableReviewState(pr) {
       if (!/^[0-9a-f]{40}$/iu.test(parent?.sha ?? "")) {
         throw new Error("durable review-state parent metadata is incomplete");
       }
-      if (!visitedShas.has(parent.sha)) pendingShas.push(parent.sha);
+      if (!visitedShas.has(parent.sha)) pendingShas.unshift(parent.sha);
     }
   }
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import {
   DEFAULT_GH_RETRY_ATTEMPTS,
@@ -198,6 +199,10 @@ function readDurableReviewState(filePath, expectedPrNumber) {
       (["fixed", "stale", "rejected", "linked-follow-up"].includes(finding.disposition) &&
         (typeof finding.dispositionCommentId !== "string" ||
           finding.dispositionCommentId.length === 0)) ||
+      (finding.sourceFingerprint !== undefined &&
+        !isFindingFingerprint(finding.sourceFingerprint)) ||
+      (finding.dispositionSourceFingerprint !== undefined &&
+        !isFindingFingerprint(finding.dispositionSourceFingerprint)) ||
       findingIds.has(finding.commentId)
     ) {
       failEvaluation("Durable review state contains an invalid finding.");
@@ -226,14 +231,33 @@ function reconcileDurableReviewState(reviewState, pr) {
 
   for (const comment of pr.comments.nodes.filter(isPrFindingComment)) {
     const existing = findings.get(comment.id);
+    const sourceFingerprint = fingerprintFinding(comment);
+    const retainsTerminalDisposition =
+      existing?.dispositionCommentId && existing.dispositionSourceFingerprint === sourceFingerprint;
     findings.set(comment.id, {
       commentId: comment.id,
       author: normaliseAuthorLogin(comment.author?.login),
       createdAt: existing?.createdAt ?? comment.createdAt,
+      sourceFingerprint,
       disposition:
         comment.isMinimized && comment.minimizedReason === RESOLVED_MINIMIZED_REASON
           ? "resolved"
-          : "open",
+          : retainsTerminalDisposition
+            ? existing.disposition
+            : "open",
+      ...(retainsTerminalDisposition
+        ? {
+            dispositionCommentId: existing.dispositionCommentId,
+            dispositionSourceFingerprint: existing.dispositionSourceFingerprint,
+          }
+        : existing?.dispositionCommentId
+          ? {
+              dispositionCommentId: existing.dispositionCommentId,
+              ...(existing.dispositionSourceFingerprint
+                ? { dispositionSourceFingerprint: existing.dispositionSourceFingerprint }
+                : {}),
+            }
+          : {}),
     });
   }
 
@@ -244,14 +268,34 @@ function reconcileDurableReviewState(reviewState, pr) {
     if (!finding) {
       failEvaluation("A trusted durable disposition references an unknown finding.");
     }
+    if (
+      finding.dispositionCommentId === comment.id &&
+      (!finding.sourceFingerprint ||
+        finding.dispositionSourceFingerprint !== finding.sourceFingerprint)
+    ) {
+      continue;
+    }
     findings.set(disposition.findingId, {
       ...finding,
       disposition: disposition.disposition,
       dispositionCommentId: comment.id,
+      ...(finding.sourceFingerprint
+        ? { dispositionSourceFingerprint: finding.sourceFingerprint }
+        : {}),
     });
   }
 
   return { version: 1, prNumber, findings: [...findings.values()] };
+}
+
+function fingerprintFinding(comment) {
+  return createHash("sha256")
+    .update(String(comment.body ?? ""), "utf8")
+    .digest("hex");
+}
+
+function isFindingFingerprint(value) {
+  return typeof value === "string" && /^[0-9a-f]{64}$/iu.test(value);
 }
 
 function validatePersistedDurableDispositions(reviewState, pr) {
