@@ -109,6 +109,36 @@ describe("popup background failure presentation", () => {
     expect(renderedController?.actionError).toBe("Unexpected Pack response.");
   });
 
+  it("keeps every remaining malformed successful response visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+    expect(controller?.actionError).toBe("Unexpected Pack response.");
+
+    await act(async () => {
+      await controller?.acknowledgeInterruptedRun();
+    });
+    expect(controller?.actionError).toBe("Unexpected Pack response.");
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener({ "pack:last-filed-returns-flow-summary": { newValue: {} } }, "session"),
+      );
+      await Promise.resolve();
+    });
+    expect(controller?.actionError).toBe("Unexpected Pack response.");
+  });
+
   it("keeps a flow failure when a later context refresh succeeds", async () => {
     mocks.sendMessage.mockImplementation((message: PackMessage) =>
       message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"
