@@ -1,5 +1,33 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 56 — retain specific flow-rejection reasons in the popup
+
+- Window: 2026-08-27 05:31–05:36 IST. This is a short lossy-surface test-quality checkpoint; its
+  actual duration is recorded without an idle hold.
+- Picked: action-response failures already prefer `safeMessage` over a generic transport error, but
+  the popup controller covered that rule for mount, refresh, and summary-change reads rather than a
+  user-initiated flow action.
+- Measured before: the action rejection projection correctly retained its safe message in source,
+  but no focused test proved that specific fact reached the controller’s human-visible error state.
+- Changed: added an action-response regression that starts a flow with a specific safe rejection and
+  requires the controller to retain that exact message. No production behavior, persistence, portal
+  action, download evidence, or copy changed.
+- Discrimination: temporarily replacing the safe-message preference with the transport error made
+  the test fail: it received `BACKGROUND_MESSAGE_HANDLER_FAILED` instead of the specific safe
+  rejection. The source was restored before final gates.
+- Final gate: build, TypeScript, zero-warning ESLint, repo-wide Prettier, package verification and
+  `git diff --check` passed. Exact Vitest footer:
+
+  ```text
+       Tests  2809 passed (2809)
+    Start at  05:32:35
+    Duration  154.71s (transform 2.49s, setup 0ms, import 12.44s, tests 126.21s, environment 8ms)
+  ```
+
+- Checkpoints: `3efe0e6 test(popup): retain flow safe rejection`; the progress record follows in a
+  separate documentation checkpoint. No live/authenticated GST qualification, release claim, push
+  or PR action was made.
+
 ## Cycle 55 — mutate-check saved-file evidence counting
 
 - Window: 2026-08-27 05:29–05:31 IST. This is a quiet test-quality checkpoint, not a
