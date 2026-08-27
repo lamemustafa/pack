@@ -1,5 +1,41 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 67 — remove unused summary projections
+
+- Window: 2026-08-27 06:22–06:27 IST. This is a bounded code-reduction checkpoint; its actual
+  duration is recorded without an idle hold.
+- Picked: the controller still calculated and returned `completionStatus` and `summaryHeading`.
+  Both values were dedicated text projections from the saved summary, but PanelSurface renders the
+  canonical summary, inline status and diagnostics directly instead.
+- Measured before: exact source/test tracing found each helper had one production caller—the
+  controller—and each controller return field had one consumer—the synthetic panel fixture. The
+  eight unit tests named those helpers but no rendered surface used either value. PanelSurface uses
+  `scopedFlowSummary` and `lastRunSummary`, so its visible status and recovery diagnostic path stay
+  on their canonical summaries.
+- Changed: removed the two stale hook projections, their two test-only helper exports and the eight
+  tests that only asserted text which no human could reach. This intentionally changes the full test
+  count from 2,818 to 2,810, while retaining 151 test files: it removes unreachable coverage rather
+  than a product behavior test. No runtime completion/recovery predicate was weakened or removed.
+- Fixed-point check: the deleted helper names have zero remaining tracked references. The neighboring
+  persisted-download-ID predicate still has three live UI importers (summary, inline status and
+  scope-form model), so no target/download-evidence guard became a test-only orphan.
+- Gate: focused flow-summary/controller/panel coverage passed 4 files and 50 tests. The full build,
+  serial suite, TypeScript, zero-warning ESLint, Prettier, package verifier and diff check passed.
+  Exact final Vitest footer:
+
+  ```text
+        Tests  2810 passed (2810)
+     Start at  06:24:06
+     Duration  156.83s (transform 2.55s, setup 0ms, import 13.35s, tests 127.33s, environment 8ms)
+  ```
+
+- Checkpoint: `ec039ef refactor(popup): remove unused summary projections`; post-commit
+  `pnpm workflow:preflight` passed. No live/authenticated GST qualification, release claim, push or
+  PR action was made.
+- Learned / next: a passing unit test can still protect an unreachable presentation export. Keep the
+  canonical summary predicates because they have live render callers; audit the next popup boundary
+  for a specific reason that gets flattened rather than extending this deletion without evidence.
+
 ## Cycle 66 — remove the unused observation refresh projection
 
 - Window: 2026-08-27 06:16–06:21 IST. This is a bounded duplicate-fact/code-reduction checkpoint;
