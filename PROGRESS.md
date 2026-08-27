@@ -1,5 +1,34 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 81 — retain local-clear recovery failures
+
+- Window: 2026-08-27 07:39–07:45 IST. This is a bounded destructive-action safety correction; its
+  actual duration is recorded without an idle hold.
+- Picked: Clear local Pack data checks retained artifact-acquisition recovery before erasing session
+  or local bookkeeping. If that session read rejected, the exception escaped and Options fell back to
+  a generic request failure instead of naming the recovery verification that prevented deletion.
+- Discrimination: before the fix, the new clear-data regression rejected with a synthetic retained
+  checkpoint read failure rather than returning a failed cleanup response. It proved neither session
+  clear nor local removal ran, but the specific human explanation was absent.
+- Changed: the recovery-read guard now converts any recovery inspection exception into a fixed,
+  non-sensitive failure response before destructive cleanup. It preserves every existing explicit
+  unresolved-recovery refusal, staging cleanup check and successful clear path; it adds no storage,
+  portal, download or UI action.
+- Security review: PASS. The reviewer confirmed no secret/error-object exposure and that the catch
+  runs before either `storage.session.clear` or `storage.local.remove`; targeted proof verifies both
+  calls remain absent.
+- Gate: focused local-data coverage passed 1 file and 51 tests. The full build, serial suite,
+  TypeScript, zero-warning ESLint, Prettier and package verifier passed. Exact final Vitest footer:
+
+  ```text
+        Tests  2830 passed (2830)
+     Start at  07:41:09
+     Duration  156.33s (transform 2.61s, setup 0ms, import 12.66s, tests 126.98s, environment 295ms)
+  ```
+
+- Checkpoint: `5bcbabe fix(recovery): retain local clear recovery failures`; post-commit preflight
+  passed. No live portal, taxpayer data, manifest, permission, dependency, push or PR changed.
+
 ## Cycle 80 — retain artifact-acquisition storage failures
 
 - Window: 2026-08-27 07:29–07:39 IST. This is a bounded fail-closed recovery correction; its

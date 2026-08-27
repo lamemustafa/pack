@@ -39,6 +39,16 @@
 
 ## Outcome
 
+### Cycle 81 — local-data recovery-read safety
+
+- Clear local Pack data now returns an exact, fixed recovery-verification error when its retained
+  recovery inspection cannot read storage. It makes no destructive storage call in that state;
+  Options already renders the backend error rather than a generic fallback.
+- The regression first rejected out of the action. Restored targeted proof checks the exact response
+  and no session/local deletion. The security review and full gate found no storage scope,
+  target-binding, download-evidence or MV3 regression; the final suite passed 152 files and 2,830
+  tests.
+
 ### Cycle 80 — retained checkpoint storage-read block
 
 - A session-storage read failure before artifact-acquisition recovery inspection now returns a fixed
