@@ -65,6 +65,9 @@ describe("popup background failure presentation", () => {
           context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
         });
       }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({ ok: true, flowSummary: null });
+      }
       return Promise.resolve({ ok: true });
     });
     root = createRoot(dom.window.document.getElementById("root") as Element);
@@ -82,6 +85,28 @@ describe("popup background failure presentation", () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith({
       type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
     });
+  });
+
+  it("keeps a malformed saved-summary response visible", async () => {
+    await act(async () => root?.unmount());
+    controller = null;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    root = createRoot(document.getElementById("root") as Element);
+    await act(async () => {
+      root?.render(<Harness onChange={(next) => (controller = next)} />);
+      await Promise.resolve();
+    });
+
+    const renderedController = controller as ReturnType<typeof usePackPopupController> | null;
+    expect(renderedController?.actionError).toBe("Unexpected Pack response.");
   });
 
   it("keeps a flow failure when a later context refresh succeeds", async () => {

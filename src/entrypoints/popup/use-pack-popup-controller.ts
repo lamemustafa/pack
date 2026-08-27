@@ -50,11 +50,15 @@ export function usePackPopupController() {
       sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
     ])
       .then(([contextResponse, summaryResponse]) => {
-        if (summaryResponse.ok && "flowSummary" in summaryResponse) {
-          const flowSummary = summaryResponse.flowSummary;
-          setFiledReturnsFlowSummary(flowSummary);
-          if (flowSummary) setScopeState(flowSummary.scope);
-        } else if (!summaryResponse.ok) {
+        if (summaryResponse.ok) {
+          if ("flowSummary" in summaryResponse) {
+            const flowSummary = summaryResponse.flowSummary;
+            setFiledReturnsFlowSummary(flowSummary);
+            if (flowSummary) setScopeState(flowSummary.scope);
+          } else {
+            showActionError("Unexpected Pack response.");
+          }
+        } else {
           showActionError(
             summaryResponse.safeMessage ??
               "Pack could not read saved local recovery state. Try again.",
