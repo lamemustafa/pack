@@ -1,5 +1,29 @@
 # Sustained catalogue-overhaul progress
 
+## Cycle 58 — make the disabled-state design rule screen-reader complete
+
+- Window: 2026-08-27 05:38–05:41 IST. This is a short documentation/accessibility checkpoint;
+  its actual duration is recorded without an idle hold.
+- Picked: `DESIGN.md` required unavailable matrix cells to state their reason only “on hover”,
+  despite the current popup and panel controls correctly exposing disabled reasons as visible text
+  and through `aria-describedby`.
+- Measured before: focused scope-action, recovery-action, and inline-status tests exercise those
+  existing relationships (3 files, 84 tests). The design contract was stale: hover alone cannot
+  explain a disabled control to keyboard or screen-reader users.
+- Changed: the internal matrix-cell rule now requires visible reason text and a programmatic
+  relationship from a disabled control to that reason; it explicitly rejects hover-only
+  explanations. No production UI, portal behavior, persistence, download evidence, or public copy
+  changed.
+- Required review: Pack privacy review PASS found no credential/session, taxpayer-data, storage,
+  network, manifest, selector, or public-claim change.
+- Gate: the 3 focused suites passed 84 tests; `pnpm exec prettier --check DESIGN.md` and
+  `git diff --check` passed before the source checkpoint.
+- Checkpoints: `a42f73a docs(design): require described disabled reasons`; the progress record
+  follows in a separate documentation checkpoint. No live/authenticated GST qualification, release
+  claim, push or PR action was made.
+- Learned / next: visual unavailable styling is not sufficient documentation for a disabled
+  control. Continue a bounded mutation sample on a separate user-visible safety boundary.
+
 ## Cycle 57 — audit guided-panel navigation while an action is active
 
 - Window: 2026-08-27 05:36–05:38 IST. This is a quiet keyboard/screen-reader audit, not a
