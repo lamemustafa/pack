@@ -2982,3 +2982,26 @@ recovery state`, proving the response was silently discarded after context succe
 - Checkpoint: `29f06a7 refactor(verify): remove duplicate GST context probe`; post-commit preflight
   passed. No product runtime, taxpayer data, persistence, permission, manifest, dependency, push or
   PR changed.
+
+## Cycle 93 — require compact-verifier invocations in its contract test
+
+- Window: 2026-08-27 08:51–08:55 IST. This is a bounded test-quality correction; its actual
+  duration is recorded without an idle hold.
+- Picked: the static package-verifier test named the compact sign-in and guided-step helper symbols,
+  but a dead helper definition would satisfy those weak string checks without proving the browser
+  verifier still invokes it.
+- Changed: the contract now requires each exact awaited invocation at the call site. This preserves
+  the existing packaged-browser assertions while making a detached helper a test failure.
+- Gate: focused verifier coverage passed 1 file and 27 tests. Full build, serial suite, TypeScript,
+  zero-warning ESLint, Prettier, package verification and packaged browser verification passed.
+  Exact final Vitest footer:
+
+  ```text
+        Tests  2829 passed (2829)
+     Start at  08:52:15
+     Duration  156.47s (transform 2.54s, setup 0ms, import 12.81s, tests 127.05s, environment 296ms)
+  ```
+
+- Checkpoint: `0a36f56 test(package): require compact verifier invocations`; post-commit preflight
+  passed. No product runtime, taxpayer data, persistence, permission, manifest, dependency, push or
+  PR changed.
