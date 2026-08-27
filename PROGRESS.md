@@ -2893,3 +2893,19 @@ recovery state`, proving the response was silently discarded after context succe
   hint resolve at every step.
 - Result: the temporary regression was removed; no production or test change is justified. Do not
   add a busy reason to a control that cannot be exposed in that state.
+
+## Cycle 89 — audit compact access-blocked harness coverage
+
+- Window: 2026-08-27 08:33–08:36 IST. This is a quiet packaged-browser harness audit, not a
+  cadence-qualifying implementation cycle; its actual duration is recorded without an idle hold.
+- Picked: the 320px packaged-browser verifier covers the initial context and signed-in chooser but
+  not the access-blocked terminal context.
+- Measured: the synthetic content script correctly persisted the access-blocked context. Opening
+  `panel.html` for the verifier then made that normal extension tab active; its mount-time context
+  refresh therefore selected the remaining actionable GST tab rather than the access-blocked page.
+  The assertion timed out instead of proving the terminal state.
+- Result: removed the candidate assertion and retained no source or test change. A normal extension
+  tab is not a valid stand-in for Chrome's side panel, which preserves the user's active GST tab.
+  Existing component coverage remains the current proof for the access-blocked rendering; do not
+  claim packaged-browser geometry coverage until the verifier can exercise the actual side-panel
+  surface without changing the active-tab selection contract.
