@@ -200,6 +200,40 @@ describe("popup pack summary", () => {
     expect(markup).not.toContain("row-count");
   });
 
+  it.each(["-1", "37", "not-a-count"])(
+    "does not render an untrusted summary period count of %s",
+    (count) => {
+      const scope = {
+        artifactType: "JSON" as const,
+        financialYear: "2024-25",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B" as const,
+      };
+      const summary: FiledReturnsFlowSummary = {
+        scope,
+        status: "complete",
+        completedPeriods: ["April", "May"],
+        totalPeriods: 2,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "downloaded",
+          safeSignals: [
+            "full-fiscal-year-zip-downloaded",
+            "full-fiscal-year-summary-included",
+            `full-fiscal-year-summary-parsed-period-count:${count}`,
+          ],
+          safeMessage: "Summary metadata was unavailable.",
+        },
+      };
+
+      const markup = renderToStaticMarkup(<PackSummary scope={scope} summary={summary} />);
+
+      expect(markup).toContain("One ZIP · summary included · saved by your browser");
+      expect(markup).not.toContain(`summary for ${count}`);
+    },
+  );
+
   it("shows a fixed unavailable status when the artifact ZIP omitted a failed summary", () => {
     const scope = {
       artifactType: "JSON" as const,
