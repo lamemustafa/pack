@@ -43,7 +43,10 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const portalSignedIn = portalReady && !isGstSignInRequired(pack.context);
   const portalAccessDenied = pack.context?.pageKind === "gst-access-denied";
   const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
-  const running = pack.effectiveBusy !== null || summary?.status === "running";
+  const allSupportedSummary = pack.allSupportedFullFiscalYearFlowSummary;
+  const allSupportedRunning = allSupportedSummary?.status === "running";
+  const running =
+    pack.effectiveBusy !== null || summary?.status === "running" || allSupportedRunning;
 
   useRefreshOnReturn(pack.refreshPortalContext, pack.refreshFlowSummary);
 
@@ -65,6 +68,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const runComplete = presentation.kind === "complete" && !hasRecoveryActions(summary ?? null);
 
   const showFlow =
+    Boolean(allSupportedSummary) ||
     hasRecoveryActions(summary ?? null) ||
     terminalSummary ||
     ((portalReady || canRetryFullFiscalYearZipWithoutPortal(summary)) &&
@@ -99,6 +103,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
       <div className="panel-body">
         {showFlow ? (
           <>
+            {allSupportedSummary ? <AllSupportedRunStatus summary={allSupportedSummary} /> : null}
             <InlineStatus
               busy={pack.effectiveBusy}
               onOpenPortal={openPortal}
@@ -179,6 +184,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 scopeLockedForReview={pack.scopeLockedForReview}
                 onScopeChange={pack.setScope}
                 onStart={(scope) => void pack.startFiledReturnsFlow(scope)}
+                onStartAllReturnsFullYear={(plan) =>
+                  void pack.startAllSupportedFullFiscalYearFlow(plan)
+                }
               />
             )}
           </>
@@ -201,6 +209,24 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         </p>
       </footer>
     </main>
+  );
+}
+
+function AllSupportedRunStatus({
+  summary,
+}: {
+  summary: NonNullable<PackPanelController["allSupportedFullFiscalYearFlowSummary"]>;
+}) {
+  const saved = summary.targetEvidence.filter((target) => target.outcome === "saved").length;
+  return (
+    <section className="panel-all-supported-run" aria-label="All supported returns progress">
+      <p aria-live="polite">
+        <strong>
+          {saved} of {summary.totalTargets} saved
+        </strong>
+      </p>
+      <p>{summary.flowStep.safeMessage}</p>
+    </section>
   );
 }
 

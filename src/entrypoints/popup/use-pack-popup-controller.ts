@@ -2,6 +2,8 @@ import React from "react";
 import { browser } from "wxt/browser";
 import type { PortalContext } from "../../core/contracts";
 import type {
+  FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+  FiledReturnsAllSupportedFullFiscalYearRequest,
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
 } from "../../connectors/gst/filed-returns-contracts";
@@ -33,6 +35,8 @@ export function usePackPopupController() {
   const [context, setContext] = React.useState<PortalContext | null>(null);
   const [filedReturnsFlowSummary, setFiledReturnsFlowSummary] =
     React.useState<FiledReturnsFlowSummary | null>(null);
+  const [allSupportedFullFiscalYearFlowSummary, setAllSupportedFullFiscalYearFlowSummary] =
+    React.useState<FiledReturnsAllSupportedFullFiscalYearFlowSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const summaryRefreshEpoch = React.useRef(0);
@@ -61,9 +65,15 @@ export function usePackPopupController() {
       .then(([contextResponse, summaryResponse]) => {
         if (summaryEpoch === summaryRefreshEpoch.current) {
           if (summaryResponse.ok) {
-            if ("flowSummary" in summaryResponse) {
+            if ("allSupportedFullFiscalYearFlowSummary" in summaryResponse) {
+              setAllSupportedFullFiscalYearFlowSummary(
+                summaryResponse.allSupportedFullFiscalYearFlowSummary,
+              );
+              setFiledReturnsFlowSummary(null);
+            } else if ("flowSummary" in summaryResponse) {
               const flowSummary = summaryResponse.flowSummary;
               setFiledReturnsFlowSummary(flowSummary);
+              setAllSupportedFullFiscalYearFlowSummary(null);
               if (flowSummary) setScopeState(flowSummary.scope);
             } else {
               showActionError(UNEXPECTED_PACK_RESPONSE, "summary");
@@ -149,8 +159,18 @@ export function usePackPopupController() {
       try {
         const response = await sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
         if (refreshEpoch !== summaryRefreshEpoch.current) return;
+        if (response.ok && "allSupportedFullFiscalYearFlowSummary" in response) {
+          setAllSupportedFullFiscalYearFlowSummary(response.allSupportedFullFiscalYearFlowSummary);
+          setFiledReturnsFlowSummary(null);
+          if (actionErrorSource.current === "summary") {
+            actionErrorSource.current = null;
+            setActionError(null);
+          }
+          return;
+        }
         if (response.ok && "flowSummary" in response) {
           setFiledReturnsFlowSummary(response.flowSummary ?? null);
+          setAllSupportedFullFiscalYearFlowSummary(null);
           if (adoptSummaryScope && response.flowSummary) setScopeState(response.flowSummary.scope);
           if (actionErrorSource.current === "summary") {
             actionErrorSource.current = null;
@@ -216,7 +236,13 @@ export function usePackPopupController() {
 
   const applyFlowResponse = React.useCallback(
     (response: PackMessageResponse) => {
-      if (response.ok && "flowStep" in response) {
+      if (response.ok && "allSupportedFullFiscalYearFlowSummary" in response) {
+        summaryRefreshEpoch.current += 1;
+        actionErrorSource.current = null;
+        setActionError(null);
+        setAllSupportedFullFiscalYearFlowSummary(response.allSupportedFullFiscalYearFlowSummary);
+        setFiledReturnsFlowSummary(null);
+      } else if (response.ok && "flowStep" in response) {
         summaryRefreshEpoch.current += 1;
         actionErrorSource.current = null;
         setActionError(null);
@@ -259,6 +285,19 @@ export function usePackPopupController() {
       });
     },
     [applyFlowResponse, scope, withBusy],
+  );
+
+  const startAllSupportedFullFiscalYearFlow = React.useCallback(
+    async (plan: FiledReturnsAllSupportedFullFiscalYearRequest) => {
+      await withBusy("start-all-supported-filed-returns-full-fiscal-year-flow", async () => {
+        const response = await sendPackMessage({
+          type: "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+          payload: plan,
+        });
+        applyFlowResponse(response);
+      });
+    },
+    [applyFlowResponse, withBusy],
   );
 
   const acknowledgeInterruptedRun = React.useCallback(async () => {
@@ -399,6 +438,7 @@ export function usePackPopupController() {
   return {
     acknowledgeInterruptedRun,
     actionError,
+    allSupportedFullFiscalYearFlowSummary,
     context,
     effectiveBusy,
     lastRunSummary: filedReturnsFlowSummary,
@@ -414,6 +454,7 @@ export function usePackPopupController() {
     scopedFlowSummary,
     setScope,
     startFiledReturnsFlow,
+    startAllSupportedFullFiscalYearFlow,
     startFreshFiledReturnsFlow,
   };
 }
