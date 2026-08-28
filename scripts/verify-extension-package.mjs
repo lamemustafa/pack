@@ -258,6 +258,11 @@ const forbiddenPackSourcePatterns = [
   /\bindexedDB\b/i,
   /\bcaches\.open\s*\(/i,
 ];
+
+// Alpha flows are permitted only in WXT's source-build `alpha` mode. The JSX
+// marker is removed from a production bundle by Vite's compile-time mode
+// replacement; finding it in a release package means the exclusion failed.
+const forbiddenAlphaSurfaceMarkers = ["data-pack-alpha-surface"];
 const forbiddenRawArtifactHandoffPatterns = [
   {
     label: "raw artifact dataUrl postMessage",
@@ -290,6 +295,13 @@ for (const file of await listFiles(outputDir)) {
     assertNoForbiddenTelemetry(contents, file);
     assertNoHarnessPolicyLeaks(contents, file);
     assertNoPathfulGstPortalUrl(contents, file);
+    for (const marker of forbiddenAlphaSurfaceMarkers) {
+      if (contents.includes(marker)) {
+        throw new Error(
+          `Alpha surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
+        );
+      }
+    }
   }
   if (/\.svg$/.test(file)) {
     for (const pattern of forbiddenBuiltSvgPatterns) {

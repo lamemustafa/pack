@@ -89,8 +89,8 @@ const HISTORICAL_RECORDS = new Map([
 // correction and was found by review rather than by us.
 const RETIRED_CLAIMS: readonly { pattern: RegExp; why: string }[] = [
   {
-    pattern: /\balpha\b/i,
-    why: "the published package is a pre-1.0 beta; 'alpha' understates the release",
+    pattern: /\b(?:Alpha:|source-first alpha|alpha with no Store release)\b/i,
+    why: "the published package is a pre-1.0 beta; source-only alpha wording must not describe the Store release",
   },
   {
     pattern: /source-build experimental/i,

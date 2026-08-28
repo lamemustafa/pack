@@ -25,6 +25,11 @@ import {
   type PanelAllReturnsFullYearPreset,
   updatePanelGuidedScope,
 } from "./panel-guided-scope-model";
+import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
+
+export function isPackAlphaBuildMode(buildMode: string): boolean {
+  return buildMode === "alpha";
+}
 
 export function PanelGuidedScope({
   busy,
@@ -56,12 +61,22 @@ export function PanelGuidedScope({
    */
   onStartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan) => void;
 }) {
+  // Keep this expression in the panel module: Vite replaces it during a WXT
+  // production build, so the alpha JSX below is removed from packaged output.
+  const alphaSurfacesEnabled = import.meta.env.MODE === "alpha";
   const [view, setView] = React.useState<"presets" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
   const selectRef = React.useRef<HTMLSelectElement>(null);
   const presetDoorRef = React.useRef<HTMLButtonElement>(null);
   const focusTarget = React.useRef<"preset-door" | "select" | null>(null);
-  const steps = panelGuidedSteps(scope);
+  const steps = panelGuidedSteps(scope).map((candidate) =>
+    candidate.key === "period" && !alphaSurfacesEnabled
+      ? {
+          ...candidate,
+          options: candidate.options.filter((option) => option.value !== "FULL_FISCAL_YEAR"),
+        }
+      : candidate,
+  );
   const step = steps[activeStep] ?? steps[0];
   const [, refreshPresetSnapshot] = React.useState(0);
   // The panel can stay mounted while a new period becomes eligible. Read the
@@ -69,12 +84,14 @@ export function PanelGuidedScope({
   // a focus-driven parent refresh cannot combine a current FY with old periods.
   const presetAsOf = new Date();
   const currentFinancialYear = getFiledReturnsFinancialYearOptions(presetAsOf)[0];
-  const presets = currentFinancialYear
-    ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
-    : [];
-  const allReturnsPreset = currentFinancialYear
-    ? panelAllReturnsFullYearPreset(currentFinancialYear, presetAsOf)
-    : null;
+  const presets =
+    alphaSurfacesEnabled && currentFinancialYear
+      ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
+      : [];
+  const allReturnsPreset =
+    alphaSurfacesEnabled && currentFinancialYear
+      ? panelAllReturnsFullYearPreset(currentFinancialYear, presetAsOf)
+      : null;
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -201,12 +218,22 @@ export function PanelGuidedScope({
   const scopeExternalBlock = savedRunForScope ? null : externalBlock;
   const guidedExternalBlock =
     scopeExternalBlock ??
+    (!alphaSurfacesEnabled && isFullFiscalYearScope(scope)
+      ? {
+          disabled: true as const,
+          label: "This full-year flow is available only in a source build qualified for alpha use.",
+        }
+      : null) ??
     (portalSignedIn || canRetryFullFiscalYearZipWithoutPortal(scopeSummary)
       ? null
       : { disabled: true as const, label: "Open a signed-in GST Portal tab to continue." });
 
   return (
-    <section className="panel-guide" aria-labelledby="panel-guide-title">
+    <section
+      className="panel-guide"
+      aria-labelledby="panel-guide-title"
+      {...(alphaSurfacesEnabled ? { "data-pack-alpha-surface": "full-fiscal-year" } : {})}
+    >
       <div
         className="panel-guide-progress"
         role="status"

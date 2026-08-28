@@ -199,6 +199,7 @@ function guideControlCount(): number {
 
 describe("panel guided scope interaction", () => {
   beforeEach(() => {
+    vi.stubEnv("MODE", "alpha");
     dom = new JSDOM("<div id='root'></div>", {
       pretendToBeVisual: true,
       url: "https://extension.test",
@@ -212,6 +213,7 @@ describe("panel guided scope interaction", () => {
     if (root) await act(async () => root?.unmount());
     root = null;
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it.each([false, true])("preserves existing focus on mount (StrictMode: %s)", async (strict) => {
@@ -254,6 +256,9 @@ describe("panel guided scope interaction", () => {
     expect(container.textContent).toContain("Choose return, year and period");
     expect(container.textContent).not.toContain("Catalogue & limits");
     expect(container.textContent).not.toContain("Step 1 of 4");
+
+    await clickButtonContaining("Choose return, year and period");
+    expect(container.innerHTML).toContain("data-pack-alpha-surface");
   });
 
   it("places everything-this-year first without moving focus on initial mount", async () => {

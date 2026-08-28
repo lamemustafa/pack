@@ -57,7 +57,7 @@ Examples:
 ## Chrome Web Store Impact
 
 - [ ] This PR does not expand beyond the existing Chrome Web Store V0 listing unless every gate in `docs/PUBLICATION_READINESS.md` is checked.
-- [ ] Full fiscal year ships in the one binary but stays out of Store-advertised scope until its evidence gates are recorded.
+- [ ] Full fiscal year remains source-only and excluded from the packaged Store build until its evidence gates are recorded.
 - [ ] Store copy, README status, Privacy QA, and reviewer instructions were reviewed if user-facing behavior changed.
 - [ ] CI ZIP creation, provenance, and protected publishing are treated as release evidence, not manual store-submission sign-off.
 - [ ] PR title uses Conventional Commits so Release Please can bump Pack after merge.

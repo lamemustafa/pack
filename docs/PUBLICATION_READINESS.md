@@ -76,11 +76,14 @@ summary` sheet stating the portal's own availability totals and the GSTR-3B
   below are what it must satisfy before Store-facing V0 advertises it:
   exact-ZIP clean-profile, real-browser restart/resume, reconciliation, and
   privacy-review evidence.
-  The decision on how to reach that state is to **record the gates and keep one
-  binary** — full-year is advertised once it has earned it, rather than being
-  compiled out of Store builds and left present in source builds. Two artifacts
-  that behave differently would make the binary the source of truth for what
-  Pack offers, and would mean live evidence covers a build users never receive.
+  Until those gates are recorded, full-year controls are available only in the
+  maintainer-only source build created with `pnpm exec wxt build --mode alpha`.
+  That command is for local qualification work only: its output must not be
+  zipped, submitted, or described as live evidence. It is compiled out of the
+  packaged Store build. The package verifier rejects the source-only surface
+  marker if it reaches the built artifact, so a release cannot silently carry
+  the unqualified offer. Running the command records none of the four gates;
+  only their separately recorded evidence can do that.
   Of the four gates, privacy-review evidence is **partially** recorded. An
   independent privacy review of the summary identity scoping ran against PR #184.
   It returned findings at High severity; each was reproduced, fixed and
