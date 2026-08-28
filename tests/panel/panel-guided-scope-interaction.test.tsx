@@ -311,6 +311,21 @@ describe("panel guided scope interaction", () => {
     expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith(expectedPlan);
   });
 
+  it("wires the alpha all-returns recipe from the composed panel", async () => {
+    const onStartAllReturnsFullYear = vi.fn();
+    await mount(
+      { overrides: { startAllSupportedFullFiscalYearFlow: onStartAllReturnsFullYear } },
+      false,
+      false,
+    );
+
+    await clickButtonContaining("Everything this year");
+
+    expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "all-supported-returns-full-fiscal-year" }),
+    );
+  });
+
   it("gives every disabled preset a resolvable reason", async () => {
     const retained = completedPanelSummary({
       scope: { ...PANEL_TEST_SCOPE, financialYear: "2024-25" },
