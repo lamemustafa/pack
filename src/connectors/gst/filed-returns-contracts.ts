@@ -14,6 +14,34 @@ export interface FiledReturnsDownloadScope {
   completedPeriods?: string[];
 }
 
+/**
+ * A root plan that covers every currently supported, full-fiscal-year return.
+ *
+ * This is deliberately not a `FiledReturnsDownloadScope`: a scope authorises
+ * exactly one return type, while this root is expanded into immutable atomic
+ * targets when the run is created.
+ */
+export const FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND =
+  "all-supported-returns-full-fiscal-year" as const;
+
+export interface FiledReturnsAllSupportedFullFiscalYearIdentity {
+  kind: typeof FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND;
+  financialYear: string;
+}
+
+/** The user-authorised request shape for an all-supported-returns year run. */
+export type FiledReturnsAllSupportedFullFiscalYearRequest =
+  FiledReturnsAllSupportedFullFiscalYearIdentity;
+
+/**
+ * Readers must distinguish an all-supported-returns run from the existing
+ * one-return full-fiscal-year scope. A period alone is not enough identity for
+ * the former because the same period occurs under multiple return types.
+ */
+export type FiledReturnsFullFiscalYearSummaryIdentity =
+  | { kind: "single-return"; scope: FiledReturnsDownloadScope }
+  | FiledReturnsAllSupportedFullFiscalYearIdentity;
+
 export interface FiledReturnsDownloadTarget {
   actionId: string;
   financialYear: string;
@@ -356,6 +384,51 @@ export interface FiledReturnsTargetEvidence {
   period: string;
   outcome: FiledReturnsTargetOutcome;
 }
+
+/**
+ * Evidence for an all-supported-returns run must include the full target
+ * identity. A period-only entry would conflate, for example, the same month
+ * under two return types and make both progress and completion claims unsafe.
+ */
+export interface FiledReturnsAllSupportedFullFiscalYearTargetEvidence {
+  targetId: string;
+  financialYear: string;
+  period: FiledReturnsMonth;
+  returnType: FiledReturnsReturnType;
+  artifactType: FiledReturnsArtifactType;
+  outcome: FiledReturnsTargetOutcome;
+}
+
+/**
+ * The display summary for the separate all-supported-returns full-year plan.
+ * It is intentionally separate from `FiledReturnsFlowSummary`: that existing
+ * shape is bound to one atomic scope and readers must never infer that its
+ * period-only evidence applies across return types.
+ */
+export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
+  summaryIdentity: FiledReturnsAllSupportedFullFiscalYearIdentity;
+  status: "complete" | "running" | "partial" | "blocked" | "cancelled";
+  completedAt?: string;
+  updatedAt?: string;
+  /** Progress-only target IDs; the durable projection deliberately drops them. */
+  completedTargetIds: string[];
+  targetEvidence: FiledReturnsAllSupportedFullFiscalYearTargetEvidence[];
+  totalTargets: number;
+  currentTargetId?: string;
+  /** The atomic target scope to which the current flow step is bound. */
+  flowStepScope: FiledReturnsDownloadScope;
+  flowStep: PortalFlowStepResult;
+}
+
+/**
+ * The session-safe projection validates display evidence before dropping it.
+ * Target outcomes can include whether a return was filed, which remains in the
+ * ledger that needs it for recovery and must not be copied into session state.
+ */
+export type FiledReturnsAllSupportedFullFiscalYearDurableSummary = Omit<
+  FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+  "completedTargetIds" | "targetEvidence"
+>;
 
 export interface FiledReturnsFlowSummary {
   /** Binds an artifact-reconciled completion to the acquisition that produced it. */

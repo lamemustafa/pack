@@ -1,8 +1,11 @@
 import type {
+  FiledReturnsAllSupportedFullFiscalYearRequest,
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { expandAllSupportedFullFiscalYearTargetPlan } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
 import type {
   FullFiscalYearTargetRecoveryPayload,
   FiledReturnsFreshStartPayload,
@@ -22,6 +25,7 @@ import {
 import type { ActiveGstTab } from "./filed-returns-active-tab";
 import type { MainWorldFiledReturnsFilterSelectionOutcome } from "../connectors/gst/main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
+import { startAllSupportedFullFiscalYearDownloadFlow } from "./filed-returns-all-supported-full-fiscal-year";
 import {
   discardMalformedFullFiscalYearRunForFreshStart,
   prepareFullFiscalYearTargetRetry,
@@ -101,7 +105,7 @@ export interface FiledReturnsFlowRunnerDeps {
     scope: FiledReturnsDownloadScope,
   ) => Promise<MainWorldFiledReturnsFilterSelectionOutcome>;
   stageCapturedDownloads?: {
-    bundleKind?: "full-fiscal-year" | "single-period";
+    bundleKind?: "all-supported-full-fiscal-year" | "full-fiscal-year" | "single-period";
     ledgerId: string;
   };
   timings?: {
@@ -237,6 +241,73 @@ export async function startFiledReturnsDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+/**
+ * Starts the separate all-supported-returns root under the same durable
+ * operation lease as every other filed-return action. The lease is anchored to
+ * one derived atomic full-year scope only because the existing lease record is
+ * a concurrency guard; the all-returns ledger remains the authoritative root
+ * plan and target state.
+ */
+export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+  request: FiledReturnsAllSupportedFullFiscalYearRequest,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse> {
+  const leaseScope = allSupportedLeaseScope(request);
+  if (!leaseScope) {
+    return startAllSupportedFullFiscalYearDownloadFlow(
+      request,
+      deps as never,
+      startSinglePeriodFiledReturnsDownloadFlow,
+    );
+  }
+  let targetReviewState;
+  try {
+    targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+  } catch {
+    return targetReviewStorageUnavailableResponse(leaseScope, deps);
+  }
+  if (targetReviewState.state === "malformed") {
+    return malformedTargetReviewResponse(leaseScope, blockedScopeTotalPeriods(leaseScope, deps));
+  }
+  if (targetReviewState.state === "valid") {
+    return responseForFiledReturnsTargetReview(targetReviewState.review);
+  }
+
+  const activeRun = await acquireFiledReturnsRun(leaseScope, deps);
+  if ("response" in activeRun) return activeRun.response;
+
+  const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
+  try {
+    const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(
+      leaseScope,
+      deps,
+    );
+    if (retainedArtifactRecovery) return retainedArtifactRecovery;
+    return startAllSupportedFullFiscalYearDownloadFlow(
+      request,
+      deps as never,
+      startSinglePeriodFiledReturnsDownloadFlow,
+    );
+  } finally {
+    stopLeaseRenewal();
+    await releaseFiledReturnsRun(activeRun.run, deps);
+  }
+}
+
+function allSupportedLeaseScope(
+  request: FiledReturnsAllSupportedFullFiscalYearRequest,
+): FiledReturnsDownloadScope | null {
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  const first = expansion.ok ? expansion.targets[0] : undefined;
+  if (!first) return null;
+  return {
+    financialYear: request.financialYear,
+    period: FULL_FISCAL_YEAR_PERIOD,
+    returnType: first.returnType,
+    artifactType: first.artifactType,
+  };
 }
 
 function targetReviewStorageUnavailableResponse(

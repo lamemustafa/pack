@@ -25,11 +25,16 @@ import {
   readPlanLedgersStorageState,
   readRetainedPlanLedgers,
 } from "./filed-returns-full-fiscal-year-run-state";
+import {
+  clearAllSupportedFullFiscalYearLedgerPlans,
+  readAllSupportedPlanLedgersStorageState,
+} from "./filed-returns-all-supported-full-fiscal-year-run-state";
 
 export interface PackLocalDataDeps {
   clearableLocalStorageKeys: readonly string[];
   storageKeys: {
     activeRun: string;
+    allSupportedFullFiscalYearLedgerIndex?: string;
     fullFiscalYearLedger: string;
     fullFiscalYearLedgerIndex?: string;
     targetReview: string;
@@ -88,6 +93,10 @@ async function clearPackLocalDataWithinOperation(
   requiresBroadStagingClear ||= ledger !== null && !fullFiscalYearLedgerId;
   const planLedgers = await readPlanLedgersStorageState(deps);
   requiresBroadStagingClear ||= planLedgers.state === "malformed";
+  const allSupportedPlanLedgers = deps.storageKeys.allSupportedFullFiscalYearLedgerIndex
+    ? await readAllSupportedPlanLedgersStorageState(deps)
+    : { state: "valid" as const, ledgers: [] };
+  requiresBroadStagingClear ||= allSupportedPlanLedgers.state === "malformed";
 
   if (requiresBroadStagingClear) {
     const clearSignals = await discardAllFiledReturnsStaging();
@@ -130,9 +139,22 @@ async function clearPackLocalDataWithinOperation(
       }
     }
   }
+  if (!requiresBroadStagingClear && allSupportedPlanLedgers.state === "valid") {
+    for (const planLedger of allSupportedPlanLedgers.ledgers) {
+      const clearSignals = await discardFullFiscalYearFiledReturnsZip(planLedger.ledgerId);
+      if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
+        return {
+          ok: false,
+          error:
+            "Pack could not clear retained fiscal-year files. Retry clearing local data before removing the saved ledger.",
+        };
+      }
+    }
+  }
 
   await browser.storage.session.clear();
   await clearLedgerPlans(deps);
+  await clearAllSupportedFullFiscalYearLedgerPlans(deps);
   await browser.storage.local.remove([...deps.clearableLocalStorageKeys]);
   return { ok: true, cleared: true };
 }
@@ -161,19 +183,53 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
     return true;
   }
   const retainedLedgers = await readRetainedPlanLedgers(deps);
-  return retainedLedgers.some(
+  if (
+    retainedLedgers.some(
+      (planLedger) =>
+        hasUnresolvedZipState(planLedger) || isUnresolvedFullFiscalYearLedger(planLedger),
+    )
+  ) {
+    return true;
+  }
+  if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return false;
+  const allSupportedPlanLedgers = await readAllSupportedPlanLedgersStorageState(deps);
+  // A malformed record is not a recoverable execution state. The caller marks
+  // it for broad staging cleanup before deleting it, matching the existing v1
+  // corrupt-plan path instead of making local-data clearing impossible.
+  if (allSupportedPlanLedgers.state === "malformed") return false;
+  return allSupportedPlanLedgers.ledgers.some(
     (planLedger) =>
-      hasUnresolvedZipState(planLedger) || isUnresolvedFullFiscalYearLedger(planLedger),
+      hasUnresolvedZipState(planLedger) || isUnresolvedAllSupportedFullFiscalYearLedger(planLedger),
   );
 }
 
-function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+function hasUnresolvedZipState(ledger: {
+  zipDownloadAttempt?: unknown;
+  zipPhase?: FiledReturnsFullFiscalYearLedger["zipPhase"];
+}): boolean {
   if (ledger.zipDownloadAttempt !== undefined) return true;
   return ledger.zipPhase !== undefined && !isCleanedZipPhase(ledger.zipPhase);
 }
 
 function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   if (hasInconsistentFullFiscalYearCompletion(ledger)) return true;
+  if (ledger.status === "complete" || ledger.status === "cancelled") return false;
+  return ledger.targets.some((target) =>
+    [
+      "pending",
+      "running",
+      "download-unconfirmed",
+      "blocked",
+      "failed",
+      "manually-observed",
+    ].includes(target.status),
+  );
+}
+
+function isUnresolvedAllSupportedFullFiscalYearLedger(ledger: {
+  status: "running" | "complete" | "partial" | "blocked" | "cancelled";
+  targets: readonly { status: string }[];
+}): boolean {
   if (ledger.status === "complete" || ledger.status === "cancelled") return false;
   return ledger.targets.some((target) =>
     [

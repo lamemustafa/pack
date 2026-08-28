@@ -18,8 +18,11 @@ import {
 } from "../popup/flow-summary";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import {
+  panelAllReturnsFullYearPreset,
   panelFullFiscalYearPresets,
   panelGuidedSteps,
+  type PanelAllReturnsFullYearPlan,
+  type PanelAllReturnsFullYearPreset,
   updatePanelGuidedScope,
 } from "./panel-guided-scope-model";
 
@@ -34,6 +37,7 @@ export function PanelGuidedScope({
   scopeLockedForReview,
   onScopeChange,
   onStart,
+  onStartAllReturnsFullYear,
 }: {
   busy: string | null;
   context: PortalContext | null;
@@ -45,6 +49,12 @@ export function PanelGuidedScope({
   scopeLockedForReview: boolean;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: (scope: FiledReturnsDownloadScope) => void;
+  /**
+   * The all-returns root is intentionally separate from an atomic scope. Until
+   * its background message is wired, omitting this callback keeps the preset
+   * out of the panel rather than exposing a control that cannot complete.
+   */
+  onStartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan) => void;
 }) {
   const [view, setView] = React.useState<"presets" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
@@ -62,6 +72,9 @@ export function PanelGuidedScope({
   const presets = currentFinancialYear
     ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
     : [];
+  const allReturnsPreset = currentFinancialYear
+    ? panelAllReturnsFullYearPreset(currentFinancialYear, presetAsOf)
+    : null;
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -85,6 +98,15 @@ export function PanelGuidedScope({
       <section className="panel-presets" aria-labelledby="panel-presets-title">
         <h2 id="panel-presets-title">What do you need?</h2>
         <div className="panel-preset-list">
+          {allReturnsPreset && onStartAllReturnsFullYear ? (
+            <AllReturnsPreset
+              busy={busy}
+              externalBlock={externalBlock}
+              plan={allReturnsPreset}
+              portalReady={portalSignedIn}
+              onStart={onStartAllReturnsFullYear}
+            />
+          ) : null}
           {presets.map((preset) => {
             const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
             const summaryForPreset = savedRunForPreset ?? flowSummary;
@@ -266,6 +288,55 @@ export function PanelGuidedScope({
       <CatalogueLimits />
     </section>
   );
+}
+
+function AllReturnsPreset({
+  busy,
+  externalBlock,
+  plan,
+  portalReady,
+  onStart,
+}: {
+  busy: string | null;
+  externalBlock: { disabled: true; label: string } | null;
+  plan: PanelAllReturnsFullYearPreset;
+  portalReady: boolean;
+  onStart: (plan: PanelAllReturnsFullYearPlan) => void;
+}) {
+  const disabled = !portalReady || busy !== null || externalBlock?.disabled === true;
+  const disabledReason =
+    externalBlock?.label ??
+    (busy !== null
+      ? "Pack is processing another action."
+      : portalReady
+        ? null
+        : "Open a signed-in GST Portal tab to continue.");
+  const countLabel = `${plan.returnCount} ${plural(plan.returnCount, "return")} · ${plan.targetPeriodCount} return ${plural(plan.targetPeriodCount, "period")} · ${plan.artifactCount} ${plural(plan.artifactCount, "format")} · ${plan.fileCount} ${plural(plan.fileCount, "file")} · one ZIP`;
+
+  return (
+    <React.Fragment>
+      <button
+        className="panel-preset panel-everything-preset"
+        type="button"
+        disabled={disabled}
+        aria-describedby={disabledReason ? "preset-all-returns-reason" : undefined}
+        aria-label={`${plan.label} for all supported returns. ${countLabel}.`}
+        onClick={() => onStart(plan)}
+      >
+        <span>{plan.label} · all supported returns</span>
+        <span className="panel-preset-count">{countLabel}</span>
+      </button>
+      {disabledReason ? (
+        <p className="panel-preset-reason" id="preset-all-returns-reason">
+          {disabledReason}
+        </p>
+      ) : null}
+    </React.Fragment>
+  );
+}
+
+function plural(count: number, singular: string): string {
+  return count === 1 ? singular : `${singular}s`;
 }
 
 function ActiveScope({ scope }: { scope: FiledReturnsDownloadScope }) {

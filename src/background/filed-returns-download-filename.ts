@@ -40,6 +40,30 @@ export function safeFullFiscalYearZipFilename(scope: FiledReturnsDownloadScope):
   return [...safeFiledReturnZipDirectory(scope), "full-year.zip"].join("/");
 }
 
+/**
+ * Keeps different return types from sharing a same-period path in an
+ * all-supported fiscal-year archive. The return-type segment is part of the
+ * persisted target binding, not a presentation-only ZIP layout choice.
+ */
+export function safeAllSupportedFullFiscalYearZipEntryPath(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+  extension: FiledReturnsArtifactExtension = filedReturnsArtifactExtension(artifactType),
+): string {
+  return [
+    safeFilenameSegment(scope.returnType),
+    safeFiledReturnZipEntryPath(scope, artifactType, extension),
+  ].join("/");
+}
+
+export function safeAllSupportedFullFiscalYearZipFilename(financialYear: string): string {
+  return [
+    "ComplyEaze-Pack",
+    safeFilenameSegment(financialYear),
+    "all-supported-returns-full-year.zip",
+  ].join("/");
+}
+
 export function safeSinglePeriodZipFilename(scope: FiledReturnsDownloadScope): string {
   return [
     ...safeFiledReturnZipDirectory(scope),

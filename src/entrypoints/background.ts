@@ -8,6 +8,11 @@ import {
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
+import { readCurrentAllSupportedFullFiscalYearFlowSummary } from "../background/filed-returns-all-supported-full-fiscal-year-summary";
+import {
+  reconcilePendingAllSupportedFullFiscalYearZipDownload,
+  reconcilePersistedAllSupportedFullFiscalYearZipDownload,
+} from "../background/filed-returns-all-supported-full-fiscal-year";
 import {
   reconcilePendingFullFiscalYearZipDownload,
   reconcilePersistedFullFiscalYearZipDownload,
@@ -16,6 +21,7 @@ import {
   resolveFullFiscalYearTargetFlow,
   resolveUnconfirmedFiledReturnsDownloadFlow,
   retryFullFiscalYearTargetDownloadFlow,
+  startAllSupportedFiledReturnsFullFiscalYearDownloadFlow,
   retryFiledReturnsTargetDownloadFlow,
   startFreshFiledReturnsDownloadFlow,
   startFiledReturnsDownloadFlow,
@@ -113,8 +119,15 @@ export default defineBackground(() => {
   installPackActionOpensSidePanel();
   installFiledReturnsDurableDownloadReconciler(undefined, {
     storageKeys: filedReturnsStorageKeys(),
+    reconcileAllSupportedFullFiscalYearZip: (downloadId) =>
+      reconcilePendingAllSupportedFullFiscalYearZipDownload(
+        downloadId,
+        filedReturnsFlowRunnerDeps(),
+      ),
     reconcileFullFiscalYearZip: (downloadId) =>
       reconcilePendingFullFiscalYearZipDownload(downloadId, filedReturnsFlowRunnerDeps()),
+    reconcilePersistedAllSupportedFullFiscalYearZip: () =>
+      reconcilePersistedAllSupportedFullFiscalYearZipDownload(filedReturnsFlowRunnerDeps()),
     reconcilePersistedFullFiscalYearZip: () =>
       reconcilePersistedFullFiscalYearZipDownload(filedReturnsFlowRunnerDeps()),
   });
@@ -163,6 +176,7 @@ function backgroundMessageSource(message: unknown): string {
   }
   switch (message.type) {
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+    case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
     case "PACK_RETRY_FILED_RETURNS_TARGET":
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
@@ -191,6 +205,8 @@ function backgroundMessageHandlerSite(message: unknown): `background-message-han
   switch (message.type) {
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return "background-message-handler:filed-returns-start";
+    case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+      return "background-message-handler:filed-returns-all-supported-start";
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return "background-message-handler:filed-returns-start-fresh";
     case "PACK_RETRY_FILED_RETURNS_TARGET":
@@ -291,16 +307,24 @@ async function handleMessage(
           )),
       };
     }
-    case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
+    case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY": {
       await reconcileTerminalFiledReturnsDownload(browser.downloads, {
         storageKeys: filedReturnsStorageKeys(),
       }).catch(() => undefined);
+      const allSupportedFullFiscalYearFlowSummary =
+        await readCurrentAllSupportedFullFiscalYearFlowSummary({
+          storageKeys: filedReturnsStorageKeys(),
+        });
+      if (allSupportedFullFiscalYearFlowSummary) {
+        return { ok: true, allSupportedFullFiscalYearFlowSummary };
+      }
       return {
         ok: true,
         flowSummary: await readCurrentFiledReturnsFlowSummary({
           storageKeys: filedReturnsStorageKeys(),
         }),
       };
+    }
     case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
       return {
         ok: true,
@@ -330,6 +354,11 @@ async function handleMessage(
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+      return startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+        message.payload,
+        filedReturnsFlowRunnerDeps(),
+      );
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFreshFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":
@@ -389,6 +418,8 @@ export async function clearPackLocalData(): Promise<PackMessageResponse> {
     clearableLocalStorageKeys: PACK_CLEARABLE_LOCAL_STORAGE_KEYS,
     storageKeys: {
       activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
+      allSupportedFullFiscalYearLedgerIndex:
+        PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex,
       fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
       fullFiscalYearLedgerIndex: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedgerIndex,
       targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,

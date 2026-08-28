@@ -47,7 +47,9 @@ export interface DurableDownloadReconcilerDeps extends Omit<
   persistDownloadId?: (review: FiledReturnsTargetReview, downloadId: number) => Promise<boolean>;
   readCurrentReview?: () => Promise<FiledReturnsTargetReview | null>;
   reconcile?: (review: FiledReturnsTargetReview) => Promise<unknown>;
+  reconcileAllSupportedFullFiscalYearZip?: (downloadId: number) => Promise<boolean>;
   reconcileFullFiscalYearZip?: (downloadId: number) => Promise<boolean>;
+  reconcilePersistedAllSupportedFullFiscalYearZip?: () => Promise<boolean>;
   reconcilePersistedFullFiscalYearZip?: () => Promise<boolean>;
 }
 
@@ -130,9 +132,19 @@ export function installFiledReturnsDurableDownloadReconciler(
               deps.reconcileFullFiscalYearZip!(downloadId),
             ),
           ).then((results) => results.some(Boolean)),
+      pendingTerminalDownloadIds.length === 0 || !deps.reconcileAllSupportedFullFiscalYearZip
+        ? Promise.resolve(false)
+        : Promise.all(
+            pendingTerminalDownloadIds.map((downloadId) =>
+              deps.reconcileAllSupportedFullFiscalYearZip!(downloadId),
+            ),
+          ).then((results) => results.some(Boolean)),
       !reconcilePersistedFullFiscalYearZip || !deps.reconcilePersistedFullFiscalYearZip
         ? Promise.resolve(false)
         : deps.reconcilePersistedFullFiscalYearZip(),
+      !reconcilePersistedFullFiscalYearZip || !deps.reconcilePersistedAllSupportedFullFiscalYearZip
+        ? Promise.resolve(false)
+        : deps.reconcilePersistedAllSupportedFullFiscalYearZip(),
     ])
       .then((results) => results.some(Boolean))
       .finally(() => {

@@ -96,7 +96,7 @@ export async function stageOffscreenFiledReturn({
 export async function createOffscreenFiledReturnZipUrl(
   ledgerId: string,
   expected: {
-    returnType: FiledReturnsReturnType;
+    returnType?: FiledReturnsReturnType;
     entryCount: number;
     entries: readonly PackOffscreenFiledReturnZipExpectedEntry[];
     generatedAt: Date;
@@ -111,7 +111,7 @@ export async function createOffscreenFiledReturnZipUrl(
     payload: {
       requestId,
       ledgerId,
-      expectedReturnType: expected.returnType,
+      ...(expected.returnType ? { expectedReturnType: expected.returnType } : {}),
       expectedEntryCount: expected.entryCount,
       expectedEntries: [...expected.entries],
       generatedAt: expected.generatedAt.toISOString(),

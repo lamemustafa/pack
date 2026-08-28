@@ -1,5 +1,8 @@
 import type { UserActionRequired } from "../core/contracts";
 import type {
+  FiledReturnsAllSupportedFullFiscalYearDurableSummary,
+  FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+  FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearTargetStatus,
@@ -7,11 +10,17 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypesForSelection,
+  isFiledReturnsArtifactType,
   isFiledReturnsConcreteArtifactType,
   normaliseFiledReturnsArtifactType,
+  supportsFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
+import { isAllSupportedFullFiscalYearRequest } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { isCanonicalFiledReturnsActionId } from "../connectors/gst/filed-returns-operation-id";
-import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
+import {
+  filedReturnsScopeId,
+  isFiledReturnsReturnType,
+} from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
   FULL_FISCAL_YEAR_PERIOD,
@@ -50,6 +59,18 @@ const SUMMARY_KEYS = [
   // nothing but display convenience.
   "targetEvidence",
   "totalPeriods",
+  "updatedAt",
+] as const;
+const ALL_SUPPORTED_SUMMARY_KEYS = [
+  "completedAt",
+  "completedTargetIds",
+  "currentTargetId",
+  "flowStep",
+  "flowStepScope",
+  "status",
+  "summaryIdentity",
+  "targetEvidence",
+  "totalTargets",
   "updatedAt",
 ] as const;
 const FLOW_STEP_KEYS = [
@@ -92,6 +113,10 @@ const TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "pending",
   "running",
 ]);
+const ALL_SUPPORTED_COMPLETE_OUTCOMES = new Set<
+  FiledReturnsAllSupportedFullFiscalYearTargetEvidence["outcome"]
+>(["saved", "partly-saved", "not-filed"]);
+const MAX_ALL_SUPPORTED_FULL_FISCAL_YEAR_TARGETS = FILED_RETURNS_MONTHS.length * 16;
 
 export function parseDurableFiledReturnsFlowSummary(
   input: unknown,
@@ -155,6 +180,200 @@ export function parseDurableFiledReturnsFlowSummary(
     ...(recovery ? { fullFiscalYearRecovery: recovery } : {}),
     flowStep,
   };
+}
+
+/**
+ * Parses the all-supported-returns summary independently from the legacy
+ * atomic summary. The latter has a single `scope` and period-only evidence, so
+ * accepting this shape there would silently collapse distinct targets.
+ *
+ * Evidence and completed target IDs are checked on input and then deliberately
+ * excluded from the result. They can encode filing outcomes and belong only in
+ * the durable ledger that authorises recovery, never in session summary state.
+ */
+export function parseDurableAllSupportedFullFiscalYearFlowSummary(
+  input: unknown,
+): FiledReturnsAllSupportedFullFiscalYearDurableSummary | null {
+  if (!input || typeof input !== "object") return null;
+  const summary = input as Partial<FiledReturnsAllSupportedFullFiscalYearFlowSummary> &
+    Record<string, unknown>;
+  if (!hasOnlyKeys(summary, ALL_SUPPORTED_SUMMARY_KEYS)) return null;
+  if (!isAllSupportedFullFiscalYearRequest(summary.summaryIdentity)) return null;
+  if (!summary.status || !SUMMARY_STATUSES.has(summary.status)) return null;
+  if (
+    !isAllSupportedTargetCount(summary.totalTargets) ||
+    !isOptionalCanonicalTimestamp(summary.completedAt) ||
+    !isOptionalCanonicalTimestamp(summary.updatedAt) ||
+    (summary.completedAt === undefined && summary.updatedAt === undefined)
+  ) {
+    return null;
+  }
+  const targetEvidence = parseAllSupportedTargetEvidence(
+    summary.targetEvidence,
+    summary.summaryIdentity.financialYear,
+    summary.totalTargets,
+  );
+  if (!targetEvidence) return null;
+  const completedTargetIds = parseCompletedTargetIds(summary.completedTargetIds, targetEvidence);
+  if (!completedTargetIds) return null;
+  const currentTargetId = parseCurrentTargetId(summary.currentTargetId, targetEvidence);
+  if (summary.currentTargetId !== undefined && !currentTargetId) return null;
+  const flowStepScope = parseDurableFiledReturnsScope(summary.flowStepScope, false);
+  if (
+    !flowStepScope ||
+    flowStepScope.financialYear !== summary.summaryIdentity.financialYear ||
+    flowStepScope.completedPeriods !== undefined ||
+    !targetEvidence.some((target) => sameTargetScope(target, flowStepScope))
+  ) {
+    return null;
+  }
+  const flowStep = parseDurableFlowStep(
+    summary.flowStep,
+    flowStepScope,
+    summary.status,
+    flowStepScope.period,
+  );
+  if (!flowStep) return null;
+  if (
+    summary.status === "complete" &&
+    (!summary.completedAt ||
+      currentTargetId !== null ||
+      completedTargetIds.length !== summary.totalTargets ||
+      !targetEvidence.every((target) => ALL_SUPPORTED_COMPLETE_OUTCOMES.has(target.outcome)) ||
+      flowStep.state !== "downloaded" ||
+      !flowStep.safeSignals.includes("full-fiscal-year-complete"))
+  ) {
+    return null;
+  }
+  return {
+    summaryIdentity: { ...summary.summaryIdentity },
+    status: summary.status,
+    ...(summary.completedAt ? { completedAt: summary.completedAt } : {}),
+    ...(summary.updatedAt ? { updatedAt: summary.updatedAt } : {}),
+    totalTargets: summary.totalTargets,
+    ...(currentTargetId ? { currentTargetId } : {}),
+    flowStepScope,
+    flowStep,
+  };
+}
+
+function parseAllSupportedTargetEvidence(
+  input: unknown,
+  financialYear: string,
+  totalTargets: unknown,
+): FiledReturnsAllSupportedFullFiscalYearTargetEvidence[] | null {
+  if (
+    !Array.isArray(input) ||
+    !isAllSupportedTargetCount(totalTargets) ||
+    input.length !== totalTargets
+  ) {
+    return null;
+  }
+  const targetIds = new Set<string>();
+  const targetTuples = new Set<string>();
+  const evidence = input.map((entry) => {
+    if (!entry || typeof entry !== "object") return null;
+    const target = entry as Record<string, unknown>;
+    if (
+      !hasOnlyKeys(target, [
+        "artifactType",
+        "financialYear",
+        "outcome",
+        "period",
+        "returnType",
+        "targetId",
+      ]) ||
+      !isBoundedString(target.targetId, 1, 120) ||
+      target.financialYear !== financialYear ||
+      typeof target.period !== "string" ||
+      !FILED_RETURNS_MONTHS.includes(target.period as never) ||
+      typeof target.returnType !== "string" ||
+      !isFiledReturnsReturnType(target.returnType) ||
+      typeof target.artifactType !== "string" ||
+      !isFiledReturnsArtifactType(target.artifactType) ||
+      !supportsFiledReturnsArtifactType(target.returnType, target.artifactType) ||
+      !isFiledReturnsTargetOutcome(target.outcome)
+    ) {
+      return null;
+    }
+    const targetId = target.targetId;
+    const artifactType = target.artifactType;
+    const tuple = [target.returnType, target.period, artifactType].join("\u0000");
+    if (targetIds.has(targetId) || targetTuples.has(tuple)) return null;
+    targetIds.add(targetId);
+    targetTuples.add(tuple);
+    return {
+      targetId,
+      financialYear,
+      period: target.period as FiledReturnsAllSupportedFullFiscalYearTargetEvidence["period"],
+      returnType: target.returnType,
+      artifactType,
+      outcome: target.outcome,
+    };
+  });
+  return evidence.some((target) => target === null)
+    ? null
+    : (evidence as FiledReturnsAllSupportedFullFiscalYearTargetEvidence[]);
+}
+
+function parseCompletedTargetIds(
+  input: unknown,
+  evidence: readonly FiledReturnsAllSupportedFullFiscalYearTargetEvidence[],
+): string[] | null {
+  if (!Array.isArray(input) || input.length > evidence.length) return null;
+  const knownTargetIds = new Set(evidence.map((target) => target.targetId));
+  if (!input.every((targetId) => typeof targetId === "string" && knownTargetIds.has(targetId))) {
+    return null;
+  }
+  return new Set(input).size === input.length ? [...input] : null;
+}
+
+function parseCurrentTargetId(
+  input: unknown,
+  evidence: readonly FiledReturnsAllSupportedFullFiscalYearTargetEvidence[],
+): string | null {
+  if (input === undefined) return null;
+  return typeof input === "string" && evidence.some((target) => target.targetId === input)
+    ? input
+    : null;
+}
+
+function sameTargetScope(
+  target: FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  return (
+    target.financialYear === scope.financialYear &&
+    target.period === scope.period &&
+    target.returnType === scope.returnType &&
+    target.artifactType === normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType)
+  );
+}
+
+function isFiledReturnsTargetOutcome(
+  input: unknown,
+): input is FiledReturnsAllSupportedFullFiscalYearTargetEvidence["outcome"] {
+  return (
+    input === "saved" ||
+    input === "partly-saved" ||
+    input === "captured" ||
+    input === "not-filed" ||
+    input === "needs-review" ||
+    input === "running" ||
+    input === "pending"
+  );
+}
+
+function isAllSupportedTargetCount(input: unknown): input is number {
+  return (
+    Number.isSafeInteger(input) &&
+    (input as number) >= 1 &&
+    (input as number) <= MAX_ALL_SUPPORTED_FULL_FISCAL_YEAR_TARGETS
+  );
+}
+
+function isBoundedString(input: unknown, minLength: number, maxLength: number): input is string {
+  return typeof input === "string" && input.length >= minLength && input.length <= maxLength;
 }
 
 /**

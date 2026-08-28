@@ -4,6 +4,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type { FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
 import {
@@ -35,6 +36,9 @@ export interface StagedFiledReturnsZipClearResult {
   safeSignals: string[];
 }
 
+export type StagedFiledReturnsZipKind =
+  "all-supported-full-fiscal-year" | "full-fiscal-year" | "single-period";
+
 export async function discardAllFiledReturnsStaging(): Promise<string[]> {
   const clearSignals = opfsClearSignals(
     await clearAllOffscreenFiledReturnLedgers(),
@@ -48,7 +52,7 @@ export async function exportStagedFiledReturnsZip({
   clearSignalPrefix,
   completeStep,
   ledgerId,
-  scope,
+  expectedReturnType,
   safeMessage,
   startRejectedMessage,
   unconfirmedMessage,
@@ -62,10 +66,11 @@ export async function exportStagedFiledReturnsZip({
   onDownloadStarted,
   stagingCleanupCheckpointFailedMessage,
 }: {
-  clearSignalPrefix: "full-fiscal-year" | "single-period";
+  clearSignalPrefix: StagedFiledReturnsZipKind;
   completeStep: PortalFlowStepResult;
   ledgerId: string;
-  scope: FiledReturnsDownloadScope;
+  /** The default return type for legacy one-return ZIP plans. */
+  expectedReturnType?: FiledReturnsReturnType;
   safeMessage: string;
   startRejectedMessage: string;
   unconfirmedMessage: string;
@@ -104,7 +109,7 @@ export async function exportStagedFiledReturnsZip({
   }
   const generatedAt = new Date();
   const zip = await createOffscreenFiledReturnZipUrl(ledgerId, {
-    returnType: scope.returnType,
+    ...(expectedReturnType ? { returnType: expectedReturnType } : {}),
     entryCount: expectedZipEntryCount,
     entries: expectedZipEntries,
     generatedAt,
@@ -133,7 +138,7 @@ export async function exportStagedFiledReturnsZip({
           : zip.errorCategory === "offscreen-response-invalid" && summaryPlan
             ? "Pack rejected the fiscal-year ZIP because its local summary receipt could not be verified."
             : zipFailedMessage,
-      ...(clearSignalPrefix === "full-fiscal-year"
+      ...(isFullFiscalYearZip(clearSignalPrefix)
         ? {
             userAction: {
               type: "RETRY_PORTAL_GENERATION" as const,
@@ -165,16 +170,14 @@ export async function exportStagedFiledReturnsZip({
         `${clearSignalPrefix}-zip-actual-entry-count:${artifactEntryCount}`,
         retainedStagedLedgerSignal(clearSignalPrefix),
       ],
-      safeMessage:
-        clearSignalPrefix === "full-fiscal-year"
-          ? "Pack rejected the fiscal-year zip because its staged entry count was incomplete."
-          : "Pack rejected the selected zip because its staged artifact set was incomplete.",
+      safeMessage: isFullFiscalYearZip(clearSignalPrefix)
+        ? "Pack rejected the fiscal-year zip because its staged entry count was incomplete."
+        : "Pack rejected the selected zip because its staged artifact set was incomplete.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
-        message:
-          clearSignalPrefix === "full-fiscal-year"
-            ? "Retry the unresolved periods before exporting the fiscal-year zip."
-            : "Retry the selected period so Pack can rebuild the exact artifact set.",
+        message: isFullFiscalYearZip(clearSignalPrefix)
+          ? "Retry the unresolved periods before exporting the fiscal-year zip."
+          : "Retry the selected period so Pack can rebuild the exact artifact set.",
         canResume: true,
       },
     };
@@ -507,8 +510,8 @@ export function filedReturnsZipObservationContext(downloadId: number, armedAt: D
   };
 }
 
-export function checkBrowserDownloadsAction(prefix: "full-fiscal-year" | "single-period") {
-  const label = prefix === "full-fiscal-year" ? "fiscal-year ZIP" : "selected-file ZIP";
+export function checkBrowserDownloadsAction(prefix: StagedFiledReturnsZipKind) {
+  const label = isFullFiscalYearZip(prefix) ? "fiscal-year ZIP" : "selected-file ZIP";
   return {
     type: "NAVIGATE_TO_SUPPORTED_PAGE" as const,
     message: `Check browser Downloads for the saved ${label}. Do not start another ZIP until this state is resolved.`,
@@ -534,13 +537,13 @@ export function filedReturnsZipExpectedEntries(
   }));
 }
 
-function retainedStagedLedgerSignal(prefix: "full-fiscal-year" | "single-period"): string {
+function retainedStagedLedgerSignal(prefix: StagedFiledReturnsZipKind): string {
   return `${prefix}-opfs-retained`;
 }
 
 export function opfsClearSignals(
   result: OffscreenFiledReturnClearResult,
-  prefix: "filed-returns" | "full-fiscal-year" | "single-period",
+  prefix: "all-supported-full-fiscal-year" | "filed-returns" | "full-fiscal-year" | "single-period",
 ): string[] {
   if (result.status === "cleared") return [`${prefix}-opfs-cleared`];
   if (result.errorCategory === "clear-failed" || result.errorCategory === "opfs-unavailable") {
@@ -552,4 +555,8 @@ export function opfsClearSignals(
       ? `${prefix}-opfs-clear-offscreen-response-invalid`
       : `${prefix}-opfs-clear-offscreen-unreachable`,
   ];
+}
+
+function isFullFiscalYearZip(prefix: StagedFiledReturnsZipKind): boolean {
+  return prefix === "full-fiscal-year" || prefix === "all-supported-full-fiscal-year";
 }

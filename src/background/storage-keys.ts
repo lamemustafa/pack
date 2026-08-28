@@ -1,5 +1,6 @@
 export const PACK_LOCAL_STORAGE_KEYS = {
   activeFiledReturnsRun: "pack:active-filed-returns-run",
+  allSupportedFullFiscalYearLedgerIndex: "pack:all-supported-full-fiscal-year-ledger-index",
   fullFiscalYearLedger: "pack:full-fiscal-year-ledger",
   fullFiscalYearLedgerIndex: "pack:full-fiscal-year-ledger-index",
   install: "pack:install",
@@ -23,6 +24,8 @@ export const PACK_CLEARABLE_LOCAL_STORAGE_KEYS = Object.values(PACK_LOCAL_STORAG
 export function filedReturnsStorageKeys() {
   return {
     activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
+    allSupportedFullFiscalYearLedgerIndex:
+      PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex,
     completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
     fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
     fullFiscalYearLedgerIndex: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedgerIndex,

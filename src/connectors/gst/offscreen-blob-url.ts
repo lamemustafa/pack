@@ -45,7 +45,8 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
   payload: {
     requestId: string;
     ledgerId: string;
-    expectedReturnType: FiledReturnsReturnType;
+    /** Legacy one-return ZIP plans use this default; heterogeneous plans bind every entry. */
+    expectedReturnType?: FiledReturnsReturnType;
     expectedEntryCount: number;
     expectedEntries: PackOffscreenFiledReturnZipExpectedEntry[];
     generatedAt: string;
@@ -56,6 +57,8 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
 export interface PackOffscreenFiledReturnZipExpectedEntry {
   artifactType: FiledReturnsConcreteArtifactType;
   entryNames: string[];
+  /** Required when the enclosing ZIP plan has no single return type. */
+  returnType?: FiledReturnsReturnType;
 }
 
 // These are the only filename-free ZIP failures produced by the offscreen
@@ -276,7 +279,8 @@ export function isPackOffscreenBlobUrlMessageShape(
       ]) &&
       isBoundedString(input.payload.ledgerId, 1, 120) &&
       isIsoTimestamp(input.payload.generatedAt) &&
-      isFiledReturnsReturnType(input.payload.expectedReturnType) &&
+      (input.payload.expectedReturnType === undefined ||
+        isFiledReturnsReturnType(input.payload.expectedReturnType)) &&
       typeof expectedEntryCount === "number" &&
       Number.isInteger(expectedEntryCount) &&
       expectedEntryCount >= 1 &&
@@ -306,7 +310,7 @@ export function isPackOffscreenBlobUrlMessageShape(
 }
 
 function isFiledReturnsSummaryPlanShape(input: unknown): input is FiledReturnsSummaryPlanEntry[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return false;
+  if (!Array.isArray(input) || input.length < 1 || input.length > 108) return false;
   const financialYears = new Set<string>();
   for (const candidate of input) {
     if (
@@ -358,13 +362,17 @@ function isBoundedString(value: unknown, minLength: number, maxLength: number): 
 function isExpectedZipEntryPlanShape(
   input: unknown,
 ): input is PackOffscreenFiledReturnZipExpectedEntry[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return false;
+  if (!Array.isArray(input) || input.length < 1 || input.length > 108) return false;
   for (const candidate of input) {
-    if (!isRecord(candidate) || !hasOnlyKeys(candidate, ["artifactType", "entryNames"])) {
+    if (
+      !isRecord(candidate) ||
+      !hasOnlyKeys(candidate, ["artifactType", "entryNames", "returnType"])
+    ) {
       return false;
     }
     if (
       !isFiledReturnsConcreteArtifactType(candidate.artifactType) ||
+      (candidate.returnType !== undefined && !isFiledReturnsReturnType(candidate.returnType)) ||
       !Array.isArray(candidate.entryNames) ||
       candidate.entryNames.length < 1 ||
       candidate.entryNames.length > 2 ||
