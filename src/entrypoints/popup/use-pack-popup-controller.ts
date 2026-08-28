@@ -1,6 +1,6 @@
 import React from "react";
 import { browser } from "wxt/browser";
-import type { PortalContext, PortalObservation } from "../../core/contracts";
+import type { PortalContext } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
@@ -14,25 +14,28 @@ import {
   DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   normaliseFiledReturnsScope,
 } from "../../connectors/gst/filed-returns-scope";
-import { PACK_SESSION_STORAGE_KEYS } from "../../background/storage-keys";
 import {
-  getFiledReturnsCompletionStatus,
-  getFiledReturnsSummaryHeading,
+  FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX,
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+} from "../../background/storage-keys";
+import {
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
+
+const UNEXPECTED_PACK_RESPONSE = "Unexpected Pack response.";
+
 export function usePackPopupController() {
-  const [status, setStatus] = React.useState("Loading Pack context...");
   const [scope, setScopeState] = React.useState<FiledReturnsDownloadScope>(
     DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
   );
   const [context, setContext] = React.useState<PortalContext | null>(null);
-  const [filedReturnsObservation, setFiledReturnsObservation] =
-    React.useState<PortalObservation | null>(null);
   const [filedReturnsFlowSummary, setFiledReturnsFlowSummary] =
     React.useState<FiledReturnsFlowSummary | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
+  const summaryRefreshEpoch = React.useRef(0);
   // `actionError` is shared with flow actions, so a successful context refresh
   // must clear only an error the context read itself produced. Clearing it
   // unconditionally wiped an unrelated download failure whenever the panel
@@ -41,43 +44,53 @@ export function usePackPopupController() {
   // only by the context path went stale: a later flow failure replaced the
   // message without clearing the marker, so the next successful refresh cleared
   // a flow error it did not own and hid a live diagnostic.
-  const actionErrorSource = React.useRef<"context" | "flow" | null>(null);
+  const actionErrorSource = React.useRef<"action" | "context" | "summary" | null>(null);
   const showActionError = React.useCallback(
-    (message: string, source: "context" | "flow" = "flow") => {
+    (message: string, source: "action" | "context" | "summary" = "action") => {
       actionErrorSource.current = source;
       setActionError(message);
-      setStatus(message);
     },
     [],
   );
   React.useEffect(() => {
+    const summaryEpoch = ++summaryRefreshEpoch.current;
     void Promise.all([
       sendPackMessage({ type: "PACK_GET_CONTEXT" }),
-      sendPackMessage({ type: "PACK_GET_FILED_RETURNS_OBSERVATION" }),
       sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
     ])
-      .then(([contextResponse, observationResponse, summaryResponse]) => {
-        if (observationResponse.ok && "observation" in observationResponse) {
-          setFiledReturnsObservation(observationResponse.observation);
-        }
-        if (summaryResponse.ok && "flowSummary" in summaryResponse) {
-          const flowSummary = summaryResponse.flowSummary;
-          setFiledReturnsFlowSummary(flowSummary);
-          if (flowSummary) setScopeState(flowSummary.scope);
+      .then(([contextResponse, summaryResponse]) => {
+        if (summaryEpoch === summaryRefreshEpoch.current) {
+          if (summaryResponse.ok) {
+            if ("flowSummary" in summaryResponse) {
+              const flowSummary = summaryResponse.flowSummary;
+              setFiledReturnsFlowSummary(flowSummary);
+              if (flowSummary) setScopeState(flowSummary.scope);
+            } else {
+              showActionError(UNEXPECTED_PACK_RESPONSE, "summary");
+            }
+          } else {
+            showActionError(
+              summaryResponse.safeMessage ??
+                "Pack could not read saved local recovery state. Try again.",
+              "summary",
+            );
+          }
         }
 
         if (contextResponse.ok && "context" in contextResponse) {
           setContext(contextResponse.context);
-          setStatus(
-            contextResponse.context?.supported
-              ? "GST context detected."
-              : "Pack is dormant until you start an action.",
-          );
         } else {
-          showActionError(contextResponse.ok ? "Unexpected Pack response." : contextResponse.error);
+          showActionError(
+            contextResponse.ok
+              ? UNEXPECTED_PACK_RESPONSE
+              : (contextResponse.safeMessage ?? contextResponse.error),
+            "context",
+          );
         }
       })
-      .catch(() => showActionError("Pack could not read the current GST Portal state. Try again."));
+      .catch(() =>
+        showActionError("Pack could not read the current GST Portal state. Try again.", "context"),
+      );
   }, [showActionError]);
 
   /**
@@ -105,62 +118,115 @@ export function usePackPopupController() {
           actionErrorSource.current = null;
           setActionError(null);
         }
-        setStatus(
-          response.context?.supported
-            ? "GST context detected."
-            : "Pack is dormant until you start an action.",
-        );
         return;
       }
-      showActionError(response.ok ? "Unexpected Pack response." : response.error, "context");
+      showActionError(
+        response.ok ? UNEXPECTED_PACK_RESPONSE : (response.safeMessage ?? response.error),
+        "context",
+      );
     } catch {
       showActionError("Pack could not read the current GST Portal state. Try again.", "context");
     }
   }, [showActionError]);
+
+  /**
+   * Re-reads the saved run without touching the scope.
+   *
+   * The storage listener below answers every change to the summary, which covers a run that
+   * is progressing. It cannot cover a run that has stopped: a stall writes nothing, so the
+   * event that would prompt a re-read is exactly the event a stall withholds. The background
+   * decides staleness from elapsed time and will report an interrupted run the moment it is
+   * asked -- so returning to this page has to ask, or the panel keeps rendering "Run in
+   * progress" for a run that ended, under a promise that retry controls arrive on their own.
+   *
+   * Deliberately does not adopt `scope` from the response, unlike the mount effect and the
+   * storage listener: the user may be part-way through a selection when they come back, and
+   * that selection is theirs, not the saved run's.
+   */
+  const refreshFlowSummary = React.useCallback(
+    async (adoptSummaryScope = false) => {
+      const refreshEpoch = ++summaryRefreshEpoch.current;
+      try {
+        const response = await sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
+        if (refreshEpoch !== summaryRefreshEpoch.current) return;
+        if (response.ok && "flowSummary" in response) {
+          setFiledReturnsFlowSummary(response.flowSummary ?? null);
+          if (adoptSummaryScope && response.flowSummary) setScopeState(response.flowSummary.scope);
+          if (actionErrorSource.current === "summary") {
+            actionErrorSource.current = null;
+            setActionError(null);
+          }
+          return;
+        }
+        showActionError(
+          response.ok
+            ? UNEXPECTED_PACK_RESPONSE
+            : (response.safeMessage ??
+                "Pack could not read saved local recovery state. Try again."),
+          "summary",
+        );
+      } catch {
+        if (refreshEpoch !== summaryRefreshEpoch.current) return;
+        showActionError("Pack could not read saved local recovery state. Try again.", "summary");
+      }
+    },
+    [showActionError],
+  );
 
   React.useEffect(() => {
     const onChanged = (
       changes: Record<string, Browser.storage.StorageChange>,
       areaName: string,
     ) => {
+      const activeRunChange = changes[PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun];
+      const leaseOnlyRemoval =
+        areaName === "local" &&
+        Object.keys(changes).length === 1 &&
+        activeRunChange !== undefined &&
+        !("newValue" in activeRunChange);
+      if (leaseOnlyRemoval) return;
       // Reacting to the key changing at all, not to it gaining a value: a
       // removal carries no `newValue`, so clearing local data left an already
       // open surface rendering a summary that no longer exists. The popup is
       // short-lived enough to have hidden this; the panel page is not.
-      if (
-        areaName !== "session" ||
-        !changes[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary]
-      ) {
+      const summaryChanged =
+        (areaName === "session" &&
+          Boolean(changes[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary])) ||
+        (areaName === "local" &&
+          [
+            PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
+            PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
+            PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedgerIndex,
+            PACK_LOCAL_STORAGE_KEYS.targetReview,
+          ].some((key) => Boolean(changes[key]))) ||
+        Object.keys(changes).some((key) => key.startsWith(FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX));
+      if (!summaryChanged) {
         return;
       }
-      void sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }).then((response) => {
-        if (!response.ok || !("flowSummary" in response)) return;
-        setFiledReturnsFlowSummary(response.flowSummary ?? null);
-        // The scope is the user's own selection, so it is only adopted from a
-        // summary that exists; a clear must not silently reset what they chose.
-        if (response.flowSummary) setScopeState(response.flowSummary.scope);
-      });
+      // The run ledger is local and advances once per target. The session summary is
+      // terminal-only, so both must trigger the same canonical summary read.
+      void refreshFlowSummary(true);
     };
     browser.storage.onChanged.addListener(onChanged);
-    return () => browser.storage.onChanged.removeListener(onChanged);
-  }, []);
+    return () => {
+      summaryRefreshEpoch.current += 1;
+      browser.storage.onChanged.removeListener(onChanged);
+    };
+  }, [refreshFlowSummary]);
 
   const applyFlowResponse = React.useCallback(
     (response: PackMessageResponse) => {
       if (response.ok && "flowStep" in response) {
+        summaryRefreshEpoch.current += 1;
         actionErrorSource.current = null;
         setActionError(null);
-        setStatus(response.flowStep.safeMessage);
         if ("flowSummary" in response && response.flowSummary) {
           setFiledReturnsFlowSummary(response.flowSummary);
           setScopeState(response.flowSummary.scope);
         }
-        if ("observation" in response) {
-          setFiledReturnsObservation(response.observation);
-        }
       } else {
         showActionError(
-          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+          response.ok ? UNEXPECTED_PACK_RESPONSE : (response.safeMessage ?? response.error),
         );
       }
     },
@@ -181,15 +247,9 @@ export function usePackPopupController() {
     [showActionError],
   );
 
-  /**
-   * `override` lets a caller start a scope it has just chosen, without waiting a render for
-   * the state update to land. The panel's presets need this; the popup calls it with no
-   * argument and is unaffected.
-   */
   const startFiledReturnsFlow = React.useCallback(
-    async (override?: FiledReturnsDownloadScope) => {
-      const target = normaliseFiledReturnsScope(override ?? scope);
-      if (override) setScopeState(target);
+    async (requestedScope?: FiledReturnsDownloadScope) => {
+      const target = normaliseFiledReturnsScope(requestedScope ?? scope);
       await withBusy("start-filed-returns-flow", async () => {
         const response = await sendPackMessage({
           type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
@@ -207,11 +267,10 @@ export function usePackPopupController() {
       if (response.ok && "flowStep" in response) {
         actionErrorSource.current = null;
         setActionError(null);
-        setStatus(response.flowStep.safeMessage);
         setFiledReturnsFlowSummary(null);
       } else {
         showActionError(
-          response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
+          response.ok ? UNEXPECTED_PACK_RESPONSE : (response.safeMessage ?? response.error),
         );
       }
     });
@@ -328,7 +387,6 @@ export function usePackPopupController() {
     [applyFlowResponse, getFullFiscalYearRecoveryPayload, withBusy],
   );
 
-  const completionStatus = getFiledReturnsCompletionStatus(scope, filedReturnsFlowSummary);
   const recoverySummary = hasUnresolvedFiledReturnsRecovery(filedReturnsFlowSummary)
     ? filedReturnsFlowSummary
     : null;
@@ -337,19 +395,15 @@ export function usePackPopupController() {
     setScopeState(nextScope);
   }, []);
   const scopedFlowSummary = getScopeMatchedFiledReturnsSummary(scope, filedReturnsFlowSummary);
-  const summaryHeading = scopedFlowSummary
-    ? getFiledReturnsSummaryHeading(scope, scopedFlowSummary)
-    : null;
   const effectiveBusy = scopedFlowSummary?.status === "complete" ? null : busy;
   return {
     acknowledgeInterruptedRun,
     actionError,
-    completionStatus,
     context,
     effectiveBusy,
-    filedReturnsObservation,
     lastRunSummary: filedReturnsFlowSummary,
     recoverySummary,
+    refreshFlowSummary,
     refreshPortalContext,
     resolveFullFiscalYearTarget,
     resolveUnconfirmedDownload,
@@ -361,8 +415,6 @@ export function usePackPopupController() {
     setScope,
     startFiledReturnsFlow,
     startFreshFiledReturnsFlow,
-    status,
-    summaryHeading,
   };
 }
 

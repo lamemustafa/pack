@@ -6,7 +6,7 @@ export function ScopeActionPanel({
   label,
   onStart,
 }: {
-  actionCopy: { summary: string; details: string[] };
+  actionCopy: { summary: string; details: string[]; busySummary?: string };
   disabled: boolean;
   disabledReason?: string | null;
   busy: boolean;
@@ -15,13 +15,16 @@ export function ScopeActionPanel({
 }) {
   return (
     <div className="popup-action-area">
-      <p className="run-action-copy">
-        {busy ? "Waiting for Chrome to save the file." : disabledReason || actionCopy.summary}
+      <p className="run-action-copy" id={disabled ? "scope-action-reason" : undefined}>
+        {busy
+          ? (actionCopy.busySummary ?? "Waiting for Chrome to save the file.")
+          : disabledReason || actionCopy.summary}
       </p>
       <button
         className={busy ? "primary-action primary-action-busy" : "primary-action"}
         type="button"
         disabled={disabled}
+        aria-describedby={disabled ? "scope-action-reason" : undefined}
         onClick={onStart}
       >
         {label}

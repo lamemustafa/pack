@@ -7,6 +7,7 @@ import {
   runFiledReturnsOperationCriticalSection,
 } from "./filed-returns-active-run";
 import {
+  hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedger,
   recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-ledger";
@@ -19,12 +20,18 @@ import {
 } from "./filed-returns-artifact-progress";
 import { hasArtifactAcquisitionCheckpoint } from "./artifact-acquisition-state";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
+import {
+  clearLedgerPlans,
+  readPlanLedgersStorageState,
+  readRetainedPlanLedgers,
+} from "./filed-returns-full-fiscal-year-run-state";
 
 export interface PackLocalDataDeps {
   clearableLocalStorageKeys: readonly string[];
   storageKeys: {
     activeRun: string;
     fullFiscalYearLedger: string;
+    fullFiscalYearLedgerIndex?: string;
     targetReview: string;
   };
 }
@@ -38,7 +45,17 @@ export async function clearPackLocalDataWithRecoveryGuard(
 async function clearPackLocalDataWithinOperation(
   deps: PackLocalDataDeps,
 ): Promise<PackMessageResponse> {
-  if (await hasUnresolvedFiledReturnsRecoveryState(deps)) {
+  let hasUnresolvedRecoveryState: boolean;
+  try {
+    hasUnresolvedRecoveryState = await hasUnresolvedFiledReturnsRecoveryState(deps);
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Pack could not verify retained artifact recovery. Retry clearing local data before removing saved state.",
+    };
+  }
+  if (hasUnresolvedRecoveryState) {
     return {
       ok: false,
       error:
@@ -69,6 +86,8 @@ async function clearPackLocalDataWithinOperation(
     ? ledger.ledgerId
     : recoverableFullFiscalYearLedgerId(ledger);
   requiresBroadStagingClear ||= ledger !== null && !fullFiscalYearLedgerId;
+  const planLedgers = await readPlanLedgersStorageState(deps);
+  requiresBroadStagingClear ||= planLedgers.state === "malformed";
 
   if (requiresBroadStagingClear) {
     const clearSignals = await discardAllFiledReturnsStaging();
@@ -99,8 +118,21 @@ async function clearPackLocalDataWithinOperation(
       };
     }
   }
+  if (!requiresBroadStagingClear && planLedgers.state === "valid") {
+    for (const planLedger of planLedgers.ledgers) {
+      const clearSignals = await discardFullFiscalYearFiledReturnsZip(planLedger.ledgerId);
+      if (!clearSignals.includes("full-fiscal-year-opfs-cleared")) {
+        return {
+          ok: false,
+          error:
+            "Pack could not clear retained fiscal-year files. Retry clearing local data before removing the saved ledger.",
+        };
+      }
+    }
+  }
 
   await browser.storage.session.clear();
+  await clearLedgerPlans(deps);
   await browser.storage.local.remove([...deps.clearableLocalStorageKeys]);
   return { ok: true, cleared: true };
 }
@@ -122,8 +154,17 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
   if (await hasArtifactAcquisitionCheckpoint()) return true;
 
   const ledger = await readLocalValue<unknown>(deps.storageKeys.fullFiscalYearLedger);
-  if (!isFullFiscalYearLedger(ledger)) return false;
-  return hasUnresolvedZipState(ledger) || isUnresolvedFullFiscalYearLedger(ledger);
+  if (
+    isFullFiscalYearLedger(ledger) &&
+    (hasUnresolvedZipState(ledger) || isUnresolvedFullFiscalYearLedger(ledger))
+  ) {
+    return true;
+  }
+  const retainedLedgers = await readRetainedPlanLedgers(deps);
+  return retainedLedgers.some(
+    (planLedger) =>
+      hasUnresolvedZipState(planLedger) || isUnresolvedFullFiscalYearLedger(planLedger),
+  );
 }
 
 function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolean {
@@ -132,9 +173,17 @@ function hasUnresolvedZipState(ledger: FiledReturnsFullFiscalYearLedger): boolea
 }
 
 function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
+  if (hasInconsistentFullFiscalYearCompletion(ledger)) return true;
   if (ledger.status === "complete" || ledger.status === "cancelled") return false;
   return ledger.targets.some((target) =>
-    ["pending", "running", "download-unconfirmed", "blocked", "failed"].includes(target.status),
+    [
+      "pending",
+      "running",
+      "download-unconfirmed",
+      "blocked",
+      "failed",
+      "manually-observed",
+    ].includes(target.status),
   );
 }
 

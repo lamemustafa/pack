@@ -351,10 +351,18 @@ Pack uses Chrome extension storage only inside the current browser profile.
   year, period, return type and artifact type; target status, safe
   messages/signals, attempts, revisions, ZIP phase and timestamps. During a
   final ZIP handoff, it also records the ZIP request timestamp and, after
-  browser creation, the exact numeric browser download ID. Per-target
+  browser creation, the exact numeric browser download ID. After the first
+  portal-tab selection, it also records a bounded numeric portal tab ID and an
+  opaque extension-generated tab-session marker; both remain with that selected
+  ledger until it is replaced or cleared.
+  Per-target
   diagnostics may include an opaque action ID, the exact numeric browser
   download ID, endpoint and download-path classes, MIME and byte-count classes,
   and status and error classes;
+- `pack:full-fiscal-year-ledger-index`: local-only index that maps a selected
+  plan scope to its opaque ledger ID. Each indexed plan is stored under the
+  generated `pack:filed-returns-plan:<opaque-ledger-id>` key with the same
+  bounded ledger fields; the index and plan records are cleared together;
 - `pack:single-period-staging`: a short-lived local recovery ledger for a
   selected-file ZIP. It stores an opaque ledger identifier, canonical scope
   (financial year, period, return type and selected artifacts), per-artifact
@@ -391,6 +399,10 @@ Pack uses Chrome extension storage only inside the current browser profile.
   Portal tab, so a run can find its tab again without scanning every tab. A tab
   ID is a per-session integer assigned by the browser and carries no page, URL
   or taxpayer information.
+- `pack:full-fiscal-year-tab-session`: an opaque browser-session marker paired
+  by the saved full-year ledger with its tab ID. It prevents a resumed plan from
+  silently reusing the tab after a browser-session change; it carries no page,
+  URL or taxpayer information.
 - `pack.artifact-acquisition.v2.*`: a per-target, session-only recovery
   checkpoint for a direct artifact action. It contains the requested financial
   year, period, return/artifact type, opaque request ID, checkpoint state, and

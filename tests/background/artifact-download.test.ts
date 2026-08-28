@@ -74,26 +74,59 @@ describe("downloadAcquiredArtifact", () => {
     await expect(downloadAcquiredArtifact(input(), deps())).resolves.toMatchObject({
       ok: false,
       reason: "search-unavailable",
+      safeMessage:
+        "Pack could not query the exact browser download, so it did not mark the target saved. Check browser Downloads before retrying.",
       safeSignals: ["browser-download-search-unavailable"],
     });
   });
 
   it.each([
-    ["interrupted", 12, "safe", "interrupted"],
-    ["complete", 0, "safe", "empty"],
+    [
+      "interrupted",
+      12,
+      "safe",
+      "interrupted",
+      "The browser interrupted the filed-return download, so Pack did not mark the target saved. Check browser Downloads before retrying.",
+    ],
+    [
+      "complete",
+      0,
+      "safe",
+      "empty",
+      "The browser completed an empty filed-return download, so Pack did not mark the target saved.",
+    ],
     // Danger is resolved before size, matching the shared observer: a
     // browser-blocked or still-scanning item is not evidence of a saved file
     // whatever its byte count says.
-    ["complete", 12, undefined, "danger-unconfirmed"],
-    ["complete", 12, "asyncScanning", "danger-unconfirmed"],
-    ["complete", 12, "dangerousFile", "danger-rejected"],
+    [
+      "complete",
+      12,
+      undefined,
+      "danger-unconfirmed",
+      "The browser has not classified this filed-return download as safe, so Pack did not mark the target saved. Check browser Downloads before retrying.",
+    ],
+    [
+      "complete",
+      12,
+      "asyncScanning",
+      "danger-unconfirmed",
+      "The browser has not classified this filed-return download as safe, so Pack did not mark the target saved. Check browser Downloads before retrying.",
+    ],
+    [
+      "complete",
+      12,
+      "dangerousFile",
+      "danger-rejected",
+      "The browser did not classify this filed-return download as safe, so Pack did not mark the target saved. Review the item in browser Downloads before deciding whether to retry.",
+    ],
   ] as const)(
     "fails %s downloads (danger %s) without completing",
-    async (state, bytesReceived, danger, reason) => {
+    async (state, bytesReceived, danger, reason, safeMessage) => {
       downloads.search.mockResolvedValueOnce([{ id: 9, state, bytesReceived, danger }] as never);
       await expect(downloadAcquiredArtifact(input(), deps())).resolves.toMatchObject({
         ok: false,
         reason,
+        safeMessage,
       });
     },
   );
@@ -113,7 +146,12 @@ describe("downloadAcquiredArtifact", () => {
         },
         deps({ revokeOffscreenBlobUrl: revoke, closeOffscreenBlobDocument: close }),
       ),
-    ).resolves.toMatchObject({ ok: false, reason: "checkpoint-failed" });
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: "checkpoint-failed",
+      safeMessage:
+        "Pack started the browser download but could not save its exact recovery record. Check browser Downloads before retrying.",
+    });
     expect(onStartCheckpointFailed).toHaveBeenCalledWith(9);
     expect(revoke).toHaveBeenCalledWith("blob:extension");
     expect(close).toHaveBeenCalledOnce();
@@ -134,7 +172,12 @@ describe("downloadAcquiredArtifact", () => {
     const result = downloadAcquiredArtifact(input(), deps({ timeoutMs: 30 }));
     for (const listener of listeners) listener({ id: 10 });
     await vi.advanceTimersByTimeAsync(30);
-    await expect(result).resolves.toMatchObject({ ok: false, reason: "timeout" });
+    await expect(result).resolves.toMatchObject({
+      ok: false,
+      reason: "timeout",
+      safeMessage:
+        "Pack could not confirm the exact browser download result, so it did not mark the target saved. Check browser Downloads before retrying.",
+    });
     expect(downloads.download).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
@@ -164,6 +207,25 @@ describe("downloadAcquiredArtifact", () => {
     );
 
     expect(result).toMatchObject({ ok: true, safeSignals: [] });
+  });
+
+  it("keeps completed artifact evidence but names an unavailable saved filename", async () => {
+    const result = await downloadAcquiredArtifact(
+      input(),
+      deps({
+        downloads: {
+          ...downloads,
+          search: vi.fn(async () => [{ ...matchingItem(), filename: undefined }]),
+        } as never,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      safeSignals: ["download-filename-unavailable"],
+      safeMessage:
+        "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+    });
   });
 
   it("keeps a completed target complete when the browser saved it under a different base name", async () => {
@@ -256,6 +318,37 @@ describe("downloadAcquiredArtifact", () => {
       if (createOverride) expect(revoke).not.toHaveBeenCalled();
       else expect(revoke).toHaveBeenCalledWith("blob:extension");
       expect(close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ["offscreen Blob setup", vi.fn(async () => null), undefined],
+    [
+      "browser download start",
+      undefined,
+      vi.fn(async () => {
+        throw new Error("rejected");
+      }),
+    ],
+  ])(
+    "names a rejected %s instead of leaving a generic delivery failure",
+    async (_, createOverride, downloadOverride) => {
+      await expect(
+        downloadAcquiredArtifact(
+          input(),
+          deps({
+            createOffscreenBlobUrl: createOverride ?? vi.fn(async () => "blob:extension"),
+            downloads: (downloadOverride
+              ? { ...downloads, download: downloadOverride }
+              : downloads) as never,
+          }),
+        ),
+      ).resolves.toMatchObject({
+        ok: false,
+        reason: "start-rejected",
+        safeMessage:
+          "Pack could not start the local filed-return download. Check browser Downloads, then retry.",
+      });
     },
   );
 });

@@ -3,6 +3,10 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsTargetReview,
 } from "../../src/connectors/gst/filed-returns-contracts";
+import {
+  FULL_FISCAL_YEAR_PERIOD,
+  getFiledReturnsFullFiscalYearPeriods,
+} from "../../src/connectors/gst/filed-returns-scope";
 import type * as FiledReturnsTargetReviewModule from "../../src/background/filed-returns-target-review";
 
 const mocks = vi.hoisted(() => ({
@@ -39,6 +43,11 @@ const activeRunMocks = vi.hoisted(() => ({
   releaseFiledReturnsRun: vi.fn(),
   startFiledReturnsRunLeaseRenewal: vi.fn(),
 }));
+const fullFiscalYearRunStateMocks = vi.hoisted(() => ({
+  readMalformedLedgerState: vi.fn(),
+  readPlanLedgersStorageState: vi.fn(),
+  readRetainedPlanLedgers: vi.fn(),
+}));
 
 vi.mock("../../src/background/filed-returns-target-review", async (importOriginal) => ({
   ...(await importOriginal<typeof FiledReturnsTargetReviewModule>()),
@@ -50,6 +59,15 @@ vi.mock("../../src/background/filed-returns-target-review", async (importOrigina
   resolveUnconfirmedFiledReturnsDownload: mocks.resolveUnconfirmedFiledReturnsDownload,
 }));
 vi.mock("../../src/background/filed-returns-active-run", () => activeRunMocks);
+vi.mock(
+  "../../src/background/filed-returns-full-fiscal-year-run-state",
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    readMalformedLedgerState: fullFiscalYearRunStateMocks.readMalformedLedgerState,
+    readPlanLedgersStorageState: fullFiscalYearRunStateMocks.readPlanLedgersStorageState,
+    readRetainedPlanLedgers: fullFiscalYearRunStateMocks.readRetainedPlanLedgers,
+  }),
+);
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
   createMalformedArtifactAcquisitionCheckpointReference:
     mocks.createMalformedArtifactAcquisitionCheckpointReference,
@@ -97,6 +115,12 @@ describe("filed returns retained target scoping", () => {
     activeRunMocks.acquireFiledReturnsRun.mockResolvedValue({ run: { id: "synthetic-run" } });
     activeRunMocks.releaseFiledReturnsRun.mockResolvedValue(undefined);
     activeRunMocks.startFiledReturnsRunLeaseRenewal.mockReturnValue(() => undefined);
+    fullFiscalYearRunStateMocks.readPlanLedgersStorageState.mockResolvedValue({
+      state: "valid",
+      ledgers: [],
+    });
+    fullFiscalYearRunStateMocks.readMalformedLedgerState.mockResolvedValue(null);
+    fullFiscalYearRunStateMocks.readRetainedPlanLedgers.mockResolvedValue([]);
   });
 
   it.each([
@@ -117,6 +141,45 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.responseForFiledReturnsTargetReview).toHaveBeenCalledOnce();
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
     expect(response).toMatchObject({ flowStep: { safeSignals: ["retained-gstr2b-review"] } });
+  });
+
+  it("returns a blocked reason when target-review storage cannot be read before a start", async () => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockRejectedValueOnce(
+      new Error("synthetic target-review read failure"),
+    );
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      storageKeys: {},
+    } as never);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: ["filed-returns-target-review-storage-unavailable"],
+        safeMessage:
+          "Pack could not read saved target recovery and will not start another portal action.",
+        state: "blocked",
+        userAction: {
+          canResume: true,
+          message: "Try again after local recovery state is available.",
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+      flowSummary: {
+        completedPeriods: [],
+        currentPeriod: "June",
+        scope: requestedScope,
+        status: "blocked",
+        totalPeriods: 1,
+      },
+    });
+    expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
 
   it("keeps the retained review bound to its own GSTR-2B bundle target", async () => {
@@ -219,6 +282,129 @@ describe("filed returns retained target scoping", () => {
     });
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
     expect(response).toMatchObject({ flowSummary: { status: "blocked" } });
+  });
+
+  it("returns a blocked reason when retained checkpoint storage cannot be read", async () => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockRejectedValueOnce(
+      new Error("synthetic retained-checkpoint read failure"),
+    );
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      storageKeys: {},
+    } as never);
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        scope: requestedScope,
+        status: "blocked",
+        totalPeriods: 1,
+      },
+      flowStep: {
+        safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
+        state: "blocked",
+        safeMessage:
+          "Pack could not read retained local artifact recovery and will not start another portal action.",
+        userAction: {
+          canResume: true,
+          message: "Try again after local recovery state is available.",
+          type: "RETRY_PORTAL_GENERATION",
+        },
+      },
+    });
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
+  it("derives blocked full-year fallback progress from eligible periods", async () => {
+    const now = new Date("2026-08-26T00:00:00.000Z");
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockRejectedValueOnce(
+      new Error("synthetic retained-checkpoint read failure"),
+    );
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      now: () => now,
+      storageKeys: {},
+    } as never);
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        status: "blocked",
+        totalPeriods: getFiledReturnsFullFiscalYearPeriods("2026-27", now).length,
+      },
+    });
+    if (!response.ok || !("flowSummary" in response) || !response.flowSummary) {
+      throw new Error("Expected blocked fallback summary.");
+    }
+    expect(response.flowSummary?.totalPeriods).not.toBe(12);
+  });
+
+  it.each([
+    [
+      "target-review metadata is malformed",
+      () => {
+        mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValueOnce({
+          state: "malformed",
+        });
+      },
+    ],
+    [
+      "target-review storage is unavailable",
+      () => {
+        mocks.readCurrentFiledReturnsTargetReviewStorageState.mockRejectedValueOnce(
+          new Error("synthetic target-review read failure"),
+        );
+      },
+    ],
+    [
+      "the plan index is malformed",
+      () => {
+        fullFiscalYearRunStateMocks.readPlanLedgersStorageState.mockResolvedValueOnce({
+          state: "malformed",
+        });
+      },
+    ],
+    [
+      "the legacy ledger is malformed",
+      () => {
+        fullFiscalYearRunStateMocks.readMalformedLedgerState.mockResolvedValueOnce({});
+      },
+    ],
+  ])("derives %s full-year blocked progress from eligible periods", async (_label, arrange) => {
+    const now = new Date("2026-08-26T00:00:00.000Z");
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockResolvedValue([]);
+    arrange();
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      now: () => now,
+      storageKeys: {},
+    } as never);
+
+    expect(response).toMatchObject({
+      flowSummary: {
+        status: "blocked",
+        totalPeriods: getFiledReturnsFullFiscalYearPeriods("2026-27", now).length,
+      },
+    });
   });
 
   it("does not scan retained checkpoints when another run already owns the start", async () => {

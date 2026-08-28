@@ -54,9 +54,12 @@ export function supportsFiledReturnsArtifactType(
 ): boolean {
   const offered = filedReturnsOfferedArtifacts(returnType);
   if (artifactType === "PDF_AND_EXCEL") {
-    // The combined selection is literally PDF plus Excel. GSTR-3B offers two artifacts
-    // (PDF and portal data) but no Excel, so it must not qualify.
-    return offered.includes("PDF") && offered.includes("EXCEL");
+    // The wire value is a legacy name; the selection means "every format this
+    // return offers". Reading it literally excluded GSTR-3B, which offers PDF
+    // and portal data but no Excel, and forced a hardcoded exception for
+    // GSTR-2B, whose "all" is three formats. Derive it from the catalogue so a
+    // return qualifies whenever it offers more than one format.
+    return offered.length > 1;
   }
   return offered.includes(artifactType);
 }
@@ -69,31 +72,19 @@ export function normaliseFiledReturnsArtifactType(
   return supportsFiledReturnsArtifactType(returnType, candidate) ? candidate : "PDF";
 }
 
-export function concreteFiledReturnsArtifactTypes(
-  artifactType: FiledReturnsArtifactType | undefined,
-): FiledReturnsConcreteArtifactType[] {
-  if (artifactType === "PDF_AND_EXCEL") return ["PDF", "EXCEL"];
-  if (artifactType === "EXCEL") return ["EXCEL"];
-  if (artifactType === "JSON") return ["JSON"];
-  return ["PDF"];
-}
-
 export function concreteFiledReturnsArtifactTypesForSelection(
   returnType: FiledReturnsReturnType,
   artifactType: FiledReturnsArtifactType | undefined,
 ): FiledReturnsConcreteArtifactType[] {
   const selectedArtifactType = normaliseFiledReturnsArtifactType(returnType, artifactType);
-  if (returnType === "GSTR-2B" && selectedArtifactType === "PDF_AND_EXCEL") {
-    return ["PDF", "EXCEL", "JSON"];
-  }
-  return concreteFiledReturnsArtifactTypes(selectedArtifactType);
+  if (selectedArtifactType === "PDF_AND_EXCEL") return filedReturnsOfferedArtifacts(returnType);
+  return [selectedArtifactType];
 }
 
 export function filedReturnsArtifactLabel(
   artifactType: FiledReturnsArtifactType,
-  returnType?: FiledReturnsReturnType,
+  returnType: FiledReturnsReturnType,
 ): string {
-  if (!returnType) return artifactType === "PDF_AND_EXCEL" ? "All formats" : artifactType;
   return filedReturnsCapabilityArtifactLabel(returnType, artifactType);
 }
 

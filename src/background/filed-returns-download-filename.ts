@@ -1,6 +1,6 @@
 import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
 import {
-  concreteFiledReturnsArtifactTypes,
+  concreteFiledReturnsArtifactTypesForSelection,
   type FiledReturnsArtifactExtension,
   filedReturnsArtifactExtension,
   normaliseFiledReturnsArtifactType,
@@ -11,7 +11,8 @@ const SAFE_DOWNLOAD_ROOT = "complyeaze-pack/gst";
 
 export function safeFiledReturnDownloadFilename(
   scope: FiledReturnsDownloadScope,
-  artifactType: FiledReturnsConcreteArtifactType = concreteFiledReturnsArtifactTypes(
+  artifactType: FiledReturnsConcreteArtifactType = concreteFiledReturnsArtifactTypesForSelection(
+    scope.returnType,
     normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType),
   )[0] ?? "PDF",
   extension: FiledReturnsArtifactExtension = filedReturnsArtifactExtension(artifactType),

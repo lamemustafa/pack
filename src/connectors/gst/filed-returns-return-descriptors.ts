@@ -3,11 +3,10 @@ import {
   filedReturnsScopeId,
   type FiledReturnsReturnType,
 } from "./filed-returns-return-types";
+import { filedReturnsCapability } from "./filed-returns-capabilities";
 
 export interface FiledReturnDescriptor {
-  returnType: FiledReturnsReturnType;
-  label: FiledReturnsReturnType;
-  scopeId: string;
+  label: string;
   signalSlug: string;
   reselectionDestination: "filed-returns" | "return-dashboard";
   detailRoutePattern: RegExp;
@@ -18,12 +17,10 @@ export interface FiledReturnDescriptor {
   systemGeneratedPattern?: RegExp;
 }
 
-export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledReturnDescriptor> = {
+type FiledReturnMechanics = Omit<FiledReturnDescriptor, "label" | "signalSlug">;
+
+const FILED_RETURN_MECHANICS: Record<FiledReturnsReturnType, FiledReturnMechanics> = {
   "GSTR-3B": {
-    returnType: "GSTR-3B",
-    label: "GSTR-3B",
-    scopeId: filedReturnsScopeId("GSTR-3B"),
-    signalSlug: filedReturnsSafeSlug("GSTR-3B"),
     reselectionDestination: "filed-returns",
     detailRoutePattern: /\/returns\/auth\/gstr3b$/i,
     detailHeadingPattern: /\bgstr[\s-]?3b\s*-\s*monthly\s+return\b/i,
@@ -31,10 +28,6 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     systemGeneratedPattern: /\bsystem\s+generated\b.*\bgstr[\s-]?3b\b/i,
   },
   "GSTR-1": {
-    returnType: "GSTR-1",
-    label: "GSTR-1",
-    scopeId: filedReturnsScopeId("GSTR-1"),
-    signalSlug: filedReturnsSafeSlug("GSTR-1"),
     reselectionDestination: "return-dashboard",
     detailRoutePattern: /\/returns\/auth\/gstr1(?:\/|$)/i,
     detailHeadingPattern: /\bgstr[\s-]?1\b/i,
@@ -44,10 +37,6 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
     secondaryDownloadPattern: /\bdownload\s*\(?\s*pdf\s*\)?\b/i,
   },
   "GSTR-2B": {
-    returnType: "GSTR-2B",
-    label: "GSTR-2B",
-    scopeId: filedReturnsScopeId("GSTR-2B"),
-    signalSlug: filedReturnsSafeSlug("GSTR-2B"),
     reselectionDestination: "return-dashboard",
     detailRoutePattern: /\/gstr2b\/auth\/gstr2b\/summary\/?$/i,
     detailHeadingPattern: /\bgstr[^a-z0-9]?2b\b/i,
@@ -59,16 +48,20 @@ export const FILED_RETURN_DESCRIPTORS: Record<FiledReturnsReturnType, FiledRetur
 };
 
 export function filedReturnDescriptor(returnType: FiledReturnsReturnType): FiledReturnDescriptor {
-  return FILED_RETURN_DESCRIPTORS[returnType];
+  return {
+    ...FILED_RETURN_MECHANICS[returnType],
+    label: filedReturnsCapability(returnType).label,
+    signalSlug: filedReturnsSafeSlug(returnType),
+  };
 }
 
 export function filedReturnScopeId(returnType: FiledReturnsReturnType): string {
-  return filedReturnDescriptor(returnType).scopeId;
+  return filedReturnsScopeId(returnType);
 }
 
 export function filedReturnScopedSignal(
   returnType: FiledReturnsReturnType,
   suffix: string,
 ): string {
-  return `filed-${filedReturnDescriptor(returnType).signalSlug}-${suffix}`;
+  return `filed-${filedReturnsSafeSlug(returnType)}-${suffix}`;
 }

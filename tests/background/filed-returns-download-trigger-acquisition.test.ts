@@ -259,17 +259,64 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     });
 
     if (!response.ok || !("flowStep" in response)) throw new Error("expected flow step");
-    const expectedReason =
+    const expectedReason = (
       errorCategory === "unexpected-local-stage-category"
         ? "offscreen-response-invalid"
-        : errorCategory;
+        : errorCategory
+    ) as ArtifactFailureReason;
     expect(response.flowStep).toMatchObject({
       state: "blocked",
+      safeMessage: ARTIFACT_FAILURE_MESSAGES[expectedReason],
       safeSignals: expect.arrayContaining([`artifact-${expectedReason}`]),
     });
     expect(parseDurableFiledReturnsSignals(response.flowStep.safeSignals)).toEqual(
       response.flowStep.safeSignals,
     );
+  });
+
+  it("keeps a rejected full-year staging worker request distinct from delivery uncertainty", async () => {
+    vi.clearAllMocks();
+    captureMocks.acquireGstr3bPdfAfterPreflight.mockImplementationOnce(async (input) => {
+      if (!input.deliver) throw new Error("expected staged delivery");
+      return input.deliver({ base64: "JVBERi0xLjc=", mimeType: "application/pdf" });
+    });
+    captureMocks.stageOffscreenFiledReturn.mockRejectedValueOnce(
+      new Error("synthetic offscreen request rejection"),
+    );
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "PDF",
+      deps: {
+        sendMessageToTabWithInjection: vi.fn(
+          async (_tabId, message) =>
+            ({
+              ok: true,
+              artifact: {
+                ok: true,
+                state: "ready",
+                requestId: message.payload.requestId,
+                safeSignals: ["target-period-verified"],
+              },
+            }) as PackMessageResponse,
+        ),
+        stageCapturedDownloads: {
+          bundleKind: "full-fiscal-year",
+          ledgerId: "full-fiscal-year:12345678-test",
+        },
+        storageKeys: {},
+      },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeMessage: ARTIFACT_FAILURE_MESSAGES["offscreen-unreachable"],
+        safeSignals: expect.arrayContaining(["artifact-offscreen-unreachable"]),
+      },
+    });
   });
 
   it("stages GSTR-3B JSON for a full-year ZIP without creating an artifact download", async () => {

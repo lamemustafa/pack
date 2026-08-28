@@ -113,6 +113,7 @@ vi.mock("../../src/background/offscreen-blob-url", () => ({
 }));
 
 import { reconcileFiledReturnsTargetDownload } from "../../src/background/filed-returns-target-download-recovery";
+import { persistReconciledZipCleanupCheckpoint } from "../../src/background/filed-returns-target-download-recovery";
 import { isFiledReturnsTargetDownloadAttempt } from "../../src/background/filed-returns-target-download-attempt-validation";
 import {
   createSinglePeriodBundleLedger,
@@ -120,7 +121,10 @@ import {
   markSinglePeriodBundleArtifactStaged,
   markSinglePeriodBundleZipDownloadId,
   markSinglePeriodBundleZipIntent,
+  singlePeriodBundleFlowStep,
 } from "../../src/background/filed-returns-single-period-bundle-ledger";
+import { cleanupSinglePeriodBundleStaging } from "../../src/background/filed-returns-single-period-bundle-cleanup";
+import { singlePeriodCleanupCheckpointFailureSignal } from "../../src/connectors/gst/single-period-cleanup-checkpoint";
 import {
   readFiledReturnsTargetReview,
   resolveUnconfirmedFiledReturnsDownload,
@@ -161,6 +165,11 @@ describe("filed returns target download recovery", () => {
     mocks.state.failTargetReviewRemoveOnce = false;
     mocks.state.local = {};
     mocks.state.session = {};
+    mocks.browser.storage.local.get.mockImplementation(async (key: string) =>
+      Object.prototype.hasOwnProperty.call(mocks.state.local, key)
+        ? { [key]: mocks.state.local[key] }
+        : {},
+    );
     mocks.browser.downloads.search.mockResolvedValue([]);
     mocks.browser.downloads.download.mockImplementation(async () => {
       mocks.events.push("download");
@@ -464,16 +473,98 @@ describe("filed returns target download recovery", () => {
         flowStep: {
           state: "blocked",
           safeSignals: expect.arrayContaining([
+            "filed-returns-target-review-required",
             "single-period-opfs-cleared",
             "single-period-cleanup-checkpoint-failed",
+            singlePeriodCleanupCheckpointFailureSignal("callback-failed"),
           ]),
+          safeMessage:
+            "Pack cleared temporary selected-file staging but could not verify its durable recovery checkpoint cleanup.",
         },
       },
     });
     expect(mocks.state.local["pack:single-period-staging"]).toBeDefined();
+    expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
+      safeSignals: expect.arrayContaining([
+        singlePeriodCleanupCheckpointFailureSignal("callback-failed"),
+      ]),
+    });
     expect(mocks.state.session[COMPLETION_KEY]).toBeUndefined();
     expect(mocks.events).toEqual(["opfs:clear", "storage:observing"]);
   });
+
+  it.each([
+    {
+      arrange: () => {
+        const review = reviewFor(ZIP_SCOPE, observingZipAttempt(73));
+        delete review.downloadAttempt;
+        return { deps, flowStep: checkpointFlowStep(), review };
+      },
+      stage: "bundle-mismatch",
+    },
+    {
+      arrange: () => ({
+        deps,
+        flowStep: {
+          connectorId: "gst" as const,
+          safeMessage: "Synthetic incomplete cleanup checkpoint.",
+          safeSignals: [],
+          scopeId: "gst-filed-returns-gstr2b-private-v0",
+          state: "downloaded" as const,
+        },
+        review: reviewFor(ZIP_SCOPE, observingZipAttempt(73)),
+      }),
+      stage: "completion-evidence-missing",
+    },
+    {
+      arrange: () => ({
+        deps: { ...deps, storageKeys: { completion: COMPLETION_KEY } } as never,
+        flowStep: checkpointFlowStep(),
+        review: reviewFor(ZIP_SCOPE, observingZipAttempt(73)),
+      }),
+      stage: "completion-persist-failed",
+    },
+    {
+      arrange: () => {
+        const review = reviewFor(ZIP_SCOPE, observingZipAttempt(73));
+        mocks.state.local[REVIEW_KEY] = review;
+        let targetReviewReads = 0;
+        mocks.browser.storage.local.get.mockImplementation(async (key: string) => {
+          if (key === REVIEW_KEY && ++targetReviewReads === 2) return {};
+          return Object.prototype.hasOwnProperty.call(mocks.state.local, key)
+            ? { [key]: mocks.state.local[key] }
+            : {};
+        });
+        return { deps, flowStep: checkpointFlowStep(), review };
+      },
+      stage: "completion-mismatch",
+    },
+  ] as const)(
+    "retains the cleanup block with the reachable $stage stage",
+    async ({ arrange, stage }) => {
+      const { deps: checkpointDeps, flowStep, review } = arrange();
+
+      const cleanup = await cleanupSinglePeriodBundleStaging({
+        ledgerId: "single-period:dddddddddddddddddddd",
+        onAfterTransientClear: async () => {
+          return Boolean(
+            await persistReconciledZipCleanupCheckpoint(review, flowStep, checkpointDeps),
+          );
+        },
+        scope: ZIP_SCOPE,
+      });
+
+      expect(cleanup).toMatchObject({
+        state: "blocked",
+        safeSignals: expect.arrayContaining([
+          "single-period-opfs-cleared",
+          "single-period-cleanup-checkpoint-failed",
+          singlePeriodCleanupCheckpointFailureSignal(stage),
+        ]),
+        transientStagingCleared: true,
+      });
+    },
+  );
 
   it("recovers from a canonical completion write failure after checkpointed ZIP cleanup", async () => {
     const review = reviewFor(ZIP_SCOPE, observingZipAttempt(73));
@@ -497,6 +588,7 @@ describe("filed returns target download recovery", () => {
           safeSignals: expect.arrayContaining([
             "filed-return-durable-status-rejected",
             "single-period-opfs-cleared",
+            singlePeriodCleanupCheckpointFailureSignal("canonical-completion-persist-failed"),
           ]),
         },
       },
@@ -764,6 +856,41 @@ describe("filed returns target download recovery", () => {
     expect(mocks.state.session[COMPLETION_KEY]).toBeUndefined();
   });
 
+  it("retains a staging-storage read failure instead of relabelling it as malformed", async () => {
+    const review = reviewFor(ZIP_SCOPE, observingZipAttempt(73));
+    mocks.state.local[REVIEW_KEY] = review;
+    mocks.browser.storage.local.get.mockImplementation(async (key: string) => {
+      if (key === "pack:single-period-staging") {
+        throw new Error("synthetic staging storage read failure");
+      }
+      return key === REVIEW_KEY ? { [REVIEW_KEY]: mocks.state.local[REVIEW_KEY] } : {};
+    });
+    mocks.browser.downloads.search.mockResolvedValue([
+      { danger: "safe", exists: true, fileSize: 2048, id: 73, state: "complete" },
+    ]);
+    mocks.observeBrowserDownloadById.mockResolvedValue(completedObservation(73, "generic-binary"));
+
+    const result = await reconcileFiledReturnsTargetDownload(review, deps);
+
+    expect(result).toMatchObject({
+      state: "handled",
+      response: {
+        flowStep: {
+          safeSignals: expect.arrayContaining(["single-period-bundle-state-read-failed"]),
+          state: "blocked",
+        },
+      },
+    });
+    expect(mocks.discardSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
+      safeSignals: expect.arrayContaining(["single-period-bundle-state-read-failed"]),
+    });
+    expect((mocks.state.local[REVIEW_KEY] as FiledReturnsTargetReview).safeSignals).not.toContain(
+      "single-period-bundle-ledger-malformed",
+    );
+    expect(mocks.state.session[COMPLETION_KEY]).toBeUndefined();
+  });
+
   it("repairs the ZIP ledger after restart between the review and bundle download-ID writes", async () => {
     const review = reviewFor(ZIP_SCOPE, observingZipAttempt(73));
     mocks.state.local[REVIEW_KEY] = review;
@@ -838,7 +965,11 @@ describe("filed returns target download recovery", () => {
     const first = await reconcileFiledReturnsTargetDownload(review, deps);
 
     expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
-      safeSignals: expect.arrayContaining(["filed-returns-target-review-clear-failed"]),
+      safeSignals: expect.arrayContaining([
+        "filed-returns-target-review-clear-failed",
+        "filed-returns-target-review-clear-failed:storage-remove-failed",
+        "single-period-cleanup-checkpoint-failed:target-review-clear-failed",
+      ]),
     });
     expect(first).toMatchObject({
       state: "handled",
@@ -923,7 +1054,12 @@ describe("filed returns target download recovery", () => {
       flowSummary: { status: "blocked" },
     });
     expect(mocks.discardSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
-    expect(mocks.state.local[REVIEW_KEY]).toEqual(review);
+    expect(mocks.state.local[REVIEW_KEY]).toMatchObject({
+      safeSignals: expect.arrayContaining([
+        "single-period-opfs-clear-failed",
+        "single-period-zip-recovery-checkpoint-missing",
+      ]),
+    });
   });
 });
 
@@ -1061,6 +1197,19 @@ function observingBundleLedger(downloadId: number) {
     downloadId,
     new Date("2026-07-23T23:59:01.000Z"),
   )!;
+}
+
+function checkpointFlowStep(): PortalFlowStepResult {
+  const stagedEvidence = singlePeriodBundleFlowStep(observingBundleLedger(73));
+  if (!stagedEvidence) throw new Error("expected synthetic staged ZIP evidence");
+  return {
+    ...stagedEvidence,
+    safeSignals: [
+      ...stagedEvidence.safeSignals,
+      "single-period-zip-downloaded",
+      "single-period-opfs-cleared",
+    ],
+  };
 }
 
 function stagedBundleStep(artifactType: "PDF" | "JSON" | "EXCEL"): PortalFlowStepResult {

@@ -1,8 +1,13 @@
+import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
+import { filedReturnsPlanCoverageMessage } from "../../connectors/gst/filed-returns-durable-status";
 import type { PopupPresentationState } from "./presentation-state";
 import { canReconcileFiledReturnsTarget, RunProgress } from "./run-summary";
 import {
+  getFullFiscalYearCleanupCopy,
+  hasConfirmedSinglePeriodBrowserDownload,
+  hasFiledReturnsDownloadFilenameOverride,
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
@@ -29,8 +34,20 @@ export function InlineStatus({
   presentation,
   summary,
 }: InlineStatusProps) {
+  const checkingCleanup =
+    busy === "start-filed-returns-flow" && Boolean(getFullFiscalYearCleanupCopy(summary));
+  const statusRef = React.useRef<HTMLElement>(null);
+  const wasCheckingCleanup = React.useRef(checkingCleanup);
+  React.useEffect(() => {
+    // The clicked guide disappears; bring its replacement feedback into view.
+    if (checkingCleanup && !wasCheckingCleanup.current) statusRef.current?.focus();
+    wasCheckingCleanup.current = checkingCleanup;
+  }, [checkingCleanup]);
   const copy = getInlineStatusCopy(presentation, summary);
   if (!copy) return null;
+  const planCoverageMessage = summary
+    ? filedReturnsPlanCoverageMessage(summary.scope, summary.status, summary.flowStep.safeSignals)
+    : "";
 
   const actionBusy = busy !== null;
   const primaryAction = getInlinePrimaryAction(presentation, summary, {
@@ -43,6 +60,8 @@ export function InlineStatus({
 
   return (
     <section
+      ref={statusRef}
+      tabIndex={checkingCleanup ? -1 : undefined}
       className={`inline-status inline-status-${copy.tone}`}
       aria-live="polite"
       aria-label={copy.title}
@@ -53,18 +72,32 @@ export function InlineStatus({
       <div className="inline-status-content">
         <strong>{copy.title}</strong>
         <p>{copy.body}</p>
-        {presentation.kind === "downloading" && summary ? <RunProgress summary={summary} /> : null}
+        {planCoverageMessage && !copy.body.includes(planCoverageMessage) ? (
+          <p>{planCoverageMessage}</p>
+        ) : null}
+        {presentation.kind === "downloading" &&
+        summary &&
+        !getFullFiscalYearCleanupCopy(summary) ? (
+          <RunProgress summary={summary} />
+        ) : null}
         {primaryAction ? (
           <button
             className="inline-status-primary"
             type="button"
             disabled={actionBusy || Boolean(portalDisabledReason)}
+            aria-describedby={
+              portalDisabledReason ? "inline-status-portal-disabled-reason" : undefined
+            }
             onClick={primaryAction.onClick}
           >
             {actionBusy ? "Working..." : primaryAction.label}
           </button>
         ) : null}
-        {portalDisabledReason ? <p className="muted">{portalDisabledReason}</p> : null}
+        {portalDisabledReason ? (
+          <p className="muted" id="inline-status-portal-disabled-reason">
+            {portalDisabledReason}
+          </p>
+        ) : null}
       </div>
     </section>
   );
@@ -111,19 +144,28 @@ function getInlineStatusCopy(
   summary: FiledReturnsFlowSummary | null,
 ): { body: string; icon: string; title: string; tone: "warning" | "success" | "neutral" } | null {
   if (presentation.kind === "downloading") {
+    const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
     return {
-      body: "Keep the GST Portal tab open while Pack prepares the files.",
-      icon: "↓",
-      title: "Packing your files",
+      body: cleanupCopy
+        ? presentation.body
+        : "Keep the GST Portal tab open while Pack prepares the files.",
+      icon: presentation.icon,
+      title: presentation.title,
       tone: "neutral",
+    };
+  }
+  if (presentation.kind === "ready" && summary?.status === "cancelled") {
+    return {
+      body: presentation.body,
+      icon: "✓",
+      title: presentation.title,
+      tone: "success",
     };
   }
   if (presentation.kind === "complete") {
     const periods = summary?.completedPeriods.length ?? 0;
     const isFullYear = summary?.scope.period === FULL_FISCAL_YEAR_PERIOD;
-    const filenameOverridden =
-      summary?.flowStep.safeSignals.includes("download-filename-overridden") ||
-      summary?.flowStep.safeSignals.includes("zip-download-filename-overridden");
+    const filenameOverridden = hasFiledReturnsDownloadFilenameOverride(summary);
     /**
      * A full-year run carries two separate facts, and `status: "complete"` only
      * knows the first: every period was fetched. `canCompleteFullFiscalYearLedger`
@@ -135,6 +177,14 @@ function getInlineStatusCopy(
      * same had the ZIP never arrived.
      */
     const zipConfirmed = summary?.flowStep.safeSignals.includes("full-fiscal-year-zip-downloaded");
+    if (!isFullYear && !filenameOverridden && !hasConfirmedSinglePeriodBrowserDownload(summary)) {
+      return {
+        body: presentation.body,
+        icon: "!",
+        title: presentation.title,
+        tone: "warning",
+      };
+    }
     // A run where every period was positively not-filed produces no ZIP BY
     // DESIGN and says so through its own signal. Treating that absence as an
     // unconfirmed download would send the user hunting in Downloads for a file
@@ -221,30 +271,46 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "blocked" && summary?.currentPeriod) {
     const signals = new Set(summary.flowStep.safeSignals);
+    // `userAction.message` is the remedy the flow already computed and the
+    // durable summary already persists. Nothing rendered it, so 82 blocked
+    // states told the reader what was wrong and never what to do -- and the
+    // strings below were written to compensate, one page at a time.
+    const remedy = summary.flowStep.userAction?.message;
     const needsTargetReview = signals.has("filed-returns-target-review-required");
     const needsFullFiscalYearRecovery = Boolean(summary.fullFiscalYearRecovery);
     const canReconcileTarget = canReconcileFiledReturnsTarget(summary);
     const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
     return {
-      body: needsTargetReview
-        ? signals.has("artifact-acquisition-session-proof-expired")
-          ? `Pack cannot reconcile ${summary.currentPeriod} after the extension reload cleared its temporary exact-download proof. Check Browser Downloads, then start fresh or cancel and reset.`
-          : canReconcileTarget
-            ? `Resolve ${summary.currentPeriod} before choosing another period. Finish or cancel any open Save dialog, then reconcile the exact browser download.`
-            : canRetryTargetCleanup
-              ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the local cleanup; Pack will not click the GST Portal again.`
-              : signals.has("single-period-zip-incomplete")
-                ? `Resolve ${summary.currentPeriod} before choosing another period. Open More run controls to discard the saved state and start the selected files again, or cancel and reset.`
-                : `Resolve ${summary.currentPeriod} before choosing another period. Check Browser Downloads, then open More run controls to record a manual observation, explicitly start fresh, or cancel and reset.`
-        : needsFullFiscalYearRecovery
-          ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
-          : summary.flowStep.safeMessage,
+      body: withRemedy(
+        needsTargetReview
+          ? signals.has("artifact-acquisition-session-proof-expired")
+            ? `Pack cannot reconcile ${summary.currentPeriod} after the extension reload cleared its temporary exact-download proof. Check Browser Downloads, then start fresh or cancel and reset.`
+            : canReconcileTarget
+              ? `Resolve ${summary.currentPeriod} before choosing another period. Finish or cancel any open Save dialog, then reconcile the exact browser download.`
+              : canRetryTargetCleanup
+                ? `Resolve ${summary.currentPeriod} before choosing another period. Retry the local cleanup; Pack will not click the GST Portal again.`
+                : signals.has("single-period-zip-incomplete")
+                  ? `Resolve ${summary.currentPeriod} before choosing another period. Open More run controls to discard the saved state and start the selected files again, or cancel and reset.`
+                  : `Resolve ${summary.currentPeriod} before choosing another period. Check Browser Downloads, then open More run controls to record a manual observation, explicitly start fresh, or cancel and reset.`
+          : needsFullFiscalYearRecovery
+            ? getFullFiscalYearRecoveryBody(summary.currentPeriod, signals)
+            : summary.flowStep.safeMessage,
+        remedy,
+      ),
       icon: "!",
       title: needsTargetReview
         ? `${summary.currentPeriod} needs review`
         : needsFullFiscalYearRecovery
           ? `Full-year run paused at ${summary.currentPeriod}`
           : `${summary.currentPeriod} needs a quick check`,
+      tone: "warning",
+    };
+  }
+  if (presentation.kind === "blocked" && summary) {
+    return {
+      body: summary.flowStep.safeMessage,
+      icon: "!",
+      title: presentation.title,
       tone: "warning",
     };
   }
@@ -257,6 +323,16 @@ function getInlineStatusCopy(
     };
   }
   return null;
+}
+
+/**
+ * Appends the flow step's own remedy when the body does not already carry it.
+ * The containment check exists because two states currently repeat their remedy
+ * inside `safeMessage`; those copies should come out now that this renders.
+ */
+function withRemedy(body: string, remedy: string | undefined): string {
+  if (!remedy || body.includes(remedy)) return body;
+  return `${body} ${remedy}`;
 }
 
 function getFullFiscalYearRecoveryBody(currentPeriod: string, signals: Set<string>): string {
@@ -295,7 +371,7 @@ export function getInlinePrimaryAction(
   if (!summary) return null;
 
   const signals = new Set(summary.flowStep.safeSignals);
-  if (presentation.kind === "blocked" && summary.fullFiscalYearRecovery) {
+  if (presentation.kind === "blocked" && summary.currentPeriod && summary.fullFiscalYearRecovery) {
     const { gerund, label } = getSavedFullFiscalYearActionDecision(summary);
     return {
       label,

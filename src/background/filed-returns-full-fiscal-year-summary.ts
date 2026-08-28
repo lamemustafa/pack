@@ -20,6 +20,8 @@ import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durabl
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import {
   canCompleteFullFiscalYearLedger,
+  unplannedEligibleFullFiscalYearPeriods,
+  hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedgerStale,
 } from "./filed-returns-full-fiscal-year-ledger";
 
@@ -180,13 +182,16 @@ export function summariseFullFiscalYearLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   now = new Date(),
 ): FiledReturnsFlowSummary {
+  const zipPhaseStep = hasInconsistentFullFiscalYearCompletion(ledger)
+    ? null
+    : fullFiscalYearZipPhaseStep(ledger);
+  ledger = recoveryLedgerView(ledger);
   if (ledger.targets.some((target) => target.status === "download-unconfirmed")) {
     return toFullFiscalYearSummary(ledger, downloadUnconfirmedFullFiscalYearStep(ledger));
   }
-  const zipPhaseStep = fullFiscalYearZipPhaseStep(ledger);
   if (zipPhaseStep) return toFullFiscalYearSummary(ledger, zipPhaseStep);
   if (ledger.status === "complete" && canCompleteFullFiscalYearLedger(ledger)) {
-    return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger));
+    return toFullFiscalYearSummary(ledger, completeFullFiscalYearStep(ledger, now));
   }
   if (hasRecoverableActionRequiredTarget(ledger)) {
     return toFullFiscalYearSummary(ledger, recoverableActionRequiredFullFiscalYearStep(ledger));
@@ -198,10 +203,14 @@ export function summariseFullFiscalYearLedger(
     );
   }
   if (ledger.status === "running") {
-    if (
-      ledger.targets.some((target) => target.status === "running") &&
-      isFullFiscalYearLedgerStale(ledger, now)
-    ) {
+    // Deliberately not gated on a target being `running`. A run also goes stale in the
+    // window after one target finishes and before the next is marked running -- which is
+    // where a dead runner most often leaves it -- and requiring a running target there
+    // meant the ledger reported itself active forever, with no age at which that changed.
+    // Every other verdict for a running ledger (unconfirmed download, ZIP phase, an
+    // action-required target, resume confirmation) is already settled above, so what
+    // reaches here is a run that claims to be progressing and demonstrably is not.
+    if (isFullFiscalYearLedgerStale(ledger, now)) {
       const displayLedger: FiledReturnsFullFiscalYearLedger = {
         ...ledger,
         status: "blocked",
@@ -216,7 +225,6 @@ export function summariseFullFiscalYearLedger(
 
 export function needsResumeConfirmation(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   return (
-    ledger.status !== "complete" &&
     ledger.targets.some((target) => target.status === "pending") &&
     !ledger.targets.some((target) => target.status === "running")
   );
@@ -378,14 +386,15 @@ export function toFullFiscalYearSummary(
   ledger: FiledReturnsFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
 ): FiledReturnsFlowSummary {
+  ledger = recoveryLedgerView(ledger);
   const completedPeriods = ledger.targets
     .filter((target) => COMPLETED_SUMMARY_TARGET_STATUSES.has(target.status))
     .map((target) => target.period);
-  const currentTarget = ledger.targets.find((target) => target.targetId === ledger.currentTargetId);
-  const recoveryTarget =
-    currentTarget && isRecoverableFullFiscalYearTarget(currentTarget)
-      ? currentTarget
-      : ledger.targets.find(isRecoverableFullFiscalYearTarget);
+  const recoveryTarget = fullFiscalYearRecoveryTarget(
+    ledger,
+    flowStep.state === "user-action-required" &&
+      flowStep.safeSignals.includes("full-fiscal-year-run-interrupted"),
+  );
   return {
     scope: ledger.scope,
     status: ledger.status,
@@ -423,11 +432,20 @@ export function toFullFiscalYearSummary(
  * So the fact is restored where it was lost, not patched into each reader. The
  * signal is the existing canonical one and survives durable parsing, so a step
  * built after a restart is indistinguishable from the one the observing run
- * emitted -- which is the point.
+ * emitted -- which is the point. The existing no-export signal likewise needs
+ * its explicit cleaned phase and positively not-filed targets; counts alone
+ * cannot establish that no ZIP was created.
  */
 export function completeFullFiscalYearStep(
   ledger: FiledReturnsFullFiscalYearLedger,
+  now = new Date(),
 ): PortalFlowStepResult {
+  // A plan is fixed at creation and never grows, so a run started mid-year can
+  // finish covering fewer periods than the year now has. Saying only "completed
+  // the full fiscal year run" would leave the reader to discover the gap from a
+  // period count. State it where the outcome is stated.
+  const unplanned = unplannedEligibleFullFiscalYearPeriods(ledger, now);
+  const plannedCount = (ledger.targetPlan ?? ledger.targets).length;
   return {
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
@@ -435,9 +453,45 @@ export function completeFullFiscalYearStep(
     safeSignals: [
       "full-fiscal-year-complete",
       ...(zipPhaseProvesDelivery(ledger.zipPhase) ? ["full-fiscal-year-zip-downloaded"] : []),
+      ...(unplanned.length > 0 ? ["full-fiscal-year-plan-narrower-than-eligible"] : []),
+      ...(ledger.zipPhase === "cleaned-without-export" &&
+      ledger.targets.length > 0 &&
+      ledger.targets.every((target) => target.status === "not-filed")
+        ? ["full-fiscal-year-no-zip-artifacts"]
+        : []),
     ],
-    safeMessage: `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.`,
+    safeMessage:
+      `Pack completed the local full fiscal year run for FY ${ledger.scope.financialYear}.` +
+      (unplanned.length > 0
+        ? ` This run covers the ${plannedCount} ${plannedCount === 1 ? "period" : "periods"} planned when it started; ` +
+          `${unplanned.length} more ${unplanned.length === 1 ? "is" : "are"} eligible now, starting with ${unplanned[0]}. ` +
+          `Start this year again to include ${unplanned.length === 1 ? "it" : "them"}.`
+        : ""),
   };
+}
+
+/** A read-only view: keep the source ledger's revision, identity and timestamps intact. */
+function recoveryLedgerView(
+  ledger: FiledReturnsFullFiscalYearLedger,
+): FiledReturnsFullFiscalYearLedger {
+  return hasInconsistentFullFiscalYearCompletion(ledger) ||
+    (ledger.status === "complete" && fullFiscalYearZipPhaseStep(ledger) !== null)
+    ? { ...ledger, status: "blocked" }
+    : ledger;
+}
+
+function fullFiscalYearRecoveryTarget(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  interrupted = false,
+): FiledReturnsFullFiscalYearTarget | undefined {
+  const priorityTarget =
+    ledger.targets.find((target) => target.status === "download-unconfirmed") ??
+    (interrupted ? ledger.targets.find((target) => target.status === "running") : undefined);
+  if (priorityTarget) return priorityTarget;
+  const currentTarget = ledger.targets.find((target) => target.targetId === ledger.currentTargetId);
+  return currentTarget && isRecoverableFullFiscalYearTarget(currentTarget)
+    ? currentTarget
+    : ledger.targets.find(isRecoverableFullFiscalYearTarget);
 }
 
 function isRecoverableFullFiscalYearTarget(target: FiledReturnsFullFiscalYearTarget): boolean {
@@ -505,10 +559,7 @@ export function blockedFullFiscalYearStep(
 function recoverableActionRequiredFullFiscalYearStep(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): PortalFlowStepResult {
-  const target =
-    (ledger.currentTargetId
-      ? ledger.targets.find((candidate) => candidate.targetId === ledger.currentTargetId)
-      : null) ?? ledger.targets.find((candidate) => candidate.status !== "pending");
+  const target = fullFiscalYearRecoveryTarget(ledger);
   if (!target) return blockedFullFiscalYearStep("full-fiscal-year-run-needs-action", ledger);
   const durableTargetStatus = parseDurableTargetStatus(
     {
@@ -540,15 +591,16 @@ function recoverableActionRequiredFullFiscalYearStep(
 export function downloadUnconfirmedFullFiscalYearStep(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): PortalFlowStepResult {
-  const target = ledger.targets.find((candidate) => candidate.status === "download-unconfirmed");
+  const target = fullFiscalYearRecoveryTarget(ledger);
   return {
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "user-action-required",
     safeSignals: ["full-fiscal-year-download-unconfirmed"],
-    safeMessage: target
-      ? `Pack could not confirm the browser download for ${target.period}. Check Downloads before retrying this period.`
-      : "Pack could not confirm one browser download. Check Downloads before retrying.",
+    safeMessage:
+      target?.status === "download-unconfirmed"
+        ? `Pack could not confirm the browser download for ${target.period}. Check Downloads before retrying this period.`
+        : "Pack could not confirm one browser download. Check Downloads before retrying.",
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: `Check browser Downloads first. Retry only if no filed ${ledger.scope.returnType} ${artifactLabel(ledger)} appeared.`,
@@ -560,15 +612,16 @@ export function downloadUnconfirmedFullFiscalYearStep(
 export function interruptedFullFiscalYearStep(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): PortalFlowStepResult {
-  const target = ledger.targets.find((candidate) => candidate.status === "running");
+  const target = fullFiscalYearRecoveryTarget(ledger, true);
   return {
     connectorId: "gst",
     scopeId: filedReturnsScopeId(ledger.scope.returnType),
     state: "user-action-required",
     safeSignals: ["full-fiscal-year-run-interrupted"],
-    safeMessage: target
-      ? `Pack stopped before it could confirm the result for ${target.period}. Check Downloads before starting again.`
-      : `Pack stopped before it could confirm the FY ${ledger.scope.financialYear} run. Check Downloads before starting again.`,
+    safeMessage:
+      target?.status === "running"
+        ? `Pack stopped before it could confirm the result for ${target.period}. Check Downloads before starting again.`
+        : `Pack stopped before it could confirm the FY ${ledger.scope.financialYear} run. Check Downloads before starting again.`,
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: `Check browser Downloads first. Retry only after confirming that no duplicate filed ${ledger.scope.returnType} ${artifactLabel(ledger)} was saved.`,

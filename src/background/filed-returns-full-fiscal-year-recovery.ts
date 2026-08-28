@@ -11,10 +11,7 @@ import type {
   FullFiscalYearTargetRecoveryPayload,
   PackMessageResponse,
 } from "../connectors/gst/messages";
-import {
-  isFullFiscalYearLedger,
-  markFullFiscalYearTargetTerminal,
-} from "./filed-returns-full-fiscal-year-ledger";
+import { markFullFiscalYearTargetTerminal } from "./filed-returns-full-fiscal-year-ledger";
 import { toFullFiscalYearSummary } from "./filed-returns-full-fiscal-year-summary";
 import { clearFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { normaliseFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
@@ -22,6 +19,11 @@ import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-type
 import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 import { readMalformedLedgerState } from "./filed-returns-full-fiscal-year-run-state";
+import {
+  persistLedger as persistPlanLedger,
+  readLedgerById,
+  removeLedger as removePlanLedger,
+} from "./filed-returns-full-fiscal-year-run-state";
 
 const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
   "pending",
@@ -48,6 +50,7 @@ export interface FullFiscalYearTargetRecoveryDeps {
   storageKeys: {
     completion?: string;
     fullFiscalYearLedger: string;
+    fullFiscalYearLedgerIndex?: string;
     targetReview?: string;
   };
   now?: () => Date;
@@ -85,7 +88,7 @@ export async function prepareFullFiscalYearTargetRetry(
         ok: false,
         response: recoveryActionUnavailableResponse(
           "full-fiscal-year-run-interrupted",
-          `Pack cannot safely retry interrupted ${checked.target.period} because a staged file may exist without its final ledger checkpoint. Discard this saved run before starting again.`,
+          "Pack cannot safely retry an interrupted period because a staged file may exist without its final ledger checkpoint. Discard this saved run before starting again.",
           checked.ledger,
         ),
       };
@@ -211,7 +214,7 @@ async function discardFullFiscalYearRun(
   };
   const flowSummary = toFullFiscalYearSummary(cancelledLedger, clearedFlowStep);
   delete flowSummary.fullFiscalYearRecovery;
-  await browser.storage.local.remove(deps.storageKeys.fullFiscalYearLedger);
+  await removePlanLedger(deps, cancelledLedger);
   await persistSummary(flowSummary, deps);
   await clearLegacyTargetReview(target, deps);
   return { ok: true, flowStep: clearedFlowStep, flowSummary };
@@ -241,7 +244,7 @@ async function readRecoverableFullFiscalYearTarget(
     }
   | { response: PackMessageResponse }
 > {
-  const ledger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  const ledger = await readLedgerById(deps, payload.ledgerId);
   if (!ledger) {
     return {
       response: recoveryActionUnavailableResponse(
@@ -403,17 +406,11 @@ function recoveryActionUnavailableResponse(
   };
 }
 
-async function readLedger(key: string): Promise<FiledReturnsFullFiscalYearLedger | null> {
-  const values = await browser.storage.local.get(key);
-  const ledger = values[key];
-  return isFullFiscalYearLedger(ledger) ? ledger : null;
-}
-
 async function persistLedger(
   ledger: FiledReturnsFullFiscalYearLedger,
   deps: FullFiscalYearTargetRecoveryDeps,
 ): Promise<void> {
-  await browser.storage.local.set({ [deps.storageKeys.fullFiscalYearLedger]: ledger });
+  await persistPlanLedger(deps, ledger);
 }
 
 async function persistSummary(

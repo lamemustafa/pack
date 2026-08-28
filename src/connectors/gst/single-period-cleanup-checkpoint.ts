@@ -26,3 +26,11 @@ export function singlePeriodCleanupCheckpointFailureSignal(
 ): `single-period-cleanup-checkpoint-failed:${SinglePeriodCleanupCheckpointFailureStage}` {
   return `single-period-cleanup-checkpoint-failed:${stage}`;
 }
+
+export function isSinglePeriodCleanupCheckpointFailureSignal(
+  signal: string,
+): signal is `single-period-cleanup-checkpoint-failed:${SinglePeriodCleanupCheckpointFailureStage}` {
+  return SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES.some(
+    (stage) => signal === singlePeriodCleanupCheckpointFailureSignal(stage),
+  );
+}

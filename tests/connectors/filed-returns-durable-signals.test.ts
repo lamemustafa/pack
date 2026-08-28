@@ -14,11 +14,33 @@ import {
   SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES,
   singlePeriodCleanupCheckpointFailureSignal,
 } from "../../src/connectors/gst/single-period-cleanup-checkpoint";
+import {
+  FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES,
+  filedReturnsTargetReviewClearFailureSignal,
+} from "../../src/connectors/gst/filed-returns-target-review-clear";
+import {
+  ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS,
+  artifactAcquisitionCheckpointClearFailureSignal,
+} from "../../src/connectors/gst/artifact-acquisition-checkpoint-clear";
+import {
+  FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS,
+  filedReturnsArtifactProgressFailureSignal,
+} from "../../src/connectors/gst/filed-returns-artifact-progress-recovery";
 import { scoreFiledReturnDownloadCandidate } from "../../src/connectors/gst/filed-returns-download-candidates";
 import { scoreFiledReturnsSummaryModalDismissalCandidate } from "../../src/connectors/gst/filed-returns-navigation-candidates";
 import { detectSafeSignals } from "../../src/connectors/gst/filed-returns-observer-signals";
 
 describe("filed-return durable signal contract", () => {
+  it.each([
+    "full-fiscal-year-target-plan-invalid",
+    "full-fiscal-year-ledger-malformed",
+    "full-fiscal-year-pinned-gst-tab-unavailable",
+    "full-fiscal-year-gst-tab-session-unavailable",
+    "full-fiscal-year-plan-narrower-than-eligible",
+  ])("retains the plan runner signal %s alongside catalogue diagnostics", (signal) => {
+    const signals = [signal, "filed-returns-target-review-clear-failed:storage-remove-failed"];
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+  });
   // Every successful GSTR-2B run emits this signal. It was not in the allowlist,
   // so `persistLedgerAndSummary` rejected the whole array and removed the
   // canonical session summary -- letting a download proceed with no recoverable
@@ -127,11 +149,16 @@ describe("filed-return durable signal contract", () => {
     }
   });
 
-  it("retains the filename-free ZIP override marker", () => {
-    expect(isDurableFiledReturnsSignal("zip-download-filename-overridden")).toBe(true);
-    expect(parseDurableFiledReturnsSignals(["zip-download-filename-overridden"])).toEqual([
-      "zip-download-filename-overridden",
-    ]);
+  it.each([
+    "download-filename-unavailable",
+    "download-filename-overridden",
+    "zip-download-filename-item-unavailable",
+    "zip-download-filename-overridden",
+    "zip-download-filename-search-unavailable",
+    "zip-download-filename-unavailable",
+  ])("retains the fixed filename outcome %s", (signal) => {
+    expect(isDurableFiledReturnsSignal(signal)).toBe(true);
+    expect(parseDurableFiledReturnsSignals([signal])).toEqual([signal]);
   });
 
   it("admits every bounded ZIP-export error category for durable recovery", () => {
@@ -160,6 +187,7 @@ describe("filed-return durable signal contract", () => {
   it("retains artifact acquisition recovery signals", () => {
     const signals = [
       "artifact-acquisition-checkpoint-malformed",
+      "artifact-acquisition-checkpoint-storage-unavailable",
       "artifact-acquisition-checkpoint-clear-failed",
       "artifact-acquisition-download-interrupted",
       "artifact-acquisition-download-reconciled",
@@ -168,6 +196,58 @@ describe("filed-return durable signal contract", () => {
     expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
     expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
   });
+
+  it("retains the fixed target-review storage-unavailable signal", () => {
+    const signals = ["filed-returns-target-review-storage-unavailable"];
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
+  });
+
+  it("retains the fixed GST tab-focus-unavailable signal", () => {
+    const signals = ["filed-returns-gst-tab-focus-unavailable"];
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
+  });
+
+  it("retains every bounded artifact-checkpoint clear failure reason", () => {
+    const signals = ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS.map(
+      artifactAcquisitionCheckpointClearFailureSignal,
+    );
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
+    expect(
+      isDurableFiledReturnsSignal("artifact-acquisition-checkpoint-clear-failed:private-value"),
+    ).toBe(false);
+  });
+
+  it.each(ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS)(
+    "emits the %s artifact-checkpoint clear reason in its durable signal",
+    (reason) => {
+      expect(artifactAcquisitionCheckpointClearFailureSignal(reason)).toBe(
+        `artifact-acquisition-checkpoint-clear-failed:${reason}`,
+      );
+    },
+  );
+
+  it("retains only the fixed selected-artifact progress failure signals", () => {
+    const signals = FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS.map(
+      filedReturnsArtifactProgressFailureSignal,
+    );
+
+    expect(parseDurableFiledReturnsSignals(signals)).toEqual(signals);
+    expect(signals.every(isDurableFiledReturnsSignal)).toBe(true);
+    expect(isDurableFiledReturnsSignal("filed-return-artifact-progress-private-value")).toBe(false);
+  });
+
+  it.each(FILED_RETURNS_ARTIFACT_PROGRESS_FAILURE_REASONS)(
+    "emits the %s selected-artifact progress reason in its durable signal",
+    (reason) => {
+      expect(filedReturnsArtifactProgressFailureSignal(reason)).toBe(
+        `filed-return-artifact-progress-${reason}`,
+      );
+    },
+  );
 
   it("retains categorical artifact page-identity diagnostics", () => {
     const signals = [
@@ -269,6 +349,35 @@ describe("filed-return durable signal contract", () => {
       isDurableFiledReturnsSignal("single-period-cleanup-checkpoint-failed:private-value"),
     ).toBe(false);
   });
+
+  it.each(SINGLE_PERIOD_CLEANUP_CHECKPOINT_FAILURE_STAGES)(
+    "emits the %s cleanup-checkpoint stage in its durable signal",
+    (stage) => {
+      expect(singlePeriodCleanupCheckpointFailureSignal(stage)).toBe(
+        `single-period-cleanup-checkpoint-failed:${stage}`,
+      );
+    },
+  );
+
+  it("accepts only the closed target-review clear failure stages", () => {
+    for (const stage of FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES) {
+      expect(isDurableFiledReturnsSignal(filedReturnsTargetReviewClearFailureSignal(stage))).toBe(
+        true,
+      );
+    }
+    expect(
+      isDurableFiledReturnsSignal("filed-returns-target-review-clear-failed:private-value"),
+    ).toBe(false);
+  });
+
+  it.each(FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES)(
+    "emits the %s target-review clear stage in its durable signal",
+    (stage) => {
+      expect(filedReturnsTargetReviewClearFailureSignal(stage)).toBe(
+        `filed-returns-target-review-clear-failed:${stage}`,
+      );
+    },
+  );
 
   it("continues to reject unknown, interpolated, duplicate, and over-cap signal vectors", () => {
     for (const suffix of [

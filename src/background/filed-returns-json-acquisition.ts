@@ -12,7 +12,7 @@ type JsonAcquisitionResult =
       safeMessage?: string;
       safeSignals: string[];
     }
-  | { ok: false; reason: string; safeSignals: string[] };
+  | { ok: false; reason: string; safeMessage?: string; safeSignals: string[] };
 type MainWorldJsonCaptureResult = { ok: true; base64: string } | { ok: false; reason: string };
 
 export async function acquireFiledReturnJsonInMainWorld(input: {
@@ -82,7 +82,12 @@ export async function acquireFiledReturnJsonInMainWorld(input: {
         safeSignals: delivery.safeSignals,
         ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
       }
-    : { ok: false, reason: delivery.reason, safeSignals: delivery.safeSignals };
+    : {
+        ok: false,
+        reason: delivery.reason,
+        ...(delivery.safeMessage ? { safeMessage: delivery.safeMessage } : {}),
+        safeSignals: delivery.safeSignals,
+      };
 }
 
 /**

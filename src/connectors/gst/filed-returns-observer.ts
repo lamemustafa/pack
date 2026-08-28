@@ -13,6 +13,8 @@ export type {
   FiledReturnsObservationState,
 } from "./filed-returns-observer-types";
 
+const DEFAULT_SCOPE_ID = scopeIdForVisibleReturnLabel("GSTR-3B");
+
 export function observeFiledReturnsPageText(
   text: string,
   hints: FiledReturnsObservationHints = {},
@@ -24,7 +26,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: DEFAULT_SCOPE_ID,
       state: "login-required",
       safeSignals: ["login"],
       safeMessage: "Sign in to the GST Portal, then reopen Pack.",
@@ -40,7 +42,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: DEFAULT_SCOPE_ID,
       state: "wrong-page",
       safeSignals,
       safeMessage: "Navigate to Services > Returns > View Filed Returns.",
@@ -56,7 +58,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: DEFAULT_SCOPE_ID,
       state: "detail-summary-modal-open",
       safeSignals,
       safeMessage:
@@ -68,7 +70,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: DEFAULT_SCOPE_ID,
       state: "ready",
       safeSignals,
       safeMessage: "Filed GSTR-3B PDF controls appear ready for the private spike.",
@@ -82,7 +84,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-gstr2b-private-v0",
+      scopeId: scopeIdForVisibleReturnLabel("GSTR-2B"),
       state: "ready",
       safeSignals,
       safeMessage: "GSTR-2B download controls appear ready.",
@@ -97,7 +99,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+      scopeId: scopeIdForVisibleReturnLabel("GSTR-1"),
       state: "ready",
       safeSignals,
       safeMessage: "Filed GSTR-1 download controls appear ready.",
@@ -108,7 +110,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: DEFAULT_SCOPE_ID,
       state: "filed-return-results-visible",
       safeSignals,
       safeMessage:
@@ -120,7 +122,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: DEFAULT_SCOPE_ID,
       state: "filters-required",
       safeSignals,
       safeMessage:
@@ -138,7 +140,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: DEFAULT_SCOPE_ID,
       state: "page-settling",
       safeSignals,
       safeMessage: "The filed returns page route is open and Pack is waiting for the form to load.",
@@ -153,7 +155,7 @@ export function observeFiledReturnsPageText(
     return {
       connectorId: "gst",
       pageKind: "gst-filed-returns",
-      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      scopeId: DEFAULT_SCOPE_ID,
       state: "download-not-visible",
       safeSignals,
       safeMessage:

@@ -39,6 +39,7 @@ describe("filed returns private observer", () => {
     );
 
     expect(observation.state).toBe("ready");
+    expect(observation.scopeId).toBe("gst-filed-returns-gstr3b-pdf-private-v0");
     expect(observation.safeSignals).toEqual(
       expect.arrayContaining(["filed-returns-heading", "gstr-3b", "download-filed-gstr-3b"]),
     );

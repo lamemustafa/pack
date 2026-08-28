@@ -3,6 +3,7 @@ import type {
   FiledReturnsFullFiscalYearLedger,
   FiledReturnsFullFiscalYearTarget,
   FiledReturnsFullFiscalYearTargetStatus,
+  FiledReturnsLedgerPlanTarget,
 } from "../connectors/gst/filed-returns-contracts";
 import { isCleanedZipPhase, CLEANED_ZIP_PHASES } from "../connectors/gst/filed-returns-contracts";
 import {
@@ -32,7 +33,7 @@ import {
   isValidFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
 
-export const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-monthly-v2";
+export const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-targets-v3";
 
 export function canonicalFullFiscalYearPlanPeriods(
   financialYear: string,
@@ -50,30 +51,42 @@ export function canonicalFullFiscalYearPlanPeriods(
 export function hasCanonicalFullFiscalYearTargetPlan(
   ledger: Pick<
     FiledReturnsFullFiscalYearLedger,
-    "eligibleThrough" | "planVersion" | "scope" | "targets"
+    "eligibleThrough" | "planVersion" | "scope" | "targetPlan" | "targets"
   >,
 ): boolean {
   if (ledger.planVersion !== FULL_FISCAL_YEAR_PLAN_VERSION) return false;
-  const periods = canonicalFullFiscalYearPlanPeriods(
+  if (!ledger.targetPlan || ledger.targetPlan.length === 0) return false;
+  const canonicalPeriods = canonicalFullFiscalYearPlanPeriods(
     ledger.scope.financialYear,
     ledger.eligibleThrough,
   );
-  return Boolean(periods && targetsMatchPeriods(ledger, periods));
+  return Boolean(
+    canonicalPeriods &&
+    ledger.targetPlan.length === canonicalPeriods.length &&
+    ledger.targetPlan.every((target, index) => target.period === canonicalPeriods[index]) &&
+    targetsMatchRecordedPlan(ledger.targets, ledger.targetPlan),
+  );
 }
 
-export function hasLegacyCanonicalFullFiscalYearTargetPrefix(
+function hasLegacyCanonicalFullFiscalYearTargetPrefix(
   ledger: Pick<
     FiledReturnsFullFiscalYearLedger,
-    "eligibleThrough" | "planVersion" | "scope" | "targets"
+    "eligibleThrough" | "planVersion" | "scope" | "targetPlan" | "targets"
   >,
 ): boolean {
-  if (ledger.planVersion !== undefined || ledger.eligibleThrough !== undefined) return false;
+  if (
+    ledger.planVersion !== undefined ||
+    ledger.eligibleThrough !== undefined ||
+    ledger.targetPlan !== undefined
+  ) {
+    return false;
+  }
   const maximumPeriods = canonicalFullFiscalYearPlanPeriods(ledger.scope.financialYear, "March");
   return Boolean(
     maximumPeriods &&
     ledger.targets.length > 0 &&
     ledger.targets.length <= maximumPeriods.length &&
-    targetsMatchPeriods(ledger, maximumPeriods.slice(0, ledger.targets.length)),
+    ledger.targets.every((target, index) => target.period === maximumPeriods[index]),
   );
 }
 
@@ -90,39 +103,11 @@ export function isCanonicalFullFiscalYearPeriodPlan(
   );
 }
 
-function targetsMatchPeriods(
-  ledger: Pick<FiledReturnsFullFiscalYearLedger, "scope" | "targets">,
-  periods: readonly FiledReturnsMonth[],
-): boolean {
-  return (
-    ledger.targets.length === periods.length &&
-    ledger.targets.every((target, index) =>
-      targetMatchesPlanPeriod(target, ledger.scope, periods[index]),
-    )
-  );
-}
-
 export function durableFullFiscalYearArtifactSignals(signals: readonly string[]): string[] {
   return signals.filter(
     (signal) =>
       /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|JSON|EXCEL)$/.test(signal) ||
       /^full-fiscal-year-opfs-staged:(?:PDF|JSON|EXCEL)$/.test(signal),
-  );
-}
-
-function targetMatchesPlanPeriod(
-  target: FiledReturnsFullFiscalYearTarget,
-  scope: FiledReturnsFullFiscalYearLedger["scope"],
-  period: FiledReturnsMonth | undefined,
-): boolean {
-  if (!period || target.period !== period) return false;
-  const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
-  const targetId = createTargetId(scope.financialYear, period, scope.returnType, artifactType);
-  return (
-    target.targetId === targetId &&
-    target.financialYear === scope.financialYear &&
-    target.returnType === scope.returnType &&
-    normaliseFiledReturnsArtifactType(target.returnType, target.artifactType) === artifactType
   );
 }
 
@@ -183,10 +168,13 @@ const LEDGER_KEYS = [
   "lastReconciledAt",
   "ledgerId",
   "planVersion",
+  "portalTabId",
+  "portalTabSessionId",
   "revision",
   "schemaVersion",
   "scope",
   "status",
+  "targetPlan",
   "targets",
   "updatedAt",
   "zipDownloadAttempt",
@@ -233,6 +221,12 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
   ) {
     return false;
   }
+  if (
+    (ledger.portalTabId === undefined) !== (ledger.portalTabSessionId === undefined) ||
+    (ledger.portalTabSessionId !== undefined && !isBoundedString(ledger.portalTabSessionId, 1, 120))
+  ) {
+    return false;
+  }
   if (!ledger.status || !VALID_LEDGER_STATUSES.has(ledger.status)) return false;
   if (ledger.zipPhase !== undefined && !VALID_ZIP_PHASES.has(ledger.zipPhase)) {
     return false;
@@ -251,6 +245,12 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
     return false;
   }
   if (!isFullFiscalYearScope(ledger.scope)) return false;
+  if (
+    ledger.portalTabId !== undefined &&
+    (!Number.isSafeInteger(ledger.portalTabId) || ledger.portalTabId < 0)
+  ) {
+    return false;
+  }
   if (ledger.currentTargetId !== undefined && !isBoundedString(ledger.currentTargetId, 1, 120)) {
     return false;
   }
@@ -272,25 +272,23 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
   ) {
     return false;
   }
-  const hasPlanVersion = ledger.planVersion !== undefined;
-  const hasEligibleThrough = ledger.eligibleThrough !== undefined;
-  if (hasPlanVersion !== hasEligibleThrough) return false;
-  if (hasPlanVersion) {
-    if (
-      ledger.planVersion !== FULL_FISCAL_YEAR_PLAN_VERSION ||
-      !hasCanonicalFullFiscalYearTargetPlan(ledger as FiledReturnsFullFiscalYearLedger)
-    ) {
-      return false;
-    }
-  } else if (
-    ledger.status === "complete" ||
-    ledger.zipPhase !== undefined ||
-    ledger.zipDownloadAttempt !== undefined ||
-    !hasLegacyCanonicalFullFiscalYearTargetPrefix(ledger as FiledReturnsFullFiscalYearLedger)
-  ) {
-    return false;
+  const hasRecordedPlan = ledger.planVersion !== undefined || ledger.eligibleThrough !== undefined;
+  if (hasRecordedPlan) {
+    return (
+      ledger.planVersion === FULL_FISCAL_YEAR_PLAN_VERSION &&
+      ledger.eligibleThrough !== undefined &&
+      isTargetPlan(ledger.targetPlan) &&
+      hasCanonicalFullFiscalYearTargetPlan(ledger as FiledReturnsFullFiscalYearLedger)
+    );
   }
-  return true;
+  // Legacy plans can be resumed, but never completed or zipped without the
+  // recorded target plan that proves their exact intended scope.
+  return (
+    ledger.status !== "complete" &&
+    ledger.zipPhase === undefined &&
+    ledger.zipDownloadAttempt === undefined &&
+    hasLegacyCanonicalFullFiscalYearTargetPrefix(ledger as FiledReturnsFullFiscalYearLedger)
+  );
 }
 
 function isValidZipDownloadAttempt(ledger: Partial<FiledReturnsFullFiscalYearLedger>): boolean {
@@ -365,20 +363,26 @@ function isFullFiscalYearTarget(
 ): target is FiledReturnsFullFiscalYearTarget {
   if (!hasOnlyKeys(target as Record<string, unknown>, TARGET_KEYS)) return false;
   if (!isBoundedString(target.targetId, 1, 120)) return false;
-  if (target.financialYear !== scope.financialYear) return false;
-  if (!isFiledReturnsMonth(target.period)) return false;
-  if (target.returnType !== scope.returnType) return false;
-  const artifactType = normaliseFiledReturnsArtifactType(target.returnType, target.artifactType);
+  const financialYear = target.financialYear;
+  const period = target.period;
+  const returnType = target.returnType;
+  if (!isConsecutiveFinancialYear(financialYear) || !isFiledReturnsMonth(period)) return false;
+  if (!returnType || !isFiledReturnsReturnType(returnType)) return false;
+  // Every target belongs to its ledger's scope. This was briefly relaxed so one
+  // plan could hold mixed return types, but nothing constructs such a plan and
+  // the plan index keys records by `returnType:financialYear:artifactType`, so a
+  // mixed plan could not be stored even if one existed. A guard loosened for an
+  // absent capability only widens what a corrupt record can claim.
+  if (financialYear !== scope.financialYear) return false;
+  if (returnType !== scope.returnType) return false;
+  const artifactType = normaliseFiledReturnsArtifactType(returnType, target.artifactType);
   const ledgerArtifactType = normaliseFiledReturnsArtifactType(
     scope.returnType,
     scope.artifactType,
   );
   if (artifactType !== ledgerArtifactType) return false;
   if (target.artifactType !== undefined && target.artifactType !== artifactType) return false;
-  if (
-    target.targetId !==
-    createTargetId(scope.financialYear, target.period, target.returnType, artifactType)
-  ) {
+  if (target.targetId !== createTargetId(financialYear, period, returnType, artifactType)) {
     return false;
   }
   if (!target.status || !VALID_TARGET_STATUSES.has(target.status)) return false;
@@ -395,9 +399,9 @@ function isFullFiscalYearTarget(
   const durableStatus = parseDurableTargetStatus(
     {
       artifactType,
-      financialYear: target.financialYear,
-      period: target.period,
-      returnType: target.returnType,
+      financialYear,
+      period,
+      returnType,
     },
     target.status,
     target.safeSignals,
@@ -408,9 +412,9 @@ function isFullFiscalYearTarget(
     !isHistoricalDurableTargetMessage(
       {
         artifactType,
-        financialYear: target.financialYear,
-        period: target.period,
-        returnType: target.returnType,
+        financialYear,
+        period,
+        returnType,
       },
       target.status,
       durableStatus.safeSignals,
@@ -425,9 +429,9 @@ function isFullFiscalYearTarget(
   if (
     !isValidFiledReturnsDownloadDiagnosticState(target, {
       artifactType: target.artifactType,
-      financialYear: target.financialYear,
-      period: target.period,
-      returnType: target.returnType,
+      financialYear,
+      period,
+      returnType,
     })
   ) {
     return false;
@@ -438,9 +442,9 @@ function isFullFiscalYearTarget(
       target,
       {
         artifactType: target.artifactType,
-        financialYear: target.financialYear,
-        period: target.period,
-        returnType: target.returnType,
+        financialYear,
+        period,
+        returnType,
       },
       target.safeSignals ?? [],
       "full-fiscal-year",
@@ -455,6 +459,66 @@ function isFullFiscalYearTarget(
     return false;
   }
   return true;
+}
+
+function isTargetPlan(input: unknown): input is FiledReturnsLedgerPlanTarget[] {
+  if (!Array.isArray(input) || input.length === 0) return false;
+  const targetIds = new Set<string>();
+  return input.every((target) => {
+    if (!target || typeof target !== "object") return false;
+    if (!hasOnlyKeys(target as Record<string, unknown>, PLAN_TARGET_KEYS)) return false;
+    const candidate = target as Partial<FiledReturnsLedgerPlanTarget>;
+    if (!isBoundedString(candidate.targetId, 1, 120)) return false;
+    const financialYear = candidate.financialYear;
+    const period = candidate.period;
+    const returnType = candidate.returnType;
+    if (!isConsecutiveFinancialYear(financialYear)) return false;
+    if (!isFiledReturnsMonth(period)) return false;
+    if (!returnType || !isFiledReturnsReturnType(returnType)) return false;
+    const artifactType = normaliseFiledReturnsArtifactType(returnType, candidate.artifactType);
+    if (!supportsFiledReturnsArtifactType(returnType, artifactType)) return false;
+    if (candidate.artifactType !== undefined && candidate.artifactType !== artifactType)
+      return false;
+    if (candidate.targetId !== createTargetId(financialYear, period, returnType, artifactType)) {
+      return false;
+    }
+    if (targetIds.has(candidate.targetId)) return false;
+    targetIds.add(candidate.targetId);
+    return true;
+  });
+}
+
+const PLAN_TARGET_KEYS = [
+  "artifactType",
+  "financialYear",
+  "period",
+  "returnType",
+  "targetId",
+] as const;
+
+function targetsMatchRecordedPlan(
+  targets: readonly FiledReturnsFullFiscalYearTarget[],
+  targetPlan: readonly FiledReturnsLedgerPlanTarget[],
+): boolean {
+  return (
+    targets.length === targetPlan.length &&
+    targets.every((target, index) => targetMatchesRecordedPlanTarget(target, targetPlan[index]))
+  );
+}
+
+function targetMatchesRecordedPlanTarget(
+  target: FiledReturnsFullFiscalYearTarget,
+  planTarget: FiledReturnsLedgerPlanTarget | undefined,
+): boolean {
+  if (!planTarget) return false;
+  return (
+    target.targetId === planTarget.targetId &&
+    target.financialYear === planTarget.financialYear &&
+    target.period === planTarget.period &&
+    target.returnType === planTarget.returnType &&
+    normaliseFiledReturnsArtifactType(target.returnType, target.artifactType) ===
+      normaliseFiledReturnsArtifactType(planTarget.returnType, planTarget.artifactType)
+  );
 }
 
 function isFiledReturnsMonth(input: unknown): input is FiledReturnsMonth {

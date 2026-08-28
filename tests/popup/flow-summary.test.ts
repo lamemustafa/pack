@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   canRetryFiledReturnsTargetWithoutPortal,
   canRetryFullFiscalYearZipWithoutPortal,
-  getFiledReturnsCompletionStatus,
   getScopeMatchedFiledReturnsSummary,
-  getFiledReturnsSummaryHeading,
+  hasConfirmedSinglePeriodBrowserDownload,
   hasUnresolvedFiledReturnsRecovery,
   hasUnresolvedFiledReturnsTargetReview,
 } from "../../src/entrypoints/popup/flow-summary";
@@ -44,173 +43,6 @@ const COMPLETE_SUMMARY: FiledReturnsFlowSummary = {
 };
 
 describe("popup filed returns flow summary", () => {
-  it("shows a completion status for a matching full-year scope", () => {
-    expect(
-      getFiledReturnsCompletionStatus(
-        {
-          financialYear: "2025-26",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-3B",
-        },
-        COMPLETE_SUMMARY,
-      ),
-    ).toBe("FY 2025-26 GSTR-3B complete. 12 of 12 periods reconciled.");
-  });
-
-  it("does not show stale completion for a different selected scope", () => {
-    expect(
-      getFiledReturnsCompletionStatus(
-        {
-          financialYear: "2024-25",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-3B",
-        },
-        COMPLETE_SUMMARY,
-      ),
-    ).toBeNull();
-  });
-
-  it("shows partial full fiscal year status without claiming completion", () => {
-    expect(
-      getFiledReturnsCompletionStatus(
-        {
-          financialYear: "2025-26",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-3B",
-        },
-        {
-          ...COMPLETE_SUMMARY,
-          status: "blocked",
-          totalPeriods: 12,
-          completedPeriods: ["April", "May"],
-          currentPeriod: "June",
-        },
-      ),
-    ).toBe("FY 2025-26 GSTR-3B blocked at June. 2 of 12 periods reconciled.");
-  });
-
-  it("uses reconciled language when completed periods may include manual or not-filed outcomes", () => {
-    expect(
-      getFiledReturnsCompletionStatus(
-        {
-          financialYear: "2025-26",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-3B",
-        },
-        {
-          ...COMPLETE_SUMMARY,
-          status: "complete",
-          completedPeriods: ["April", "May"],
-          totalPeriods: 2,
-        },
-      ),
-    ).toBe("FY 2025-26 GSTR-3B complete. 2 of 2 periods reconciled.");
-  });
-
-  it("asks for final zip confirmation when all periods reconciled but browser save is unconfirmed", () => {
-    expect(
-      getFiledReturnsCompletionStatus(
-        {
-          financialYear: "2025-26",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-2B",
-          artifactType: "PDF_AND_EXCEL",
-        },
-        {
-          ...COMPLETE_SUMMARY,
-          flowStep: {
-            ...COMPLETE_SUMMARY.flowStep,
-            state: "download-unconfirmed",
-            safeSignals: ["full-fiscal-year-zip-download-unconfirmed"],
-          },
-          scope: {
-            financialYear: "2025-26",
-            period: FULL_FISCAL_YEAR_PERIOD,
-            returnType: "GSTR-2B",
-            artifactType: "PDF_AND_EXCEL",
-          },
-          status: "blocked",
-        },
-      ),
-    ).toBe(
-      "FY 2025-26 GSTR-2B prepared. 12 of 12 periods reconciled; check Browser Downloads before retrying the final ZIP.",
-    );
-  });
-
-  it("shows reset full-year runs as ready for a fresh local run", () => {
-    expect(
-      getFiledReturnsCompletionStatus(
-        {
-          financialYear: "2025-26",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-2B",
-          artifactType: "PDF_AND_EXCEL",
-        },
-        {
-          ...COMPLETE_SUMMARY,
-          completedPeriods: [],
-          currentPeriod: "April",
-          scope: {
-            financialYear: "2025-26",
-            period: FULL_FISCAL_YEAR_PERIOD,
-            returnType: "GSTR-2B",
-            artifactType: "PDF_AND_EXCEL",
-          },
-          status: "cancelled",
-          totalPeriods: 12,
-        },
-      ),
-    ).toBe(
-      "Saved FY 2025-26 GSTR-2B run cleared. Start a fresh local run when the GST Portal is ready.",
-    );
-  });
-
-  it("uses the persisted summary status in the popup heading for the selected scope", () => {
-    expect(
-      getFiledReturnsSummaryHeading(
-        {
-          financialYear: "2025-26",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-3B",
-        },
-        COMPLETE_SUMMARY,
-      ),
-    ).toBe("Last filed-returns run: complete");
-    expect(
-      getFiledReturnsSummaryHeading(
-        {
-          financialYear: "2025-26",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-3B",
-        },
-        { ...COMPLETE_SUMMARY, status: "blocked" },
-      ),
-    ).toBe("Last filed-returns run: blocked");
-    expect(
-      getFiledReturnsSummaryHeading(
-        {
-          financialYear: "2025-26",
-          period: FULL_FISCAL_YEAR_PERIOD,
-          returnType: "GSTR-3B",
-        },
-        { ...COMPLETE_SUMMARY, status: "cancelled" },
-      ),
-    ).toBe("Ready for a new filed-returns run");
-  });
-
-  it("does not show stale summary details for a different selected scope", () => {
-    expect(
-      getFiledReturnsSummaryHeading(
-        {
-          financialYear: "2025-26",
-          period: "May",
-          returnType: "GSTR-3B",
-        },
-        COMPLETE_SUMMARY,
-      ),
-    ).toBeNull();
-  });
-
   it("filters stale summaries before rendering recovery actions", () => {
     expect(
       getScopeMatchedFiledReturnsSummary(
@@ -232,6 +64,59 @@ describe("popup filed returns flow summary", () => {
         COMPLETE_SUMMARY,
       ),
     ).toBe(COMPLETE_SUMMARY);
+  });
+
+  it("accepts only exact, non-empty diagnostic evidence for every selected artifact", () => {
+    const summary: FiledReturnsFlowSummary = {
+      ...COMPLETE_SUMMARY,
+      completedPeriods: ["May"],
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-1",
+      },
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "downloaded",
+        safeMessage: "Complete.",
+        safeSignals: [],
+        downloadDiagnostics: [diagnostic("PDF", 7), diagnostic("EXCEL", 8)],
+      },
+    };
+
+    expect(hasConfirmedSinglePeriodBrowserDownload(summary)).toBe(true);
+    expect(
+      hasConfirmedSinglePeriodBrowserDownload({
+        ...summary,
+        flowStep: { ...summary.flowStep, downloadDiagnostics: [diagnostic("PDF", 7)] },
+      }),
+    ).toBe(false);
+    expect(
+      hasConfirmedSinglePeriodBrowserDownload({
+        ...summary,
+        flowStep: {
+          ...summary.flowStep,
+          downloadDiagnostics: [
+            diagnostic("PDF", 7),
+            { ...diagnostic("EXCEL", 8), downloadId: -1 },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      hasConfirmedSinglePeriodBrowserDownload({
+        ...summary,
+        flowStep: {
+          ...summary.flowStep,
+          downloadDiagnostics: [
+            diagnostic("PDF", 7),
+            { ...diagnostic("EXCEL", 8), period: "April" },
+          ],
+        },
+      }),
+    ).toBe(false);
   });
 
   it("identifies an unresolved target review that must keep ownership of the scope", () => {
@@ -390,3 +275,24 @@ describe("popup filed returns flow summary", () => {
     expect(canRetryFiledReturnsTargetWithoutPortal(undefined)).toBe(false);
   });
 });
+
+function diagnostic(artifactType: "PDF" | "EXCEL", downloadId: number) {
+  return {
+    actionId: `action-${artifactType}`,
+    artifactType,
+    byteCountClass: "non-empty" as const,
+    downloadId,
+    downloadPathClass: "captured-portal-request-unknown" as const,
+    endpointClass:
+      artifactType === "PDF"
+        ? ("gstr1-pdf-portal-blob-captured-download" as const)
+        : ("gstr1-excel-portal-blob-captured-download" as const),
+    eventType: "filed-return-download-path" as const,
+    financialYear: "2025-26",
+    mimeClass: artifactType === "PDF" ? ("pdf" as const) : ("spreadsheet" as const),
+    period: "May",
+    returnType: "GSTR-1" as const,
+    schemaVersion: "1.0" as const,
+    status: "downloaded" as const,
+  };
+}

@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsDownloadScope } from "../connectors/gst/filed-returns-contracts";
+import type { ArtifactAcquisitionCheckpointClearFailureReason } from "../connectors/gst/artifact-acquisition-checkpoint-clear";
 import {
   concreteFiledReturnsArtifactTypesForSelection,
   filedReturnsArtifactExtension,
@@ -241,7 +242,7 @@ export async function clearArtifactAcquisitionCheckpoint(
 export type ArtifactCheckpointCancellation =
   | { state: "cleared" }
   | { state: "completed"; evidence: ArtifactAcquisitionCompletionEvidence[] }
-  | { state: "blocked" };
+  | { state: "blocked"; reason: ArtifactAcquisitionCheckpointClearFailureReason };
 
 export async function clearArtifactAcquisitionCheckpoints(
   scope: FiledReturnsDownloadScope,
@@ -258,6 +259,8 @@ export async function clearArtifactAcquisitionCheckpoints(
   );
   const keys = targets.map((target) => artifactAcquisitionCheckpointKey(target));
   const completedEvidence: ArtifactAcquisitionCompletionEvidence[] = [];
+  let operationFailureReason: ArtifactAcquisitionCheckpointClearFailureReason =
+    "storage-read-failed";
   try {
     const stored = await browser.storage.session.get(keys);
     for (const target of targets) {
@@ -277,7 +280,7 @@ export async function clearArtifactAcquisitionCheckpoints(
       // replaced.
       if (isMalformedArtifactAcquisitionCheckpointSentinel(checkpoint)) continue;
       if (isArtifactAcquisitionIntent(checkpoint, target)) {
-        if (!options.discardIntent) return { state: "blocked" };
+        if (!options.discardIntent) return blockedCancellation("intent-discard-not-approved");
         continue;
       }
       if (
@@ -289,15 +292,16 @@ export async function clearArtifactAcquisitionCheckpoints(
         !Number.isSafeInteger(checkpoint.downloadId) ||
         checkpoint.downloadId < 0
       ) {
-        return { state: "blocked" };
+        return blockedCancellation("checkpoint-invalid");
       }
       const downloadId = checkpoint.downloadId;
+      operationFailureReason = "download-search-failed";
       const [download] = await browser.downloads.search({ id: downloadId });
       if (!download) {
-        if (!options.discardMissing) return { state: "blocked" };
+        if (!options.discardMissing) return blockedCancellation("download-missing");
         continue;
       }
-      if (!download.state) return { state: "blocked" };
+      if (!download.state) return blockedCancellation("download-state-missing");
       if (download.state === "complete") {
         const armedAt = armedAtFromCheckpoint(checkpoint);
         if (
@@ -309,13 +313,15 @@ export async function clearArtifactAcquisitionCheckpoints(
             trustedDownloadIds: new Set([downloadId]),
           })
         ) {
-          return { state: "blocked" };
+          return blockedCancellation("download-target-mismatch");
         }
         // Keep this decision coupled to the shared download observer. Unknown
         // danger and size are not evidence in either direction.
-        if (classifyDownloadDanger(download) !== "safe") return { state: "blocked" };
+        const danger = classifyDownloadDanger(download);
+        if (danger !== "safe") return blockedCancellation(`download-danger-${danger}`);
         const size = firstKnownSize(download);
-        if (size === null || size === 0) return { state: "blocked" };
+        if (size === null) return blockedCancellation("download-size-unknown");
+        if (size === 0) return blockedCancellation("download-empty");
         completedEvidence.push({
           artifactType: target.artifactType,
           downloadId,
@@ -324,11 +330,15 @@ export async function clearArtifactAcquisitionCheckpoints(
         continue;
       }
       if (download.state === "in_progress") {
+        operationFailureReason = "download-cancel-failed";
         await browser.downloads.cancel(downloadId);
+        operationFailureReason = "download-search-failed";
         const [cancelledDownload] = await browser.downloads.search({ id: downloadId });
-        if (cancelledDownload?.state !== "interrupted") return { state: "blocked" };
+        if (cancelledDownload?.state !== "interrupted") {
+          return blockedCancellation("download-cancel-unconfirmed");
+        }
       } else if (download.state !== "interrupted") {
-        return { state: "blocked" };
+        return blockedCancellation("download-state-unsupported");
       }
     }
     if (
@@ -336,16 +346,24 @@ export async function clearArtifactAcquisitionCheckpoints(
       new Set(completedEvidence.map(({ downloadId }) => downloadId)).size === targets.length
     ) {
       if (options.discardCompleted) {
+        operationFailureReason = "storage-remove-failed";
         await browser.storage.session.remove(keys);
         return { state: "cleared" };
       }
       return { state: "completed", evidence: completedEvidence };
     }
+    operationFailureReason = "storage-remove-failed";
     await browser.storage.session.remove(keys);
     return { state: "cleared" };
   } catch {
-    return { state: "blocked" };
+    return blockedCancellation(operationFailureReason);
   }
+}
+
+function blockedCancellation(
+  reason: ArtifactAcquisitionCheckpointClearFailureReason,
+): ArtifactCheckpointCancellation {
+  return { reason, state: "blocked" };
 }
 
 function checkpointTargetFromKey(key: string): ArtifactAcquisitionTarget | null {

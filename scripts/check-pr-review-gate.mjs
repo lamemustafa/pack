@@ -25,6 +25,8 @@ const DURABLE_DISPOSITION_MARKER = "<!-- review-gate-disposition:";
 const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 const CODEX_SEVERITY_BADGE_PATTERN =
   /!\[P[0-3] Badge\]\(https:\/\/img\.shields\.io\/badge\/P[0-3]-[^)\s]+\)/u;
+const CODEX_CLEAN_TOP_LEVEL_REVIEW_PATTERN =
+  /^Codex Review: Didn't find any major issues\.[^\r\n]*(?:\r?\n)+[\s\S]*?\*\*Reviewed commit:\*\*\s*`([0-9a-f]{10,64})`/u;
 
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
@@ -146,9 +148,35 @@ function evaluatePullRequestReviewState(pr) {
       CODEX_SEVERITY_BADGE_PATTERN.test(comment.body ?? ""),
   );
   const authorStates = reduceSubmittedCurrentHeadReviewsByAuthor(pr.reviews.nodes, pr.headRefOid);
-  const blockingReviews = Array.from(authorStates.values())
-    .map((state) => state.blockingReview)
-    .filter(Boolean);
+  const cleanTopLevelReviews = strictHeadReview
+    ? pr.comments.nodes.filter((comment) =>
+        isTrustedCurrentHeadCodexTopLevelReview(comment, pr.headRefOid),
+      )
+    : [];
+  const cleanTopLevelReviewCutoffs = new Map();
+  for (const comment of cleanTopLevelReviews) {
+    const author = normaliseAuthorLogin(comment.author?.login);
+    const cutoff = Date.parse(comment.updatedAt ?? "");
+    if (!Number.isFinite(cutoff)) continue;
+    cleanTopLevelReviewCutoffs.set(
+      author,
+      Math.max(cleanTopLevelReviewCutoffs.get(author) ?? 0, cutoff),
+    );
+  }
+  const blockingReviews = Array.from(authorStates.entries())
+    .map(([author, state]) => ({ author, review: state.blockingReview }))
+    .filter(
+      ({ author, review }) =>
+        review &&
+        !(
+          cleanTopLevelReviewCutoffs.has(author) &&
+          review.commit?.oid &&
+          review.commit.oid !== pr.headRefOid &&
+          Number.isFinite(Date.parse(review.submittedAt ?? "")) &&
+          Date.parse(review.submittedAt) < cleanTopLevelReviewCutoffs.get(author)
+        ),
+    )
+    .map(({ review }) => review);
   const headReviews = Array.from(authorStates.values())
     .map((state) => state.latestCurrentHeadReview)
     .filter(Boolean)
@@ -157,7 +185,22 @@ function evaluatePullRequestReviewState(pr) {
         !requiredReviewAuthor ||
         normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
     );
-  return { unresolvedThreads, blockingReviews, blockingComments, headReviews };
+  return {
+    unresolvedThreads,
+    blockingReviews,
+    blockingComments,
+    headReviews: [...headReviews, ...cleanTopLevelReviews],
+  };
+}
+
+function isTrustedCurrentHeadCodexTopLevelReview(comment, headRefOid) {
+  if (comment.isMinimized) return false;
+  if (normaliseAuthorLogin(comment.author?.login) !== normaliseAuthorLogin(requiredReviewAuthor)) {
+    return false;
+  }
+  const match = (comment.body ?? "").trimStart().match(CODEX_CLEAN_TOP_LEVEL_REVIEW_PATTERN);
+  const reviewedCommit = match?.[1]?.toLowerCase();
+  return reviewedCommit !== undefined && headRefOid.toLowerCase().startsWith(reviewedCommit);
 }
 
 function readDurableReviewState(filePath, expectedPrNumber) {

@@ -8,6 +8,7 @@ describe("popup presentation state", () => {
   it.each([
     ["unsupported", unsupportedContext(), null, null],
     ["session-expired", authContext(), null, null],
+    ["access-denied", accessDeniedContext(), null, null],
     ["ready", supportedContext(), null, null],
     ["downloading", supportedContext(), runningSummary(), "start-filed-returns-flow"],
     ["partial", supportedContext(), partialSummary(), null],
@@ -24,6 +25,19 @@ describe("popup presentation state", () => {
 
     expect(state.title).toBe("Ready when you are");
     expect(state.body).toContain("filed returns");
+  });
+
+  it("treats a supported authentication landing page as signed out without a required action", () => {
+    const state = getPopupPresentationState(
+      { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
+      null,
+      null,
+    );
+
+    expect(state).toMatchObject({
+      kind: "session-expired",
+      title: "Sign in on GST Portal",
+    });
   });
 
   it("renders a blocked run message on an unsupported active tab", () => {
@@ -79,7 +93,7 @@ describe("popup presentation state", () => {
     expect(getPopupPresentationState(unsupportedContext(), retainedZipSummary, null)).toMatchObject(
       {
         kind: "blocked",
-        title: "Finish the saved fiscal-year ZIP",
+        title: "Saved run needs attention",
       },
     );
   });
@@ -116,6 +130,46 @@ describe("popup presentation state", () => {
       title: "Pack could not finish that action",
     });
   });
+
+  it("does not claim an unconfirmed single-period completion was saved", () => {
+    const state = getPopupPresentationState(supportedContext(), completeSummary(), null);
+
+    expect(state).toMatchObject({
+      badge: "Download unconfirmed",
+      body: "Pack finished this run, but has not confirmed your browser saved the selected file. Check Browser Downloads.",
+      title: "Browser download not confirmed",
+      tone: "warning",
+    });
+  });
+
+  it("keeps the completion claim after positive single-period download evidence", () => {
+    const state = getPopupPresentationState(
+      supportedContext(),
+      summary("complete", ["browser-download-completed", "browser-download-non-empty"]),
+      null,
+    );
+
+    expect(state).toMatchObject({
+      badge: "Complete",
+      body: "The selected files were saved by your browser.",
+      tone: "success",
+    });
+  });
+
+  it("renders a complete positive not-filed result as unavailable, not a download warning", () => {
+    const state = getPopupPresentationState(
+      supportedContext(),
+      summary("complete", ["filed-return-positively-not-filed"]),
+      null,
+    );
+
+    expect(state).toMatchObject({
+      kind: "unavailable",
+      title: "No filed return for this period",
+      tone: "neutral",
+    });
+    expect(state.body).not.toContain("Browser Downloads");
+  });
 });
 
 function supportedContext(): PortalContext {
@@ -131,6 +185,14 @@ function authContext(): PortalContext {
     connectorId: "gst",
     pageKind: "gst-auth-landing",
     requiredAction: { type: "LOGIN", message: "Sign in", canResume: true },
+    supported: false,
+  };
+}
+
+function accessDeniedContext(): PortalContext {
+  return {
+    connectorId: "gst",
+    pageKind: "gst-access-denied",
     supported: false,
   };
 }

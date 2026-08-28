@@ -6,7 +6,7 @@ import type { PackMessageResponse } from "../../connectors/gst/messages";
 import "../../styles/global.css";
 import { runFileSystemAccessProbe } from "./file-system-access-probe";
 
-function OptionsPage() {
+export function OptionsPage() {
   const [status, setStatus] = React.useState(
     "Pack stores install metadata, synthetic demo manifest summaries, temporary session observations, active filed-return run markers, single-period review markers, and full fiscal-year ledgers in extension storage.",
   );
@@ -30,6 +30,8 @@ function OptionsPage() {
         setManifestSummary("");
         setDownloadProbeSummary("");
       }
+    } catch {
+      setStatus("Pack could not clear local data. Try again.");
     } finally {
       setBusy(null);
     }
@@ -50,6 +52,8 @@ function OptionsPage() {
           response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
         );
       }
+    } catch {
+      setStatus("Pack could not start the synthetic download probe. Try again.");
     } finally {
       setBusy(null);
     }
@@ -103,6 +107,8 @@ function OptionsPage() {
           response.ok ? "Unexpected Pack response." : (response.safeMessage ?? response.error),
         );
       }
+    } catch {
+      setStatus("Pack could not load the last synthetic demo manifest. Try again.");
     } finally {
       setBusy(null);
     }
@@ -136,7 +142,9 @@ function OptionsPage() {
           <h1>Pack Options</h1>
         </div>
       </header>
-      <p>{status}</p>
+      <p role="status" aria-live="polite">
+        {status}
+      </p>
       <section className="actions" aria-label="Pack reviewer demo tools">
         <button
           type="button"
@@ -256,8 +264,11 @@ function formatDownloadPromptProbeSummary(result: {
   );
 }
 
-createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <OptionsPage />
-  </React.StrictMode>,
-);
+const optionsRoot = document.getElementById("root");
+if (optionsRoot) {
+  createRoot(optionsRoot).render(
+    <React.StrictMode>
+      <OptionsPage />
+    </React.StrictMode>,
+  );
+}

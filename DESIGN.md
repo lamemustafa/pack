@@ -57,9 +57,7 @@ typography:
     fontSize: "12px"
     fontWeight: 500
     lineHeight: 1.25
-    letterSpacing: "0.06em"
-    textTransform: "uppercase"
-    usage: "Group labels and column headers only."
+    usage: "Compact labels, metadata and dense catalogue rows. This is the hard type-size floor."
 spacing:
   scale: "4 / 8 / 12 / 16 / 24"
   cell: "20px"
@@ -128,14 +126,17 @@ Four sizes, three weights. Nothing else.
 - **Monospace for every number**, target identifier, status pill, count and duration, with
   `font-variant-numeric: tabular-nums`. Numeric columns are right-aligned; text columns are
   left-aligned.
-- **Nothing below 12px**, and 12px is reserved for uppercase group labels.
+- **Nothing below 12px.** Use 12px only for compact labels, metadata and dense catalogue rows;
+  sentence case is valid when it makes a target or limit easier to scan.
 - **Ship the font or do not name it.** A stack whose first entry is not bundled renders differently
   on a developer's machine than on a user's.
 
 ## Layout
 
-- **Panel: 400px wide.** **Popup: 420 × 560**, hard-clamped by Chromium at 800 × 600 and closing on
-  outside focus. Design for the panel; the popup gets status and two buttons.
+- **Panel: correct at 320px, comfortable up to 420px.** Extra width may improve wrapping but must
+  not reveal content that was clipped at 320px. **Popup: 420 × 560**, hard-clamped by Chromium at
+  800 × 600 and closing on outside focus. Design for the panel; the popup gets status and two
+  buttons.
 - **Bands, not cards.** A surface is a vertical stack of full-width bands separated by a 1px rule.
   Do not wrap every section in a rounded card.
 - **Density is the point.** Row height 32px, matrix cell 20px. Spacing comes from the 4/8/12/16/24
@@ -157,7 +158,8 @@ pill-shaped except a format chip.
 
 - **Matrix cell** — 20px, 1px border, 2px radius. Five states: unselected, selected, saved,
   needs-review, unavailable. Unavailable is hatched, never merely greyed, and **must state its
-  reason** on hover; a disabled control that cannot say why is a defect.
+  reason** in visible text. A disabled control must programmatically reference that reason; hover
+  alone is not an accessible explanation.
 - **Ledger row** — 32px, bottom border only, header sticky on `surface-muted`. Columns: target,
   format, status, evidence.
 - **Status pill** — bordered rectangle, 2px radius, monospace, semantic triad. Never a bare colour.
@@ -166,6 +168,28 @@ pill-shaped except a format chip.
 - **Primary action** — one per surface, `action` background, `ink-inverse` text.
 - **Cost line** — monospace, two lines, states what the run will actually cost the user in files,
   archives and save prompts.
+- **Guided scope** — four catalogue-derived steps: return, financial year, the periodicity-derived
+  axis, then artifact. Keep one exact return/FY/period/artifact scope visible throughout, expose no
+  more than four controls including the catalogue disclosure, and place the target review before
+  the final action.
+- **Return catalogue** — one canonical row owns the label, support status, periodicity and artifact
+  availability. Runnable options are derived from supported rows. Declared-but-unsupported rows
+  are explanatory text, never disabled or misleading controls.
+
+## Return periodicity
+
+Periodicity is structural data, not a label inferred from the return name. The model contains four
+complete axis shapes: monthly, quarterly, annual and non-period-based. The three currently supported
+returns are monthly, but the panel must not encode that temporary fact as a permanent month grid or
+a return-name switch. A future support-status change should activate the catalogue row's existing
+periodicity and artifact data without adding a second hand-maintained UI list.
+
+The chosen direction is the guided scope in
+`design-lab/10-catalogue-overhaul/04-judgement.md`. It was the only explored direction that kept the
+control budget at four while deriving every axis from periodicity. The outcome-recipe direction was
+faster but grew to eight controls after selection. The compact-register direction was fastest, but
+its runnable scope was monthly-specific and had five actual controls. Those alternatives remain
+useful references, not parallel product contracts.
 
 ## Copy
 

@@ -6,9 +6,10 @@ import {
 } from "./offscreen-blob-url";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
 import type { PackDownloadFilenameReservation } from "./pack-download-filename-reassertion";
-import { isRequestedFilenameOverridden } from "./download-filename-comparison";
+import { classifyRequestedFilenameOutcome } from "./download-filename-comparison";
 import { classifyDownloadDanger } from "./download-observer-results";
 import { extensionBlobUrlFingerprint } from "./filed-returns-durable-download-reconciler";
+import { artifactFailureMessage } from "../connectors/gst/artifact-source";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -29,7 +30,22 @@ export type ArtifactDownloadResult =
       safeMessage?: string;
       safeSignals: string[];
     }
-  | { ok: false; reason: DownloadFailure; safeSignals: string[] };
+  | { ok: false; reason: DownloadFailure; safeMessage: string; safeSignals: string[] };
+
+const ARTIFACT_DOWNLOAD_FAILURE_MESSAGES = {
+  "checkpoint-failed":
+    "Pack started the browser download but could not save its exact recovery record. Check browser Downloads before retrying.",
+  "start-rejected":
+    "Pack could not start the local filed-return download. Check browser Downloads, then retry.",
+  interrupted:
+    "The browser interrupted the filed-return download, so Pack did not mark the target saved. Check browser Downloads before retrying.",
+  empty:
+    "The browser completed an empty filed-return download, so Pack did not mark the target saved.",
+  timeout:
+    "Pack could not confirm the exact browser download result, so it did not mark the target saved. Check browser Downloads before retrying.",
+  "search-unavailable":
+    "Pack could not query the exact browser download, so it did not mark the target saved. Check browser Downloads before retrying.",
+} satisfies Record<Exclude<DownloadFailure, "danger-unconfirmed" | "danger-rejected">, string>;
 
 type DownloadApi = Pick<typeof browser.downloads, "download" | "search" | "onChanged">;
 type DeliveryDeps = {
@@ -68,7 +84,7 @@ export async function downloadAcquiredArtifact(
   try {
     offscreenRequested = true;
     blobUrl = await deps.createOffscreenBlobUrl(`data:${input.mimeType};base64,${input.base64}`);
-    if (!blobUrl) return { ok: false, reason: "start-rejected", safeSignals: [] };
+    if (!blobUrl) return failedArtifactDownload("start-rejected");
     filenameReservation = deps.reserveRequestedFilename(blobUrl, input.filename);
     let downloadId: number;
     try {
@@ -80,7 +96,7 @@ export async function downloadAcquiredArtifact(
       });
       filenameReservation.bind(downloadId);
     } catch {
-      return { ok: false, reason: "start-rejected", safeSignals: [] };
+      return failedArtifactDownload("start-rejected");
     }
     try {
       await input.onStarted?.(downloadId);
@@ -91,7 +107,7 @@ export async function downloadAcquiredArtifact(
         // Keep the original intent checkpoint for fail-closed recovery.
       }
       await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
-      return { ok: false, reason: "checkpoint-failed", safeSignals: [] };
+      return failedArtifactDownload("checkpoint-failed");
     }
     return await awaitCompletion(deps.downloads, downloadId, input.filename, deps.timeoutMs);
   } finally {
@@ -152,8 +168,7 @@ function awaitCompletion(
         .search({ id: downloadId })
         .then(([item]) => {
           if (!item) return;
-          if (item.state === "interrupted")
-            return finish({ ok: false, reason: "interrupted", safeSignals: [] });
+          if (item.state === "interrupted") return finish(failedArtifactDownload("interrupted"));
           if (item.state === "complete") {
             // A completed, non-empty item is not proof on its own. The shared
             // observer refuses to treat an unclassified, still-scanning or
@@ -161,17 +176,18 @@ function awaitCompletion(
             // the same call from the same predicate rather than restate it.
             const danger = classifyDownloadDanger(item);
             if (danger !== "safe") {
-              return finish({
-                ok: false,
-                reason: danger === "rejected" ? "danger-rejected" : "danger-unconfirmed",
-                safeSignals: [
-                  danger === "rejected"
-                    ? "browser-download-danger-rejected"
-                    : danger === "pending"
-                      ? "browser-download-danger-pending"
-                      : "browser-download-danger-unknown",
-                ],
-              });
+              return finish(
+                failedArtifactDownload(
+                  danger === "rejected" ? "danger-rejected" : "danger-unconfirmed",
+                  [
+                    danger === "rejected"
+                      ? "browser-download-danger-rejected"
+                      : danger === "pending"
+                        ? "browser-download-danger-pending"
+                        : "browser-download-danger-unknown",
+                  ],
+                ),
+              );
             }
             const bytes = Math.max(
               item.bytesReceived ?? 0,
@@ -181,27 +197,41 @@ function awaitCompletion(
             return finish(
               bytes > 0
                 ? completedArtifact(downloadId, bytes, requestedFilename, item.filename)
-                : { ok: false, reason: "empty", safeSignals: [] },
+                : failedArtifactDownload("empty"),
             );
           }
         })
         .catch(() =>
-          finish({
-            ok: false,
-            reason: "search-unavailable",
-            safeSignals: ["browser-download-search-unavailable"],
-          }),
+          finish(
+            failedArtifactDownload("search-unavailable", ["browser-download-search-unavailable"]),
+          ),
         );
     const listener = (delta: { id: number }) => {
       if (delta.id === downloadId) inspect();
     };
-    const timer = globalThis.setTimeout(
-      () => finish({ ok: false, reason: "timeout", safeSignals: [] }),
-      timeoutMs,
-    );
+    const timer = globalThis.setTimeout(() => finish(failedArtifactDownload("timeout")), timeoutMs);
     downloads.onChanged.addListener(listener);
     inspect();
   });
+}
+
+function failedArtifactDownload(
+  reason: DownloadFailure,
+  safeSignals: string[] = [],
+): ArtifactDownloadResult {
+  return {
+    ok: false,
+    reason,
+    safeMessage: artifactDownloadFailureMessage(reason),
+    safeSignals,
+  };
+}
+
+function artifactDownloadFailureMessage(reason: DownloadFailure): string {
+  if (reason === "danger-unconfirmed" || reason === "danger-rejected") {
+    return artifactFailureMessage(reason);
+  }
+  return ARTIFACT_DOWNLOAD_FAILURE_MESSAGES[reason];
 }
 
 function completedArtifact(
@@ -210,8 +240,19 @@ function completedArtifact(
   requestedFilename: string,
   observedFilename: string | undefined,
 ): Extract<ArtifactDownloadResult, { ok: true }> {
-  if (!isRequestedFilenameOverridden(requestedFilename, observedFilename)) {
+  const filenameOutcome = classifyRequestedFilenameOutcome(requestedFilename, observedFilename);
+  if (filenameOutcome === "matched") {
     return { ok: true, downloadId, bytesReceived, safeSignals: [] };
+  }
+  if (filenameOutcome === "unavailable") {
+    return {
+      ok: true,
+      downloadId,
+      bytesReceived,
+      safeMessage:
+        "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file.",
+      safeSignals: ["download-filename-unavailable"],
+    };
   }
   return {
     ok: true,

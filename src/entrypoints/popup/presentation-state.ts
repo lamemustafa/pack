@@ -1,9 +1,16 @@
 import type { PortalContext } from "../../core/contracts";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
-import { canRetryFullFiscalYearZipWithoutPortal } from "./flow-summary";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
+import {
+  canRetryFullFiscalYearZipWithoutPortal,
+  getFullFiscalYearCleanupCopy,
+  hasConfirmedSinglePeriodBrowserDownload,
+  hasFiledReturnsDownloadFilenameOverride,
+} from "./flow-summary";
 
 export type PopupPresentationKind =
   | "loading"
+  | "access-denied"
   | "unsupported"
   | "session-expired"
   | "ready"
@@ -29,6 +36,18 @@ export function getPopupPresentationState(
   busy: string | null,
   actionError: string | null = null,
 ): PopupPresentationState {
+  const cleanupCopy =
+    busy === "start-filed-returns-flow" ? getFullFiscalYearCleanupCopy(summary) : null;
+  if (cleanupCopy) {
+    return {
+      badge: "Checking",
+      body: cleanupCopy.busySummary,
+      icon: "…",
+      kind: "downloading",
+      title: cleanupCopy.busyLabel,
+      tone: "neutral",
+    };
+  }
   if (busy === "start-filed-returns-flow" || summary?.status === "running") {
     return {
       badge: "Downloading",
@@ -57,7 +76,7 @@ export function getPopupPresentationState(
       body: summary?.flowStep.safeMessage ?? "Retry the retained fiscal-year ZIP.",
       icon: "!",
       kind: "blocked",
-      title: "Finish the saved fiscal-year ZIP",
+      title: "Saved run needs attention",
       tone: "warning",
     };
   }
@@ -71,6 +90,17 @@ export function getPopupPresentationState(
     return getUnsupportedContextState(context);
   }
 
+  if (summary?.flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
+    return {
+      badge: "Unavailable",
+      body: "The GST Portal reports that this return was not filed for the selected period.",
+      icon: "–",
+      kind: "unavailable",
+      title: "No filed return for this period",
+      tone: "neutral",
+    };
+  }
+
   if (summary?.status === "complete") {
     const unavailable = summary.flowStep.safeSignals.some((signal) =>
       signal.includes("artifact-unavailable"),
@@ -82,6 +112,20 @@ export function getPopupPresentationState(
         icon: "!",
         kind: "unavailable",
         title: "Download saved with one unavailable file",
+        tone: "warning",
+      };
+    }
+    if (
+      !hasConfirmedSinglePeriodBrowserDownload(summary) &&
+      !hasFiledReturnsDownloadFilenameOverride(summary) &&
+      !isFullFiscalYearSummary(summary)
+    ) {
+      return {
+        badge: "Download unconfirmed",
+        body: "Pack finished this run, but has not confirmed your browser saved the selected file. Check Browser Downloads.",
+        icon: "!",
+        kind: "complete",
+        title: "Browser download not confirmed",
         tone: "warning",
       };
     }
@@ -129,16 +173,6 @@ export function getPopupPresentationState(
   }
 
   if (summary?.status === "blocked") {
-    if (summary.flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
-      return {
-        badge: "Unavailable",
-        body: "The GST Portal reports that this return was not filed for the selected period.",
-        icon: "–",
-        kind: "unavailable",
-        title: "No filed return for this period",
-        tone: "neutral",
-      };
-    }
     if (summary.currentPeriod) {
       return {
         badge: "Needs review",
@@ -184,8 +218,22 @@ export function getPopupPresentationState(
   };
 }
 
+function isFullFiscalYearSummary(summary: FiledReturnsFlowSummary): boolean {
+  return summary.scope.period === FULL_FISCAL_YEAR_PERIOD;
+}
+
 function getUnsupportedContextState(context: PortalContext): PopupPresentationState {
-  const authRequired = context.pageKind === "gst-auth-landing";
+  if (context.pageKind === "gst-access-denied") {
+    return {
+      badge: "Access blocked",
+      body: "The GST Portal did not allow this page. Return to a GST Portal page you can access, then reopen Pack.",
+      icon: "!",
+      kind: "access-denied",
+      title: "GST Portal access blocked",
+      tone: "warning",
+    };
+  }
+  const authRequired = isGstSignInRequired(context);
   return {
     badge: authRequired ? "Sign-in needed" : "Unsupported tab",
     body: authRequired
@@ -213,7 +261,7 @@ export function isGstSignInRequired(context: PortalContext | null | undefined): 
 
 function isSessionExpired(context: PortalContext | null, summary: FiledReturnsFlowSummary | null) {
   return (
-    context?.requiredAction?.type === "LOGIN" ||
+    isGstSignInRequired(context) ||
     summary?.flowStep.state === "login-required" ||
     summary?.flowStep.safeSignals.includes("gst-login-tab-opened")
   );

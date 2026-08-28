@@ -12,6 +12,7 @@ const CONTEXT_KEYS = [
 ] as const;
 const PAGE_KINDS = new Set<PortalContext["pageKind"]>([
   "gst-auth-landing",
+  "gst-access-denied",
   "gst-filed-returns",
   "gst-portal",
   "supported-gst-return-page",
@@ -23,7 +24,11 @@ const SUPPORTED_PAGE_KINDS = new Set<PortalContext["pageKind"]>([
   "gst-filed-returns",
   "supported-gst-return-page",
 ]);
-const UNSUPPORTED_PAGE_KINDS = new Set<PortalContext["pageKind"]>(["unknown", "unsupported"]);
+const UNSUPPORTED_PAGE_KINDS = new Set<PortalContext["pageKind"]>([
+  "gst-access-denied",
+  "unknown",
+  "unsupported",
+]);
 
 const CANONICAL_ACTIONS: Record<UserActionRequired["type"], UserActionRequired> = {
   ALLOW_MULTIPLE_DOWNLOADS: {

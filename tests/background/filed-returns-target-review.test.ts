@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearFiledReturnsTargetReview,
+  clearFiledReturnsTargetReviewWithReason,
   persistFiledReturnsTargetReview,
   reconcileRetainedArtifactAcquisition,
   readCurrentFiledReturnsTargetReviewStorageState,
   resolveUnconfirmedFiledReturnsDownload,
   retryCompletedSinglePeriodZipCleanup,
 } from "../../src/background/filed-returns-target-review";
+import { FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES } from "../../src/connectors/gst/filed-returns-target-review-clear";
+import { ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS } from "../../src/connectors/gst/artifact-acquisition-checkpoint-clear";
 import { persistFiledReturnsTargetDownloadId } from "../../src/background/filed-returns-target-download-attempt";
 import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-returns-durable-summary";
 import { persistArtifactAcquisitionCompletion } from "../../src/background/filed-returns-artifact-acquisition-completion";
@@ -92,6 +96,116 @@ describe("filed returns target review", () => {
     );
     acquisitionMocks.clearMalformedArtifactAcquisitionCheckpoint.mockResolvedValue(true);
   });
+
+  // `review-missing` is deliberately absent: clearing a review that is already
+  // gone is the post-condition, not a failure, and is covered by
+  // filed-returns-target-review-clear-idempotent.test.ts. Treating absence as an
+  // error blocked a live download that had already been proven by exact
+  // browser-download ID.
+  it.each(
+    FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES.filter((stage) => stage !== "review-missing"),
+  )("names the %s target-review clear exit", async (stage) => {
+    const scope = {
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-3B" as const,
+    };
+    const review = {
+      revision: 1,
+      safeMessage: "Synthetic target review.",
+      safeSignals: ["browser-download-not-observed"],
+      schemaVersion: "1.0" as const,
+      scope,
+      status: "download-unconfirmed" as const,
+      targetId: "GSTR-3B:2025-26:March",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    };
+    const deps = { storageKeys: { targetReview: "target-review" } };
+    let expectedRevision: number | undefined = 1;
+
+    switch (stage) {
+      case "storage-key-missing":
+        deps.storageKeys.targetReview = "";
+        break;
+      case "expected-revision-invalid":
+        expectedRevision = 0;
+        break;
+      case "review-malformed":
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": { schemaVersion: "1.0", unsafe: true },
+        });
+        break;
+      case "scope-mismatch":
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": {
+            ...review,
+            scope: { ...scope, period: "April" },
+            targetId: "GSTR-3B:2025-26:April",
+          },
+        });
+        break;
+      case "revision-mismatch":
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": { ...review, revision: 2 },
+        });
+        break;
+      case "storage-read-failed":
+        browserMocks.storage.local.get.mockRejectedValue(new Error("synthetic read failure"));
+        break;
+      case "storage-write-failed":
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": { schemaVersion: "1.0", unsafe: true },
+        });
+        browserMocks.storage.local.set.mockRejectedValue(new Error("synthetic write failure"));
+        break;
+      case "storage-remove-failed":
+        browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
+        browserMocks.storage.local.remove.mockRejectedValue(new Error("synthetic remove failure"));
+        break;
+    }
+
+    const result = await clearFiledReturnsTargetReviewWithReason(scope, deps, expectedRevision);
+
+    expect(result).toMatchObject({ error: { stage }, ok: false });
+  });
+
+  it.each(["read", "write", "remove"] as const)(
+    "preserves the boolean clear API's thrown storage %s failure",
+    async (operation) => {
+      const scope = {
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-3B" as const,
+      };
+      const expectedError = new Error(`synthetic ${operation} failure`);
+      if (operation === "read") {
+        browserMocks.storage.local.get.mockRejectedValue(expectedError);
+      } else if (operation === "write") {
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": { schemaVersion: "1.0", unsafe: true },
+        });
+        browserMocks.storage.local.set.mockRejectedValue(expectedError);
+      } else {
+        browserMocks.storage.local.get.mockResolvedValue({
+          "target-review": {
+            revision: 1,
+            safeMessage: "Synthetic target review.",
+            safeSignals: ["browser-download-not-observed"],
+            schemaVersion: "1.0",
+            scope,
+            status: "download-unconfirmed",
+            targetId: "GSTR-3B:2025-26:March",
+            updatedAt: "2026-06-24T00:00:00.000Z",
+          },
+        });
+        browserMocks.storage.local.remove.mockRejectedValue(expectedError);
+      }
+
+      await expect(
+        clearFiledReturnsTargetReview(scope, { storageKeys: { targetReview: "target-review" } }, 1),
+      ).rejects.toBe(expectedError);
+    },
+  );
 
   it("records a manual observation without completing or clearing the unresolved target", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
@@ -950,7 +1064,66 @@ describe("filed returns target review", () => {
     });
   });
 
-  it("keeps retained acquisition recovery blocked when an exact download cannot be cancelled", async () => {
+  it.each(ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS)(
+    "keeps retained acquisition recovery blocked with the %s reason",
+    async (reason) => {
+      const scope = {
+        artifactType: "PDF" as const,
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-3B" as const,
+      };
+      const review = {
+        revision: 1,
+        safeMessage: "Pack retained unresolved artifact recovery.",
+        safeSignals: ["artifact-acquisition-download-unreconciled"],
+        schemaVersion: "1.0",
+        scope,
+        status: "download-unconfirmed",
+        targetId: "GSTR-3B:2025-26:May",
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      };
+      browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
+      acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
+        reason,
+        state: "blocked",
+      });
+
+      const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
+        storageKeys: { completion: "completion", targetReview: "target-review" },
+      });
+
+      expect(response).toMatchObject({
+        flowStep: {
+          safeSignals: expect.arrayContaining([
+            "artifact-acquisition-download-unreconciled",
+            "artifact-acquisition-checkpoint-clear-failed",
+            `artifact-acquisition-checkpoint-clear-failed:${reason}`,
+          ]),
+          state: "user-action-required",
+        },
+      });
+      if (reason === "download-cancel-unconfirmed") {
+        expect(response).toMatchObject({
+          flowStep: {
+            safeMessage:
+              "Pack could not confirm cancellation of the exact browser download, so it retained artifact recovery and did not retry.",
+          },
+        });
+      }
+      expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+      expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
+        "target-review": expect.objectContaining({
+          safeSignals: expect.arrayContaining([
+            "artifact-acquisition-checkpoint-clear-failed",
+            `artifact-acquisition-checkpoint-clear-failed:${reason}`,
+          ]),
+        }),
+      });
+    },
+  );
+
+  it("retains the durable artifact guard when clear diagnostics exceed the signal cap", async () => {
     const scope = {
       artifactType: "PDF" as const,
       financialYear: "2025-26",
@@ -960,34 +1133,44 @@ describe("filed returns target review", () => {
     const review = {
       revision: 1,
       safeMessage: "Pack retained unresolved artifact recovery.",
-      safeSignals: ["artifact-acquisition-download-unreconciled"],
+      safeSignals: [
+        "artifact-acquisition-download-unreconciled",
+        ...Array.from({ length: 30 }, (_, index) => `browser-download-id:${index + 1}`),
+      ],
       schemaVersion: "1.0",
       scope,
       status: "download-unconfirmed",
       targetId: "GSTR-3B:2025-26:May",
       updatedAt: "2026-08-01T00:00:00.000Z",
     };
-    browserMocks.storage.local.get.mockResolvedValue({ "target-review": review });
-    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({ state: "blocked" });
-
-    const response = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", {
-      storageKeys: { completion: "completion", targetReview: "target-review" },
+    const localValues: Record<string, unknown> = { "target-review": review };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      typeof key === "string" && Object.hasOwn(localValues, key) ? { [key]: localValues[key] } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(localValues, values);
+    });
+    browserMocks.storage.local.remove.mockImplementation(async (keys: unknown) => {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (typeof key === "string") delete localValues[key];
+      }
+    });
+    acquisitionMocks.clearArtifactAcquisitionCheckpoints.mockResolvedValue({
+      reason: "download-cancel-unconfirmed",
+      state: "blocked",
     });
 
-    expect(response).toMatchObject({
-      flowStep: {
-        safeSignals: expect.arrayContaining([
-          "artifact-acquisition-download-unreconciled",
-          "artifact-acquisition-checkpoint-clear-failed",
-        ]),
-        state: "user-action-required",
-      },
-    });
+    const deps = { storageKeys: { completion: "completion", targetReview: "target-review" } };
+    const firstResponse = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", deps);
+    const secondResponse = await resolveUnconfirmedFiledReturnsDownload(scope, "cancelled", deps);
+
+    expect(firstResponse).toMatchObject({ flowStep: { state: "user-action-required" } });
+    expect(secondResponse).toMatchObject({ flowStep: { state: "user-action-required" } });
+    expect(acquisitionMocks.clearArtifactAcquisitionCheckpoints).toHaveBeenCalledTimes(2);
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
-    expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
-      "target-review": expect.objectContaining({
-        safeSignals: expect.arrayContaining(["artifact-acquisition-checkpoint-clear-failed"]),
-      }),
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    expect(localValues["target-review"]).toMatchObject({
+      safeSignals: expect.arrayContaining(["artifact-acquisition-download-unreconciled"]),
     });
   });
 
@@ -1589,6 +1772,224 @@ describe("filed returns target review", () => {
       ]),
     });
     expect(localValues["completion"]).toBeUndefined();
+  });
+
+  it.each([
+    {
+      cause: "single-period-bundle-state-read-failed",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const review = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              throw new Error("synthetic staging read failure");
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-bundle-scope-conflict",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const review = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              return {
+                "pack:single-period-staging": {
+                  ledgerId: "single-period:dddddddddddddddddddd",
+                  schemaVersion: "1.0",
+                },
+              };
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-zip-recovery-checkpoint-missing",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const { downloadAttempt: _downloadAttempt, ...review } = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        void _downloadAttempt;
+        return {
+          read(key: unknown) {
+            return key === "target-review" ? { "target-review": review } : {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-bundle-ledger-malformed",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const { downloadAttempt: _downloadAttempt, ...review } = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        void _downloadAttempt;
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              return { "pack:single-period-staging": { malformed: true } };
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-bundle-scope-conflict",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const { downloadAttempt: _downloadAttempt, ...review } = {
+          ...intentOnlyZipReview(scope),
+          safeSignals: ["single-period-opfs-clear-failed"],
+        };
+        void _downloadAttempt;
+        const mismatchedScope = { ...scope, period: "April" };
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              return { "pack:single-period-staging": intentBundleLedger(mismatchedScope) };
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+    {
+      cause: "single-period-bundle-revision-conflict",
+      prepare(scope: {
+        artifactType: "PDF_AND_EXCEL";
+        financialYear: string;
+        period: string;
+        returnType: "GSTR-2B";
+      }) {
+        const review = {
+          ...interruptedBundleReview(scope),
+          safeSignals: [
+            "single-period-bundle-artifact-review-required",
+            "single-period-bundle-running-ambiguous",
+            "single-period-opfs-clear-failed",
+          ],
+        };
+        review.singlePeriodBundleCheckpoint.revision -= 1;
+        const ledger = runningBundleLedger(scope);
+        return {
+          read(key: unknown) {
+            if (key === "target-review") return { "target-review": review };
+            if (key === "pack:single-period-staging") {
+              return { "pack:single-period-staging": ledger };
+            }
+            return {};
+          },
+          review,
+        };
+      },
+    },
+  ])(
+    "retains retry-cleanup cause $cause in the stored review and response",
+    async ({ cause, prepare }) => {
+      const scope = {
+        artifactType: "PDF_AND_EXCEL" as const,
+        financialYear: "2025-26",
+        period: "March",
+        returnType: "GSTR-2B" as const,
+      };
+      const fixture = prepare(scope);
+      let storedReview = fixture.review;
+      browserMocks.storage.local.get.mockImplementation(async (key: unknown) => fixture.read(key));
+      browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+        storedReview = values["target-review"] as typeof storedReview;
+      });
+
+      const response = await retryCompletedSinglePeriodZipCleanup(scope, {
+        now: () => new Date("2026-08-27T00:00:00.000Z"),
+        storageKeys: { completion: "completion", targetReview: "target-review" },
+      });
+
+      expect(storedReview.safeSignals).toContain(cause);
+      expect(response).toMatchObject({
+        flowStep: { safeSignals: expect.arrayContaining([cause]) },
+      });
+    },
+  );
+
+  it("surfaces a retry-cleanup cause and its failed local retention", async () => {
+    const scope = {
+      artifactType: "PDF_AND_EXCEL" as const,
+      financialYear: "2025-26",
+      period: "March",
+      returnType: "GSTR-2B" as const,
+    };
+    const review = {
+      ...intentOnlyZipReview(scope),
+      safeSignals: ["single-period-opfs-clear-failed"],
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key === "target-review") return { "target-review": review };
+      if (key === "pack:single-period-staging") {
+        throw new Error("synthetic staging read failure");
+      }
+      return {};
+    });
+    browserMocks.storage.local.set.mockRejectedValue(new Error("synthetic storage write failure"));
+
+    const response = await retryCompletedSinglePeriodZipCleanup(scope, {
+      storageKeys: { completion: "completion", targetReview: "target-review" },
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "single-period-bundle-state-persist-failed",
+          "single-period-bundle-state-read-failed",
+        ]),
+      },
+    });
   });
 
   it("does not treat completed cleanup checkpoints as a cleanup failure", () => {

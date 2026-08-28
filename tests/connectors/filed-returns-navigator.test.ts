@@ -159,6 +159,7 @@ describe("filed returns navigation matcher", () => {
     const result = await navigateToFiledReturnsPage(documentRef);
 
     expect(result.state).toBe("clicked");
+    expect(result.scopeId).toBe("gst-filed-returns-gstr3b-pdf-private-v0");
     expect(fetchCalls).toEqual([]);
   });
 

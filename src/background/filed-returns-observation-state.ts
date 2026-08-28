@@ -5,6 +5,7 @@ import {
   scopeIdForVisibleReturnLabel,
 } from "../connectors/gst/filed-returns-observer-scope";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "../connectors/gst/filed-returns-observer-signals";
+import { supportedFiledReturnsCatalogueEntries } from "../connectors/gst/filed-returns-capabilities";
 import type {
   FiledReturnsObservation,
   FiledReturnsObservationState,
@@ -32,11 +33,11 @@ const OBSERVATION_STATES = new Set<FiledReturnsObservationState>([
   "wrong-page",
 ]);
 
-const OBSERVATION_SCOPE_IDS = new Set<FiledReturnsObservation["scopeId"]>([
-  "gst-filed-returns-gstr3b-pdf-private-v0",
-  "gst-filed-returns-gstr1-pdf-private-v0",
-  "gst-gstr2b-private-v0",
-]);
+const OBSERVATION_SCOPE_IDS = new Set<FiledReturnsObservation["scopeId"]>(
+  supportedFiledReturnsCatalogueEntries().map(
+    (entry) => entry.capability.scopeId as FiledReturnsObservation["scopeId"],
+  ),
+);
 
 const OBSERVATION_SIGNALS = new Set<string>(FILED_RETURNS_OBSERVATION_SIGNALS);
 
@@ -175,14 +176,14 @@ function readyScopeId(safeSignals: readonly string[]): FiledReturnsObservation["
     safeSignals.includes("download-gstr2b-summary-pdf") ||
     safeSignals.includes("download-gstr2b-details-excel")
   ) {
-    return "gst-gstr2b-private-v0";
+    return scopeIdForVisibleReturnLabel("GSTR-2B");
   }
   if (
     safeSignals.includes("download-filed-gstr-1") ||
     safeSignals.includes("download-pdf-gstr-1") ||
     safeSignals.includes("download-excel-gstr-1")
   ) {
-    return "gst-filed-returns-gstr1-pdf-private-v0";
+    return scopeIdForVisibleReturnLabel("GSTR-1");
   }
   return null;
 }
@@ -209,17 +210,19 @@ function canonicalObservationMessage(
     "wrong-page": "Navigate to Services > Returns > View Filed Returns.",
   };
   if (state === "ready") {
-    if (scopeId === "gst-gstr2b-private-v0") return "GSTR-2B download controls appear ready.";
-    if (scopeId === "gst-filed-returns-gstr1-pdf-private-v0") {
+    if (scopeId === scopeIdForVisibleReturnLabel("GSTR-2B")) {
+      return "GSTR-2B download controls appear ready.";
+    }
+    if (scopeId === scopeIdForVisibleReturnLabel("GSTR-1")) {
       return "Filed GSTR-1 download controls appear ready.";
     }
     return "Filed GSTR-3B PDF controls appear ready for the private spike.";
   }
   if (state === "download-not-visible") {
     const label =
-      scopeId === "gst-gstr2b-private-v0"
+      scopeId === scopeIdForVisibleReturnLabel("GSTR-2B")
         ? "GSTR-2B"
-        : scopeId === "gst-filed-returns-gstr1-pdf-private-v0"
+        : scopeId === scopeIdForVisibleReturnLabel("GSTR-1")
           ? "GSTR-1"
           : "GSTR-3B";
     return `${label} is visible, but a filed-return download control is not visible.`;
@@ -264,7 +267,7 @@ function sameSignals(left: readonly string[], right: readonly string[]): boolean
 }
 
 function gstr3bScopeId(): FiledReturnsObservation["scopeId"] {
-  return "gst-filed-returns-gstr3b-pdf-private-v0";
+  return scopeIdForVisibleReturnLabel("GSTR-3B");
 }
 
 function hasOnlyKeys(input: Record<string, unknown>, allowedKeys: readonly string[]): boolean {

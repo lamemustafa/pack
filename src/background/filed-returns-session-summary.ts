@@ -8,6 +8,12 @@ import { parseDurableFiledReturnsFlowSummary } from "./filed-returns-durable-sum
 
 let summaryMutationCriticalSection = Promise.resolve();
 
+export type FiledReturnsFlowSummaryStorageState =
+  | { state: "missing" }
+  | { state: "malformed" }
+  | { reason: "storage-read-failed" | "storage-write-failed"; state: "unavailable" }
+  | { state: "valid"; summary: FiledReturnsFlowSummary };
+
 export async function persistCanonicalFiledReturnsFlowSummary(
   key: string,
   input: unknown,
@@ -41,6 +47,41 @@ export async function readCanonicalFiledReturnsFlowSummary(
     const input = values[key];
     if (input === undefined || input === null) return null;
     return writeCanonicalSummary(key, input);
+  });
+}
+
+export async function readCanonicalFiledReturnsFlowSummaryStorageState(
+  key: string,
+  malformedReplacement: FiledReturnsFlowSummary,
+): Promise<FiledReturnsFlowSummaryStorageState> {
+  return runSummaryMutationCriticalSection(async () => {
+    const canonicalMalformedReplacement = parseDurableFiledReturnsFlowSummary(malformedReplacement);
+    if (!canonicalMalformedReplacement) {
+      throw new Error("Invalid canonical malformed-summary replacement.");
+    }
+    let values: Record<string, unknown>;
+    try {
+      values = await browser.storage.session.get(key);
+    } catch {
+      return { reason: "storage-read-failed", state: "unavailable" };
+    }
+    const input = values[key];
+    if (input === undefined || input === null) return { state: "missing" };
+    const summary = parseDurableFiledReturnsFlowSummary(input);
+    if (!summary) {
+      try {
+        await browser.storage.session.set({ [key]: canonicalMalformedReplacement });
+      } catch {
+        return { reason: "storage-write-failed", state: "unavailable" };
+      }
+      return { state: "malformed" };
+    }
+    try {
+      await browser.storage.session.set({ [key]: summary });
+    } catch {
+      return { reason: "storage-write-failed", state: "unavailable" };
+    }
+    return { state: "valid", summary };
   });
 }
 

@@ -10,14 +10,18 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
-  createFiledReturnsLedgerId,
-  isCanonicalSinglePeriodLedgerId,
-} from "../connectors/gst/filed-returns-ledger-id";
+  filedReturnsArtifactProgressFailureReasonFromSignal,
+  filedReturnsArtifactProgressFailureSignal,
+  type FiledReturnsArtifactProgressFailureReason,
+} from "../connectors/gst/filed-returns-artifact-progress-recovery";
+import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
+import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { isCanonicalSinglePeriodLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   persistCanonicalFiledReturnsFlowSummary,
-  readCanonicalFiledReturnsFlowSummary,
+  readCanonicalFiledReturnsFlowSummaryStorageState,
 } from "./filed-returns-session-summary";
 import {
   copyFiledReturnsDownloadDiagnosticState,
@@ -36,29 +40,6 @@ export class InvalidSinglePeriodStagingRecordError extends Error {
   }
 }
 
-export function createSinglePeriodBundleLedgerId(): string {
-  return createFiledReturnsLedgerId("single-period");
-}
-
-export async function reserveSinglePeriodBundleLedger(): Promise<string | null> {
-  let existing: SinglePeriodStagingRecord | null;
-  try {
-    existing = await readSinglePeriodStagingRecord();
-  } catch {
-    return null;
-  }
-  if (existing) return null;
-
-  const ledgerId = createSinglePeriodBundleLedgerId();
-  const record: SinglePeriodStagingRecord = { ledgerId, schemaVersion: "1.0" };
-  try {
-    await browser.storage.local.set({ [PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging]: record });
-    return ledgerId;
-  } catch {
-    return null;
-  }
-}
-
 export async function readSinglePeriodStagingRecord(): Promise<SinglePeriodStagingRecord | null> {
   const values = await browser.storage.local.get(PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging);
   const record = values[PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging];
@@ -72,23 +53,6 @@ export async function readSinglePeriodStagingRecord(): Promise<SinglePeriodStagi
     throw new InvalidSinglePeriodStagingRecordError(recoverableLedgerId);
   }
   return { ledgerId: recoverableLedgerId, schemaVersion: "1.0" };
-}
-
-export async function clearSinglePeriodStagingRecord(ledgerId: string): Promise<boolean> {
-  let record: SinglePeriodStagingRecord | null;
-  try {
-    record = await readSinglePeriodStagingRecord();
-  } catch {
-    return false;
-  }
-  if (!record) return true;
-  if (record.ledgerId !== ledgerId) return false;
-  try {
-    await browser.storage.local.remove(PACK_LOCAL_STORAGE_KEYS.singlePeriodStaging);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function recoverableSinglePeriodLedgerId(
@@ -139,26 +103,80 @@ export function selectedArtifactsSafeMessage(flowStep: PortalFlowStepResult): st
   return "Pack downloaded the selected filed-return artifacts.";
 }
 
+export type PersistedArtifactProgress =
+  | {
+      reason: FiledReturnsArtifactProgressFailureReason;
+      state: "blocked";
+    }
+  | {
+      completedArtifactTypes: FiledReturnsConcreteArtifactType[];
+      flowStep: PortalFlowStepResult;
+      state: "ready";
+    };
+
+export function artifactProgressFailureFlowStep(
+  scope: FiledReturnsDownloadScope,
+  reason: FiledReturnsArtifactProgressFailureReason,
+): PortalFlowStepResult {
+  const durableStatus = canonicalDurableTargetStatus(scope, "target-review", [
+    filedReturnsArtifactProgressFailureSignal(reason),
+  ]);
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(scope.returnType),
+    state: "blocked",
+    safeSignals: durableStatus.safeSignals,
+    safeMessage: durableStatus.safeMessage,
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Use Clear local Pack data only after reviewing the retained selected-file run.",
+      canResume: false,
+    },
+  };
+}
+
 export async function readPersistedArtifactProgress(
   scope: FiledReturnsDownloadScope,
   artifactTypes: readonly FiledReturnsConcreteArtifactType[],
   deps: FiledReturnsFlowRunnerDeps,
-): Promise<{
-  completedArtifactTypes: FiledReturnsConcreteArtifactType[];
-  flowStep: PortalFlowStepResult;
-} | null> {
-  const summary = await readCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion).catch(
-    () => null,
+): Promise<PersistedArtifactProgress | null> {
+  const malformedFlowStep = artifactProgressFailureFlowStep(scope, "malformed-summary");
+  const storageState = await readCanonicalFiledReturnsFlowSummaryStorageState(
+    deps.storageKeys.completion,
+    {
+      scope,
+      status: "blocked",
+      updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      completedPeriods: [],
+      currentPeriod: scope.period,
+      flowStep: malformedFlowStep,
+      totalPeriods: 1,
+    },
   );
-  if (!summary) return null;
+  if (storageState.state === "missing") return null;
+  if (storageState.state === "malformed") {
+    return { reason: "malformed-summary", state: "blocked" };
+  }
+  if (storageState.state === "unavailable") {
+    return { reason: storageState.reason, state: "blocked" };
+  }
+  const retainedFailureReason = storageState.summary.flowStep.safeSignals
+    .map(filedReturnsArtifactProgressFailureReasonFromSignal)
+    .find((reason) => reason !== null);
+  if (retainedFailureReason) {
+    return { reason: retainedFailureReason, state: "blocked" };
+  }
+  const summary = storageState.summary;
   const completedArtifactTypes =
-    summary.status === "partial" && sameFiledReturnsScope(summary.scope, scope)
+    summary.status === "partial" &&
+    sameFiledReturnsScope(summary.scope, scope) &&
+    isValidFiledReturnsDownloadDiagnosticState(summary.flowStep, summary.scope)
       ? downloadedArtifactTypes(summary.flowStep.safeSignals).filter((artifactType) =>
           artifactTypes.includes(artifactType),
         )
       : completedConcreteArtifactTypeForSelection(summary, scope, artifactTypes);
   if (completedArtifactTypes.length === 0) return null;
-  return { completedArtifactTypes, flowStep: summary.flowStep };
+  return { completedArtifactTypes, flowStep: summary.flowStep, state: "ready" };
 }
 
 export async function persistPartialArtifactSummary(

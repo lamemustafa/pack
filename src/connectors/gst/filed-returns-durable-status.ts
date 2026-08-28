@@ -9,6 +9,7 @@ import {
   normaliseFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
 } from "./filed-returns-artifacts";
+import { filedReturnsArtifactProgressFailureReasonFromSignal } from "./filed-returns-artifact-progress-recovery";
 import {
   isFiledReturnsReturnType,
   type FiledReturnsReturnType,
@@ -19,6 +20,8 @@ import {
   isFiledReturnsFinancialYear,
 } from "./filed-returns-scope";
 import {
+  FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS,
+  FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS,
   FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
   RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   durableFiledReturnsSignalRejectionReason,
@@ -39,16 +42,32 @@ type DurableMessageKey =
   | "complete"
   | "durable-status-rejected"
   | "full-year-active"
+  | "full-year-complete-download-unconfirmed"
   | "full-year-downloaded-cleanup-blocked"
   | "full-year-interrupted"
   | "full-year-needs-action"
+  | "full-year-pinned-tab-unavailable"
+  | "full-year-no-artifacts"
   | "full-year-resume"
+  | "full-year-tab-session-unavailable"
   | "full-year-zip-review"
   | "not-filed"
   | "partial"
   | "target-cancelled"
   | "target-blocked"
   | "target-blocked-or-session-expired"
+  | "target-checkpoint-clear-cancel"
+  | "target-checkpoint-clear-checkpoint"
+  | "target-checkpoint-clear-danger"
+  | "target-checkpoint-clear-download"
+  | "target-checkpoint-clear-size"
+  | "target-checkpoint-clear-state"
+  | "target-checkpoint-clear-storage-read"
+  | "target-checkpoint-clear-storage-remove"
+  | "target-checkpoint-clear-target"
+  | "target-artifact-progress-malformed-summary"
+  | "target-artifact-progress-storage-read-failed"
+  | "target-artifact-progress-storage-write-failed"
   | "target-completion-pending-summary"
   | "target-cleanup-blocked"
   | "target-downloaded"
@@ -61,6 +80,7 @@ type DurableMessageKey =
   | "target-review"
   | "target-running"
   | "target-scheduled-downtime"
+  | "target-tab-focus-unavailable"
   | "target-system-error";
 
 export function canonicalDurableTargetStatus(
@@ -81,7 +101,7 @@ export function canonicalDurableTargetStatus(
   }
   return {
     safeSignals,
-    safeMessage: renderDurableMessage(messageKeyForTarget(status, safeSignals), scope),
+    safeMessage: canonicalDurableTargetMessage(scope, status, safeSignals),
   };
 }
 
@@ -94,7 +114,7 @@ export function parseDurableTargetStatus(
   if (!safeSignals) return null;
   return {
     safeSignals,
-    safeMessage: renderDurableMessage(messageKeyForTarget(status, safeSignals), scope),
+    safeMessage: canonicalDurableTargetMessage(scope, status, safeSignals),
   };
 }
 
@@ -104,10 +124,18 @@ export function isHistoricalDurableTargetMessage(
   signals: readonly string[],
   safeMessage: string,
 ): boolean {
-  // This one-way migration admits only the old derived target-review cache for the
-  // newly distinct blocked/failed message keys. The exact-match guard otherwise rejects
-  // stale or arbitrary text; remove this once no persisted ledger can carry that cache.
+  // Admit only exact former derived caches. Target identity and evidence checks
+  // still apply, and outward recovery copy is reconstructed canonically.
   const messageKey = messageKeyForTarget(status, signals);
+  const baseMessage = renderDurableMessage(messageKey, scope);
+  const historicalFilenameMessage = filenameOutcomeMessage(signals, "download");
+  if (
+    historicalFilenameMessage &&
+    (safeMessage === baseMessage ||
+      (status !== "downloaded" && safeMessage === `${baseMessage} ${historicalFilenameMessage}`))
+  ) {
+    return true;
+  }
   if (
     ![
       "target-blocked",
@@ -135,23 +163,94 @@ export function canonicalDurableSummaryMessage(
   if (mismatchedGstr1Period) {
     return incompleteGstr1PeriodMismatchRecoveryMessage(scope, mismatchedGstr1Period);
   }
+  let partialMessage: string | null = null;
   if (status === "partial") {
     const missingArtifacts = signals
       .map((signal) => /^filed-return-artifact-unavailable:(PDF|JSON|EXCEL)$/.exec(signal)?.[1])
       .filter((artifactType): artifactType is string => Boolean(artifactType));
     const missingReasons = signals.filter((signal) => /^artifact-[a-z0-9-]+$/.test(signal));
     if (missingArtifacts.length > 0 && missingArtifacts.length === missingReasons.length) {
-      return `Pack prepared a partial ZIP; missing ${missingArtifacts
+      partialMessage = `Pack prepared a partial ZIP; missing ${missingArtifacts
         .map((artifactType, index) => `${artifactType} (${missingReasons[index]})`)
         .join(", ")}.`;
     }
   }
-  const durableMessage = renderDurableMessage(messageKeyForSummary(status, signals), scope);
+  const durableMessageKey = messageKeyForSummary(scope, status, signals);
+  const durableMessage = partialMessage ?? renderDurableMessage(durableMessageKey, scope);
   const summaryMessage = filedReturnsSummaryStatusMessage(
     signals,
     summaryLifecycleForDurableSignals(signals),
   );
-  return [durableMessage, summaryMessage].filter(Boolean).join(" ");
+  const filenameContext =
+    durableMessageKey === "complete" ||
+    durableMessageKey === "full-year-downloaded-cleanup-blocked" ||
+    durableMessageKey === "target-downloaded-cleanup-blocked" ||
+    (durableMessageKey === "partial" &&
+      scope.period !== FULL_FISCAL_YEAR_PERIOD &&
+      hasConfirmedSinglePeriodZipDownloadEvidence(signals))
+      ? "download"
+      : "unresolved-target";
+  const filenameMessage =
+    durableMessageKey === "full-year-complete-download-unconfirmed" ||
+    durableMessageKey === "full-year-no-artifacts" ||
+    durableMessageKey === "not-filed"
+      ? ""
+      : filenameOutcomeMessage(signals, filenameContext);
+  return [
+    durableMessage,
+    filedReturnsPlanCoverageMessage(scope, status, signals),
+    summaryMessage,
+    filenameMessage,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function filedReturnsPlanCoverageMessage(
+  scope: FiledReturnsDownloadScope,
+  status: FiledReturnsFlowSummary["status"],
+  signals: readonly string[],
+): string {
+  if (
+    scope.period !== FULL_FISCAL_YEAR_PERIOD ||
+    status !== "complete" ||
+    !signals.includes("full-fiscal-year-plan-narrower-than-eligible") ||
+    !["complete", "full-year-no-artifacts", "full-year-complete-download-unconfirmed"].includes(
+      messageKeyForSummary(scope, status, signals),
+    )
+  )
+    return "";
+  return "This run covers its original plan; more periods are eligible now. Start this year again to include them.";
+}
+
+function canonicalDurableTargetMessage(
+  scope: FiledReturnsDownloadScope,
+  status: FiledReturnsFullFiscalYearTargetStatus | "target-review",
+  signals: readonly string[],
+): string {
+  return [
+    renderDurableMessage(messageKeyForTarget(status, signals), scope),
+    filenameOutcomeMessage(signals, status === "downloaded" ? "download" : "unresolved-target"),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function filenameOutcomeMessage(
+  signals: readonly string[],
+  context: "download" | "unresolved-target",
+): string {
+  if (FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS.some((signal) => signals.includes(signal))) {
+    return context === "download"
+      ? "Pack completed the download, but the browser saved it under a different name. Check browser Downloads before using the file."
+      : "The browser may have used a different saved name, but Pack could not verify that any file belongs to this unresolved target. Check browser Downloads before using a file.";
+  }
+  if (FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS.some((signal) => signals.includes(signal))) {
+    return context === "download"
+      ? "Pack completed the download, but could not confirm its saved filename. Check browser Downloads before using the file."
+      : "Pack could not confirm the saved filename for this unresolved target. Check browser Downloads before using a file.";
+  }
+  return "";
 }
 
 function summaryLifecycleForDurableSignals(
@@ -268,11 +367,72 @@ function messageKeyForTarget(
   signals: readonly string[],
 ): DurableMessageKey {
   if (signals.includes("filed-return-durable-status-rejected")) return "durable-status-rejected";
+  const artifactProgressReason = signals
+    .map(filedReturnsArtifactProgressFailureReasonFromSignal)
+    .find((reason) => reason !== null);
+  if (artifactProgressReason === "malformed-summary") {
+    return "target-artifact-progress-malformed-summary";
+  }
+  if (artifactProgressReason === "storage-read-failed") {
+    return "target-artifact-progress-storage-read-failed";
+  }
+  if (artifactProgressReason === "storage-write-failed") {
+    return "target-artifact-progress-storage-write-failed";
+  }
+  const checkpointClearReason = signals
+    .map((signal) => /^artifact-acquisition-checkpoint-clear-failed:(.+)$/.exec(signal)?.[1])
+    .find((reason): reason is string => Boolean(reason));
+  if (checkpointClearReason === "storage-read-failed") {
+    return "target-checkpoint-clear-storage-read";
+  }
+  if (checkpointClearReason === "storage-remove-failed") {
+    return "target-checkpoint-clear-storage-remove";
+  }
+  if (
+    checkpointClearReason === "download-search-failed" ||
+    checkpointClearReason === "download-missing"
+  ) {
+    return "target-checkpoint-clear-download";
+  }
+  if (
+    checkpointClearReason === "download-cancel-failed" ||
+    checkpointClearReason === "download-cancel-unconfirmed"
+  ) {
+    return "target-checkpoint-clear-cancel";
+  }
+  if (
+    checkpointClearReason === "checkpoint-invalid" ||
+    checkpointClearReason === "intent-discard-not-approved"
+  ) {
+    return "target-checkpoint-clear-checkpoint";
+  }
+  if (checkpointClearReason === "download-target-mismatch") {
+    return "target-checkpoint-clear-target";
+  }
+  if (checkpointClearReason?.startsWith("download-danger-")) {
+    return "target-checkpoint-clear-danger";
+  }
+  if (
+    checkpointClearReason === "download-size-unknown" ||
+    checkpointClearReason === "download-empty"
+  ) {
+    return "target-checkpoint-clear-size";
+  }
+  if (checkpointClearReason) return "target-checkpoint-clear-state";
   if (signals.includes("artifact-acquisition-completion-pending-summary")) {
     return "target-completion-pending-summary";
   }
   if (signals.includes("full-fiscal-year-restaging-required")) return "target-restaging";
   if (signals.includes("full-fiscal-year-target-retry-approved")) return "target-retry-approved";
+  if (signals.includes("full-fiscal-year-pinned-gst-tab-unavailable")) {
+    return "full-year-pinned-tab-unavailable";
+  }
+  if (signals.includes("full-fiscal-year-gst-tab-session-unavailable")) {
+    return "full-year-tab-session-unavailable";
+  }
+  if (signals.includes("filed-returns-gst-tab-focus-unavailable")) {
+    return "target-tab-focus-unavailable";
+  }
   if (signals.includes("filed-returns-target-manually-observed")) return "target-manually-observed";
   if (hasCleanupFailureSignal(signals)) {
     return "target-cleanup-blocked";
@@ -285,14 +445,20 @@ function messageKeyForTarget(
   if (status === "downloaded") return "target-downloaded";
   if (status === "cancelled") return "target-cancelled";
   if (status === "blocked" || status === "failed") {
-    if (signals.includes("portal-system-error")) return "target-system-error";
-    if (signals.includes("portal-scheduled-downtime")) return "target-scheduled-downtime";
-    if (signals.includes("portal-blocked-or-session-expired")) {
-      return "target-blocked-or-session-expired";
-    }
+    const portalAvailabilityKey = portalAvailabilityMessageKey(signals);
+    if (portalAvailabilityKey) return portalAvailabilityKey;
     return status === "failed" ? "target-failed" : "target-blocked";
   }
   return "target-review";
+}
+
+function portalAvailabilityMessageKey(signals: readonly string[]): DurableMessageKey | null {
+  if (signals.includes("portal-system-error")) return "target-system-error";
+  if (signals.includes("portal-scheduled-downtime")) return "target-scheduled-downtime";
+  if (signals.includes("portal-blocked-or-session-expired")) {
+    return "target-blocked-or-session-expired";
+  }
+  return null;
 }
 
 export function visibleGstr1MismatchPeriod(
@@ -334,31 +500,90 @@ function visibleReturnTypeMismatch(
 }
 
 function messageKeyForSummary(
+  scope: FiledReturnsDownloadScope,
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
 ): DurableMessageKey {
+  const isFullFiscalYear = scope.period === FULL_FISCAL_YEAR_PERIOD;
   if (signals.includes("filed-return-durable-status-rejected")) return "durable-status-rejected";
-  if (signals.includes("full-fiscal-year-resume-confirmation-required")) return "full-year-resume";
-  if (signals.includes("full-fiscal-year-run-interrupted")) return "full-year-interrupted";
-  if (signals.includes("full-fiscal-year-run-needs-action")) return "full-year-needs-action";
-  if (signals.includes("full-fiscal-year-run-active")) return "full-year-active";
+  if (isFullFiscalYear && signals.includes("full-fiscal-year-resume-confirmation-required")) {
+    return "full-year-resume";
+  }
+  if (isFullFiscalYear && signals.includes("full-fiscal-year-run-interrupted")) {
+    return "full-year-interrupted";
+  }
+  const blockingRecoveryKey = blockingSummaryRecoveryMessageKey(signals, isFullFiscalYear);
+  if (isFullFiscalYear && (status === "blocked" || status === "partial")) {
+    if (blockingRecoveryKey) return blockingRecoveryKey;
+    if (signals.includes("full-fiscal-year-pinned-gst-tab-unavailable")) {
+      return "full-year-pinned-tab-unavailable";
+    }
+    if (signals.includes("full-fiscal-year-gst-tab-session-unavailable")) {
+      return "full-year-tab-session-unavailable";
+    }
+  }
+  if (isFullFiscalYear && signals.includes("full-fiscal-year-run-needs-action")) {
+    if (blockingRecoveryKey) return blockingRecoveryKey;
+    if (signals.includes("filed-returns-target-review-required")) return "target-review";
+    if (status === "blocked" || status === "partial") {
+      const portalAvailabilityKey = portalAvailabilityMessageKey(signals);
+      if (portalAvailabilityKey) return portalAvailabilityKey;
+    }
+    return "full-year-needs-action";
+  }
+  if (isFullFiscalYear && signals.includes("full-fiscal-year-run-active")) {
+    return "full-year-active";
+  }
+  if (blockingRecoveryKey) return blockingRecoveryKey;
+  if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
+  if (signals.includes("filed-returns-gst-tab-focus-unavailable")) {
+    return "target-tab-focus-unavailable";
+  }
+  if (signals.includes("filed-returns-target-review-required")) return "target-review";
+  if (status === "blocked" || status === "partial") {
+    const portalAvailabilityKey = portalAvailabilityMessageKey(signals);
+    if (portalAvailabilityKey) return portalAvailabilityKey;
+  }
+  if (
+    isFullFiscalYear &&
+    status === "complete" &&
+    signals.includes("full-fiscal-year-no-zip-artifacts")
+  ) {
+    return "full-year-no-artifacts";
+  }
+  if (
+    isFullFiscalYear &&
+    status === "complete" &&
+    signals.includes("full-fiscal-year-complete") &&
+    !signals.includes("full-fiscal-year-zip-downloaded")
+  ) {
+    return "full-year-complete-download-unconfirmed";
+  }
+  if (status === "complete") return "complete";
+  if (status === "partial") return "partial";
+  if (status === "cancelled") return "target-cancelled";
+  return "full-year-needs-action";
+}
+
+function blockingSummaryRecoveryMessageKey(
+  signals: readonly string[],
+  isFullFiscalYear: boolean,
+): DurableMessageKey | null {
   if (hasCleanupFailureSignal(signals)) {
-    if (signals.includes("full-fiscal-year-zip-downloaded")) {
+    if (isFullFiscalYear && signals.includes("full-fiscal-year-zip-downloaded")) {
       return "full-year-downloaded-cleanup-blocked";
     }
     return hasConfirmedSinglePeriodZipDownloadEvidence(signals)
       ? "target-downloaded-cleanup-blocked"
       : "target-cleanup-blocked";
   }
-  if (signals.some((signal) => signal.includes("full-fiscal-year-zip-download"))) {
+  if (
+    isFullFiscalYear &&
+    signals.some((signal) => signal.startsWith("full-fiscal-year-zip-download-"))
+  ) {
     return "full-year-zip-review";
   }
-  if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
-  if (signals.includes("filed-returns-target-review-required")) return "target-review";
-  if (status === "complete") return "complete";
-  if (status === "partial") return "partial";
-  if (status === "cancelled") return "target-cancelled";
-  return "full-year-needs-action";
+  return null;
 }
 
 function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloadScope): string {
@@ -369,12 +594,20 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "durable-status-rejected":
       "Pack rejected non-canonical recovery metadata and will not continue automatically.",
     "full-year-active": `The saved FY ${scope.financialYear} run is still active.`,
+    "full-year-complete-download-unconfirmed":
+      "Pack completed the saved fiscal-year run, but could not confirm a final ZIP download. Check browser Downloads before relying on a file.",
     "full-year-downloaded-cleanup-blocked":
       "Pack confirmed the final fiscal-year ZIP download; only retained local staging remains to be cleared.",
     "full-year-interrupted": `Pack stopped before it could confirm ${period}. Check Downloads before retrying.`,
     "full-year-needs-action": `Pack needs an explicit recovery action before continuing ${period}.`,
+    "full-year-pinned-tab-unavailable":
+      "Pack stopped because the GST Portal tab selected for this saved plan is no longer available. Use Cancel and reset for this saved run, then start this year again.",
+    "full-year-no-artifacts":
+      "Pack completed the saved fiscal-year run. No ZIP was created because no filed-return artifacts were available for export.",
     "full-year-resume":
       "Pack cannot verify which GST account owns this saved run. Resume only with the same account open; otherwise discard it.",
+    "full-year-tab-session-unavailable":
+      "Pack could not retain the GST tab identity for this saved plan. Try again with the GST Portal tab open in the foreground.",
     "full-year-zip-review":
       "Pack could not confirm the final fiscal-year ZIP. Check the exact browser download before retrying.",
     "not-filed": "The GST Portal reported no filed return for the selected period.",
@@ -382,6 +615,30 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "target-cancelled": `Pack cancelled the unresolved filed-return target for ${period}.`,
     "target-blocked": `Pack paused the saved full-year run at ${period}. Resolve the GST Portal page before retrying this period.`,
     "target-blocked-or-session-expired": FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
+    "target-checkpoint-clear-cancel":
+      "Pack could not confirm cancellation of the exact browser download, so it retained artifact recovery and did not retry.",
+    "target-checkpoint-clear-checkpoint":
+      "Pack found retained artifact recovery that is not safe to discard, so it did not clear or retry it.",
+    "target-checkpoint-clear-danger":
+      "The browser has not classified the retained download as safe, so Pack did not clear or retry its recovery state.",
+    "target-checkpoint-clear-download":
+      "Pack could not find the exact browser download owned by retained artifact recovery, so it did not clear or retry it.",
+    "target-checkpoint-clear-size":
+      "Pack could not verify a non-empty retained browser download, so it did not clear or retry its recovery state.",
+    "target-checkpoint-clear-state":
+      "Pack could not verify the retained browser download state, so it did not clear or retry its recovery state.",
+    "target-checkpoint-clear-storage-read":
+      "Pack could not read retained artifact recovery state, so it did not clear or retry it.",
+    "target-checkpoint-clear-storage-remove":
+      "Pack verified retained artifact recovery but could not remove it, so it will not start another portal action.",
+    "target-checkpoint-clear-target":
+      "The retained browser download no longer matches its exact artifact target, so Pack did not clear or retry it.",
+    "target-artifact-progress-malformed-summary":
+      "Pack found retained selected-file progress it could not validate, so it did not inspect or act on the GST Portal tab.",
+    "target-artifact-progress-storage-read-failed":
+      "Pack could not read retained selected-file progress, so it did not inspect or act on the GST Portal tab.",
+    "target-artifact-progress-storage-write-failed":
+      "Pack could not verify retained selected-file progress in session storage, so it did not inspect or act on the GST Portal tab.",
     "target-completion-pending-summary":
       "Pack proved this browser download and is safely finishing its local recovery record.",
     "target-cleanup-blocked":
@@ -397,6 +654,8 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "target-review": `Pack could not verify the browser download for ${period}. Check Downloads before retrying or cancelling this target.`,
     "target-running": `Checking ${period}.`,
     "target-scheduled-downtime": FILED_RETURNS_PORTAL_SCHEDULED_DOWNTIME_MESSAGE,
+    "target-tab-focus-unavailable":
+      "Pack could not focus the selected GST Portal tab and will not start another portal action.",
     "target-system-error": FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE,
   };
   return messages[key];

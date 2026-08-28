@@ -465,6 +465,7 @@ describe("GSTR-1 period-mismatch recovery", () => {
 });
 
 function createDeps(sendMessage: () => Promise<PackMessageResponse>): FiledReturnsFlowRunnerDeps {
+  let elapsedMs = 0;
   return {
     getActiveGstTab: async () =>
       ({
@@ -482,6 +483,12 @@ function createDeps(sendMessage: () => Promise<PackMessageResponse>): FiledRetur
       flowStepSettleMs: 0,
       portalNavigationSettleMs: 0,
       resultRowNavigationSettleMs: 0,
+    },
+    now: () => {
+      elapsedMs += 100;
+      return new Date(
+        `2026-06-24T00:00:${String(Math.floor(elapsedMs / 1_000)).padStart(2, "0")}.000Z`,
+      );
     },
   };
 }

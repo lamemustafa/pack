@@ -28,6 +28,7 @@ import {
 import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isCanonicalSinglePeriodLedgerId } from "../connectors/gst/filed-returns-ledger-id";
+import { isSinglePeriodCleanupCheckpointFailureSignal } from "../connectors/gst/single-period-cleanup-checkpoint";
 import { readSinglePeriodStagingRecord } from "./filed-returns-artifact-progress";
 import { isFiledReturnsTargetDownloadAttempt } from "./filed-returns-target-download-attempt-validation";
 import {
@@ -49,6 +50,16 @@ import {
   sameSinglePeriodBundleScope,
   type SinglePeriodBundleLedger,
 } from "./filed-returns-single-period-bundle-ledger";
+import {
+  FiledReturnsTargetReviewClearError,
+  isFiledReturnsTargetReviewClearFailureSignal,
+  type FiledReturnsTargetReviewClearFailureStage,
+  type FiledReturnsTargetReviewClearResult,
+} from "../connectors/gst/filed-returns-target-review-clear";
+import {
+  artifactAcquisitionCheckpointClearFailureSignal,
+  type ArtifactAcquisitionCheckpointClearFailureReason,
+} from "../connectors/gst/artifact-acquisition-checkpoint-clear";
 
 export interface FiledReturnsTargetReviewDeps {
   storageKeys: {
@@ -251,24 +262,88 @@ export async function clearFiledReturnsTargetReview(
   deps: FiledReturnsTargetReviewDeps,
   expectedRevision?: number,
 ): Promise<boolean> {
+  return (
+    await clearFiledReturnsTargetReviewAttempt(
+      scope,
+      deps,
+      expectedRevision,
+      "throw-storage-errors",
+    )
+  ).ok;
+}
+
+/**
+ * The diagnostic form used where the caller can safely persist a reason. It
+ * preserves the boolean export's storage-error behaviour for every existing
+ * caller while preventing this recovery boundary from replacing a specific
+ * failed exit with `false`.
+ */
+export function clearFiledReturnsTargetReviewWithReason(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+  expectedRevision?: number,
+): Promise<FiledReturnsTargetReviewClearResult> {
+  return clearFiledReturnsTargetReviewAttempt(scope, deps, expectedRevision, "name-storage-errors");
+}
+
+async function clearFiledReturnsTargetReviewAttempt(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsTargetReviewDeps,
+  expectedRevision: number | undefined,
+  storageErrorMode: "name-storage-errors" | "throw-storage-errors",
+): Promise<FiledReturnsTargetReviewClearResult> {
   const key = deps.storageKeys.targetReview;
-  if (!key) return false;
+  if (!key) return targetReviewClearFailure("storage-key-missing");
   if (
     expectedRevision !== undefined &&
     (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || expectedRevision > 10_000)
   ) {
-    return false;
+    return targetReviewClearFailure("expected-revision-invalid");
   }
 
   return runTargetReviewMutationCriticalSection(async () => {
-    const state = await readTargetReviewStorageStateByKey(key);
-    if (state.state !== "valid" || !sameFiledReturnsScope(state.review.scope, scope)) return false;
-    if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
-      return false;
+    let state: FiledReturnsTargetReviewStorageState;
+    try {
+      state = await readTargetReviewStorageStateByKey(
+        key,
+        storageErrorMode === "name-storage-errors" ? "tag-write-error" : "throw-storage-error",
+      );
+    } catch (error) {
+      if (storageErrorMode === "throw-storage-errors") throw error;
+      return targetReviewClearFailure(
+        error instanceof TargetReviewStorageWriteError
+          ? "storage-write-failed"
+          : "storage-read-failed",
+      );
     }
-    await browser.storage.local.remove(key);
-    return true;
+    // Nothing to remove is the post-condition, not a failure. A live
+    // single-period All-formats run downloaded its ZIP, correlated it by exact
+    // browser download ID, cleared staging -- and then blocked, because the
+    // review record it went to delete was already gone. A non-idempotent delete
+    // reported success as an error and held a proven download hostage to its
+    // own bookkeeping.
+    if (state.state === "missing") return { ok: true };
+    if (state.state === "malformed") return targetReviewClearFailure("review-malformed");
+    if (!sameFiledReturnsScope(state.review.scope, scope)) {
+      return targetReviewClearFailure("scope-mismatch");
+    }
+    if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
+      return targetReviewClearFailure("revision-mismatch");
+    }
+    try {
+      await browser.storage.local.remove(key);
+    } catch (error) {
+      if (storageErrorMode === "throw-storage-errors") throw error;
+      return targetReviewClearFailure("storage-remove-failed");
+    }
+    return { ok: true };
   });
+}
+
+function targetReviewClearFailure(
+  stage: FiledReturnsTargetReviewClearFailureStage,
+): FiledReturnsTargetReviewClearResult {
+  return { error: new FiledReturnsTargetReviewClearError(stage), ok: false };
 }
 
 /**
@@ -449,7 +524,14 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       // service-worker stop can leave the local review behind after checkpoint
       // cleanup; never replace that completed target with a cancellation.
       const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
-      if (cancellation.state === "blocked") return responseForFiledReturnsTargetReview(review);
+      if (cancellation.state === "blocked") {
+        return persistArtifactCheckpointClearFailureReview(
+          key,
+          review,
+          cancellation.reason,
+          deps.now?.() ?? new Date(),
+        );
+      }
       if (cancellation.state === "completed") {
         await clearArtifactAcquisitionCheckpointsAfterPersistedSummary(
           review.scope,
@@ -469,6 +551,14 @@ export async function resolveUnconfirmedFiledReturnsDownload(
       !review.artifactAcquisitionCompletion
     ) {
       const cancellation = await clearArtifactAcquisitionCheckpoints(review.scope);
+      if (cancellation.state === "blocked") {
+        return persistArtifactCheckpointClearFailureReview(
+          key,
+          review,
+          cancellation.reason,
+          deps.now?.() ?? new Date(),
+        );
+      }
       if (cancellation.state === "completed") {
         // Local review storage must carry the exact proof before the session
         // completion is written. An MV3 stop after the session write can leave
@@ -611,21 +701,12 @@ export async function resolveUnconfirmedFiledReturnsDownload(
         discardMissing: true,
       });
       if (cancellation.state === "blocked") {
-        const clearFailureReview: FiledReturnsTargetReview = {
-          ...review,
-          revision: targetReviewRevision(review) + 1,
-          safeSignals: uniqueSafeSignals([
-            ...review.safeSignals,
-            "artifact-acquisition-checkpoint-clear-failed",
-          ]),
-          safeMessage:
-            "Pack could not clear retained artifact recovery state. It will not start another portal action automatically.",
-          updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-        };
-        const parsedReview = parseFiledReturnsTargetReview(clearFailureReview);
-        if (!parsedReview) return malformedTargetReviewResponse(scope);
-        await browser.storage.local.set({ [key]: parsedReview });
-        return responseForFiledReturnsTargetReview(parsedReview);
+        return persistArtifactCheckpointClearFailureReview(
+          key,
+          review,
+          cancellation.reason,
+          deps.now?.() ?? new Date(),
+        );
       }
     }
 
@@ -650,6 +731,40 @@ export async function resolveUnconfirmedFiledReturnsDownload(
     await persistResolvedTargetReviewSummary(flowSummary, deps);
     return { ok: true, flowStep, flowSummary };
   });
+}
+
+async function persistArtifactCheckpointClearFailureReview(
+  key: string,
+  review: FiledReturnsTargetReview,
+  reason: ArtifactAcquisitionCheckpointClearFailureReason,
+  now: Date,
+): Promise<PackMessageResponse> {
+  const durableStatus = parseDurableTargetStatus(
+    review.scope,
+    "target-review",
+    uniqueSafeSignals([
+      ...review.safeSignals.filter(
+        (signal) => !signal.startsWith("artifact-acquisition-checkpoint-clear-failed:"),
+      ),
+      "artifact-acquisition-checkpoint-clear-failed",
+      artifactAcquisitionCheckpointClearFailureSignal(reason),
+    ]),
+  );
+  // The original review is the durable recovery guard. If diagnostic enrichment
+  // would exceed or otherwise violate the closed signal contract, retain that
+  // guard unchanged instead of replacing it with a generic rejection record.
+  if (!durableStatus) return responseForFiledReturnsTargetReview(review);
+  const clearFailureReview: FiledReturnsTargetReview = {
+    ...review,
+    revision: targetReviewRevision(review) + 1,
+    safeSignals: durableStatus.safeSignals,
+    safeMessage: durableStatus.safeMessage,
+    updatedAt: now.toISOString(),
+  };
+  const parsedReview = parseFiledReturnsTargetReview(clearFailureReview);
+  if (!parsedReview) return responseForFiledReturnsTargetReview(review);
+  await browser.storage.local.set({ [key]: parsedReview });
+  return responseForFiledReturnsTargetReview(parsedReview);
 }
 
 export async function retryCompletedSinglePeriodZipCleanup(
@@ -679,10 +794,20 @@ export async function retryCompletedSinglePeriodZipCleanup(
       try {
         stagingRecord = await readSinglePeriodStagingRecord();
       } catch {
-        return responseForFiledReturnsTargetReview(review);
+        return retainSinglePeriodCleanupBlock(
+          review,
+          ["single-period-bundle-state-read-failed", "single-period-opfs-retained"],
+          key,
+          deps.now?.() ?? new Date(),
+        );
       }
       if (stagingRecord && stagingRecord.ledgerId !== attemptLedgerId) {
-        return responseForFiledReturnsTargetReview(review);
+        return retainSinglePeriodCleanupBlock(
+          review,
+          ["single-period-bundle-scope-conflict", "single-period-opfs-retained"],
+          key,
+          deps.now?.() ?? new Date(),
+        );
       }
     } else {
       const cleanupTarget = await readScopeBoundSinglePeriodCleanupTarget(
@@ -690,7 +815,12 @@ export async function retryCompletedSinglePeriodZipCleanup(
         isInterruptedSinglePeriodBundleReview(review),
       );
       if (cleanupTarget.state === "blocked") {
-        return responseForFiledReturnsTargetReview(review);
+        return retainSinglePeriodCleanupBlock(
+          review,
+          cleanupTarget.safeSignals,
+          key,
+          deps.now?.() ?? new Date(),
+        );
       }
       cleanupLedgerId = cleanupTarget.ledgerId;
       expectedLedger = cleanupTarget.expectedLedger;
@@ -702,7 +832,12 @@ export async function retryCompletedSinglePeriodZipCleanup(
       scope,
     });
     if (cleanup.state === "blocked") {
-      return responseForFiledReturnsTargetReview(review);
+      return retainSinglePeriodCleanupBlock(
+        review,
+        cleanup.safeSignals,
+        key,
+        deps.now?.() ?? new Date(),
+      );
     }
 
     const cancelled = review.safeSignals.includes("single-period-zip-cancel-cleanup-failed");
@@ -761,6 +896,43 @@ export async function retryCompletedSinglePeriodZipCleanup(
       flowSummary: durableSummary,
     };
   });
+}
+
+async function retainSinglePeriodCleanupBlock(
+  review: FiledReturnsTargetReview,
+  cleanupSignals: readonly string[],
+  key: string,
+  now: Date,
+): Promise<PackMessageResponse> {
+  if (cleanupSignals.every((signal) => review.safeSignals.includes(signal))) {
+    return responseForFiledReturnsTargetReview(review);
+  }
+  const durableStatus = parseDurableTargetStatus(
+    review.scope,
+    "target-review",
+    uniqueSafeSignals([...review.safeSignals, ...cleanupSignals]),
+  );
+  if (!durableStatus) return responseForFiledReturnsTargetReview(review);
+  const blockedReview = parseFiledReturnsTargetReview({
+    ...review,
+    revision: targetReviewRevision(review) + 1,
+    safeMessage: durableStatus.safeMessage,
+    safeSignals: durableStatus.safeSignals,
+    updatedAt: now.toISOString(),
+  });
+  if (!blockedReview) return responseForFiledReturnsTargetReview(review);
+  try {
+    await browser.storage.local.set({ [key]: blockedReview });
+  } catch {
+    return responseForFiledReturnsTargetReview({
+      ...blockedReview,
+      safeSignals: uniqueSafeSignals([
+        ...blockedReview.safeSignals,
+        "single-period-bundle-state-persist-failed",
+      ]),
+    });
+  }
+  return responseForFiledReturnsTargetReview(blockedReview);
 }
 
 export async function persistResolvedTargetReviewSummary(
@@ -1103,6 +1275,9 @@ function toTargetReviewSummary(
 function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResult {
   if (review.safeSignals.includes("filed-return-durable-status-rejected")) {
     const hasExactDownloadId = review.downloadAttempt?.phase === "download-observing";
+    const canonicalZipCompletionPersistFailed = review.safeSignals.includes(
+      "single-period-cleanup-checkpoint-failed:canonical-completion-persist-failed",
+    );
     return {
       connectorId: "gst",
       scopeId: filedReturnScopeId(review.scope.returnType),
@@ -1116,10 +1291,15 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
         ...(review.safeSignals.includes("single-period-opfs-cleared")
           ? ["single-period-opfs-cleared"]
           : []),
+        ...(canonicalZipCompletionPersistFailed
+          ? ["single-period-cleanup-checkpoint-failed:canonical-completion-persist-failed"]
+          : []),
       ],
-      safeMessage: hasExactDownloadId
-        ? "Pack confirmed the exact browser download but could not save canonical target completion. It will not start another download automatically."
-        : "Pack rejected non-canonical recovery state and cannot verify whether a download started. It will not continue automatically.",
+      safeMessage: canonicalZipCompletionPersistFailed
+        ? "Pack confirmed the exact browser download but could not save the confirmed ZIP completion after temporary staging was cleared. It will not start another download automatically."
+        : hasExactDownloadId
+          ? "Pack confirmed the exact browser download but could not save canonical target completion. It will not start another download automatically."
+          : "Pack rejected non-canonical recovery state and cannot verify whether a download started. It will not continue automatically.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
         message: hasExactDownloadId
@@ -1133,6 +1313,9 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
   if (hasSinglePeriodCleanupFailure(review.safeSignals)) {
     const transientStagingCleared = review.safeSignals.includes("single-period-opfs-cleared");
     const downloadConfirmed = hasConfirmedSinglePeriodZipDownloadEvidence(review.safeSignals);
+    const stagingStateReadFailed = review.safeSignals.includes(
+      "single-period-bundle-state-read-failed",
+    );
     return {
       connectorId: "gst",
       scopeId: filedReturnScopeId(review.scope.returnType),
@@ -1145,17 +1328,36 @@ function targetReviewStep(review: FiledReturnsTargetReview): PortalFlowStepResul
           : ["single-period-opfs-clear-failed", "single-period-opfs-cleanup-required"]),
         ...confirmedSinglePeriodZipSignals(review.safeSignals),
         ...singlePeriodOpfsClearDiagnosticSignals(review.safeSignals),
+        // Every signal that made hasSinglePeriodCleanupFailure true, not a
+        // generic stand-in for it. Seven signals can select this state and only
+        // two had a pass-through, so five distinct causes reached the surface as
+        // one hardcoded `single-period-cleanup-checkpoint-failed` and were
+        // indistinguishable from outside -- including in a live run this was
+        // diagnosed from.
+        ...review.safeSignals.filter(
+          (signal) =>
+            isSinglePeriodCleanupFailureSignal(signal) ||
+            isFiledReturnsTargetReviewClearFailureSignal(signal) ||
+            [
+              "single-period-bundle-state-persist-failed",
+              "single-period-zip-recovery-checkpoint-missing",
+            ].includes(signal),
+        ),
       ]),
       safeMessage: transientStagingCleared
         ? "Pack cleared temporary selected-file staging but could not verify its durable recovery checkpoint cleanup."
-        : downloadConfirmed
-          ? `Pack confirmed the selected ZIP download for ${review.scope.period}; only temporary local staging remains to be cleared.`
-          : "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
+        : stagingStateReadFailed
+          ? "Pack could not read temporary selected-file recovery state, so it retained local staging without clearing or replacing it."
+          : downloadConfirmed
+            ? `Pack confirmed the selected ZIP download for ${review.scope.period}; only temporary local staging remains to be cleared.`
+            : "Pack cannot complete this review while temporary selected-file staging remains uncleared.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
         message: transientStagingCleared
           ? "Retry so Pack can reconcile the durable selected-file recovery checkpoint."
-          : "Retry so Pack can clear the retained temporary staging before completion.",
+          : stagingStateReadFailed
+            ? "Retry after local recovery state is available; Pack will not clear or replace it while it cannot read it."
+            : "Retry so Pack can clear the retained temporary staging before completion.",
         canResume: true,
       },
       ...copyFiledReturnsDownloadDiagnosticState(review),
@@ -1287,6 +1489,7 @@ export function noTargetReviewResponse(scope: FiledReturnsDownloadScope): PackMe
 
 export function malformedTargetReviewResponse(
   scope: FiledReturnsDownloadScope,
+  totalPeriods = 1,
 ): PackMessageResponse {
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
@@ -1309,7 +1512,7 @@ export function malformedTargetReviewResponse(
       scope,
       status: "blocked",
       completedPeriods: [],
-      totalPeriods: 1,
+      totalPeriods,
       currentPeriod: scope.period,
       flowStep,
     },
@@ -1342,6 +1545,7 @@ function hasSinglePeriodCleanupFailure(safeSignals: readonly string[]): boolean 
 }
 
 function isSinglePeriodCleanupFailureSignal(signal: string): boolean {
+  if (isSinglePeriodCleanupCheckpointFailureSignal(signal)) return true;
   return [
     "single-period-opfs-clear-failed",
     "single-period-cleanup-checkpoint-failed",
@@ -1363,6 +1567,7 @@ function uniqueSafeSignals(safeSignals: readonly string[]): string[] {
 
 async function readTargetReviewStorageStateByKey(
   key: string,
+  writeErrorMode: "tag-write-error" | "throw-storage-error" = "throw-storage-error",
 ): Promise<FiledReturnsTargetReviewStorageState> {
   const values = await browser.storage.local.get(key);
   const stored = values[key];
@@ -1372,8 +1577,20 @@ async function readTargetReviewStorageStateByKey(
   if (review) return { review, state: "valid" };
   // Do not retain unvalidated recovery metadata. The sentinel preserves the
   // fail-closed state until the user explicitly clears local Pack data.
-  await browser.storage.local.set({ [key]: MALFORMED_TARGET_REVIEW_SENTINEL });
+  try {
+    await browser.storage.local.set({ [key]: MALFORMED_TARGET_REVIEW_SENTINEL });
+  } catch (error) {
+    if (writeErrorMode === "tag-write-error") throw new TargetReviewStorageWriteError();
+    throw error;
+  }
   return { state: "malformed" };
+}
+
+class TargetReviewStorageWriteError extends Error {
+  constructor() {
+    super("Target review storage write failed.");
+    this.name = "TargetReviewStorageWriteError";
+  }
 }
 
 async function readCanonicalTargetReviewStorageStateByKey(

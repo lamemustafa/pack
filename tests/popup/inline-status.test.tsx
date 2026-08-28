@@ -70,6 +70,23 @@ function fullYearSummary(safeSignals: string[]): FiledReturnsFlowSummary {
   };
 }
 
+function singlePeriodSummary(safeSignals: string[]): FiledReturnsFlowSummary {
+  return {
+    scope: { financialYear: "2025-26", period: "May", returnType: "GSTR-3B", artifactType: "PDF" },
+    status: "complete",
+    completedPeriods: ["May"],
+    totalPeriods: 1,
+    updatedAt: "2026-08-21T00:00:00.000Z",
+    flowStep: {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+      state: "downloaded",
+      safeSignals,
+      safeMessage: "Single-period run finished.",
+    },
+  };
+}
+
 describe("full-year completion claim", () => {
   it("does not claim the ZIP was saved when no download was correlated", () => {
     // A full-year run completes when every PERIOD is positive. That state cannot
@@ -137,7 +154,86 @@ describe("full-year completion claim", () => {
   });
 });
 
+describe("single-period completion claim", () => {
+  it("does not claim a selected file was saved without positive browser evidence", () => {
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Download unconfirmed",
+          body: "Pack finished this run, but has not confirmed your browser saved the selected file. Check Browser Downloads.",
+          icon: "!",
+          kind: "complete",
+          title: "Browser download not confirmed",
+          tone: "warning",
+        }}
+        summary={singlePeriodSummary([])}
+      />,
+    );
+
+    expect(markup).toContain("Browser download not confirmed");
+    expect(markup).toContain("has not confirmed your browser saved the selected file");
+    expect(markup).not.toContain("The selected file was saved by your browser.");
+  });
+
+  it("claims a selected file was saved after positive browser evidence", () => {
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={completePresentation}
+        summary={singlePeriodSummary(["browser-download-completed", "browser-download-non-empty"])}
+      />,
+    );
+
+    expect(markup).toContain("The selected file was saved by your browser.");
+  });
+});
+
 describe("inline filed-return recovery status", () => {
+  it("renders the cancelled-run reset confirmation instead of dropping it", () => {
+    const cancelledSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      status: "cancelled",
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: ["filed-returns-target-cancelled"],
+        safeMessage: "The saved target was cancelled.",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Reset",
+          body: "The previous recovery state was cleared. Start a fresh download when ready.",
+          icon: "✓",
+          kind: "ready",
+          title: "Ready for a new download",
+          tone: "ready",
+        }}
+        summary={cancelledSummary}
+      />,
+    );
+
+    expect(markup).toContain("Ready for a new download");
+    expect(markup).toContain("The previous recovery state was cleared");
+  });
+
   it("still explains the portal-gated secondary action when the inline action is local", () => {
     const reconcileSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
@@ -206,6 +302,8 @@ describe("inline filed-return recovery status", () => {
       // here rather than silently skip its assertions.
       expect(markup).toContain("inline-status-primary");
       expect(markup).toContain("disabled");
+      expect(markup).toContain('aria-describedby="inline-status-portal-disabled-reason"');
+      expect(markup).toContain('id="inline-status-portal-disabled-reason"');
       expect(markup).toMatch(/Open a signed-in GST Portal tab before [^<]+\./);
     }
   });
@@ -987,6 +1085,51 @@ describe("inline filed-return recovery status", () => {
     );
     expect(markup).toContain("Full-year run paused at May");
     expect(markup).toContain("summary overlay opened before Pack found a recognized Close control");
+  });
+
+  it("renders the remedy the flow computed instead of only the reason", () => {
+    // The wrong-origin block a GSTR-3B run hits after a GSTR-2B run: Pack knows
+    // the page is wrong and knows which portal control fixes it. Before this,
+    // the panel showed a generic "resolve the GST Portal page" and dropped the
+    // instruction, leaving the reader with nothing to act on.
+    const fullYearSummary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: "ALL" },
+      currentPeriod: "April",
+      fullFiscalYearRecovery: {
+        ledgerId: "full-fiscal-year-00000001",
+        targetId: "GSTR-3B:2026-27:April",
+        expectedRevision: 2,
+        targetStatus: "blocked",
+      },
+      flowStep: {
+        ...blockedSummary.flowStep,
+        safeSignals: ["wrong-origin-open-returns-dashboard", "returns-dashboard-anchor-not-found"],
+        safeMessage:
+          "Pack needs the GST Portal Returns Dashboard before it can acquire filed GSTR-3B.",
+        userAction: {
+          type: "NAVIGATE_TO_SUPPORTED_PAGE",
+          message:
+            "Open Services > Returns > Returns Dashboard in the GST Portal, then press Start again.",
+          canResume: true,
+        },
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={fullYearSummary}
+      />,
+    );
+
+    expect(markup).toContain("Returns Dashboard in the GST Portal, then press Start again");
   });
 
   it("explains when the portal keeps its overlay open after the recognized Close click", () => {

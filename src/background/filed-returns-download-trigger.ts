@@ -13,6 +13,7 @@ import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
 import { type FiledReturnsConcreteArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import { matchesAcceptedText } from "../connectors/gst/filed-returns-dom";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import type { FiledReturnsFlowMessagingDeps } from "./filed-returns-flow-messaging";
 import { acquireGstr3bPdfAfterPreflight } from "./gstr3b-artifact-acquisition";
 import { acquirePageGeneratedArtifact } from "./gstr2b-artifact-acquisition";
@@ -287,7 +288,8 @@ export async function triggerAndObserveFiledReturnDownload({
                     `artifact-${delivery.reason}`,
                     ...delivery.safeSignals,
                   ],
-                  safeMessage: artifactFailureMessageForDelivery(delivery.reason),
+                  safeMessage:
+                    delivery.safeMessage ?? artifactFailureMessageForDelivery(delivery.reason),
                 },
               };
         } finally {
@@ -404,7 +406,8 @@ export async function triggerAndObserveFiledReturnDownload({
                     `artifact-${acquired.reason}`,
                     ...acquired.safeSignals,
                   ],
-                  safeMessage: artifactFailureMessageForDelivery(acquired.reason),
+                  safeMessage:
+                    acquired.safeMessage ?? artifactFailureMessageForDelivery(acquired.reason),
                 },
               };
         } finally {
@@ -691,7 +694,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
               `artifact-${acquired.reason}`,
               ...acquired.safeSignals,
             ],
-            safeMessage: artifactFailureMessageForDelivery(acquired.reason),
+            safeMessage: acquired.safeMessage ?? artifactFailureMessageForDelivery(acquired.reason),
           },
         };
   } finally {
@@ -733,7 +736,7 @@ async function deliverValidatedArtifact({
       safeMessage?: string;
       safeSignals: string[];
     }
-  | { ok: false; reason: string; safeSignals: string[] }
+  | { ok: false; reason: string; safeMessage?: string; safeSignals: string[] }
 > {
   const staging = deps.stageCapturedDownloads;
   if (staging) {
@@ -747,23 +750,31 @@ async function deliverValidatedArtifact({
         zipPath: safeFiledReturnZipEntryPath(scope, artifactType),
       });
     } catch {
-      return { ok: false, reason: "delivery-unconfirmed", safeSignals };
+      return {
+        ok: false,
+        reason: "offscreen-unreachable",
+        safeMessage: artifactFailureMessage("offscreen-unreachable"),
+        safeSignals,
+      };
     }
-    return result.status === "staged"
-      ? {
-          ok: true,
-          safeSignals: [
-            ...safeSignals,
-            `${staging.bundleKind}-opfs-staged`,
-            `${staging.bundleKind}-opfs-staged:${artifactType}`,
-          ],
-          downloadDiagnostic: capturedArtifactDiagnostic(scope, artifactType, mimeType, requestId),
-        }
-      : {
-          ok: false,
-          reason: canonicalStagingFailureReason(result.errorCategory),
-          safeSignals,
-        };
+    if (result.status === "staged") {
+      return {
+        ok: true,
+        safeSignals: [
+          ...safeSignals,
+          `${staging.bundleKind}-opfs-staged`,
+          `${staging.bundleKind}-opfs-staged:${artifactType}`,
+        ],
+        downloadDiagnostic: capturedArtifactDiagnostic(scope, artifactType, mimeType, requestId),
+      };
+    }
+    const reason = canonicalStagingFailureReason(result.errorCategory);
+    return {
+      ok: false,
+      reason,
+      safeMessage: artifactFailureMessage(reason),
+      safeSignals,
+    };
   }
   let delivery;
   try {
@@ -1000,7 +1011,7 @@ function pageGeneratedArtifactDispatchFailure(
 function artifactFailureResponse(
   reason: ArtifactFailureReason,
   safeSignals: readonly string[],
-  returnType: "GSTR-1" | "GSTR-3B" | "GSTR-2B" = "GSTR-3B",
+  returnType: FiledReturnsReturnType = "GSTR-3B",
 ): FlowStepResponse {
   return {
     ok: true,

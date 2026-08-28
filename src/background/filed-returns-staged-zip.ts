@@ -25,7 +25,7 @@ import {
 } from "./download-observation-ownership";
 import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
 import { installPackDownloadFilenameReassertion } from "./pack-download-filename-reassertion";
-import { isRequestedFilenameOverridden } from "./download-filename-comparison";
+import { classifyRequestedFilenameOutcome } from "./download-filename-comparison";
 
 const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 
@@ -182,11 +182,26 @@ export async function exportStagedFiledReturnsZip({
 
   let downloadId: number | null = null;
   const armedAt = new Date();
+  let beforeDownloadFailure: { safeMessage: string; safeSignal: string } | undefined;
   try {
     const fingerprint = await extensionBlobUrlFingerprint(zip.blobUrl);
-    if (!fingerprint) throw new Error("extension Blob URL fingerprint unavailable");
-    await onBeforeDownloadStart?.(armedAt, fingerprint, summaryOutcome);
+    if (!fingerprint) {
+      beforeDownloadFailure = {
+        safeMessage:
+          "Pack did not start the ZIP download because it could not verify its target-binding diagnostic.",
+        safeSignal: "filed-return-download-diagnostics-rejected",
+      };
+    } else {
+      await onBeforeDownloadStart?.(armedAt, fingerprint, summaryOutcome);
+    }
   } catch {
+    beforeDownloadFailure = {
+      safeMessage:
+        "Pack did not start the ZIP download because it could not save a safe recovery checkpoint.",
+      safeSignal: `${clearSignalPrefix}-zip-download-state-persist-failed`,
+    };
+  }
+  if (beforeDownloadFailure) {
     await revokeOffscreenBlobUrl(zip.blobUrl);
     const stagingClear = onClearStaging ? await onClearStaging("not-downloaded") : null;
     const stagedLedgerSignals = stagingClear?.safeSignals ?? [
@@ -198,16 +213,19 @@ export async function exportStagedFiledReturnsZip({
       state: "blocked",
       safeSignals: [
         ...completeStepWithSummary.safeSignals,
-        `${clearSignalPrefix}-zip-download-state-persist-failed`,
+        beforeDownloadFailure.safeSignal,
         ...stagedLedgerSignals,
       ],
       safeMessage:
         stagingClear?.opfsCleared && !stagingClear.cleanupCheckpointVerified
           ? (stagingCleanupCheckpointFailedMessage ?? zipFailedMessage)
-          : "Pack did not start the ZIP download because it could not save a safe recovery checkpoint.",
+          : beforeDownloadFailure.safeMessage,
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
-        message: "Retry the ZIP handoff after Pack can save its local recovery state.",
+        message:
+          beforeDownloadFailure.safeSignal === "filed-return-download-diagnostics-rejected"
+            ? "Retry the ZIP handoff after Pack can verify its target-binding diagnostic."
+            : "Retry the ZIP handoff after Pack can save its local recovery state.",
         canResume: true,
       },
     };
@@ -378,6 +396,7 @@ export async function exportStagedFiledReturnsZip({
         safeMessage: joinedSafeMessages(
           "Pack downloaded the selected ZIP but could not clear its temporary local staging.",
           filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+          filenameOutcome.safeMessage,
         ),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
@@ -402,6 +421,7 @@ export async function exportStagedFiledReturnsZip({
         safeMessage: joinedSafeMessages(
           stagingCleanupCheckpointFailedMessage ?? zipFailedMessage,
           filedReturnsSummaryStatusMessage(summaryOutcome.safeSignals, "confirmed"),
+          filenameOutcome.safeMessage,
         ),
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
@@ -439,14 +459,42 @@ async function completedZipFilenameOutcome(
   downloadId: number,
   requestedFilename: string,
 ): Promise<{ safeMessage?: string; safeSignals: string[] }> {
-  const [item] = await browser.downloads.search({ id: downloadId }).catch(() => []);
-  if (!isRequestedFilenameOverridden(requestedFilename, item?.filename)) {
+  let item;
+  try {
+    [item] = await browser.downloads.search({ id: downloadId });
+  } catch {
+    return unavailableZipFilenameOutcome("zip-download-filename-search-unavailable");
+  }
+  if (!item || item.id !== downloadId) {
+    return unavailableZipFilenameOutcome("zip-download-filename-item-unavailable");
+  }
+  const filenameOutcome = classifyRequestedFilenameOutcome(requestedFilename, item.filename);
+  if (filenameOutcome === "matched") {
     return { safeSignals: [] };
+  }
+  if (filenameOutcome === "unavailable") {
+    return unavailableZipFilenameOutcome("zip-download-filename-unavailable");
   }
   return {
     safeSignals: ["zip-download-filename-overridden"],
     safeMessage:
       "Pack completed the ZIP download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+  };
+}
+
+type UnavailableZipFilenameSignal =
+  | "zip-download-filename-item-unavailable"
+  | "zip-download-filename-search-unavailable"
+  | "zip-download-filename-unavailable";
+
+function unavailableZipFilenameOutcome(signal: UnavailableZipFilenameSignal): {
+  safeMessage: string;
+  safeSignals: string[];
+} {
+  return {
+    safeSignals: [signal],
+    safeMessage:
+      "Pack completed the ZIP download, but could not confirm its saved filename. Check browser Downloads before using the file.",
   };
 }
 

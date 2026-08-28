@@ -11,6 +11,7 @@ import {
   isFullFiscalYearScope,
 } from "../../connectors/gst/filed-returns-scope";
 import {
+  hasConfirmedSinglePeriodBrowserDownload,
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
@@ -26,9 +27,6 @@ export function PackSummary({
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const totalPeriods =
     summary?.totalPeriods ?? getFiledReturnsPeriodOptions(scope.financialYear).length;
-  const completedPeriods = summary?.completedPeriods.length ?? 0;
-  const needsReview =
-    summary && summary.status !== "complete" ? Math.max(totalPeriods - completedPeriods, 0) : 0;
   const fileLabel = filedReturnsArtifactLabel(artifactType, scope.returnType);
   const fullYearMeta = getFullYearMeta(summary);
   const singlePeriodMeta = getSinglePeriodMeta(summary);
@@ -51,20 +49,14 @@ export function PackSummary({
       <p className="pack-summary-line">
         {fullYear ? `${totalPeriods} periods` : `${scope.period} period`} · {fileLabel}
       </p>
-      <p className="pack-summary-meta">
-        {fullYear ? fullYearMeta : singlePeriodMeta}
-        {needsReview > 0 ? ` · ${completedPeriods} ready · ${needsReview} needs review` : null}
-      </p>
+      <p className="pack-summary-meta">{fullYear ? fullYearMeta : singlePeriodMeta}</p>
     </section>
   );
 }
 
 function getSinglePeriodMeta(summary: FiledReturnsFlowSummary | null): string {
   const signals = new Set(summary?.flowStep.safeSignals ?? []);
-  if (
-    signals.has("single-period-zip-downloaded") ||
-    (signals.has("browser-download-completed") && signals.has("browser-download-non-empty"))
-  ) {
+  if (hasConfirmedSinglePeriodBrowserDownload(summary)) {
     return "Saved by your browser";
   }
   if (signals.has("filed-return-positively-not-filed")) return "No browser download needed";

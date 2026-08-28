@@ -14,6 +14,7 @@ import {
   canCompleteFullFiscalYearLedger,
   createFullFiscalYearLedger,
   hasCanonicalFullFiscalYearTargetPlan,
+  hasInconsistentFullFiscalYearCompletion,
   markFullFiscalYearTargetRunning,
   markFullFiscalYearTargetTerminal,
   nextRunnableFullFiscalYearTarget,
@@ -39,7 +40,9 @@ import {
   persistLedgerAndMaybeSummary,
   persistLedgerAndSummary,
   persistSummary,
-  readLedger,
+  readLedgerForScope,
+  readLedgersWithPendingZipDownload,
+  readLedgerWithPendingZipDownload,
   responseForExistingLedger,
   shouldPersistReconciledLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
@@ -64,10 +67,16 @@ import {
   exportFullFiscalYearZip,
   reconcileFullFiscalYearZipDownload,
 } from "./filed-returns-full-fiscal-year-zip";
+import { getFullFiscalYearTabSessionId } from "./filed-returns-active-tab";
 export type SinglePeriodRunner = (
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
-  options?: { persistSinglePeriodSummary?: boolean },
+  options?: {
+    onPortalTabSelected?: (tabId: number, tabSessionId: string) => Promise<void>;
+    persistSinglePeriodSummary?: boolean;
+    requiredPortalTabId?: number;
+    requiredPortalTabSessionId?: string;
+  },
 ) => Promise<PackMessageResponse>;
 
 export { summariseFullFiscalYearLedger, targetStatusFromFlowStep };
@@ -85,7 +94,7 @@ export async function reconcilePendingFullFiscalYearZipDownload(
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<boolean> {
   if (!Number.isSafeInteger(downloadId) || downloadId < 0) return false;
-  const ledger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  const ledger = await readLedgerWithPendingZipDownload(deps, downloadId);
   if (
     !ledger ||
     ledger.zipPhase !== "download-observing" ||
@@ -98,25 +107,35 @@ export async function reconcilePendingFullFiscalYearZipDownload(
 }
 
 /**
- * Reconciles the stored final-ZIP ID after an MV3 restart. This reads only the
- * exact ID already persisted for the fiscal-year run; it never scans or adopts
- * an unrelated browser download.
+ * Reconciles every persisted final-ZIP ID after an MV3 restart. Each plan is
+ * matched only to its exact stored ID; it never scans or adopts an unrelated
+ * browser download.
  */
 export async function reconcilePersistedFullFiscalYearZipDownload(
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<boolean> {
-  const ledger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
-  const downloadId = ledger?.zipDownloadAttempt?.downloadId;
-  if (
-    !ledger ||
-    ledger.zipPhase !== "download-observing" ||
-    !Number.isSafeInteger(downloadId) ||
-    (downloadId ?? -1) < 0
-  ) {
-    return false;
+  const ledgers = await readLedgersWithPendingZipDownload(deps);
+  const ledgersByDownloadId = new Map<number, FiledReturnsFullFiscalYearLedger[]>();
+  for (const ledger of ledgers) {
+    const downloadId = ledger.zipDownloadAttempt?.downloadId;
+    if (typeof downloadId !== "number" || !Number.isSafeInteger(downloadId) || downloadId < 0)
+      continue;
+    const owners = ledgersByDownloadId.get(downloadId) ?? [];
+    owners.push(ledger);
+    ledgersByDownloadId.set(downloadId, owners);
   }
-  await reconcilePersistedFullFiscalYearZip(deps, ledger);
-  return true;
+
+  let handled = false;
+  for (const owners of ledgersByDownloadId.values()) {
+    if (owners.length === 1) {
+      await reconcilePersistedFullFiscalYearZip(deps, owners[0]!);
+      handled = true;
+      continue;
+    }
+    await moveDuplicateZipOwnersToManualReview(deps, owners);
+    handled = true;
+  }
+  return handled;
 }
 
 export async function startFullFiscalYearDownloadFlow(
@@ -127,7 +146,11 @@ export async function startFullFiscalYearDownloadFlow(
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
-  let existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
+  let existingLedger = await readLedgerForScope(deps, scope);
+  if (existingLedger && hasInconsistentFullFiscalYearCompletion(existingLedger)) {
+    const summary = summariseFullFiscalYearLedger(existingLedger, now);
+    return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  }
   let sameScopeExistingLedger =
     existingLedger && sameFiledReturnsScope(existingLedger.scope, scope) ? existingLedger : null;
   if (sameScopeExistingLedger && plannedPeriods.length > 0) {
@@ -175,6 +198,23 @@ export async function startFullFiscalYearDownloadFlow(
     return finishFullFiscalYearCleanup(deps, cleanupPendingLedger);
   }
   if (sameScopeExistingLedger?.zipPhase === "download-observing") {
+    const downloadId = sameScopeExistingLedger.zipDownloadAttempt?.downloadId;
+    const owners =
+      typeof downloadId === "number" && Number.isSafeInteger(downloadId) && downloadId >= 0
+        ? await readLedgersWithPendingZipDownload(deps, downloadId)
+        : [];
+    if (owners.length > 1) {
+      const reviewLedgers = await moveDuplicateZipOwnersToManualReview(deps, owners);
+      const reviewLedger = reviewLedgers.get(sameScopeExistingLedger.ledgerId);
+      if (reviewLedger) {
+        const flowStep = fullFiscalYearZipPhaseStep(reviewLedger)!;
+        return {
+          ok: true,
+          flowStep,
+          flowSummary: toFullFiscalYearSummary(reviewLedger, flowStep),
+        };
+      }
+    }
     return reconcilePersistedFullFiscalYearZip(deps, sameScopeExistingLedger);
   }
   if (
@@ -210,12 +250,14 @@ export async function startFullFiscalYearDownloadFlow(
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     existingLedger.status === "complete" &&
     canCompleteFullFiscalYearLedger(existingLedger) &&
+    !existingLedger.zipDownloadAttempt &&
     !hasRetainedFullFiscalYearStaging(existingLedger) &&
     !options.allowExistingLedgerResume;
-  const replaceUnstartedBlockedSameScopeLedger =
+  const replaceUnstartedCancelledSameScopeLedger =
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
-    (existingLedger.status === "blocked" || existingLedger.status === "cancelled") &&
+    existingLedger.status === "cancelled" &&
+    !existingLedger.zipDownloadAttempt &&
     !hasTerminalPositiveTarget(existingLedger) &&
     !hasDownloadUnconfirmedTarget(existingLedger) &&
     !hasRetainedFullFiscalYearStaging(existingLedger) &&
@@ -242,7 +284,7 @@ export async function startFullFiscalYearDownloadFlow(
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
+    !replaceUnstartedCancelledSameScopeLedger
       ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
       : createFullFiscalYearLedger(scope, now, plannedPeriods);
 
@@ -250,7 +292,7 @@ export async function startFullFiscalYearDownloadFlow(
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
+    !replaceUnstartedCancelledSameScopeLedger
   ) {
     if (shouldPersistReconciledLedger(existingLedger, ledger)) {
       await persistLedger(deps, ledger);
@@ -263,7 +305,7 @@ export async function startFullFiscalYearDownloadFlow(
     existingLedger &&
     sameFiledReturnsScope(existingLedger.scope, scope) &&
     !replaceCompletedSameScopeLedger &&
-    !replaceUnstartedBlockedSameScopeLedger
+    !replaceUnstartedCancelledSameScopeLedger
       ? resumeFullFiscalYearLedger(ledger, now)
       : ledger;
 
@@ -276,6 +318,22 @@ export async function startFullFiscalYearDownloadFlow(
 
   await persistLedger(deps, ledger);
 
+  // An explicitly confirmed resume may cross a browser restart. Rebind only
+  // when that durable tab-session marker differs from this browser session;
+  // a matching marker must retain its original tab binding.
+  const currentTabSessionId =
+    options.allowExistingLedgerResume &&
+    ledger.portalTabId !== undefined &&
+    ledger.portalTabSessionId !== undefined
+      ? await getFullFiscalYearTabSessionId()
+      : null;
+  let mustRebindPortalTab =
+    options.allowExistingLedgerResume &&
+    ledger.portalTabId !== undefined &&
+    ledger.portalTabSessionId !== undefined &&
+    currentTabSessionId !== null &&
+    currentTabSessionId !== ledger.portalTabSessionId;
+
   while (true) {
     const nextTarget = nextRunnableFullFiscalYearTarget(ledger);
     if (!nextTarget) return completeRun(deps, ledger);
@@ -283,12 +341,20 @@ export async function startFullFiscalYearDownloadFlow(
     const previousTargetSafeSignals = nextTarget.safeSignals;
     let systemErrorPredecessor: FullFiscalYearSystemErrorPredecessor = "initial";
 
-    ledger = markFullFiscalYearTargetRunning(
-      ledger,
-      nextTarget.targetId,
-      deps.now?.() ?? new Date(),
-    );
-    await persistLedger(deps, ledger);
+    let targetMarkedRunning = false;
+    if (
+      !mustRebindPortalTab &&
+      ledger.portalTabId !== undefined &&
+      ledger.portalTabSessionId !== undefined
+    ) {
+      ledger = markFullFiscalYearTargetRunning(
+        ledger,
+        nextTarget.targetId,
+        deps.now?.() ?? new Date(),
+      );
+      await persistLedger(deps, ledger);
+      targetMarkedRunning = true;
+    }
 
     const response = await runSinglePeriod(
       retryScope,
@@ -303,7 +369,38 @@ export async function startFullFiscalYearDownloadFlow(
         persistTargetReview: false,
         stageCapturedDownloads: { bundleKind: "full-fiscal-year", ledgerId: ledger.ledgerId },
       },
-      { persistSinglePeriodSummary: false },
+      {
+        onPortalTabSelected: async (tabId, tabSessionId) => {
+          if (ledger.portalTabId !== undefined && !mustRebindPortalTab) return;
+          ledger = {
+            ...ledger,
+            portalTabId: tabId,
+            portalTabSessionId: tabSessionId,
+            revision: (ledger.revision ?? 1) + 1,
+            updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+          };
+          await persistLedger(deps, ledger);
+          mustRebindPortalTab = false;
+          if (!targetMarkedRunning) {
+            ledger = markFullFiscalYearTargetRunning(
+              ledger,
+              nextTarget.targetId,
+              deps.now?.() ?? new Date(),
+            );
+            await persistLedger(deps, ledger);
+            targetMarkedRunning = true;
+          }
+        },
+        persistSinglePeriodSummary: false,
+        ...(!mustRebindPortalTab &&
+        ledger.portalTabId !== undefined &&
+        ledger.portalTabSessionId !== undefined
+          ? {
+              requiredPortalTabId: ledger.portalTabId,
+              requiredPortalTabSessionId: ledger.portalTabSessionId,
+            }
+          : {}),
+      },
     );
 
     if (!response.ok || !("flowStep" in response)) {
@@ -381,7 +478,7 @@ async function completeRun(
     reconciledLedger.zipPhase === "export-retry-pending"
       ? reconciledLedger
       : markFullFiscalYearZipPhase(reconciledLedger, now, "export-pending");
-  const step = completeFullFiscalYearStep(readyLedger);
+  const step = completeFullFiscalYearStep(readyLedger, now);
   // Persist a resumable pre-export state before the browser download can suspend
   // this MV3 worker. A later start can then retry the retained staged ZIP without
   // re-running already completed portal targets.
@@ -471,7 +568,7 @@ async function reconcilePersistedFullFiscalYearZip(
     };
   }
   ledger = reconciledLedger;
-  const completeStep = completeFullFiscalYearStep(ledger);
+  const completeStep = completeFullFiscalYearStep(ledger, now);
   const zipStep = await restorePersistedFullFiscalYearSummaryOutcome(
     deps,
     ledger,
@@ -524,6 +621,20 @@ async function reconcilePersistedFullFiscalYearZip(
     flowStep: zipStep,
     flowSummary: toFullFiscalYearSummary(ledger, zipStep),
   };
+}
+
+async function moveDuplicateZipOwnersToManualReview(
+  deps: FiledReturnsFlowRunnerDeps,
+  owners: readonly FiledReturnsFullFiscalYearLedger[],
+): Promise<Map<string, FiledReturnsFullFiscalYearLedger>> {
+  const now = deps.now?.() ?? new Date();
+  const reviewLedgers = new Map<string, FiledReturnsFullFiscalYearLedger>();
+  for (const ledger of owners) {
+    const reviewLedger = markFullFiscalYearZipManualReview(ledger, now);
+    await persistLedgerAndSummary(deps, reviewLedger, fullFiscalYearZipPhaseStep(reviewLedger)!);
+    reviewLedgers.set(reviewLedger.ledgerId, reviewLedger);
+  }
+  return reviewLedgers;
 }
 
 function withFullFiscalYearSystemErrorPredecessor(

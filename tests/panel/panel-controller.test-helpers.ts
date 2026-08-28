@@ -1,9 +1,14 @@
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
-import { panelPresets, type PanelPreset } from "../../src/entrypoints/panel/panel-presets";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import type { PackPanelController } from "../../src/entrypoints/panel/panel-surface";
 
-/** The GSTR-3B whole-year preset, as produced by the module the panel itself calls. */
-export const FIRST_PANEL_PRESET = panelPresets()[0] as PanelPreset;
+/** Stable synthetic scope for panel rendering; production options come from the catalogue. */
+export const PANEL_TEST_SCOPE = {
+  financialYear: "2025-26",
+  period: FULL_FISCAL_YEAR_PERIOD,
+  returnType: "GSTR-3B",
+  artifactType: "PDF",
+} as const;
 
 /**
  * A controller in the state the panel treats as "nothing has happened yet". Shared by every
@@ -13,35 +18,32 @@ export function panelController(overrides: Partial<PackPanelController> = {}): P
   return {
     acknowledgeInterruptedRun: async () => undefined,
     actionError: null,
-    completionStatus: null,
     context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
     effectiveBusy: null,
-    filedReturnsObservation: null,
     lastRunSummary: null,
     recoverySummary: null,
+    refreshFlowSummary: async () => undefined,
     refreshPortalContext: async () => undefined,
     resolveFullFiscalYearTarget: async () => undefined,
     resolveUnconfirmedDownload: async () => undefined,
     retryFiledReturnsTarget: async () => undefined,
     retryFullFiscalYearTarget: async () => undefined,
-    scope: FIRST_PANEL_PRESET.scope,
+    scope: PANEL_TEST_SCOPE,
     scopeLockedForReview: false,
     scopedFlowSummary: null,
     setScope: () => undefined,
     startFiledReturnsFlow: async () => undefined,
     startFreshFiledReturnsFlow: async () => undefined,
-    status: "GST context detected.",
-    summaryHeading: null,
     ...overrides,
   };
 }
 
-/** A completed whole-year run for the first preset's own scope. */
+/** A completed whole-year run for the panel's synthetic scope. */
 export function completedPanelSummary(
   overrides: Partial<FiledReturnsFlowSummary> = {},
 ): FiledReturnsFlowSummary {
   return {
-    scope: FIRST_PANEL_PRESET.scope,
+    scope: PANEL_TEST_SCOPE,
     status: "complete",
     completedPeriods: ["April", "May"],
     totalPeriods: 2,

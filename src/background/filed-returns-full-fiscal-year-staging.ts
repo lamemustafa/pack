@@ -361,7 +361,11 @@ export async function finishFullFiscalYearCleanup(
     cleanupPendingLedger,
     deps.now?.() ?? new Date(),
   );
-  const step = fullFiscalYearCleanupCompletedStep(cleanupPendingLedger, summarySignals);
+  const step = fullFiscalYearCleanupCompletedStep(
+    cleanupPendingLedger,
+    summarySignals,
+    deps.now?.() ?? new Date(),
+  );
   await persistLedgerAndSummary(deps, completedLedger, step);
   return {
     ok: true,
@@ -502,18 +506,19 @@ function fullFiscalYearCleanupFailedStep(
 function fullFiscalYearCleanupCompletedStep(
   ledger: FiledReturnsFullFiscalYearLedger,
   summarySignals: readonly string[] = [],
+  now = new Date(),
 ): PortalFlowStepResult {
   const zipDownloaded = ledger.zipPhase === "downloaded-cleanup-pending";
   const noArtifacts = ledger.zipPhase === "no-artifacts-cleanup-pending";
   const availabilitySignals = ledger.targets.flatMap((target) =>
     target.safeSignals.filter((signal) => signal.startsWith("filed-return-artifact-unavailable:")),
   );
-  const completeStep = completeFullFiscalYearStep(ledger);
+  const completeStep = completeFullFiscalYearStep(ledger, now);
   return {
     ...completeStep,
     safeSignals: Array.from(
       new Set([
-        "full-fiscal-year-complete",
+        ...completeStep.safeSignals,
         ...(zipDownloaded ? ["full-fiscal-year-zip-downloaded"] : []),
         ...(noArtifacts ? ["full-fiscal-year-no-zip-artifacts"] : []),
         ...summarySignals,

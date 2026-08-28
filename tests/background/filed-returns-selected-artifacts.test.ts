@@ -9,6 +9,7 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../../src/connectors/gst/filed-returns-artifacts";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
+import type * as FiledReturnsArtifactProgressModule from "../../src/background/filed-returns-artifact-progress";
 
 type SyntheticBundleArtifact = {
   artifactType: FiledReturnsConcreteArtifactType;
@@ -42,10 +43,18 @@ const mocks = vi.hoisted(() => ({
       ) => Promise<FiledReturnsFlowSummary>
     >(),
   readPersistedArtifactProgress: vi.fn<
-    (...args: unknown[]) => Promise<{
-      completedArtifactTypes: Array<"PDF" | "JSON" | "EXCEL">;
-      flowStep: PortalFlowStepResult;
-    } | null>
+    (...args: unknown[]) => Promise<
+      | {
+          completedArtifactTypes: Array<"PDF" | "JSON" | "EXCEL">;
+          flowStep: PortalFlowStepResult;
+          state: "ready";
+        }
+      | {
+          reason: "malformed-summary" | "storage-read-failed" | "storage-write-failed";
+          state: "blocked";
+        }
+      | null
+    >
   >(),
   selectedArtifactsSafeMessage: vi.fn(() => "Selected artifacts downloaded."),
   toOptionalArtifactUnavailableFlowStep: vi.fn(() => null),
@@ -161,7 +170,10 @@ const bundleMocks = vi.hoisted(() => {
 });
 
 vi.mock("wxt/browser", () => ({ browser: { storage: { local: {}, session: {} } } }));
-vi.mock("../../src/background/filed-returns-artifact-progress", () => mocks);
+vi.mock("../../src/background/filed-returns-artifact-progress", async (importOriginal) => ({
+  ...(await importOriginal<typeof FiledReturnsArtifactProgressModule>()),
+  ...mocks,
+}));
 vi.mock("../../src/background/filed-returns-download-trigger", () => ({
   gstr1VisibleScopeMismatchResponse: mocks.gstr1VisibleScopeMismatchResponse,
   triggerAndObserveFiledReturnDownload: mocks.triggerAndObserveFiledReturnDownload,
@@ -475,6 +487,7 @@ describe("GSTR-2B all-format selection", () => {
     mocks.readPersistedArtifactProgress.mockResolvedValue({
       completedArtifactTypes: ["PDF"],
       flowStep: downloaded("PDF").flowStep as PortalFlowStepResult,
+      state: "ready",
     });
     mocks.triggerAndObserveFiledReturnDownload
       .mockResolvedValueOnce(downloaded("PDF"))

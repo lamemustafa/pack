@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import type { PackMessage } from "../../src/connectors/gst/messages";
 
 const mocks = vi.hoisted(() => ({
@@ -65,6 +66,9 @@ describe("popup background failure presentation", () => {
           context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
         });
       }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({ ok: true, flowSummary: null });
+      }
       return Promise.resolve({ ok: true });
     });
     root = createRoot(dom.window.document.getElementById("root") as Element);
@@ -72,6 +76,68 @@ describe("popup background failure presentation", () => {
       root?.render(<Harness onChange={(next) => (controller = next)} />);
       await Promise.resolve();
     });
+  });
+
+  it("does not refresh an observation the panel does not render", () => {
+    expect(mocks.sendMessage).not.toHaveBeenCalledWith({
+      type: "PACK_GET_FILED_RETURNS_OBSERVATION",
+    });
+    expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "PACK_GET_CONTEXT" });
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
+    });
+  });
+
+  it("keeps a malformed saved-summary response visible", async () => {
+    await act(async () => root?.unmount());
+    controller = null;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    root = createRoot(document.getElementById("root") as Element);
+    await act(async () => {
+      root?.render(<Harness onChange={(next) => (controller = next)} />);
+      await Promise.resolve();
+    });
+
+    const renderedController = controller as ReturnType<typeof usePackPopupController> | null;
+    expect(renderedController?.actionError).toBe("Unexpected Pack response.");
+  });
+
+  it("keeps every remaining malformed successful response visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+    expect(controller?.actionError).toBe("Unexpected Pack response.");
+
+    await act(async () => {
+      await controller?.acknowledgeInterruptedRun();
+    });
+    expect(controller?.actionError).toBe("Unexpected Pack response.");
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener({ "pack:last-filed-returns-flow-summary": { newValue: {} } }, "session"),
+      );
+      await Promise.resolve();
+    });
+    expect(controller?.actionError).toBe("Unexpected Pack response.");
   });
 
   it("keeps a flow failure when a later context refresh succeeds", async () => {
@@ -99,6 +165,53 @@ describe("popup background failure presentation", () => {
     expect(controller?.actionError).toBe(
       "Pack could not reach the background service. Try the action again.",
     );
+    await act(async () => root?.unmount());
+  });
+
+  it("clears a recovered summary read without clearing a failed flow action", async () => {
+    let summaryReadFails = true;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return summaryReadFails
+          ? Promise.resolve({
+              ok: false,
+              error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+              safeMessage: "Pack could not read saved local recovery state. Try again.",
+            })
+          : Promise.resolve({ ok: true, flowSummary: null });
+      }
+      if (message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW") {
+        return Promise.reject(new Error("worker unavailable"));
+      }
+      return Promise.resolve({
+        ok: true,
+        context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+      });
+    });
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.actionError).toBe(
+      "Pack could not read saved local recovery state. Try again.",
+    );
+
+    summaryReadFails = false;
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.actionError).toBeNull();
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+    const flowFailure = "Pack could not reach the background service. Try the action again.";
+    expect(controller?.actionError).toBe(flowFailure);
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.actionError).toBe(flowFailure);
     await act(async () => root?.unmount());
   });
 
@@ -157,6 +270,165 @@ describe("popup background failure presentation", () => {
       "Pack could not reach the background service. Try the action again.",
     );
     await act(async () => root?.unmount());
+  });
+
+  it("keeps a flow action's specific safe rejection visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack needs a saved-run check before continuing.",
+        });
+      }
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+
+    await act(async () => {
+      await controller?.startFiledReturnsFlow();
+    });
+
+    expect(controller?.actionError).toBe("Pack needs a saved-run check before continuing.");
+    await act(async () => root?.unmount());
+  });
+
+  it("keeps an interrupted-run acknowledgement's specific safe rejection visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_ACKNOWLEDGE_INTERRUPTED_RUN") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack could not clear the saved run until its local state is checked.",
+        });
+      }
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+
+    await act(async () => {
+      await controller?.acknowledgeInterruptedRun();
+    });
+
+    expect(controller?.actionError).toBe(
+      "Pack could not clear the saved run until its local state is checked.",
+    );
+    await act(async () => root?.unmount());
+  });
+
+  it("keeps a saved-summary read failure visible after context succeeds", async () => {
+    await act(async () => root?.unmount());
+    controller = null;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack stopped while handling saved local recovery state. Try again.",
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    root = createRoot(document.getElementById("root") as Element);
+    await act(async () => {
+      root?.render(<Harness onChange={(next) => (controller = next)} />);
+      await Promise.resolve();
+    });
+
+    const renderedController = controller as ReturnType<typeof usePackPopupController> | null;
+    expect(renderedController?.context?.supported).toBe(true);
+    expect(renderedController?.actionError).toBe(
+      "Pack stopped while handling saved local recovery state. Try again.",
+    );
+  });
+
+  it("keeps a context read safe error visible after the other mount reads succeed", async () => {
+    await act(async () => root?.unmount());
+    controller = null;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack stopped while handling the current GST Portal state. Try again.",
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+    root = createRoot(document.getElementById("root") as Element);
+    await act(async () => {
+      root?.render(<Harness onChange={(next) => (controller = next)} />);
+      await Promise.resolve();
+    });
+
+    const renderedController = controller as ReturnType<typeof usePackPopupController> | null;
+    expect(renderedController?.actionError).toBe(
+      "Pack stopped while handling the current GST Portal state. Try again.",
+    );
+  });
+
+  it("keeps a context refresh safe error visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) =>
+      message.type === "PACK_GET_CONTEXT"
+        ? Promise.resolve({
+            ok: false,
+            error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+            safeMessage: "Pack stopped while handling the current GST Portal state. Try again.",
+          })
+        : Promise.resolve({ ok: true }),
+    );
+
+    await act(async () => {
+      await controller?.refreshPortalContext();
+    });
+
+    expect(controller?.actionError).toBe(
+      "Pack stopped while handling the current GST Portal state. Try again.",
+    );
+  });
+
+  it("keeps a summary-change safe error visible", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({
+          ok: false,
+          error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
+          safeMessage: "Pack stopped while handling saved local recovery state. Try again.",
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+      });
+    });
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener({ "pack:last-filed-returns-flow-summary": { newValue: {} } }, "session"),
+      );
+      await Promise.resolve();
+    });
+
+    const renderedController = controller as ReturnType<typeof usePackPopupController> | null;
+    expect(renderedController?.actionError).toBe(
+      "Pack stopped while handling saved local recovery state. Try again.",
+    );
   });
 
   it("refreshes the visible summary when durable ZIP reconciliation completes", async () => {
@@ -243,6 +515,122 @@ describe("popup background failure presentation", () => {
     await vi.waitFor(() => expect(controller?.lastRunSummary).toBeNull());
     // The scope is the user's own selection and must survive a clear.
     expect(controller?.scope).toEqual(chosenScope);
+    await act(async () => root?.unmount());
+  });
+
+  it("refreshes the visible summary when an indexed full-year ledger advances", async () => {
+    const initialSummary: FiledReturnsFlowSummary = {
+      scope: {
+        artifactType: "PDF" as const,
+        financialYear: "2026-27",
+        period: "FULL_FISCAL_YEAR" as const,
+        returnType: "GSTR-3B" as const,
+      },
+      status: "running" as const,
+      completedPeriods: [],
+      totalPeriods: 2,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-gstr3b-private-v0",
+        state: "user-action-required" as const,
+        safeSignals: ["full-fiscal-year-run-active"],
+        safeMessage: "Synthetic active run.",
+      },
+    };
+    const advancedSummary: FiledReturnsFlowSummary = {
+      ...initialSummary,
+      completedPeriods: ["April"],
+      targetEvidence: [
+        { period: "April", outcome: "saved" as const },
+        { period: "May", outcome: "running" as const },
+      ],
+    };
+    let currentSummary: FiledReturnsFlowSummary = initialSummary;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT")
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY")
+        return Promise.resolve({ ok: true, flowSummary: currentSummary });
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    currentSummary = advancedSummary;
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener({ "pack:filed-returns-plan:synthetic": { newValue: {} } }, "local"),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => expect(controller?.lastRunSummary).toEqual(advancedSummary));
+    await act(async () => root?.unmount());
+  });
+
+  it("keeps a newer local-summary refresh when an earlier read resolves last", async () => {
+    const staleSummary: FiledReturnsFlowSummary = {
+      scope: {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "FULL_FISCAL_YEAR",
+        returnType: "GSTR-3B",
+      },
+      status: "running",
+      completedPeriods: [],
+      totalPeriods: 2,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-gstr3b-private-v0",
+        state: "user-action-required",
+        safeSignals: ["full-fiscal-year-run-active"],
+        safeMessage: "Synthetic stale run.",
+      },
+    };
+    const currentSummary: FiledReturnsFlowSummary = {
+      ...staleSummary,
+      completedPeriods: ["April"],
+    };
+    const summaryResolvers: Array<
+      (response: { ok: true; flowSummary: FiledReturnsFlowSummary }) => void
+    > = [];
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return new Promise<{ ok: true; flowSummary: FiledReturnsFlowSummary }>((resolve) =>
+          summaryResolvers.push(resolve),
+        );
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) => {
+        listener({ "pack:filed-returns-plan:synthetic-a": { newValue: {} } }, "local");
+        listener({ "pack:filed-returns-plan:synthetic-b": { newValue: {} } }, "local");
+      });
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(summaryResolvers).toHaveLength(2));
+
+    await act(async () => {
+      summaryResolvers[1]!({ ok: true, flowSummary: currentSummary });
+      await Promise.resolve();
+      summaryResolvers[0]!({ ok: true, flowSummary: staleSummary });
+      await Promise.resolve();
+    });
+
+    expect(controller?.lastRunSummary).toEqual(currentSummary);
     await act(async () => root?.unmount());
   });
 });

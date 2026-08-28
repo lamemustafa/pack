@@ -14,13 +14,14 @@ import { extractScopedFiledReturnsDetailIdentity } from "./filed-returns-detail-
 import { filedReturnDetailIdentityMatchesScope } from "./filed-returns-detail-navigation";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
+import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import { verifyVisibleGstr2bSummaryScope } from "./gstr2b-summary";
 
 const GST_RETURNS_ORIGIN = "https://return.gst.gov.in";
 const GSTR3B_GET_GEN_PDF_PATH = "/returns/auth/api/gstr3b/getgenpdf";
 
 export type ArtifactRequest = {
-  returnType: "GSTR-1" | "GSTR-3B" | "GSTR-2B";
+  returnType: FiledReturnsReturnType;
   artifactType: "PDF" | "JSON" | "EXCEL";
   financialYear: string;
   period: string;
@@ -121,8 +122,16 @@ export async function acquireFiledReturnArtifact(
   documentRef: Document,
   request: ArtifactRequest,
 ): Promise<ArtifactResult> {
-  if (request.returnType === "GSTR-2B") return acquireGstr2bArtifact(documentRef, request);
-  if (request.returnType === "GSTR-1") return acquireGstr1Artifact(documentRef, request);
+  switch (request.returnType) {
+    case "GSTR-2B":
+      return acquireGstr2bArtifact(documentRef, request);
+    case "GSTR-1":
+      return acquireGstr1Artifact(documentRef, request);
+    case "GSTR-3B":
+      break;
+    default:
+      return failed(request, "unsupported-target");
+  }
   if (request.artifactType === "EXCEL") return failed(request, "unsupported-target");
   const view = documentRef.defaultView;
   if (!view || view.location.origin !== GST_RETURNS_ORIGIN) return failed(request, "wrong-page");

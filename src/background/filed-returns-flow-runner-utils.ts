@@ -14,6 +14,18 @@ export const FLOW_STEP_SETTLE_MS = 150;
 export const DETAIL_SUMMARY_MODAL_SETTLE_MS = 60;
 export const RESULT_ROW_NAVIGATION_SETTLE_MS = 400;
 export const PORTAL_NAVIGATION_SETTLE_MS = 1_000;
+/**
+ * How long a single portal step may take before Pack stops waiting.
+ *
+ * The bound used to be a step count. At the default 150ms settle that gave a
+ * GSTR-3B period roughly 1.8 seconds of patience, so a full year was twelve
+ * coin flips against the portal's render time -- three stalls in one live run,
+ * every one of which succeeded on retry because a retry is simply a fresh
+ * budget. A step count also cannot be read as a duration, which is why the
+ * timeout message never revealed how briefly Pack had actually waited.
+ */
+export const FLOW_STEP_DEADLINE_MS = 30_000;
+
 export const MAX_FLOW_STEPS = 6;
 export const MAX_GSTR3B_FLOW_STEPS = 12;
 export const MAX_GSTR1_FLOW_STEPS = 30;
@@ -37,6 +49,14 @@ export function shouldContinueFlow(step: PortalFlowStepResult): boolean {
   return step.state === "clicked" || step.safeSignals.includes("detail-summary-modal");
 }
 
+export function flowStepDeadlineMs(deps: { timings?: { flowStepDeadlineMs?: number } }): number {
+  return deps.timings?.flowStepDeadlineMs ?? FLOW_STEP_DEADLINE_MS;
+}
+
+/**
+ * Runaway backstop only. The deadline above is what actually stops a healthy
+ * run; this exists so an instant-returning step cannot spin without bound.
+ */
 export function maxFlowStepsFor(scope: FiledReturnsDownloadScope): number {
   if (scope.returnType === "GSTR-3B") return MAX_GSTR3B_FLOW_STEPS;
   if (scope.returnType === "GSTR-1") return MAX_GSTR1_FLOW_STEPS;

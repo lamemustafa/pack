@@ -34,6 +34,7 @@ import {
   getActiveGstTab,
   inferActiveFiledReturnsObservation,
   isSupportedGstBrowserTab,
+  isTrustedGstContextReporterTab,
   refreshActiveFiledReturnsObservation,
   refreshActiveGstContext,
   rememberActiveGstTabById,
@@ -172,6 +173,10 @@ function backgroundMessageSource(message: unknown): string {
       return "the download prompt probe";
     case "PACK_GET_LAST_MANIFEST":
       return "the local manifest request";
+    case "PACK_GET_CONTEXT":
+      return "the current GST Portal state";
+    case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
+      return "saved local recovery state";
     case "PACK_CLEAR_LOCAL_DATA":
       return "the local data cleanup request";
     default:
@@ -198,6 +203,10 @@ function backgroundMessageHandlerSite(message: unknown): `background-message-han
       return "background-message-handler:download-prompt-probe";
     case "PACK_GET_LAST_MANIFEST":
       return "background-message-handler:last-manifest";
+    case "PACK_GET_CONTEXT":
+      return "background-message-handler:gst-context";
+    case "PACK_GET_FILED_RETURNS_FLOW_SUMMARY":
+      return "background-message-handler:filed-returns-summary";
     case "PACK_CLEAR_LOCAL_DATA":
       return "background-message-handler:local-data-clear";
     default:
@@ -222,11 +231,11 @@ async function handleMessage(
       portalObservation: (input) => parseCanonicalFiledReturnsObservation(input) !== null,
     })
   ) {
-    if (sender.id === browser.runtime.id && isSupportedGstBrowserTab(sender.tab)) {
-      if (isFiledReturnsObservationEnvelope(message)) {
+    if (sender.id === browser.runtime.id) {
+      if (isFiledReturnsObservationEnvelope(message) && isSupportedGstBrowserTab(sender.tab)) {
         await browser.storage.session.remove(PACK_SESSION_STORAGE_KEYS.lastFiledReturnsObservation);
       }
-      if (isContentContextEnvelope(message)) {
+      if (isContentContextEnvelope(message) && isTrustedGstContextReporterTab(sender.tab)) {
         await browser.storage.session.remove(PACK_SESSION_STORAGE_KEYS.lastContext);
       }
     }
@@ -235,7 +244,7 @@ async function handleMessage(
 
   switch (message.type) {
     case "PACK_CONTENT_CONTEXT": {
-      if (sender.id !== browser.runtime.id || !isSupportedGstBrowserTab(sender.tab)) {
+      if (sender.id !== browser.runtime.id || !isTrustedGstContextReporterTab(sender.tab)) {
         return { ok: false, error: "Invalid Pack sender or context." };
       }
       const context = await persistCanonicalGstPortalContext(
@@ -244,12 +253,13 @@ async function handleMessage(
         sender.tab.url,
       );
       if (!context) return { ok: false, error: "Invalid Pack sender or context." };
-      const nextSessionValues: Record<string, unknown> = {
-        [PACK_SESSION_STORAGE_KEYS.lastGstTabId]: sender.tab.id,
-      };
-      await browser.storage.session.set({
-        ...nextSessionValues,
-      });
+      // Error and logout pages may report context but must never replace the
+      // remembered actionable tab used by navigation/download operations.
+      if (isSupportedGstBrowserTab(sender.tab)) {
+        await browser.storage.session.set({
+          [PACK_SESSION_STORAGE_KEYS.lastGstTabId]: sender.tab.id,
+        });
+      }
       return { ok: true, context };
     }
     case "PACK_FILED_RETURNS_OBSERVATION": {
@@ -380,6 +390,7 @@ export async function clearPackLocalData(): Promise<PackMessageResponse> {
     storageKeys: {
       activeRun: PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
       fullFiscalYearLedger: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
+      fullFiscalYearLedgerIndex: PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedgerIndex,
       targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
     },
   });

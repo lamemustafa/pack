@@ -276,3 +276,36 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
 
     Method note: imports carry IGST only, so the absent CGST head must be read as zero. Treating
     absent as "no match" made the one heading that is structurally IGST-only look unmapped.
+
+## The GSTR-2B summary page does carry a Returns Dashboard link, collapsed
+
+Captured 2026-08-24 from a signed-in `GST Portal` page, by
+enumerating anchors with `clickReturnsDashboardAnchor`'s own predicate. Only navigation structure
+was captured: route origin plus pathname with query stripped, link text, and actionability. No page
+HTML, identity fields or amounts.
+
+The page holds **139 anchors**, of which **exactly one** points at
+`GST Portal`, labelled "Returns Dashboard". It reports as not
+actionable: it sits inside the collapsed "Returns" quick-links menu, whose parent anchor
+(`GST Portal`, label "Returns") _is_ actionable.
+
+This corrects an assumption worth naming, because it was about to become a product constraint. The
+run-time signal is `returns-dashboard-anchor-not-found`, and the reasonable reading of that name —
+no such link exists on this page — is wrong. The link exists and the matcher finds it. What
+rejects it is the visibility test, and then the single-match fallback declining because
+`isGstAuthLandingRoute` requires the `GST Portal` origin. A signal named for the shape of
+the failure invited a conclusion about the cause.
+
+Observed in the 2026-08-24 source-build capture: after a GSTR-2B full-year run left the selected tab on its summary page, starting a GSTR-3B run returned the listed blocked signals. Earlier releases and other environments have not been assessed.
+
+Two other portal-owned routes back appear on the same page and are **not yet characterised**:
+
+- a visible `BACK TO DASHBOARD` button. It carries no `href`, so its destination — the Returns
+  Dashboard or the services dashboard — cannot be read from the DOM and must be observed.
+- the visible "Returns" quick-links parent anchor, which may expand the menu or may navigate to
+  the quick-links page. Also unobserved.
+
+What remains unknown for the collapsed anchor itself: whether it fails only the CSS visibility
+test, or also `isSemanticallyEnabledPortalControl`. The capture conflated the two. Only the first
+case is safe to act on, and it decides whether widening the existing single-match fallback is a
+fix or a no-op.

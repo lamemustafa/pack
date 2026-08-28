@@ -40,6 +40,21 @@ describe("GST connector", () => {
     expect(context.requiredAction).toBeUndefined();
   });
 
+  it("keeps the captured access-denied route neutral about its cause", () => {
+    const url = new URL("https://services.gst.gov.in/services/error/accessdenied");
+    const context = detectGstPortalContext(
+      url as unknown as Location,
+      "View Filed Returns",
+      "Your session is expired or you do not have permission to access the requested page.",
+    );
+
+    expect(context).toMatchObject({
+      supported: false,
+      pageKind: "gst-access-denied",
+    });
+    expect(context.requiredAction).toBeUndefined();
+  });
+
   it("detects the filed returns area as the first private live scope", () => {
     const url = new URL("https://services.gst.gov.in/services/auth/returns/view-filed-returns");
     const context = detectGstPortalContext(url as unknown as Location, "View Filed Returns");

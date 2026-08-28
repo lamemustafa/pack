@@ -15,11 +15,12 @@ export function ContextState({
   onOpenPortal: () => void;
 }) {
   const isSessionExpired = status.kind === "session-expired";
+  const isAccessDenied = status.kind === "access-denied";
   const isChecking = status.kind === "loading";
   return (
     <section className="context-state" aria-live="polite">
       <div className="context-state-icon" aria-hidden="true">
-        {isSessionExpired ? "!" : "↗"}
+        {isSessionExpired || isAccessDenied ? "!" : "↗"}
       </div>
       <div className="context-state-content">
         <p className="context-state-kicker">GST Portal status</p>

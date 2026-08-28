@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global chrome, document */
+/* global chrome, document, window */
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
@@ -92,7 +92,7 @@ try {
   await assertServiceWorkerStarted(serviceWorker);
   await assertOptionsPageLoads(context, extensionId);
   await assertPanelPageLoads(context, extensionId);
-  await assertApprovedContentScript(context, serviceWorker);
+  await assertPanelSignInContext(context, extensionId);
   await assertHostilePageCannotMessageExtension(context);
   assertDeniedUnexpectedNetwork();
   assertSanitizedBrowserLogs();
@@ -350,6 +350,7 @@ async function assertOptionsPageLoads(browserContext, extensionId) {
 async function assertPanelPageLoads(browserContext, extensionId) {
   const panelPage = await browserContext.newPage();
   attachPageLogging(panelPage);
+  await panelPage.setViewportSize({ width: 320, height: 900 });
   await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
   await panelPage.waitForLoadState("domcontentloaded");
   await panelPage.waitForSelector(".panel-shell", { timeout: 5_000 });
@@ -375,6 +376,7 @@ async function assertPanelPageLoads(browserContext, extensionId) {
         : null;
     return {
       title: document.title,
+      viewportWidth: window.innerWidth,
       shellRect: document.querySelector(".panel-shell")?.getBoundingClientRect().toJSON(),
       shellText: document.querySelector(".panel-shell")?.textContent ?? "",
       hasContextState: Boolean(document.querySelector(".context-state")),
@@ -408,9 +410,10 @@ async function assertPanelPageLoads(browserContext, extensionId) {
   if (!panelState.hasContextState) {
     throw new Error("Pack panel did not render its context state.");
   }
+  await assertPanelControlsFitViewport(panelPage, "checking or unavailable context");
   if (
     !panelState.shellRect ||
-    panelState.shellRect.width < 300 ||
+    panelState.shellRect.width < Math.min(300, panelState.viewportWidth - 32) ||
     panelState.shellRect.height < 180
   ) {
     throw new Error(
@@ -422,19 +425,83 @@ async function assertPanelPageLoads(browserContext, extensionId) {
   await panelPage.close();
 }
 
-async function assertApprovedContentScript(browserContext, serviceWorker) {
+/**
+ * The authenticated landing route is supported enough to remain the selected
+ * GST tab, but without its authenticated markers it must render the terminal
+ * sign-in state rather than a ready chooser. Check that packaged path at the
+ * side panel's narrowest supported width.
+ */
+async function assertPanelSignInContext(browserContext, extensionId) {
   const gstPage = await browserContext.newPage();
   attachPageLogging(gstPage);
-  await gstPage.goto("https://services.gst.gov.in/services/auth/fowelcome", {
-    waitUntil: "domcontentloaded",
+  const panelPage = await browserContext.newPage();
+  attachPageLogging(panelPage);
+  try {
+    await gstPage.goto("https://services.gst.gov.in/services/auth/fowelcome", {
+      waitUntil: "domcontentloaded",
+    });
+    const serviceWorker = await waitForServiceWorker(browserContext, extensionId);
+    await waitForStoredContext(serviceWorker, {
+      supported: true,
+      pageKind: "gst-auth-landing",
+      origin: "https://services.gst.gov.in",
+    });
+
+    await panelPage.setViewportSize({ width: 320, height: 900 });
+    await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
+    await panelPage.getByRole("heading", { name: "Sign in on GST Portal" }).waitFor();
+    await panelPage.getByRole("button", { name: "Open GST Portal sign-in" }).waitFor();
+    await assertPanelControlsFitViewport(panelPage, "sign-in context");
+  } finally {
+    await panelPage.close();
+    await gstPage.close();
+  }
+}
+
+async function assertPanelControlsFitViewport(panelPage, state) {
+  const geometry = await panelPage.evaluate(() => {
+    const shell = document.querySelector(".panel-shell")?.getBoundingClientRect();
+    const controls = [
+      ...document.querySelectorAll(
+        ".panel-shell button, .panel-shell select, .panel-shell summary",
+      ),
+    ].map((control) => {
+      const rect = control.getBoundingClientRect();
+      return {
+        label: control.textContent?.trim() || control.getAttribute("aria-label") || control.tagName,
+        height: rect.height,
+        left: rect.left,
+        right: rect.right,
+      };
+    });
+    return {
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      shell: shell?.toJSON() ?? null,
+      controls,
+    };
   });
-  await gstPage.waitForLoadState("networkidle");
-  await waitForStoredContext(serviceWorker, {
-    supported: true,
-    pageKind: "gst-auth-landing",
-    origin: "https://services.gst.gov.in",
-  });
-  await gstPage.close();
+  if (!geometry.shell) throw new Error(`Pack panel shell is absent at 320px during ${state}.`);
+  if (geometry.documentWidth > geometry.viewportWidth) {
+    throw new Error(
+      `Pack panel introduced horizontal document scrolling at 320px during ${state}: ${geometry.documentWidth}px > ${geometry.viewportWidth}px.`,
+    );
+  }
+  const clippedControl = geometry.controls.find(
+    (control) =>
+      control.left < geometry.shell.x || control.right > geometry.shell.x + geometry.shell.width,
+  );
+  if (clippedControl) {
+    throw new Error(
+      `Pack panel clipped a control at 320px during ${state}: ${clippedControl.label}.`,
+    );
+  }
+  const undersizedControl = geometry.controls.find((control) => control.height < 44);
+  if (undersizedControl) {
+    throw new Error(
+      `Pack panel rendered a control shorter than 44px at 320px during ${state}: ${undersizedControl.label}.`,
+    );
+  }
 }
 
 async function waitForStoredContext(serviceWorker, expected) {

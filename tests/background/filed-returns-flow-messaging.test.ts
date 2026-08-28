@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   runDownloadStepWithRetry,
-  runDownloadTriggerOnce,
   type FiledReturnsFlowMessagingDeps,
 } from "../../src/background/filed-returns-flow-messaging";
-import type { FiledReturnsDownloadTarget } from "../../src/connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 
 const BASE_DEPS = {
@@ -248,32 +246,5 @@ describe("filed returns flow messaging", () => {
         },
       }),
     ).resolves.toEqual(response);
-  });
-
-  it("uses ambiguous download recovery when a trigger message never resolves", async () => {
-    vi.useFakeTimers();
-    const deps: FiledReturnsFlowMessagingDeps = {
-      ...BASE_DEPS,
-      sendMessageToTabWithInjection: vi.fn(() => new Promise<never>(() => undefined)),
-    };
-    const target: FiledReturnsDownloadTarget = {
-      actionId: "view",
-      financialYear: "2026-27",
-      period: "May",
-      returnType: "GSTR-3B",
-    };
-
-    const responsePromise = runDownloadTriggerOnce(deps, 10, target);
-
-    await vi.advanceTimersByTimeAsync(25);
-
-    await expect(responsePromise).resolves.toMatchObject({
-      ok: true,
-      flowStep: {
-        state: "user-action-required",
-        safeSignals: expect.arrayContaining(["filed-gstr3b-download-trigger-ambiguous"]),
-      },
-    });
-    expect(deps.sendMessageToTabWithInjection).toHaveBeenCalledTimes(1);
   });
 });

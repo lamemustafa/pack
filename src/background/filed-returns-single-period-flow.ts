@@ -6,9 +6,14 @@ import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
+import { canonicalDurableSummaryMessage } from "../connectors/gst/filed-returns-durable-status";
 import { persistFiledReturnsTargetReview } from "./filed-returns-target-review";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
-import { getRequiredGstTab } from "./filed-returns-active-tab";
+import {
+  focusRequiredGstTab,
+  getFullFiscalYearTabSessionId,
+  getRequiredGstTab,
+} from "./filed-returns-active-tab";
 import {
   clickReturnsDashboardAnchorFromTab,
   verifyCurrentContentScriptFromTab,
@@ -17,10 +22,10 @@ import { runDownloadStepWithRetry } from "./filed-returns-flow-messaging";
 import {
   extractActiveFinancialYear,
   extractActivePeriod,
+  flowStepDeadlineMs,
   getFlowStepSettleMs,
   getResultRowNavigationSettleMs,
   isFiledReturnDownloadReady,
-  maxFlowStepsFor,
   persistFlowResponse,
   shouldContinueFlow,
 } from "./filed-returns-flow-runner-utils";
@@ -46,12 +51,20 @@ import {
   type ReturnTypeMismatchRecovery,
 } from "./filed-returns-gstr1-period-mismatch-recovery";
 
+// The deadline is the product bound. This only stops a broken zero-delay response loop.
+const ZERO_DELAY_RUNAWAY_STEP_LIMIT = 10_000;
+
 const MAIN_WORLD_FILTER_SEARCH_SETTLE_MS = 1_000;
 
 export async function startSinglePeriodFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
-  options: { persistSinglePeriodSummary?: boolean } = {},
+  options: {
+    onPortalTabSelected?: (tabId: number, tabSessionId: string) => Promise<void>;
+    persistSinglePeriodSummary?: boolean;
+    requiredPortalTabId?: number;
+    requiredPortalTabSessionId?: string;
+  } = {},
 ): Promise<PackMessageResponse> {
   const shouldPersistSinglePeriodSummary = options.persistSinglePeriodSummary !== false;
   // Every direct-artifact return type checkpoints its acquisition, so every one
@@ -111,8 +124,46 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
         )
       : recoveryResponse;
   }
-  const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
-  if (!activeTab) {
+  const requiredTab = await getRequiredGstTab(
+    deps.getActiveGstTab,
+    options.requiredPortalTabId,
+    options.requiredPortalTabSessionId,
+    options.onPortalTabSelected === undefined,
+  );
+  if (requiredTab.state !== "ready") {
+    if (requiredTab.state === "tab-focus-unavailable") {
+      return tabFocusUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
+    }
+    if (requiredTab.state === "tab-session-unavailable") {
+      return tabSessionUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
+    }
+    if (
+      options.requiredPortalTabId !== undefined ||
+      options.requiredPortalTabSessionId !== undefined
+    ) {
+      return withPersistedSinglePeriodSummary(
+        scope,
+        {
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: filedReturnScopeId(scope.returnType),
+            state: "blocked",
+            safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
+            safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+              "full-fiscal-year-pinned-gst-tab-unavailable",
+            ]),
+            userAction: {
+              type: "RETRY_PORTAL_GENERATION",
+              message: "Discard this saved plan before using a different GST Portal tab.",
+              canResume: false,
+            },
+          },
+        },
+        deps,
+        shouldPersistSinglePeriodSummary,
+      );
+    }
     return withPersistedSinglePeriodSummary(
       scope,
       {
@@ -135,6 +186,19 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
       deps,
       shouldPersistSinglePeriodSummary,
     );
+  }
+  const activeTab = requiredTab;
+  if (options.onPortalTabSelected) {
+    const tabSessionId = await getFullFiscalYearTabSessionId();
+    if (!tabSessionId) {
+      return tabSessionUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
+    }
+    await options.onPortalTabSelected(activeTab.tab.id, tabSessionId);
+    try {
+      await focusRequiredGstTab(activeTab.tab);
+    } catch {
+      return tabFocusUnavailableResponse(scope, deps, shouldPersistSinglePeriodSummary);
+    }
   }
 
   if (scope.returnType === "GSTR-3B" && !isReturnsOrigin(activeTab.tab.url)) {
@@ -181,6 +245,64 @@ export async function startSinglePeriodFiledReturnsDownloadFlow(
   );
 }
 
+function tabSessionUnavailableResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+  shouldPersistSinglePeriodSummary: boolean,
+): Promise<PackMessageResponse> {
+  return withPersistedSinglePeriodSummary(
+    scope,
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-gst-tab-session-unavailable"],
+        safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+          "full-fiscal-year-gst-tab-session-unavailable",
+        ]),
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Try again with the GST Portal tab open in the foreground.",
+          canResume: true,
+        },
+      },
+    },
+    deps,
+    shouldPersistSinglePeriodSummary,
+  );
+}
+
+function tabFocusUnavailableResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+  shouldPersistSinglePeriodSummary: boolean,
+): Promise<PackMessageResponse> {
+  return withPersistedSinglePeriodSummary(
+    scope,
+    {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: ["filed-returns-gst-tab-focus-unavailable"],
+        safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+          "filed-returns-gst-tab-focus-unavailable",
+        ]),
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Try again with the GST Portal tab open in the foreground.",
+          canResume: true,
+        },
+      },
+    },
+    deps,
+    shouldPersistSinglePeriodSummary,
+  );
+}
+
 async function blockedWrongOriginResponse(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
@@ -223,7 +345,13 @@ async function waitForReturnsOrigin(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const activeTab = await getRequiredGstTab(deps.getActiveGstTab);
-    if (activeTab?.tab.id === tabId && isReturnsOrigin(activeTab.tab.url)) return true;
+    if (
+      activeTab.state === "ready" &&
+      activeTab.tab.id === tabId &&
+      isReturnsOrigin(activeTab.tab.url)
+    ) {
+      return true;
+    }
     await delay(250);
   }
   return false;
@@ -249,7 +377,18 @@ async function runSinglePeriodSteps(
   let mainWorldFilterAttempted = false;
   let mismatchRecovery: Gstr1PeriodMismatchRecovery | null = null;
   let returnTypeMismatchRecovery: ReturnTypeMismatchRecovery | null = null;
-  for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
+  // Wall clock is the real bound; the step count is only a runaway backstop.
+  // Pack observed `filed-returns-page-settling` -- its own word for a page still
+  // rendering -- and stopped anyway, because twelve steps at a 150ms settle is
+  // under two seconds of patience.
+  const stepStartedAt = (deps.now?.() ?? new Date()).getTime();
+  const stepDeadlineAt = stepStartedAt + flowStepDeadlineMs(deps);
+  for (
+    let attempt = 0;
+    attempt < ZERO_DELAY_RUNAWAY_STEP_LIMIT &&
+    (deps.now?.() ?? new Date()).getTime() < stepDeadlineAt;
+    attempt += 1
+  ) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
       return response;
@@ -406,7 +545,10 @@ async function runSinglePeriodSteps(
     ok: true,
     flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
       safeSignal: "flow-step-limit-reached",
-      safeMessage: searchStepLimitReachedMessage(scope),
+      safeMessage: searchStepLimitReachedMessage(
+        scope,
+        (deps.now?.() ?? new Date()).getTime() - stepStartedAt,
+      ),
       userActionMessage:
         "Wait for the GST Portal result page to finish loading, then click Start download again.",
     }),
@@ -457,7 +599,18 @@ async function waitForDetailReadyThenTrigger({
   let mismatchRecovery = initialMismatchRecovery;
   let returnTypeMismatchRecovery = initialReturnTypeMismatchRecovery;
 
-  for (let attempt = 0; attempt < maxFlowStepsFor(scope); attempt += 1) {
+  // Wall clock is the real bound; the step count is only a runaway backstop.
+  // Pack observed `filed-returns-page-settling` -- its own word for a page still
+  // rendering -- and stopped anyway, because twelve steps at a 150ms settle is
+  // under two seconds of patience.
+  const stepStartedAt = (deps.now?.() ?? new Date()).getTime();
+  const stepDeadlineAt = stepStartedAt + flowStepDeadlineMs(deps);
+  for (
+    let attempt = 0;
+    attempt < ZERO_DELAY_RUNAWAY_STEP_LIMIT &&
+    (deps.now?.() ?? new Date()).getTime() < stepDeadlineAt;
+    attempt += 1
+  ) {
     const response = await runScopedDownloadStepWithRetry(deps, tabId, scope);
     if (!response.ok || !("flowStep" in response)) {
       return response;
@@ -540,7 +693,10 @@ async function waitForDetailReadyThenTrigger({
     ok: true,
     flowStep: toStepLimitReachedFlowStep(scope, lastStep, {
       safeSignal: "detail-ready-step-limit-reached",
-      safeMessage: detailStepLimitReachedMessage(scope),
+      safeMessage: detailStepLimitReachedMessage(
+        scope,
+        (deps.now?.() ?? new Date()).getTime() - stepStartedAt,
+      ),
       userActionMessage:
         "Wait for the filed-return detail page to finish loading, then click Start download again.",
     }),

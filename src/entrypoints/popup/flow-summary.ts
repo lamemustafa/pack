@@ -2,7 +2,11 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
 } from "../../connectors/gst/filed-returns-contracts";
-import { normaliseFiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifacts";
+import {
+  concreteFiledReturnsArtifactTypesForSelection,
+  normaliseFiledReturnsArtifactType,
+} from "../../connectors/gst/filed-returns-artifacts";
+import { FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS } from "../../connectors/gst/filed-returns-durable-signals";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import { canReconcileFiledReturnsTarget } from "./run-summary";
 
@@ -45,6 +49,27 @@ export function canRetryFullFiscalYearZipWithoutPortal(
   );
 }
 
+/** Copy only: the background must still validate the retained run before cleanup. */
+export function getFullFiscalYearCleanupCopy(summary: FiledReturnsFlowSummary | null | undefined) {
+  if (
+    !summary ||
+    !canRetryFullFiscalYearZipWithoutPortal(summary) ||
+    summary.currentPeriod ||
+    hasUnresolvedFiledReturnsRecovery(summary) ||
+    isAmbiguousFullFiscalYearZipHandoff(summary) ||
+    !summary.flowStep.safeSignals.includes("full-fiscal-year-local-cleanup-retry")
+  ) {
+    return null;
+  }
+  return {
+    label: "Retry local cleanup",
+    summary: "Retry cleanup for this saved run.",
+    contextLabel: "Saved run · local cleanup",
+    busyLabel: "Checking saved run",
+    busySummary: "Pack is checking the saved run before retrying local cleanup.",
+  };
+}
+
 /**
  * Whether the target-review retry action — reconciling the exact browser download, or
  * retrying local cleanup — can complete without a portal tab. Both paths return locally in
@@ -83,48 +108,58 @@ export function hasPersistedFullFiscalYearZipDownloadId(
   );
 }
 
-export function getFiledReturnsCompletionStatus(
-  scope: FiledReturnsDownloadScope,
-  summary: FiledReturnsFlowSummary | null,
-): string | null {
-  const matchedSummary = getScopeMatchedFiledReturnsSummary(scope, summary);
-  if (!matchedSummary) return null;
-
-  const periodCount = matchedSummary.completedPeriods.length;
-  const totalPeriods = matchedSummary.totalPeriods ?? periodCount;
+/**
+ * A complete single-period run is not itself evidence that the browser saved a file.
+ * This is deliberately a presentation predicate: the background retains the stricter
+ * target-bound diagnostics it needs for recovery, while these surfaces only decide
+ * whether they may describe the browser handoff as confirmed.
+ */
+export function hasConfirmedSinglePeriodBrowserDownload(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  if (!summary || summary.scope.period === FULL_FISCAL_YEAR_PERIOD) return false;
+  const signals = new Set(summary.flowStep.safeSignals);
   if (
-    matchedSummary.flowStep.state === "download-unconfirmed" &&
-    matchedSummary.flowStep.safeSignals.includes("full-fiscal-year-zip-download-unconfirmed")
+    signals.has("single-period-zip-downloaded") ||
+    (signals.has("browser-download-completed") && signals.has("browser-download-non-empty"))
   ) {
-    return hasPersistedFullFiscalYearZipDownloadId(matchedSummary)
-      ? `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} prepared. ${periodCount} of ${totalPeriods} periods reconciled; check the saved final ZIP status.`
-      : `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} prepared. ${periodCount} of ${totalPeriods} periods reconciled; check Browser Downloads before retrying the final ZIP.`;
+    return true;
   }
-  if (matchedSummary.status === "complete") {
-    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} complete. ${periodCount} of ${totalPeriods} ${periodCount === 1 ? "period" : "periods"} reconciled.`;
-  }
-  if (matchedSummary.status === "blocked" && matchedSummary.currentPeriod) {
-    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} blocked at ${matchedSummary.currentPeriod}. ${periodCount} of ${totalPeriods} periods reconciled.`;
-  }
-  if (matchedSummary.status === "running" && matchedSummary.currentPeriod) {
-    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} running: ${matchedSummary.currentPeriod}. ${periodCount} of ${totalPeriods} periods reconciled.`;
-  }
-  if (matchedSummary.status === "partial") {
-    return `FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} partial. ${periodCount} of ${totalPeriods} periods reconciled.`;
-  }
-  if (matchedSummary.status === "cancelled") {
-    return `Saved FY ${matchedSummary.scope.financialYear} ${matchedSummary.scope.returnType} run cleared. Start a fresh local run when the GST Portal is ready.`;
-  }
-  return null;
+
+  const diagnostics = [
+    ...(summary.flowStep.downloadDiagnostic ? [summary.flowStep.downloadDiagnostic] : []),
+    ...(summary.flowStep.downloadDiagnostics ?? []),
+  ];
+  return concreteFiledReturnsArtifactTypesForSelection(
+    summary.scope.returnType,
+    summary.scope.artifactType,
+  ).every((artifactType) =>
+    diagnostics.some(
+      (diagnostic) =>
+        diagnostic.actionId.length > 0 &&
+        diagnostic.artifactType === artifactType &&
+        diagnostic.byteCountClass === "non-empty" &&
+        typeof diagnostic.downloadId === "number" &&
+        Number.isSafeInteger(diagnostic.downloadId) &&
+        diagnostic.downloadId >= 0 &&
+        diagnostic.financialYear === summary.scope.financialYear &&
+        diagnostic.period === summary.scope.period &&
+        diagnostic.returnType === summary.scope.returnType &&
+        diagnostic.status === "downloaded",
+    ),
+  );
 }
 
-export function getFiledReturnsSummaryHeading(
-  scope: FiledReturnsDownloadScope,
-  summary: FiledReturnsFlowSummary,
-): string | null {
-  if (!isSameScope(scope, summary.scope)) return null;
-  if (summary.status === "cancelled") return "Ready for a new filed-returns run";
-  return `Last filed-returns run: ${summary.status}`;
+export function hasFiledReturnsDownloadFilenameOverride(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  return Boolean(
+    summary?.flowStep.safeSignals.some((signal) =>
+      FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS.includes(
+        signal as (typeof FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS)[number],
+      ),
+    ),
+  );
 }
 
 export function getScopeMatchedFiledReturnsSummary(

@@ -11,7 +11,9 @@ import {
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import type { FiledReturnsArtifactProgressFailureReason } from "../connectors/gst/filed-returns-artifact-progress-recovery";
 import {
+  artifactProgressFailureFlowStep,
   combineDownloadedArtifactFlowSteps,
   markArtifactProgressNeedsReview,
   persistPartialArtifactSummary,
@@ -167,19 +169,22 @@ export async function triggerSelectedArtifacts({
         },
       }
     : deps;
-  const persistedProgress =
-    artifactTypes.length > 1 && !singlePeriodBundleLedgerId && !deps.stageCapturedDownloads
-      ? await readPersistedArtifactProgress(scope, artifactTypes, artifactDeps)
-      : null;
+  let persistedProgress = null;
+  if (artifactTypes.length > 1 && !singlePeriodBundleLedgerId && !deps.stageCapturedDownloads) {
+    persistedProgress = await readPersistedArtifactProgress(scope, artifactTypes, artifactDeps);
+    if (persistedProgress?.state === "blocked") {
+      return artifactProgressBlockedResponse(scope, persistedProgress.reason);
+    }
+  }
   const completedArtifactTypes = new Set([
-    ...(persistedProgress?.completedArtifactTypes ?? []),
+    ...(persistedProgress?.state === "ready" ? persistedProgress.completedArtifactTypes : []),
     ...(singlePeriodBundleLedger?.artifacts
       .filter((artifact) => artifact.status === "staged" || artifact.status === "unavailable")
       .map((artifact) => artifact.artifactType) ?? []),
   ]);
   let combinedFlowStep: PortalFlowStepResult | null =
     (singlePeriodBundleLedger ? singlePeriodBundleFlowStep(singlePeriodBundleLedger) : null) ??
-    persistedProgress?.flowStep ??
+    (persistedProgress?.state === "ready" ? persistedProgress.flowStep : null) ??
     null;
   let lastResponse: Extract<
     PackMessageResponse,
@@ -742,6 +747,13 @@ function staleSinglePeriodBundleResponse(
     "Pack found newer selected-file recovery state and stopped before another portal click.",
     false,
   );
+}
+
+function artifactProgressBlockedResponse(
+  scope: FiledReturnsDownloadScope,
+  reason: FiledReturnsArtifactProgressFailureReason,
+): PackMessageResponse {
+  return singlePeriodBundleResponse(scope, artifactProgressFailureFlowStep(scope, reason));
 }
 
 function singlePeriodBundleBlockedResponse(

@@ -1,3 +1,4 @@
+import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsObservation } from "./filed-returns-observer-types";
 
@@ -10,7 +11,5 @@ export function detectVisibleReturnLabel(signals: readonly string[]): FiledRetur
 export function scopeIdForVisibleReturnLabel(
   returnType: FiledReturnsReturnType,
 ): FiledReturnsObservation["scopeId"] {
-  if (returnType === "GSTR-2B") return "gst-gstr2b-private-v0";
-  if (returnType === "GSTR-1") return "gst-filed-returns-gstr1-pdf-private-v0";
-  return "gst-filed-returns-gstr3b-pdf-private-v0";
+  return filedReturnScopeId(returnType) as FiledReturnsObservation["scopeId"];
 }

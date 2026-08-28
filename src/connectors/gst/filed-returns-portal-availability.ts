@@ -1,7 +1,8 @@
 import type { PortalDownloadTriggerResult } from "../../core/contracts";
 import type { PortalFlowStepResult } from "./filed-returns-contracts";
+import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
+const FILED_RETURNS_SCOPE_ID = filedReturnScopeId("GSTR-3B");
 const BLOCKED_PORTAL_PATTERNS = [
   /request rejected/i,
   /access denied/i,

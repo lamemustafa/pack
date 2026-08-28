@@ -1,5 +1,6 @@
 import type {
   FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import type {
@@ -8,7 +9,10 @@ import type {
   PackMessage,
   PackMessageResponse,
 } from "../connectors/gst/messages";
-import { isFullFiscalYearScope } from "../connectors/gst/filed-returns-scope";
+import {
+  getFiledReturnsFullFiscalYearPeriods,
+  isFullFiscalYearScope,
+} from "../connectors/gst/filed-returns-scope";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   acquireFiledReturnsRun,
@@ -30,8 +34,9 @@ import {
 } from "./filed-returns-full-fiscal-year-ledger";
 import {
   hasRetainedFullFiscalYearStaging,
-  readLedger,
   readMalformedLedgerState,
+  readPlanLedgersStorageState,
+  readRetainedPlanLedgers,
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
@@ -78,6 +83,7 @@ export interface FiledReturnsFlowRunnerDeps {
     activeRun?: string;
     completion: string;
     fullFiscalYearLedger: string;
+    fullFiscalYearLedgerIndex?: string;
     observation: string;
     targetReview?: string;
   };
@@ -101,6 +107,7 @@ export interface FiledReturnsFlowRunnerDeps {
   timings?: {
     contentMessageTimeoutMs?: number;
     detailSummaryModalSettleMs?: number;
+    flowStepDeadlineMs?: number;
     flowStepSettleMs?: number;
     portalNavigationSettleMs?: number;
     returnsDashboardNavigationTimeoutMs?: number;
@@ -121,8 +128,15 @@ export async function startFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
-  const targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
-  if (targetReviewState.state === "malformed") return malformedTargetReviewResponse(scope);
+  let targetReviewState;
+  try {
+    targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+  } catch {
+    return targetReviewStorageUnavailableResponse(scope, deps);
+  }
+  if (targetReviewState.state === "malformed") {
+    return malformedTargetReviewResponse(scope, blockedScopeTotalPeriods(scope, deps));
+  }
   if (targetReviewState.state === "valid") {
     return responseForFiledReturnsTargetReview(targetReviewState.review);
   }
@@ -136,6 +150,34 @@ export async function startFiledReturnsDownloadFlow(
     if (retainedArtifactRecovery) return retainedArtifactRecovery;
 
     if (isFullFiscalYearScope(scope)) {
+      const planLedgers = await readPlanLedgersStorageState(deps);
+      if (planLedgers.state === "malformed") {
+        const flowStep: PortalFlowStepResult = {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-private-v0",
+          state: "blocked",
+          safeSignals: ["full-fiscal-year-ledger-malformed", "full-fiscal-year-opfs-retained"],
+          safeMessage:
+            "Pack found damaged fiscal-year recovery metadata and cannot verify whether local staging remains.",
+          userAction: {
+            type: "RETRY_PORTAL_GENERATION",
+            message:
+              "Use Clear local Pack data to remove the retained staging before starting again.",
+            canResume: false,
+          },
+        };
+        return {
+          ok: true,
+          flowStep,
+          flowSummary: {
+            scope,
+            status: "blocked",
+            completedPeriods: [],
+            totalPeriods: blockedScopeTotalPeriods(scope, deps),
+            flowStep,
+          },
+        };
+      }
       const malformedLedger = await readMalformedLedgerState(deps.storageKeys.fullFiscalYearLedger);
       if (malformedLedger) {
         const flowStep: PortalFlowStepResult = {
@@ -162,27 +204,25 @@ export async function startFiledReturnsDownloadFlow(
             scope,
             status: "blocked",
             completedPeriods: [],
-            totalPeriods: 12,
+            totalPeriods: blockedScopeTotalPeriods(scope, deps),
             flowStep,
           },
         };
       }
-      const existingLedger = await readLedger(deps.storageKeys.fullFiscalYearLedger);
-      const replaceableCompletedLedger =
-        existingLedger?.status === "complete" &&
-        canCompleteFullFiscalYearLedger(existingLedger) &&
-        !hasRetainedFullFiscalYearStaging(existingLedger);
-      if (
-        existingLedger &&
-        !sameFiledReturnsScope(existingLedger.scope, scope) &&
-        !replaceableCompletedLedger
-      ) {
-        const existingLedgerResponse = responseForExistingLedger(
-          existingLedger,
-          deps.now?.() ?? new Date(),
-          { blockRetainedStaging: true },
-        );
-        if (existingLedgerResponse) return existingLedgerResponse;
+      for (const existingLedger of await readRetainedPlanLedgers(deps)) {
+        const replaceableCompletedLedger =
+          existingLedger.status === "complete" &&
+          canCompleteFullFiscalYearLedger(existingLedger) &&
+          !existingLedger.zipDownloadAttempt &&
+          !hasRetainedFullFiscalYearStaging(existingLedger);
+        if (!sameFiledReturnsScope(existingLedger.scope, scope) && !replaceableCompletedLedger) {
+          const existingLedgerResponse = responseForExistingLedger(
+            existingLedger,
+            deps.now?.() ?? new Date(),
+            { blockRetainedStaging: true },
+          );
+          if (existingLedgerResponse) return existingLedgerResponse;
+        }
       }
     }
     if (isFullFiscalYearScope(scope)) {
@@ -197,6 +237,37 @@ export async function startFiledReturnsDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+function targetReviewStorageUnavailableResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: Pick<FiledReturnsFlowRunnerDeps, "now">,
+): PackMessageResponse {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: "gst-filed-returns-private-v0",
+    state: "blocked",
+    safeSignals: ["filed-returns-target-review-storage-unavailable"],
+    safeMessage:
+      "Pack could not read saved target recovery and will not start another portal action.",
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Try again after local recovery state is available.",
+      canResume: true,
+    },
+  };
+  return {
+    ok: true,
+    flowStep,
+    flowSummary: {
+      scope,
+      status: "blocked",
+      completedPeriods: [],
+      currentPeriod: scope.period,
+      totalPeriods: blockedScopeTotalPeriods(scope, deps),
+      flowStep,
+    },
+  };
 }
 
 export async function retryFullFiscalYearTargetDownloadFlow(
@@ -245,7 +316,9 @@ export async function retryFiledReturnsTargetDownloadFlow(
     const targetReview = await readFiledReturnsTargetReview(scope, deps);
     if (!targetReview) {
       const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
-      if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+      if (currentState.state === "malformed") {
+        return malformedTargetReviewResponse(scope, blockedScopeTotalPeriods(scope, deps));
+      }
       return currentState.state === "valid"
         ? responseForFiledReturnsTargetReview(currentState.review)
         : noTargetReviewResponse(scope);
@@ -265,14 +338,18 @@ export async function retryFiledReturnsTargetDownloadFlow(
       );
       if (!cleared) {
         const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
-        if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+        if (currentState.state === "malformed") {
+          return malformedTargetReviewResponse(scope, blockedScopeTotalPeriods(scope, deps));
+        }
         if (currentState.state === "valid") {
           return responseForFiledReturnsTargetReview(currentState.review);
         }
       }
     } else {
       const currentState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
-      if (currentState.state === "malformed") return malformedTargetReviewResponse(scope);
+      if (currentState.state === "malformed") {
+        return malformedTargetReviewResponse(scope, blockedScopeTotalPeriods(scope, deps));
+      }
       if (currentState.state === "valid") {
         return responseForFiledReturnsTargetReview(currentState.review);
       }
@@ -288,7 +365,28 @@ async function surfaceRetainedArtifactAcquisitionReview(
   requestedScope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse | null> {
-  const checkpoints = await readArtifactAcquisitionCheckpoints();
+  let checkpoints;
+  try {
+    checkpoints = await readArtifactAcquisitionCheckpoints();
+  } catch {
+    return blockedRetainedArtifactAcquisitionResponse(
+      requestedScope,
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["artifact-acquisition-checkpoint-storage-unavailable"],
+        safeMessage:
+          "Pack could not read retained local artifact recovery and will not start another portal action.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Try again after local recovery state is available.",
+          canResume: true,
+        },
+      },
+      deps,
+    );
+  }
   for (const checkpoint of checkpoints) {
     if (checkpoint.state === "malformed") continue;
     const { target } = checkpoint;
@@ -310,7 +408,7 @@ async function surfaceRetainedArtifactAcquisitionReview(
     const summary = await persistFiledReturnsTargetReview(target, flowStep, deps);
     return summary
       ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
-      : { ok: true, flowStep };
+      : blockedRetainedArtifactAcquisitionResponse(requestedScope, flowStep, deps);
   }
   const malformedCheckpoint = checkpoints.find((checkpoint) => checkpoint.state === "malformed");
   if (!malformedCheckpoint || malformedCheckpoint.state !== "malformed") return null;
@@ -318,9 +416,9 @@ async function surfaceRetainedArtifactAcquisitionReview(
     malformedCheckpoint.key,
   );
   if (!malformedCheckpointReference) {
-    return {
-      ok: true,
-      flowStep: {
+    return blockedRetainedArtifactAcquisitionResponse(
+      requestedScope,
+      {
         connectorId: "gst",
         scopeId: "gst-filed-returns-private-v0",
         state: "blocked",
@@ -328,7 +426,8 @@ async function surfaceRetainedArtifactAcquisitionReview(
         safeMessage:
           "Pack found malformed retained artifact recovery but could not prepare its local review safely.",
       },
-    };
+      deps,
+    );
   }
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
@@ -348,7 +447,34 @@ async function surfaceRetainedArtifactAcquisitionReview(
   });
   return summary
     ? { ok: true, flowStep: summary.flowStep, flowSummary: summary }
-    : { ok: true, flowStep };
+    : blockedRetainedArtifactAcquisitionResponse(requestedScope, flowStep, deps);
+}
+
+function blockedRetainedArtifactAcquisitionResponse(
+  scope: FiledReturnsDownloadScope,
+  flowStep: PortalFlowStepResult,
+  deps: FiledReturnsFlowRunnerDeps,
+): PackMessageResponse {
+  const flowSummary: FiledReturnsFlowSummary = {
+    scope,
+    status: "blocked",
+    completedPeriods: [],
+    currentPeriod: scope.period,
+    totalPeriods: isFullFiscalYearScope(scope)
+      ? getFiledReturnsFullFiscalYearPeriods(scope.financialYear, deps.now?.() ?? new Date()).length
+      : 1,
+    flowStep,
+  };
+  return { ok: true, flowStep, flowSummary };
+}
+
+function blockedScopeTotalPeriods(
+  scope: FiledReturnsDownloadScope,
+  deps: Pick<FiledReturnsFlowRunnerDeps, "now">,
+): number {
+  return isFullFiscalYearScope(scope)
+    ? getFiledReturnsFullFiscalYearPeriods(scope.financialYear, deps.now?.() ?? new Date()).length
+    : 1;
 }
 
 export async function resolveUnconfirmedFiledReturnsDownloadFlow(

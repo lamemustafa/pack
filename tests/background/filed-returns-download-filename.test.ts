@@ -22,6 +22,16 @@ describe("filed returns download filename helpers", () => {
     );
   });
 
+  it("derives a bundled GSTR-3B download fallback from its offered formats", () => {
+    expect(
+      safeFiledReturnDownloadFilename({
+        ...scope,
+        artifactType: "PDF_AND_EXCEL",
+        returnType: "GSTR-3B",
+      }),
+    ).toBe("complyeaze-pack/gst/2026-27/gstr-3b/may.pdf");
+  });
+
   it("names a selected-artifact archive under the requested return type", () => {
     expect(safeSinglePeriodZipFilename({ ...scope, artifactType: "PDF_AND_EXCEL" })).toBe(
       "ComplyEaze-Pack/2026-27/GSTR-2B/May.zip",

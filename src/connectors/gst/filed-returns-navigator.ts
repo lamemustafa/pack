@@ -18,8 +18,9 @@ import {
   toNavigationCandidateInput,
 } from "./filed-returns-navigation-dom";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
+import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 
-const FILED_RETURNS_SCOPE_ID = "gst-filed-returns-gstr3b-pdf-private-v0";
+const FILED_RETURNS_SCOPE_ID = filedReturnScopeId("GSTR-3B");
 const MENU_REVEAL_DELAY_MS = 1_000;
 
 export async function navigateToFiledReturnsPage(
