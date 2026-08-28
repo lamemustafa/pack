@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
+import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
+import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/connectors/gst/filed-returns-contracts";
 import type {
   FiledReturnsDownloadDiagnostic,
   FiledReturnsFlowSummary,
@@ -14,6 +16,13 @@ import {
 } from "../../src/background/filed-returns-full-fiscal-year-validation";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import { readPlanLedgersStorageState } from "../../src/background/filed-returns-full-fiscal-year-run-state";
+import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import { createAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
+import {
+  allSupportedFullFiscalYearPlanRootKey,
+  allSupportedFullFiscalYearPlanStorageKey,
+} from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
+import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
 
 const filedReturnsCurrentStateStorageKeys = {
   activeRun: "pack:active-filed-returns-run",
@@ -190,6 +199,48 @@ describe("Pack local data clearing", () => {
     ).resolves.toEqual({ state: "valid", ledgers: [ledger] });
 
     await expect(background.clearPackLocalData()).resolves.toEqual({ ok: true, cleared: true });
+    expect(zipMocks.discardAllFiledReturnsStaging).not.toHaveBeenCalled();
+    expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(ledger.ledgerId);
+    expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([planKey, indexKey]);
+  });
+
+  it("clears each indexed all-supported plan's staged files before deleting its dynamic records", async () => {
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected supported full-year return plan");
+    const planRoot = {
+      kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+      financialYear: "2025-26",
+    } as const;
+    const ledger = {
+      ...createAllSupportedFullFiscalYearLedger(
+        planRoot,
+        expansion.targets,
+        FILED_RETURNS_MONTHS.slice(0, 1),
+        new Date("2026-08-27T00:00:00.000Z"),
+      ),
+      status: "cancelled" as const,
+    };
+    expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
+    const indexKey = "pack:all-supported-full-fiscal-year-ledger-index";
+    const planKey = allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId);
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
+      if (key == null) {
+        return {
+          [indexKey]: {
+            schemaVersion: "1.0",
+            ledgerIdsByPlanRoot: {
+              [allSupportedFullFiscalYearPlanRootKey(planRoot)]: ledger.ledgerId,
+            },
+          },
+          [planKey]: ledger,
+        };
+      }
+      return {};
+    });
+    const background = await import("../../src/entrypoints/background");
+
+    await expect(background.clearPackLocalData()).resolves.toEqual({ ok: true, cleared: true });
+
     expect(zipMocks.discardAllFiledReturnsStaging).not.toHaveBeenCalled();
     expect(zipMocks.discardFullFiscalYearFiledReturnsZip).toHaveBeenCalledWith(ledger.ledgerId);
     expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([planKey, indexKey]);

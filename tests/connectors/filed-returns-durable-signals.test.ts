@@ -311,8 +311,14 @@ describe("filed-return durable signal contract", () => {
     expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-row-count:100001")).toBe(false);
     expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-error:portal-value")).toBe(false);
     expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:37")).toBe(true);
-    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:38")).toBe(true);
-    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:39")).toBe(false);
+    // Three supported return types, twelve fiscal periods each, and up to three
+    // offered formats per return gives the all-supported root its 108-file ceiling.
+    expect(isDurableFiledReturnsSignal("all-supported-full-fiscal-year-zip-entry-count:108")).toBe(
+      true,
+    );
+    expect(isDurableFiledReturnsSignal("all-supported-full-fiscal-year-zip-entry-count:109")).toBe(
+      false,
+    );
   });
 
   it("retains categorical page-generated artifact readiness evidence", () => {

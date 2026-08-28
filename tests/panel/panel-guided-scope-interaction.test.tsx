@@ -15,7 +15,10 @@ vi.mock("wxt/browser", () => ({
 
 import { PanelSurface, type PackPanelController } from "../../src/entrypoints/panel/panel-surface";
 import { PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
-import { panelFullFiscalYearPresets } from "../../src/entrypoints/panel/panel-guided-scope-model";
+import {
+  panelAllReturnsFullYearPreset,
+  panelFullFiscalYearPresets,
+} from "../../src/entrypoints/panel/panel-guided-scope-model";
 import {
   PANEL_TEST_SCOPE,
   completedPanelSummary,
@@ -251,6 +254,56 @@ describe("panel guided scope interaction", () => {
     expect(container.textContent).toContain("Choose return, year and period");
     expect(container.textContent).not.toContain("Catalogue & limits");
     expect(container.textContent).not.toContain("Step 1 of 4");
+  });
+
+  it("places everything-this-year first without moving focus on initial mount", async () => {
+    const previousControl = dom.window.document.createElement("button");
+    previousControl.textContent = "Existing focus";
+    dom.window.document.body.append(previousControl);
+    previousControl.focus();
+    const onStartAllReturnsFullYear = vi.fn();
+    const expectedPlan = panelAllReturnsFullYearPreset(
+      getFiledReturnsFullFiscalYearPeriods("2026-27").length > 0 ? "2026-27" : "2025-26",
+    );
+
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <PanelGuidedScope
+          busy={null}
+          context={{ connectorId: "gst", pageKind: "gst-filed-returns", supported: true }}
+          externalBlock={null}
+          flowSummary={null}
+          portalSignedIn
+          savedRun={null}
+          scope={PANEL_TEST_SCOPE}
+          scopeLockedForReview={false}
+          onScopeChange={vi.fn()}
+          onStart={vi.fn()}
+          onStartAllReturnsFullYear={onStartAllReturnsFullYear}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const presets = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
+    );
+    expect(dom.window.document.activeElement).toBe(previousControl);
+    expect(presets[0]?.classList.contains("panel-everything-preset")).toBe(true);
+    expect(presets[0]?.textContent).toContain("Everything this year · all supported returns");
+    expect(presets[0]?.textContent).toMatch(
+      /\d+ returns? · \d+ return periods? · \d+ formats? · \d+ files? · one ZIP/,
+    );
+    expect(presets[0]?.getAttribute("aria-label")).toContain("all supported returns");
+
+    await act(async () => {
+      presets[0]?.dispatchEvent(realmEvent("click"));
+      await Promise.resolve();
+    });
+
+    expect(expectedPlan).not.toBeNull();
+    expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith(expectedPlan);
   });
 
   it("gives every disabled preset a resolvable reason", async () => {
