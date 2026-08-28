@@ -451,8 +451,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
  *
  * These bound an *observed* count -- the value comes off the assembled ZIP, not from a
  * prediction -- so their job is to refuse an implausible number, not to cap a run. Each is
- * the largest legitimate bundle for its kind plus the derived entries Pack writes itself
- * (`full-year-summary.csv` and the workbook), and `tests/connectors/filed-returns-zip-entry-ceilings.test.ts`
+ * the largest legitimate bundle for its kind plus the derived entries Pack writes itself,
+ * and `tests/connectors/filed-returns-zip-entry-ceilings.test.ts`
  * re-derives the artifact half from the catalogue so adding a return type or a format fails
  * that test rather than silently exceeding a bound.
  *
@@ -466,10 +466,10 @@ const ZIP_ENTRY_COUNT_CEILINGS = {
   "single-period": 3,
   // 36 artifacts (GSTR-2B, the widest single return: 12 periods x 3 formats) + 2 derived.
   "full-fiscal-year": 38,
-  // 84 artifacts (GSTR-3B 24 + GSTR-1 24 + GSTR-2B 36) + up to 6 derived, one summary and one
-  // workbook per return type. Not 108: that assumed three formats for all three return types,
-  // and only GSTR-2B offers three.
-  "all-supported-full-fiscal-year": 90,
+  // 84 artifacts (GSTR-3B 24 + GSTR-1 24 + GSTR-2B 36) + one mixed-plan summary. Mixed plans
+  // do not receive a return-specific workbook. Not 108: that assumed three formats for all
+  // three return types, and only GSTR-2B offers three.
+  "all-supported-full-fiscal-year": 85,
 } as const;
 
 const BROWSER_DOWNLOAD_ERROR_SUFFIXES = new Set([

@@ -13,7 +13,8 @@ import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-sco
  * quietly fitting under a bound nobody re-derived.
  */
 
-const MAX_DERIVED_PER_RETURN = 2; // full-year-summary.csv and the workbook
+const MAX_DERIVED_SINGLE_RETURN = 2; // full-year-summary.csv and the workbook
+const MAX_DERIVED_MIXED_RETURN = 1; // mixed plans receive one combined summary, no workbook
 
 function artifactsPerYear(returnType: (typeof FILED_RETURNS_RETURN_TYPES)[number]): number {
   return FILED_RETURNS_MONTHS.length * filedReturnsOfferedArtifacts(returnType).length;
@@ -22,7 +23,7 @@ function artifactsPerYear(returnType: (typeof FILED_RETURNS_RETURN_TYPES)[number
 describe("ZIP entry count ceilings", () => {
   it("admits the widest single-return year and refuses one entry more", () => {
     const widest = Math.max(...FILED_RETURNS_RETURN_TYPES.map(artifactsPerYear));
-    const ceiling = widest + MAX_DERIVED_PER_RETURN;
+    const ceiling = widest + MAX_DERIVED_SINGLE_RETURN;
 
     expect(widest).toBe(36);
     expect(isDurableFiledReturnsSignal(`full-fiscal-year-zip-entry-count:${ceiling}`)).toBe(true);
@@ -36,7 +37,7 @@ describe("ZIP entry count ceilings", () => {
       (total, returnType) => total + artifactsPerYear(returnType),
       0,
     );
-    const ceiling = everyReturn + MAX_DERIVED_PER_RETURN * FILED_RETURNS_RETURN_TYPES.length;
+    const ceiling = everyReturn + MAX_DERIVED_MIXED_RETURN;
 
     expect(everyReturn).toBe(84);
     expect(
@@ -45,6 +46,9 @@ describe("ZIP entry count ceilings", () => {
     expect(
       isDurableFiledReturnsSignal(`all-supported-full-fiscal-year-zip-entry-count:${ceiling + 1}`),
     ).toBe(false);
+    expect(isDurableFiledReturnsSignal(`all-supported-full-fiscal-year-zip-entry-count:86`)).toBe(
+      false,
+    );
   });
 
   it("does not let the cross-return ceiling raise the single-return one", () => {
