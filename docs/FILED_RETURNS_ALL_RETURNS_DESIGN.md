@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented as a source-build alpha; not a packaged or Store-facing offer.**
+**Implemented in source; not a Store-advertised offer.**
 The separate root plan, bounded local ledger/index, background runner, recovery,
 and exact-download evidence are implemented. Authenticated qualification remains
 required for every supported return type and offered artifact before any broader
