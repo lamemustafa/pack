@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import {
   cataloguePeriodOptions,
@@ -31,6 +31,14 @@ function renderCatalogue() {
 }
 
 describe("panel guided scope", () => {
+  beforeEach(() => {
+    vi.stubEnv("MODE", "alpha");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("holds the initial view to the three presets and the advanced door", () => {
     const markup = renderGuide();
     const controlCount =
