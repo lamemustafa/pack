@@ -363,6 +363,11 @@ Pack uses Chrome extension storage only inside the current browser profile.
   plan scope to its opaque ledger ID. Each indexed plan is stored under the
   generated `pack:filed-returns-plan:<opaque-ledger-id>` key with the same
   bounded ledger fields; the index and plan records are cleared together;
+- `pack:all-supported-full-fiscal-year-ledger-index`: local-only index that
+  maps the selected financial year for the separate all-supported-returns plan
+  to its opaque ledger ID. Its generated plan record uses the same bounded
+  local fields and is cleared with the index; it does not store taxpayer data,
+  filenames, portal HTML, raw URLs, or session material;
 - `pack:single-period-staging`: a short-lived local recovery ledger for a
   selected-file ZIP. It stores an opaque ledger identifier, canonical scope
   (financial year, period, return type and selected artifacts), per-artifact
