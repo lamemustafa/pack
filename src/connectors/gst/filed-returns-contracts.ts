@@ -14,6 +14,30 @@ export interface FiledReturnsDownloadScope {
   completedPeriods?: string[];
 }
 
+/**
+ * A user-selected set of matrix cells.
+ *
+ * Deliberately not a `FiledReturnsDownloadScope`: a scope authorises exactly one return type
+ * and one period, while this names every cell the user painted and is expanded into immutable
+ * atomic targets when the run is created. Deliberately not the all-supported root either --
+ * that one is derived from the catalogue and covers everything, where this one is only ever
+ * what a person chose.
+ */
+export const FILED_RETURNS_SELECTED_TARGETS_KIND = "selected-filed-returns-targets" as const;
+
+export interface FiledReturnsSelectedTarget {
+  returnType: FiledReturnsReturnType;
+  period: FiledReturnsMonth;
+  artifactType: FiledReturnsArtifactType;
+}
+
+export interface FiledReturnsSelectedTargetsRequest {
+  kind: typeof FILED_RETURNS_SELECTED_TARGETS_KIND;
+  financialYear: string;
+  /** Canonical and de-duplicated before it is eligible for durable persistence. */
+  targets: readonly FiledReturnsSelectedTarget[];
+}
+
 export interface FiledReturnsDownloadTarget {
   actionId: string;
   financialYear: string;

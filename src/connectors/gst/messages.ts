@@ -13,6 +13,8 @@ import type {
   PortalFlowStepResult,
 } from "./filed-returns-contracts";
 import type { ArtifactRequest, ArtifactFailureReason } from "./artifact-source";
+import type { FiledReturnsSelectedTargetsRequest } from "./filed-returns-contracts";
+import { isSelectedFiledReturnsTargetsRequest } from "./filed-returns-selected-target-plan";
 import {
   FULL_FISCAL_YEAR_PERIOD,
   isSupportedFiledReturnsScope,
@@ -82,6 +84,10 @@ export type PackMessage =
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
   | { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
+  | {
+      type: "PACK_START_SELECTED_FILED_RETURNS_DOWNLOAD_FLOW";
+      payload: FiledReturnsSelectedTargetsRequest;
+    }
   | {
       type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
       payload: FiledReturnsFreshStartPayload;
@@ -261,6 +267,8 @@ export function isPackMessage(
       return isFiledReturnsDownloadScope(input.payload);
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
+    case "PACK_START_SELECTED_FILED_RETURNS_DOWNLOAD_FLOW":
+      return isSelectedFiledReturnsTargetsRequest(input.payload);
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsFreshStartPayload(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":

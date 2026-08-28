@@ -1,4 +1,5 @@
 import type {
+  FiledReturnsSelectedTargetsRequest,
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
   FiledReturnsFullFiscalYearTarget,
@@ -24,11 +25,13 @@ import { durableFullFiscalYearArtifactSignals } from "./filed-returns-full-fisca
 import { mergeFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import {
   FULL_FISCAL_YEAR_PLAN_VERSION,
-  hasCanonicalFullFiscalYearTargetPlan,
+  SELECTED_TARGETS_PLAN_VERSION,
+  hasTrustworthyTargetPlan,
   isCanonicalFullFiscalYearPeriodPlan,
 } from "./filed-returns-full-fiscal-year-validation";
 export {
   hasCanonicalFullFiscalYearTargetPlan,
+  hasTrustworthyTargetPlan,
   isFullFiscalYearLedger,
   recoverableFullFiscalYearLedgerId,
 } from "./filed-returns-full-fiscal-year-validation";
@@ -96,6 +99,99 @@ export function createFullFiscalYearLedger(
   };
 }
 
+/**
+ * Builds a run over exactly the periods a person picked.
+ *
+ * Shares everything below the plan with a full-year run -- the targets, the ZIP, the download
+ * evidence -- because all of that was already driven by the recorded target list rather than
+ * by the year. Only the plan differs, and with it where completion authority comes from.
+ *
+ * One return type per run, for now. The selection contract carries a return type per cell so a
+ * mixed selection can be expressed, but the ledger's scope authorises exactly one, and the
+ * all-supported root already owns the every-return case. A mixed selection is refused here by
+ * name rather than quietly run as whichever return happened to sort first.
+ */
+export function createSelectedTargetsLedger(
+  request: FiledReturnsSelectedTargetsRequest,
+  now: Date,
+): FiledReturnsFullFiscalYearLedger {
+  const returnTypes = new Set(request.targets.map((target) => target.returnType));
+  if (returnTypes.size !== 1) {
+    throw new Error("A selected-targets run covers exactly one return type.");
+  }
+  const returnType = request.targets[0]!.returnType;
+  return createSelectedPeriodsLedger(
+    {
+      financialYear: request.financialYear,
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType,
+      artifactType: request.targets[0]!.artifactType,
+    },
+    now,
+    request.targets.map((target) => target.period),
+  );
+}
+
+/** The ledger half of a selected run, shared with the flow that already holds a scope. */
+export function createSelectedPeriodsLedger(
+  scope: FiledReturnsDownloadScope,
+  now: Date,
+  periods: readonly string[],
+): FiledReturnsFullFiscalYearLedger {
+  if (periods.length === 0) {
+    throw new Error("A selected-periods run needs at least one period.");
+  }
+  const returnType = scope.returnType;
+  const artifactType = normaliseFiledReturnsArtifactType(returnType, scope.artifactType);
+  const timestamp = now.toISOString();
+  const targetPlan = createFiledReturnsTargetPlan(
+    periods.map((period) => ({
+      artifactType,
+      financialYear: scope.financialYear,
+      period,
+      returnType,
+    })),
+  );
+  return {
+    schemaVersion: "1.0",
+    planVersion: SELECTED_TARGETS_PLAN_VERSION,
+    connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
+    createdWithExtensionVersion: PACK_PRODUCT_VERSION,
+    ledgerId: createFiledReturnsLedgerId("full-fiscal-year", now),
+    revision: 1,
+    status: "running",
+    scope: {
+      financialYear: scope.financialYear,
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType,
+      artifactType,
+    },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    // Deliberately not set. `eligibleThrough` says "the year, up to here", which is a claim
+    // about a contiguous run; a picked set is not one, and a reader that took the last period
+    // as an extent would read months that were never selected as part of this run.
+    lastReconciledAt: timestamp,
+    targetPlan,
+    targets: targetPlan.map((planTarget) => {
+      const targetScope = {
+        financialYear: planTarget.financialYear,
+        period: planTarget.period,
+        returnType: planTarget.returnType,
+        ...(planTarget.artifactType ? { artifactType: planTarget.artifactType } : {}),
+      };
+      return {
+        targetId: planTarget.targetId,
+        ...targetScope,
+        status: "pending" as const,
+        attempts: 0,
+        ...canonicalDurableTargetStatus(targetScope, "pending", []),
+        updatedAt: timestamp,
+      };
+    }),
+  };
+}
+
 export function reconcileFullFiscalYearLedgerTargets(
   ledger: FiledReturnsFullFiscalYearLedger,
   now: Date,
@@ -107,7 +203,7 @@ export function reconcileFullFiscalYearLedgerTargets(
   // extension versions a resumed run is actually executing under. A validated
   // legacy prefix becomes an explicit v3 plan before any recovery action runs.
   void periods;
-  if (!hasCanonicalFullFiscalYearTargetPlan(ledger)) {
+  if (!hasTrustworthyTargetPlan(ledger)) {
     const targetPeriods = ledger.targets.map((target) => target.period) as FiledReturnsMonth[];
     const eligibleThrough = targetPeriods.at(-1);
     if (
@@ -226,7 +322,7 @@ export function unplannedEligibleFullFiscalYearPeriods(
 
 export function canCompleteFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   return (
-    hasCanonicalFullFiscalYearTargetPlan(ledger) &&
+    hasTrustworthyTargetPlan(ledger) &&
     ledger.targets.length > 0 &&
     ledger.targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))
   );

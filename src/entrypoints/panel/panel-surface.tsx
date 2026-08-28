@@ -179,6 +179,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 scopeLockedForReview={pack.scopeLockedForReview}
                 onScopeChange={pack.setScope}
                 onStart={(scope) => void pack.startFiledReturnsFlow(scope)}
+                onStartSelection={(request) => void pack.startSelectedFiledReturnsFlow(request)}
               />
             )}
           </>

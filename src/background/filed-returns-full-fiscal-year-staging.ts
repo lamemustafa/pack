@@ -11,7 +11,7 @@ import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
   canCompleteFullFiscalYearLedger,
   completeFullFiscalYearLedger,
-  hasCanonicalFullFiscalYearTargetPlan,
+  hasTrustworthyTargetPlan,
   reconcileFullFiscalYearLedgerTargets,
   sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
@@ -329,7 +329,7 @@ export async function finishFullFiscalYearCleanup(
     await persistLedger(deps, reconciledLedger);
   }
   if (!canCompleteFullFiscalYearLedger(reconciledLedger)) {
-    const signal = hasCanonicalFullFiscalYearTargetPlan(reconciledLedger)
+    const signal = hasTrustworthyTargetPlan(reconciledLedger)
       ? "full-fiscal-year-run-needs-action"
       : "full-fiscal-year-target-plan-invalid";
     const step = blockedFullFiscalYearStep(signal, reconciledLedger);

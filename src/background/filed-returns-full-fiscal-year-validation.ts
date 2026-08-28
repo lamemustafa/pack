@@ -35,6 +35,17 @@ import {
 
 export const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-targets-v3";
 
+/**
+ * A run over periods the user picked rather than the whole eligible year.
+ *
+ * The version is what separates the two kinds, not the ledger id: both are stored and read
+ * through the same machinery, and everything downstream of the plan is already driven by the
+ * recorded target list rather than by the year. What changes is where completion authority
+ * comes from -- a full-year plan must equal the canonical periods, while this one is only ever
+ * judged against the plan captured when the run was created.
+ */
+export const SELECTED_TARGETS_PLAN_VERSION = "filed-returns-selected-targets-v1";
+
 export function canonicalFullFiscalYearPlanPeriods(
   financialYear: string,
   eligibleThrough: unknown,
@@ -46,6 +57,54 @@ export function canonicalFullFiscalYearPlanPeriods(
       : FILED_RETURNS_MONTHS;
   const eligibleIndex = availableMonths.indexOf(eligibleThrough);
   return eligibleIndex < 0 ? null : availableMonths.slice(0, eligibleIndex + 1);
+}
+
+/**
+ * Whether a ledger's recorded plan can be trusted as completion authority.
+ *
+ * Both kinds answer it, differently, and every caller wants the same question answered rather
+ * than the distinction: a full-year plan has to match the canonical periods for that year,
+ * while a selected-periods plan is judged against nothing but the plan captured when the run
+ * was created. Requiring the canonical shape of the second would refuse every run a person
+ * narrowed by hand.
+ */
+export function hasTrustworthyTargetPlan(
+  ledger: Pick<
+    FiledReturnsFullFiscalYearLedger,
+    "planVersion" | "scope" | "targetPlan" | "targets" | "eligibleThrough"
+  >,
+): boolean {
+  if (ledger.planVersion === SELECTED_TARGETS_PLAN_VERSION) {
+    return hasRecordedSelectedTargetPlan(ledger);
+  }
+  return hasCanonicalFullFiscalYearTargetPlan(ledger);
+}
+
+/**
+ * A selected-periods plan is trustworthy when it is non-empty, names months this year actually
+ * offers, keeps them in canonical order without repeats, and is exactly what the run's targets
+ * were built from. Order and uniqueness are load-bearing rather than tidiness: the ZIP and the
+ * completion count both walk the plan positionally.
+ */
+function hasRecordedSelectedTargetPlan(
+  ledger: Pick<
+    FiledReturnsFullFiscalYearLedger,
+    "planVersion" | "scope" | "targetPlan" | "targets" | "eligibleThrough"
+  >,
+): boolean {
+  const plan = ledger.targetPlan;
+  if (!plan || plan.length === 0) return false;
+  const available =
+    ledger.scope.financialYear === GST_LAUNCH_FINANCIAL_YEAR
+      ? FILED_RETURNS_MONTHS.slice(FILED_RETURNS_MONTHS.indexOf(GST_LAUNCH_MONTH))
+      : FILED_RETURNS_MONTHS;
+  let previous = -1;
+  for (const target of plan) {
+    const index = available.indexOf(target.period as FiledReturnsMonth);
+    if (index < 0 || index <= previous) return false;
+    previous = index;
+  }
+  return targetsMatchRecordedPlan(ledger.targets, plan);
 }
 
 export function hasCanonicalFullFiscalYearTargetPlan(
@@ -278,7 +337,7 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
       ledger.planVersion === FULL_FISCAL_YEAR_PLAN_VERSION &&
       ledger.eligibleThrough !== undefined &&
       isTargetPlan(ledger.targetPlan) &&
-      hasCanonicalFullFiscalYearTargetPlan(ledger as FiledReturnsFullFiscalYearLedger)
+      hasTrustworthyTargetPlan(ledger as FiledReturnsFullFiscalYearLedger)
     );
   }
   // Legacy plans can be resumed, but never completed or zipped without the

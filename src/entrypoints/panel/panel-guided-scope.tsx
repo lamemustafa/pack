@@ -1,8 +1,11 @@
 import React from "react";
+import { PanelPeriodMatrix } from "./panel-period-matrix";
+import { periodMatrixFinancialYears } from "./panel-period-matrix-model";
 import type { PortalContext } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
+  FiledReturnsSelectedTargetsRequest,
 } from "../../connectors/gst/filed-returns-contracts";
 import {
   filedReturnsCapability,
@@ -34,6 +37,7 @@ export function PanelGuidedScope({
   scopeLockedForReview,
   onScopeChange,
   onStart,
+  onStartSelection,
 }: {
   busy: string | null;
   context: PortalContext | null;
@@ -45,12 +49,14 @@ export function PanelGuidedScope({
   scopeLockedForReview: boolean;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: (scope: FiledReturnsDownloadScope) => void;
+  onStartSelection: (request: FiledReturnsSelectedTargetsRequest) => void;
 }) {
-  const [view, setView] = React.useState<"presets" | "guided">("presets");
+  const [view, setView] = React.useState<"presets" | "matrix" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
   const selectRef = React.useRef<HTMLSelectElement>(null);
   const presetDoorRef = React.useRef<HTMLButtonElement>(null);
-  const focusTarget = React.useRef<"preset-door" | "select" | null>(null);
+  const matrixFirstControlRef = React.useRef<HTMLButtonElement>(null);
+  const focusTarget = React.useRef<"preset-door" | "select" | "matrix" | null>(null);
   const steps = panelGuidedSteps(scope);
   const step = steps[activeStep] ?? steps[0];
   const [, refreshPresetSnapshot] = React.useState(0);
@@ -70,6 +76,7 @@ export function PanelGuidedScope({
     if (!requestedTarget) return;
     focusTarget.current = null;
     if (requestedTarget === "select") selectRef.current?.focus();
+    else if (requestedTarget === "matrix") matrixFirstControlRef.current?.focus();
     else presetDoorRef.current?.focus();
   }, [activeStep, view]);
 
@@ -162,14 +169,72 @@ export function PanelGuidedScope({
             type="button"
             ref={presetDoorRef}
             onClick={() => {
-              focusTarget.current = "select";
-              setView("guided");
+              focusTarget.current = "matrix";
+              setView("matrix");
             }}
           >
             <span>Choose return, year and period</span>
             <span aria-hidden="true">›</span>
           </button>
         </div>
+      </section>
+    );
+  }
+
+  if (view === "matrix") {
+    return (
+      <section className="panel-guide" aria-labelledby="panel-guide-title">
+        <h1 className="visually-hidden" id="panel-guide-title">
+          Choose what to download
+        </h1>
+        <PanelPeriodMatrix
+          artifactType="PDF_AND_EXCEL"
+          firstControlRef={matrixFirstControlRef}
+          asOf={presetAsOf}
+          busy={busy}
+          disabled={scopeLockedForReview || externalBlock !== null}
+          financialYear={scope.financialYear}
+          financialYearOptions={periodMatrixFinancialYears(presetAsOf)}
+          onFinancialYearChange={(financialYear) => onScopeChange({ ...scope, financialYear })}
+          onStart={(resolution) => {
+            // One cell is an ordinary scope run and adopts the scope, so the rest of the panel
+            // describes what is running. A selection is its own contract and deliberately does
+            // not become the scope: flattening it would leave the panel naming one period of a
+            // run covering several.
+            if (resolution.kind === "scope") {
+              onScopeChange(resolution.scope);
+              onStart(resolution.scope);
+              return;
+            }
+            onStartSelection(resolution.request);
+          }}
+        />
+        <div className="panel-guide-actions">
+          <button
+            type="button"
+            className="panel-guide-back"
+            onClick={() => {
+              focusTarget.current = "preset-door";
+              setView("presets");
+            }}
+          >
+            Back
+          </button>
+          {/* The grid fetches every format a return offers, matching the presets. Narrowing to
+              one format is the only thing it cannot express, so the step-by-step form stays
+              reachable for exactly that until the grid carries a format control of its own. */}
+          <button
+            type="button"
+            className="panel-guide-back"
+            onClick={() => {
+              focusTarget.current = "select";
+              setView("guided");
+            }}
+          >
+            Choose one format
+          </button>
+        </div>
+        {externalBlock ? <p className="muted">{externalBlock.label}</p> : null}
       </section>
     );
   }

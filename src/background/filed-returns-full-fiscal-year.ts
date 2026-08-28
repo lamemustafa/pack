@@ -5,6 +5,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
+import type { FiledReturnsMonth } from "../connectors/gst/filed-returns-scope";
 import { filedReturnsSummaryStatusMessage } from "../connectors/gst/filed-returns-summary-status";
 import type {
   FiledReturnsFlowRunnerDeps,
@@ -13,7 +14,8 @@ import type {
 import {
   canCompleteFullFiscalYearLedger,
   createFullFiscalYearLedger,
-  hasCanonicalFullFiscalYearTargetPlan,
+  createSelectedPeriodsLedger,
+  hasTrustworthyTargetPlan,
   hasInconsistentFullFiscalYearCompletion,
   markFullFiscalYearTargetRunning,
   markFullFiscalYearTargetTerminal,
@@ -138,15 +140,50 @@ export async function reconcilePersistedFullFiscalYearZipDownload(
   return handled;
 }
 
+/**
+ * Whether a stored ledger was built from exactly the months now being asked for. Compared
+ * positionally because the recorded plan's order is what the ZIP and the completion count walk.
+ */
+function sameRecordedPlanPeriods(
+  ledger: FiledReturnsFullFiscalYearLedger,
+  periods: readonly string[],
+): boolean {
+  const plan = ledger.targetPlan;
+  if (!plan || plan.length !== periods.length) return false;
+  return plan.every((target, index) => target.period === periods[index]);
+}
+
 export async function startFullFiscalYearDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
   runSinglePeriod: SinglePeriodRunner,
-  options: { allowExistingLedgerResume?: boolean } = {},
+  options: {
+    allowExistingLedgerResume?: boolean;
+    /**
+     * The months a person picked, when this run is a selection rather than the whole year.
+     * Present means the plan is authored by the user and judged only against itself; absent
+     * keeps the canonical behaviour of planning every eligible period.
+     */
+    selectedPeriods?: readonly FiledReturnsMonth[];
+  } = {},
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
-  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+  const plannedPeriods =
+    options.selectedPeriods ?? getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
   let existingLedger = await readLedgerForScope(deps, scope);
+  // A scope names a year and a return, not which months were picked, so two different
+  // selections over the same year look like the same run to storage. Reconciling the second
+  // onto the first would rewrite a recorded plan that a partly finished run had already been
+  // judged against, so a stored plan that is not the one being asked for is surfaced for
+  // review instead of being silently replaced.
+  if (
+    options.selectedPeriods &&
+    existingLedger &&
+    !sameRecordedPlanPeriods(existingLedger, plannedPeriods)
+  ) {
+    const summary = summariseFullFiscalYearLedger(existingLedger, now);
+    return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
+  }
   if (existingLedger && hasInconsistentFullFiscalYearCompletion(existingLedger)) {
     const summary = summariseFullFiscalYearLedger(existingLedger, now);
     return { ok: true, flowStep: summary.flowStep, flowSummary: summary };
@@ -159,7 +196,7 @@ export async function startFullFiscalYearDownloadFlow(
       now,
       plannedPeriods,
     );
-    if (!hasCanonicalFullFiscalYearTargetPlan(reconciledLedger)) {
+    if (!hasTrustworthyTargetPlan(reconciledLedger)) {
       const step = blockedFullFiscalYearStep(
         "full-fiscal-year-target-plan-invalid",
         sameScopeExistingLedger,
@@ -286,7 +323,9 @@ export async function startFullFiscalYearDownloadFlow(
     !replaceCompletedSameScopeLedger &&
     !replaceUnstartedCancelledSameScopeLedger
       ? reconcileFullFiscalYearLedgerTargets(existingLedger, now, plannedPeriods)
-      : createFullFiscalYearLedger(scope, now, plannedPeriods);
+      : options.selectedPeriods
+        ? createSelectedPeriodsLedger(scope, now, plannedPeriods)
+        : createFullFiscalYearLedger(scope, now, plannedPeriods);
 
   if (
     existingLedger &&
@@ -461,7 +500,7 @@ async function completeRun(
     await persistLedger(deps, reconciledLedger);
   }
   if (!canCompleteFullFiscalYearLedger(reconciledLedger)) {
-    const signal = hasCanonicalFullFiscalYearTargetPlan(reconciledLedger)
+    const signal = hasTrustworthyTargetPlan(reconciledLedger)
       ? "full-fiscal-year-run-needs-action"
       : "full-fiscal-year-target-plan-invalid";
     const step = blockedFullFiscalYearStep(signal, reconciledLedger);
@@ -556,7 +595,7 @@ async function reconcilePersistedFullFiscalYearZip(
     await persistLedger(deps, reconciledLedger);
   }
   if (!canCompleteFullFiscalYearLedger(reconciledLedger)) {
-    const signal = hasCanonicalFullFiscalYearTargetPlan(reconciledLedger)
+    const signal = hasTrustworthyTargetPlan(reconciledLedger)
       ? "full-fiscal-year-zip-target-state-invalid"
       : "full-fiscal-year-target-plan-invalid";
     const step = blockedFullFiscalYearStep(signal, reconciledLedger);

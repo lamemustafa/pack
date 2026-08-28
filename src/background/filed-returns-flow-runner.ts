@@ -22,6 +22,9 @@ import {
 import type { ActiveGstTab } from "./filed-returns-active-tab";
 import type { MainWorldFiledReturnsFilterSelectionOutcome } from "../connectors/gst/main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
+import type { FiledReturnsSelectedTargetsRequest } from "../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsMonth } from "../connectors/gst/filed-returns-scope";
+import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
 import {
   discardMalformedFullFiscalYearRunForFreshStart,
   prepareFullFiscalYearTargetRetry,
@@ -124,9 +127,51 @@ export interface FiledReturnsFlowStepObservation {
   portalSystemError: boolean;
 }
 
+/**
+ * Starts a run over the periods a person picked on the grid.
+ *
+ * Delegates to the same flow a whole-year run uses rather than standing up a second one: the
+ * active-run lease, the retained-staging review, the malformed-ledger checks and the download
+ * evidence are identical, and only the plan differs. What arrives here has already been
+ * canonicalised and de-duplicated by the selection contract, so this converts it to the scope
+ * the flow speaks and hands over the months it must plan.
+ */
+export async function startSelectedFiledReturnsDownloadFlow(
+  request: FiledReturnsSelectedTargetsRequest,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse> {
+  const first = request.targets[0];
+  const returnTypes = new Set(request.targets.map((target) => target.returnType));
+  if (!first || returnTypes.size !== 1) {
+    const flowStep: PortalFlowStepResult = {
+      connectorId: "gst",
+      scopeId: "gst-filed-returns-private-v0",
+      state: "blocked",
+      safeSignals: ["filed-returns-selection-spans-multiple-returns"],
+      safeMessage: "Pack can download one return type per run. Choose periods from one row.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Select periods from a single return, then start the download again.",
+        canResume: false,
+      },
+    };
+    return { ok: true, flowStep, flowSummary: null };
+  }
+  const scope: FiledReturnsDownloadScope = {
+    financialYear: request.financialYear,
+    period: FULL_FISCAL_YEAR_PERIOD,
+    returnType: first.returnType,
+    artifactType: first.artifactType,
+  };
+  return startFiledReturnsDownloadFlow(scope, deps, {
+    selectedPeriods: request.targets.map((target) => target.period),
+  });
+}
+
 export async function startFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
+  options: { selectedPeriods?: readonly FiledReturnsMonth[] } = {},
 ): Promise<PackMessageResponse> {
   let targetReviewState;
   try {
@@ -230,6 +275,7 @@ export async function startFiledReturnsDownloadFlow(
         scope,
         deps,
         startSinglePeriodFiledReturnsDownloadFlow,
+        options.selectedPeriods ? { selectedPeriods: options.selectedPeriods } : {},
       );
     }
     return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);

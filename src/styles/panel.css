@@ -508,3 +508,98 @@ html[data-pack-surface="panel"] body {
 .panel-finished-run[open] > summary {
   margin-bottom: 4px;
 }
+/* A finished run folds away so the presets stay reachable at 320px. */
+.panel-finished-run > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--pack-link);
+  padding: 6px 0;
+}
+.panel-finished-run[open] > summary {
+  margin-bottom: 4px;
+}
+
+/* The period grid.
+   Thirteen columns inside a 320px floor leaves roughly 20px per month, so the header carries
+   one letter and the full month name rides on `abbr` and each cell's aria-label. The grid
+   scrolls inside its own box rather than widening the panel, because the panel cannot be
+   widened by the extension and a body-level horizontal scroll hides the action button. */
+.panel-matrix-hint {
+  margin: 0 0 0.5rem;
+}
+
+.panel-matrix-grid {
+  overflow-x: auto;
+  margin-bottom: 0.5rem;
+}
+
+.panel-matrix-grid table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.panel-matrix-grid th[scope="col"] {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--pack-ink-muted);
+  padding-bottom: 0.25rem;
+  text-align: center;
+}
+
+.panel-matrix-row-label {
+  background: none;
+  border: none;
+  color: var(--pack-ink-primary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0 0.375rem 0 0;
+  text-align: right;
+  width: 100%;
+}
+
+.panel-matrix-row-label:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.panel-matrix-cell {
+  background: var(--pack-surface-inset);
+  border: 1px solid var(--pack-border-default);
+  border-radius: 2px;
+  cursor: pointer;
+  display: block;
+  height: 22px;
+  margin: 1px;
+  padding: 0;
+  width: 100%;
+  min-width: 16px;
+}
+
+.panel-matrix-cell[aria-pressed="true"] {
+  background: var(--pack-surface-accent);
+  border-color: var(--pack-surface-accent);
+}
+
+.panel-matrix-cell:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.panel-matrix-cell:focus-visible,
+.panel-matrix-row-label:focus-visible {
+  outline: 2px solid var(--pack-border-accent);
+  outline-offset: 1px;
+}
+
+.panel-matrix-year {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.panel-matrix-status {
+  margin: 0 0 0.5rem;
+}

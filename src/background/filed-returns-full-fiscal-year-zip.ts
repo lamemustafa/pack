@@ -16,7 +16,7 @@ import {
 import { safeFullFiscalYearZipFilename } from "./filed-returns-download-filename";
 import {
   canCompleteFullFiscalYearLedger,
-  hasCanonicalFullFiscalYearTargetPlan,
+  hasTrustworthyTargetPlan,
 } from "./filed-returns-full-fiscal-year-ledger";
 import {
   checkBrowserDownloadsAction,
@@ -48,7 +48,7 @@ export async function exportFullFiscalYearZip(
       state: "blocked",
       safeSignals: [
         ...completeStep.safeSignals,
-        hasCanonicalFullFiscalYearTargetPlan(ledger)
+        hasTrustworthyTargetPlan(ledger)
           ? "full-fiscal-year-zip-target-state-invalid"
           : "full-fiscal-year-target-plan-invalid",
         "full-fiscal-year-opfs-retained",

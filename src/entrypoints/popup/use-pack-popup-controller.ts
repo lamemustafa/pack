@@ -4,6 +4,7 @@ import type { PortalContext } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
+  FiledReturnsSelectedTargetsRequest,
 } from "../../connectors/gst/filed-returns-contracts";
 import type {
   FullFiscalYearTargetRecoveryPayload,
@@ -247,6 +248,27 @@ export function usePackPopupController() {
     [showActionError],
   );
 
+  /**
+   * Starts a run over months picked on the grid.
+   *
+   * Separate from `startFiledReturnsFlow` because the payload is a different contract, not a
+   * scope: a scope names one period, and this names every cell the person chose. The request
+   * arrives already canonicalised, so it is sent as-is rather than normalised through the
+   * scope rules, which would flatten it back to a single period.
+   */
+  const startSelectedFiledReturnsFlow = React.useCallback(
+    async (request: FiledReturnsSelectedTargetsRequest) => {
+      await withBusy("start-filed-returns-flow", async () => {
+        const response = await sendPackMessage({
+          type: "PACK_START_SELECTED_FILED_RETURNS_DOWNLOAD_FLOW",
+          payload: request,
+        });
+        applyFlowResponse(response);
+      });
+    },
+    [applyFlowResponse, withBusy],
+  );
+
   const startFiledReturnsFlow = React.useCallback(
     async (requestedScope?: FiledReturnsDownloadScope) => {
       const target = normaliseFiledReturnsScope(requestedScope ?? scope);
@@ -414,6 +436,7 @@ export function usePackPopupController() {
     scopedFlowSummary,
     setScope,
     startFiledReturnsFlow,
+    startSelectedFiledReturnsFlow,
     startFreshFiledReturnsFlow,
   };
 }

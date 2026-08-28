@@ -232,6 +232,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   ...FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES.map(
     filedReturnsTargetReviewClearFailureSignal,
   ),
+  "filed-returns-selection-spans-multiple-returns",
   "filed-returns-target-review-required",
   "financial-year-selected",
   "flow-step-limit-reached",

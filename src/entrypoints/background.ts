@@ -19,6 +19,7 @@ import {
   retryFiledReturnsTargetDownloadFlow,
   startFreshFiledReturnsDownloadFlow,
   startFiledReturnsDownloadFlow,
+  startSelectedFiledReturnsDownloadFlow,
 } from "../background/filed-returns-flow-runner";
 import { clearPackLocalDataWithRecoveryGuard } from "../background/local-data";
 import { startSyntheticDemo } from "../background/synthetic-demo";
@@ -163,6 +164,7 @@ function backgroundMessageSource(message: unknown): string {
   }
   switch (message.type) {
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+    case "PACK_START_SELECTED_FILED_RETURNS_DOWNLOAD_FLOW":
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
     case "PACK_RETRY_FILED_RETURNS_TARGET":
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
@@ -191,6 +193,8 @@ function backgroundMessageHandlerSite(message: unknown): `background-message-han
   switch (message.type) {
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return "background-message-handler:filed-returns-start";
+    case "PACK_START_SELECTED_FILED_RETURNS_DOWNLOAD_FLOW":
+      return "background-message-handler:filed-returns-start-selected";
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return "background-message-handler:filed-returns-start-fresh";
     case "PACK_RETRY_FILED_RETURNS_TARGET":
@@ -330,6 +334,8 @@ async function handleMessage(
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_START_SELECTED_FILED_RETURNS_DOWNLOAD_FLOW":
+      return startSelectedFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFreshFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":
