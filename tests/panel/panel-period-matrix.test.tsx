@@ -76,6 +76,22 @@ describe("the period grid", () => {
     root = null;
   });
 
+  it("keeps screen-reader wording out of the visible grid", async () => {
+    // A row label once carried its purpose in a `visually-hidden` span -- a class this
+    // codebase does not define -- so the sentence rendered as visible text and squeezed the
+    // months into a sliver. Assert on what is drawn, since that is what broke.
+    await mount();
+
+    const rowLabels = [...container.querySelectorAll(".panel-matrix-row-label")];
+    expect(rowLabels.map((label) => label.textContent)).toEqual(["3B", "1", "2B"]);
+    expect(container.textContent).not.toContain("select every eligible period");
+
+    const headings = [...container.querySelectorAll("th[scope='col']")];
+    for (const heading of headings) {
+      expect((heading.textContent ?? "").length).toBeLessThanOrEqual(3);
+    }
+  });
+
   it("starts a single-period run from one cell", async () => {
     await mount();
     await click(cell("GSTR-1 June 2025-26"));
@@ -146,7 +162,7 @@ describe("the period grid", () => {
   it("takes a whole year from the return name", async () => {
     await mount();
     const rowLabel = [...container.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("select every eligible period of GSTR-2B"),
+      b.getAttribute("aria-label")?.includes("every eligible period of GSTR-2B"),
     ) as HTMLButtonElement;
     await click(rowLabel);
 

@@ -17,6 +17,18 @@ import {
  * is reachable by keyboard without a pointer: click sets a single period, shift-click extends
  * the range, and a row label takes that return's whole year.
  */
+
+/**
+ * How much of a month name fits above a column.
+ *
+ * Thirteen columns inside the 320px panel floor leave about 20px each, which is one letter.
+ * A part-finished year has far fewer, and there three letters fit and read better. The full
+ * name is on `title` and in every cell's accessible name either way.
+ */
+function monthHeading(period: string, columnCount: number): string {
+  return period.slice(0, columnCount > 6 ? 1 : 3);
+}
+
 export function PanelPeriodMatrix({
   artifactType,
   firstControlRef,
@@ -87,12 +99,10 @@ export function PanelPeriodMatrix({
         <table>
           <thead>
             <tr>
-              <th scope="col">
-                <span className="visually-hidden">Return</span>
-              </th>
+              <th scope="col" aria-label="Return" />
               {(rows[0]?.cells ?? []).map((cell) => (
-                <th key={cell.period} scope="col" abbr={cell.period}>
-                  {cell.period.slice(0, 1)}
+                <th key={cell.period} scope="col" abbr={cell.period} title={cell.period}>
+                  {monthHeading(cell.period, rows[0]?.cells.length ?? 0)}
                 </th>
               ))}
             </tr>
@@ -105,15 +115,17 @@ export function PanelPeriodMatrix({
                     type="button"
                     ref={index === 0 ? firstControlRef : undefined}
                     className="panel-matrix-row-label"
+                    // The visible label is the return's short name; what the button does --
+                    // take that return's whole year -- rides on the accessible name, so the
+                    // column stays narrow enough to leave the cells their width.
+                    aria-label={`Select every eligible period of ${row.returnType} for ${financialYear}`}
+                    title={`Every eligible ${row.returnType} period`}
                     disabled={disabled || busy !== null}
                     onClick={() =>
                       setSelection(wholeYearSelection(row.returnType, financialYear, asOf))
                     }
                   >
                     {row.returnType.replace("GSTR-", "")}
-                    <span className="visually-hidden">
-                      {` — select every eligible period of ${row.returnType} for ${financialYear}`}
-                    </span>
                   </button>
                 </th>
                 {row.cells.map((cell) => (
