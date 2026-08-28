@@ -68,6 +68,7 @@ function GuidedScopeHarness({
       busy={null}
       context={{ connectorId: "gst", pageKind: "gst-auth-landing", supported: true }}
       externalBlock={null}
+      onStartSelection={() => undefined}
       flowSummary={savedRun}
       portalSignedIn={portalSignedIn}
       savedRun={savedRun}
@@ -141,7 +142,11 @@ async function mount(
     );
     await Promise.resolve();
   });
-  if (openGuide) await clickButtonContaining("Choose return, year and period");
+  if (openGuide) {
+    // The period grid is the custom view now; the step-by-step form sits one hop behind it.
+    await clickButtonContaining("Choose return, year and period");
+    await clickButtonContaining("Choose one format");
+  }
 }
 
 async function mountGuidedScope(props: React.ComponentProps<typeof GuidedScopeHarness>) {
@@ -221,6 +226,12 @@ describe("panel guided scope interaction", () => {
 
     expect(dom.window.document.activeElement).toBe(previousControl);
     await clickButtonContaining("Choose return, year and period");
+    // The custom view is the period grid now, so focus lands on its first control. Opening a
+    // view must still move focus into it: leaving it on the unmounted door drops it to body.
+    expect(dom.window.document.activeElement).toBe(
+      container.querySelector(".panel-matrix-row-label"),
+    );
+    await clickButtonContaining("Choose one format");
     expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
     await clickButton("Continue");
     expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
@@ -309,6 +320,7 @@ describe("panel guided scope interaction", () => {
     });
 
     await clickButtonContaining("Choose return, year and period");
+    await clickButtonContaining("Choose one format");
     await clickButton("Continue");
     await clickButton("Continue");
     await clickButton("Continue");

@@ -15,6 +15,7 @@ function renderGuide() {
       busy={null}
       context={{ connectorId: "gst", pageKind: "gst-filed-returns", supported: true }}
       externalBlock={null}
+      onStartSelection={() => undefined}
       flowSummary={null}
       portalSignedIn
       scope={PANEL_TEST_SCOPE}

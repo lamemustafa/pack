@@ -129,6 +129,9 @@ describe("whole-panel cleanup action", () => {
         root?.render(<Harness initial={summary} onStart={onStart} onRecovery={onRecovery} />);
       });
       await click("Choose return, year and period");
+      // Reaches Start through the step-by-step form, which the period grid now sits in front
+      // of. What this test asserts is what Start does, not which view reached it.
+      await click("Choose one format");
       for (let step = 0; step < 3; step += 1) await click("Continue");
       const action = container.querySelector<HTMLButtonElement>(".primary-action");
       expect(action?.textContent).toBe("Retry local cleanup");

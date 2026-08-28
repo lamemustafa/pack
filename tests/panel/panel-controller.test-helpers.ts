@@ -33,6 +33,7 @@ export function panelController(overrides: Partial<PackPanelController> = {}): P
     scopedFlowSummary: null,
     setScope: () => undefined,
     startFiledReturnsFlow: async () => undefined,
+    startSelectedFiledReturnsFlow: async () => undefined,
     startFreshFiledReturnsFlow: async () => undefined,
     ...overrides,
   };
