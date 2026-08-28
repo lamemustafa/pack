@@ -446,6 +446,32 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "target-period-verified",
 ]);
 
+/**
+ * Sanity ceilings for a persisted ZIP entry count, one per plan kind.
+ *
+ * These bound an *observed* count -- the value comes off the assembled ZIP, not from a
+ * prediction -- so their job is to refuse an implausible number, not to cap a run. Each is
+ * the largest legitimate bundle for its kind plus the derived entries Pack writes itself
+ * (`full-year-summary.csv` and the workbook), and `tests/connectors/filed-returns-zip-entry-ceilings.test.ts`
+ * re-derives the artifact half from the catalogue so adding a return type or a format fails
+ * that test rather than silently exceeding a bound.
+ *
+ * Deliberately per kind. Sharing one ceiling across `full-fiscal-year` and
+ * `all-supported-full-fiscal-year` raised the single-return ceiling from 38 to 108 as a side
+ * effect of admitting the cross-return bundle -- widening a guard on a shipped path by three
+ * times to make room for a new one.
+ */
+const ZIP_ENTRY_COUNT_CEILINGS = {
+  // One period, every format a return type offers.
+  "single-period": 3,
+  // 36 artifacts (GSTR-2B, the widest single return: 12 periods x 3 formats) + 2 derived.
+  "full-fiscal-year": 38,
+  // 84 artifacts (GSTR-3B 24 + GSTR-1 24 + GSTR-2B 36) + up to 6 derived, one summary and one
+  // workbook per return type. Not 108: that assumed three formats for all three return types,
+  // and only GSTR-2B offers three.
+  "all-supported-full-fiscal-year": 90,
+} as const;
+
 const BROWSER_DOWNLOAD_ERROR_SUFFIXES = new Set([
   "file-blocked",
   "file-failed",
@@ -715,7 +741,8 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     );
   if (zipCount) {
     const count = Number(zipCount[2]);
-    return zipCount[1] === "single-period" ? count <= 3 : count <= 108;
+    const ceiling = ZIP_ENTRY_COUNT_CEILINGS[zipCount[1] as keyof typeof ZIP_ENTRY_COUNT_CEILINGS];
+    return ceiling !== undefined && count <= ceiling;
   }
   if (
     // `workbook-only` is listed with the summary signals, not matched by a
