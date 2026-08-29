@@ -44,11 +44,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const portalAccessDenied = pack.context?.pageKind === "gst-access-denied";
   const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
   const running = pack.effectiveBusy !== null || summary?.status === "running";
+  const fullYearFlowAvailable = isPackAlphaBuildMode(import.meta.env.MODE);
 
   useRefreshOnReturn(pack.refreshPortalContext, pack.refreshFlowSummary);
 
   const savedRun = pack.lastRunSummary;
-  const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy);
+  const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -101,7 +102,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
           <>
             <InlineStatus
               busy={pack.effectiveBusy}
-              fullYearFlowAvailable={isPackAlphaBuildMode(import.meta.env.MODE)}
+              fullYearFlowAvailable={fullYearFlowAvailable}
               onOpenPortal={openPortal}
               onRestartTarget={() => void pack.startFiledReturnsFlow()}
               onRetryFullFiscalYearTarget={() => void pack.retryFullFiscalYearTarget()}
@@ -150,7 +151,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 // Withheld everywhere else in a packaged build, the full-year flow was still
                 // reachable here: a ledger persisted by an earlier release renders recovery
                 // controls that resume or restart it.
-                fullYearFlowAvailable={isPackAlphaBuildMode(import.meta.env.MODE)}
+                fullYearFlowAvailable={fullYearFlowAvailable}
                 busy={pack.effectiveBusy}
                 collapsed
                 /*
@@ -292,6 +293,7 @@ function useReturnToPage(onReturn: () => void) {
 function getSavedRunBlock(
   savedRun: FiledReturnsFlowSummary | null,
   busy: string | null,
+  fullYearFlowAvailable: boolean,
 ): { disabled: true; label: string } | null {
   if (!savedRun || busy !== null) return null;
   const action = getScopeFormStartAction(
@@ -300,6 +302,12 @@ function getSavedRunBlock(
     null,
     isFullFiscalYearScope(savedRun.scope),
   );
+  if (isFullFiscalYearScope(savedRun.scope) && !fullYearFlowAvailable) {
+    return {
+      disabled: true,
+      label: "Cancel the saved full-year run before starting another download.",
+    };
+  }
   // An enabled action still blocks other scopes when recovery is outstanding: the retained
   // fiscal-year ZIP is offered a retry, not a replacement run under a different scope.
   if (!action.disabled && !hasUnresolvedFiledReturnsRecovery(savedRun)) return null;

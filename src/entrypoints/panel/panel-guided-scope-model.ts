@@ -21,6 +21,7 @@ import { createScopeFormModel, returnTypeOptions } from "../popup/scope-form-mod
 export type GuidedStepKey = "returnType" | "financialYear" | "period" | "artifactType";
 
 export interface GuidedOption {
+  readonly disabled?: boolean;
   readonly value: string;
   readonly label: string;
 }
@@ -200,10 +201,21 @@ export function panelGuidedStepForDisplay(
   step: PanelGuidedStep,
   fullYearFlowAvailable: boolean,
 ): PanelGuidedStep {
-  const options =
+  const selectableOptions =
     step.key === "period" && !fullYearFlowAvailable
       ? step.options.filter((option) => option.value !== FULL_FISCAL_YEAR_PERIOD)
       : step.options;
+  const options =
+    step.key === "period" && !fullYearFlowAvailable && step.value === FULL_FISCAL_YEAR_PERIOD
+      ? [
+          {
+            value: FULL_FISCAL_YEAR_PERIOD,
+            label: "Full fiscal year (saved run)",
+            disabled: true,
+          },
+          ...selectableOptions,
+        ]
+      : selectableOptions;
   return {
     ...step,
     options,
