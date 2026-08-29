@@ -45,14 +45,18 @@ let dom: JSDOM;
 let root: Root | null = null;
 let container: Element;
 
-async function mount(fullYearFlowAvailable: boolean, portalReady = true) {
+async function mount(
+  fullYearFlowAvailable: boolean,
+  portalReady = true,
+  summary: FiledReturnsFlowSummary = SAVED_FULL_YEAR,
+) {
   root = createRoot(container);
   await act(async () => {
     root?.render(
       <RecoveryActions
         busy={null}
         portalReady={portalReady}
-        summary={SAVED_FULL_YEAR}
+        summary={summary}
         fullYearFlowAvailable={fullYearFlowAvailable}
         onAcknowledgeInterruptedRun={() => undefined}
         onRetryFullFiscalYearTarget={() => undefined}
@@ -105,6 +109,22 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     await mount(false, false);
 
     expect(container.textContent).not.toContain("Open a signed-in GST Portal tab before");
+  });
+
+  it("withholds fresh starts from a full-year target review", async () => {
+    const targetReview = {
+      ...SAVED_FULL_YEAR,
+      flowStep: {
+        ...SAVED_FULL_YEAR.flowStep,
+        safeSignals: ["filed-returns-target-review-required"],
+      },
+    };
+    delete targetReview.fullFiscalYearRecovery;
+    await mount(false, true, targetReview);
+
+    expect(container.textContent).not.toContain("Discard saved state and start selected download");
+    expect(container.textContent).toContain("This build cannot start a full-year run");
+    expect(container.textContent).toContain("Cancel and reset");
   });
 
   it("keeps both controls in a build that may run it", async () => {
