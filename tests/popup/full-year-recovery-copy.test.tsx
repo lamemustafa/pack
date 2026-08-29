@@ -84,19 +84,33 @@ describe("full-year warning without a usable period", () => {
     },
   );
 
-  it("withholds a saved full-year retry when the enclosing build cannot run it", () => {
+  it("replaces saved full-year retry guidance when the enclosing build cannot run it", () => {
     const summary = summariseFullFiscalYearLedger(
       makeCompletedRecoveryLedger("blocked"),
       RECOVERY_NOW,
     );
     const presentation = getPopupPresentationState(null, summary, null);
+    const callbacks = actions();
 
     expect(
       getInlinePrimaryAction(presentation, summary, {
-        ...actions(),
+        ...callbacks,
         fullYearFlowAvailable: false,
       }),
     ).toBeNull();
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        {...callbacks}
+        busy={null}
+        fullYearFlowAvailable={false}
+        portalReady
+        presentation={presentation}
+        summary={summary}
+      />,
+    );
+    expect(markup).toContain("This build cannot continue the saved full-year run");
+    expect(markup).not.toContain("retry this period to continue the remaining periods");
   });
 });
 
