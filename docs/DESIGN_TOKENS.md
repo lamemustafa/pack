@@ -1,7 +1,8 @@
 # Design tokens
 
-Colour is defined once, in the `:root` block of `src/styles/global.css`, and nowhere else. All three
-stylesheets contain no colour literal at all.
+Colour is defined once, in the `:root` block of `src/styles/global.css`, and nowhere else. The other
+three of four stylesheets — `panel.css`, `popup.css`, and `popup-controls.css` — contain no colour
+literal at all.
 
 ## The rule
 
@@ -9,8 +10,8 @@ stylesheets contain no colour literal at all.
 `#526477` says only what it looks like today. If you need a colour that no role describes, add a
 role — do not write a literal.
 
-A literal in `popup.css` or `popup-controls.css` is a defect, and it is the defect that produced the
-accessibility failures described below.
+A literal in `panel.css`, `popup.css`, or `popup-controls.css` is a defect, and it is the defect that
+produced the accessibility failures described below.
 
 ## Why this exists
 
