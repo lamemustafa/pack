@@ -1,3 +1,23 @@
+/**
+ * How many staged artifacts a ZIP creation message may name, per plan kind.
+ *
+ * These count only the staged entries the caller sends; the summary and workbook the offscreen
+ * document writes itself are not in `expectedEntries` and must not be added here.
+ *
+ * A single ceiling of 36 covered every caller until a plan could span return types. A complete
+ * cross-return year stages 84 -- GSTR-3B 24, GSTR-1 24, GSTR-2B 36 -- so the listener rejected
+ * the creation message outright once six or more periods were eligible, and every file that had
+ * already been staged successfully ended in an export failure.
+ *
+ * The kind is read from `expectedReturnType`, which both single-return callers set and the
+ * cross-return caller omits, because one return type is exactly what a single-return ZIP can
+ * name. `tests/connectors/filed-returns-zip-entry-ceilings.test.ts` re-derives both numbers from
+ * the catalogue, so adding a return type or an offered format fails there rather than silently
+ * exceeding one of these.
+ */
+const MAX_SINGLE_RETURN_ZIP_ENTRIES = 36;
+const MAX_MIXED_PLAN_ZIP_ENTRIES = 84;
+
 import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
@@ -284,7 +304,10 @@ export function isPackOffscreenBlobUrlMessageShape(
       typeof expectedEntryCount === "number" &&
       Number.isInteger(expectedEntryCount) &&
       expectedEntryCount >= 1 &&
-      expectedEntryCount <= 36 &&
+      expectedEntryCount <=
+        (input.payload.expectedReturnType === undefined
+          ? MAX_MIXED_PLAN_ZIP_ENTRIES
+          : MAX_SINGLE_RETURN_ZIP_ENTRIES) &&
       isExpectedZipEntryPlanShape(expectedEntries) &&
       expectedEntries.length === expectedEntryCount &&
       (input.payload.summaryPlan === undefined ||
