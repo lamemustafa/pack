@@ -14,7 +14,11 @@ const COLOR_LITERAL = new RegExp(
   `#[\\da-f]{3,8}\\b|\\b(?:color|color-mix|device-cmyk|hsl|hsla|hwb|lab|lch|light-dark|oklab|oklch|rgb|rgba)\\([^)]*\\)|(?<![-\\w])(?:${[CSS_NAMED_COLORS, CSS_SYSTEM_COLORS].join(" ").replaceAll(" ", "|")})(?![-\\w])`,
   "gi",
 );
-const ROOT_BLOCK = /:root\s*\{[\s\S]*?\}/g;
+// Anchored to a bare, top-level `:root` rather than anything ending in `:root`. The looser form
+// also exempted a conditional block such as `.theme:root { --local: #ff0000; }`, which would let a
+// second colour definition live outside the one canonical rule this file exists to protect. There
+// is no such selector in global.css today; the anchor keeps it that way without parsing CSS.
+const ROOT_BLOCK = /(?:^|\})\s*:root\s*\{[\s\S]*?\}/g;
 const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
 const CSS_STRING = /(["'])(?:\\.|(?!\1)[^\\])*\1/g;
 const DECLARATION_VALUE = /(?:^|[;{])\s*(?:--[\w-]+|[\w-]+)\s*:\s*([^;{}]+)/g;
@@ -57,6 +61,16 @@ async function literalViolations(directory = SOURCE_ROOT): Promise<readonly stri
 }
 
 describe("design token color literals", () => {
+  it("does not exempt a conditional root inside global.css", async () => {
+    // `.theme:root { --local: #ff0000; }` once satisfied the exemption, so a second colour
+    // definition could live outside the one canonical rule. No such selector exists today; this
+    // asserts that adding one would be caught rather than quietly permitted.
+    const conditionalRoot = ".theme:root { --local: #ff0000; }";
+    expect(colorLiteralsOutsideCanonicalRoot(GLOBAL_STYLESHEET, conditionalRoot)).toContain(
+      "#ff0000",
+    );
+  });
+
   it("allows literal token definitions only inside global.css's :root", async () => {
     expect(await literalViolations()).toEqual([]);
   });
@@ -130,5 +144,30 @@ describe("design token color literals", () => {
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
+  });
+});
+
+/**
+ * The audit table in docs/DESIGN_TOKENS.md reports how many token references the collapse
+ * produced. That number was written by hand and drifted: the table said 175 while the tree held
+ * 233, in the very document this guard exists to make trustworthy (#171). Asserting it here means
+ * the next change that moves the count fails a test rather than quietly making the doc wrong.
+ */
+describe("the documented token-reference count", () => {
+  it("matches the references the stylesheets actually contain", async () => {
+    const stylesheets = (await readdir(STYLES_ROOT)).filter((name) => name.endsWith(".css"));
+    const sources = await Promise.all(
+      stylesheets.map((name) => readFile(join(STYLES_ROOT, name), "utf8")),
+    );
+    const actual = sources.reduce(
+      (total, css) => total + (css.match(/var\(--pack-[a-z0-9-]*\)/g) ?? []).length,
+      0,
+    );
+
+    const doc = await readFile(join(STYLES_ROOT, "..", "..", "docs", "DESIGN_TOKENS.md"), "utf8");
+    const documented = doc.match(/`var\(--pack-\*\)` references\s*\|\s*\d+\s*\|\s*(\d+)/);
+
+    expect(documented).not.toBeNull();
+    expect(Number(documented?.[1])).toBe(actual);
   });
 });
