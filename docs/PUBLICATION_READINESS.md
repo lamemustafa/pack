@@ -76,11 +76,11 @@ summary` sheet stating the portal's own availability totals and the GSTR-3B
   below are what it must satisfy before Store-facing V0 advertises it:
   exact-ZIP clean-profile, real-browser restart/resume, reconciliation, and
   privacy-review evidence.
-  Until those gates are recorded, full-year controls are available only in the
-  maintainer-only source build created with `pnpm exec wxt build --mode alpha`.
+  Until those gates are recorded, the next production build will expose full-year
+  controls only in the maintainer-only source build created with `pnpm exec wxt build --mode alpha`.
   That command is for local qualification work only: its output must not be
   zipped, submitted, or described as live evidence. It is compiled out of the
-  packaged Store build. The package verifier rejects the source-only surface
+  next packaged Store build. The package verifier rejects the source-only surface
   marker if it reaches the built artifact, so a release cannot silently carry
   the unqualified offer. Running the command records none of the four gates;
   only their separately recorded evidence can do that.
