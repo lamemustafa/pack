@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import {
   cataloguePeriodOptions,
+  panelGuidedStepForDisplay,
   panelGuidedSteps,
 } from "../../src/entrypoints/panel/panel-guided-scope-model";
 import { CatalogueLimits, PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
@@ -127,6 +128,17 @@ describe("panel guided scope", () => {
     });
     expect(steps[3]?.options.map((option) => option.value)).toContain("PDF");
     expect(steps[3]?.options.map((option) => option.value)).toContain("JSON");
+  });
+
+  it("derives the period hint from exactly the production options it renders", () => {
+    const periodStep = panelGuidedSteps(PANEL_TEST_SCOPE).find((step) => step.key === "period");
+    if (!periodStep) throw new Error("Expected a period step.");
+
+    const displayed = panelGuidedStepForDisplay(periodStep, false);
+    const labels = displayed.options.map((option) => option.label);
+
+    expect(labels).not.toContain("Full fiscal year");
+    expect(displayed.hint).toBe(`Choose one of: ${labels.join(", ")}.`);
   });
 
   it("withholds a new financial year until it has a selectable filed period", () => {

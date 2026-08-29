@@ -538,7 +538,10 @@ describe("panel guided scope interaction", () => {
     const expectedSteps = [
       ["Return", "Choose one supported return for this run."],
       ["Financial year", "Pack keeps each run within one financial year."],
-      ["Filed period", "Choose one month or the full fiscal year."],
+      [
+        "Filed period",
+        "Choose one of: Full fiscal year, April, May, June, July, August, September, October, November, December, January, February, March.",
+      ],
       ["File", "Choose one artifact selection offered for this return."],
     ] as const;
     await mount();
