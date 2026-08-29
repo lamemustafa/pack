@@ -49,7 +49,7 @@ The same pattern held elsewhere: 28 background literals were 6 intents, and 23 b
 |                                                       | Before |                After |
 | ----------------------------------------------------- | -----: | -------------------: |
 | Colour literals outside `:root`                       |    157 |                **0** |
-| Distinct literals                                     |    102 | 41 (all definitions) |
+| Colour-token definitions                              |    102 | 40 (all definitions) |
 | `var(--pack-*)` references                            |     31 |                  175 |
 | Distinct colours rendered across the 9 preview states |     36 |               **20** |
 | WCAG AA failures across 165 rendered text nodes       |      5 |                **0** |
@@ -75,7 +75,7 @@ and `tests/styles/design-token-literals.test.ts` for the literal detector.
 - **Action** — `action`, `action-hover`
 - **Status** — `success-fg` / `-bg` / `-border` / `-solid`, `warning-fg` / `-bg` / `-border`,
   `danger-fg` / `-bg` / `-border`
-- **Overlay** — `surface-transparent`, `overlay-border`, `overlay-surface`, `overlay-shadow`, and
+- **Overlay** — `surface-transparent`, `overlay-border`, `overlay-surface`, and
   `success-`, `warning-`, and `danger-overlay-border`
 
 Status triads are foreground, background and border for one condition. Use all three together; a

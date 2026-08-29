@@ -40,7 +40,6 @@ colors:
   surface-transparent: "transparent"
   overlay-border: "rgba(174, 189, 203, 0.72)"
   overlay-surface: "rgba(255, 255, 255, 0.96)"
-  overlay-shadow: "rgba(22, 41, 61, 0.08)"
   success-overlay-border: "rgba(112, 179, 144, 0.72)"
   warning-overlay-border: "rgba(218, 188, 109, 0.72)"
   danger-overlay-border: "rgba(218, 131, 121, 0.72)"

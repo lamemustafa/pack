@@ -335,7 +335,6 @@ html[data-pack-surface="popup"] #root {
   border: 1px solid var(--pack-overlay-border);
   border-radius: 14px;
   background: var(--pack-overlay-surface);
-  box-shadow: 0 8px 22px var(--pack-overlay-shadow);
 }
 
 .portal-status-card {
