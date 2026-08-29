@@ -196,6 +196,24 @@ export function panelGuidedSteps(
   ];
 }
 
+export function panelGuidedStepForDisplay(
+  step: PanelGuidedStep,
+  fullYearFlowAvailable: boolean,
+): PanelGuidedStep {
+  const options =
+    step.key === "period" && !fullYearFlowAvailable
+      ? step.options.filter((option) => option.value !== FULL_FISCAL_YEAR_PERIOD)
+      : step.options;
+  return {
+    ...step,
+    options,
+    hint:
+      step.key === "period"
+        ? `Choose one of: ${options.map((option) => option.label).join(", ")}.`
+        : step.hint,
+  };
+}
+
 export function updatePanelGuidedScope(
   scope: FiledReturnsDownloadScope,
   key: GuidedStepKey,

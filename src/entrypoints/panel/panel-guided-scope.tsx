@@ -19,6 +19,7 @@ import {
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import {
   panelFullFiscalYearPresets,
+  panelGuidedStepForDisplay,
   panelGuidedSteps,
   updatePanelGuidedScope,
 } from "./panel-guided-scope-model";
@@ -60,12 +61,7 @@ export function PanelGuidedScope({
   const presetDoorRef = React.useRef<HTMLButtonElement>(null);
   const focusTarget = React.useRef<"preset-door" | "select" | null>(null);
   const steps = panelGuidedSteps(scope).map((candidate) =>
-    candidate.key === "period" && !alphaSurfacesEnabled
-      ? {
-          ...candidate,
-          options: candidate.options.filter((option) => option.value !== "FULL_FISCAL_YEAR"),
-        }
-      : candidate,
+    panelGuidedStepForDisplay(candidate, alphaSurfacesEnabled),
   );
   const step = steps[activeStep] ?? steps[0];
   const [, refreshPresetSnapshot] = React.useState(0);
