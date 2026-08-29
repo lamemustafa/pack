@@ -191,16 +191,11 @@ async function hasUnresolvedFiledReturnsRecoveryState(deps: PackLocalDataDeps): 
   ) {
     return true;
   }
-  if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return false;
-  const allSupportedPlanLedgers = await readAllSupportedPlanLedgersStorageState(deps);
-  // A malformed record is not a recoverable execution state. The caller marks
-  // it for broad staging cleanup before deleting it, matching the existing v1
-  // corrupt-plan path instead of making local-data clearing impossible.
-  if (allSupportedPlanLedgers.state === "malformed") return false;
-  return allSupportedPlanLedgers.ledgers.some(
-    (planLedger) =>
-      hasUnresolvedZipState(planLedger) || isUnresolvedAllSupportedFullFiscalYearLedger(planLedger),
-  );
+  // The Options-page clear action is an explicit discard route for every
+  // all-supported plan. It deletes that plan's staged files before removing
+  // the persisted ledger, so it cannot resume or mark an unresolved target
+  // complete on a later start.
+  return false;
 }
 
 function hasUnresolvedZipState(ledger: {
@@ -213,23 +208,6 @@ function hasUnresolvedZipState(ledger: {
 
 function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   if (hasInconsistentFullFiscalYearCompletion(ledger)) return true;
-  if (ledger.status === "complete" || ledger.status === "cancelled") return false;
-  return ledger.targets.some((target) =>
-    [
-      "pending",
-      "running",
-      "download-unconfirmed",
-      "blocked",
-      "failed",
-      "manually-observed",
-    ].includes(target.status),
-  );
-}
-
-function isUnresolvedAllSupportedFullFiscalYearLedger(ledger: {
-  status: "running" | "complete" | "partial" | "blocked" | "cancelled";
-  targets: readonly { status: string }[];
-}): boolean {
   if (ledger.status === "complete" || ledger.status === "cancelled") return false;
   return ledger.targets.some((target) =>
     [

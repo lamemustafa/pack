@@ -33,7 +33,7 @@ describe("options local-data failure presentation", () => {
 
   it("keeps a rejected local-data clear request visible", async () => {
     const clearButton = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent === "Clear local Pack data",
+      (button) => button.textContent === "Clear local data and discard saved plans",
     );
     if (!clearButton) throw new Error("Expected the local-data clear action.");
 

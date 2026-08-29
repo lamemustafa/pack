@@ -204,7 +204,7 @@ describe("Pack local data clearing", () => {
     expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([planKey, indexKey]);
   });
 
-  it("clears each indexed all-supported plan's staged files before deleting its dynamic records", async () => {
+  it("lets the explicit local-data clear discard an unresolved all-supported plan only after staged files clear", async () => {
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
     if (!expansion.ok) throw new Error("expected supported full-year return plan");
     const planRoot = {
@@ -218,7 +218,7 @@ describe("Pack local data clearing", () => {
         FILED_RETURNS_MONTHS.slice(0, 1),
         new Date("2026-08-27T00:00:00.000Z"),
       ),
-      status: "cancelled" as const,
+      status: "blocked" as const,
     };
     expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
     const indexKey = "pack:all-supported-full-fiscal-year-ledger-index";
