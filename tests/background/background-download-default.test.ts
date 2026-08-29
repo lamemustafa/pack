@@ -4,6 +4,18 @@ import {
   PACK_CONTENT_SCRIPT_PROTOCOL_VERSION,
 } from "../../src/connectors/gst/messages";
 import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
+import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/connectors/gst/filed-returns-contracts";
+import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import {
+  getFiledReturnsFinancialYearOptions,
+  getFiledReturnsFullFiscalYearPeriods,
+} from "../../src/connectors/gst/filed-returns-scope";
+import { createAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
+import {
+  allSupportedFullFiscalYearPlanRootKey,
+  allSupportedFullFiscalYearPlanStorageKey,
+} from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
+import { PACK_LOCAL_STORAGE_KEYS } from "../../src/background/storage-keys";
 
 const browserMocks = vi.hoisted(() => {
   let messageListener:
@@ -301,6 +313,60 @@ describe("background filed returns download defaults", () => {
       expect(browserMocks.storage.local.remove).toHaveBeenCalledWith([legacyKey]),
     );
     await expect(browserMocks.storage.local.get()).resolves.toEqual({});
+  });
+
+  it("shows the active all-supported ledger instead of its atomic compatibility lease", async () => {
+    const now = new Date();
+    const financialYear = getFiledReturnsFinancialYearOptions(now)[0]!;
+    const periods = getFiledReturnsFullFiscalYearPeriods(financialYear, now);
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported full-year plan");
+    const planRoot = {
+      kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+      financialYear,
+    } as const;
+    const ledger = createAllSupportedFullFiscalYearLedger(
+      planRoot,
+      expansion.targets,
+      periods,
+      now,
+    );
+    const leaseScope = ledger.targets[0]!;
+    browserMocks.setLocalStorage({
+      [PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun]: {
+        schemaVersion: "1.0",
+        runId: "00000000-0000-4000-8000-000000000000",
+        revision: 1,
+        scope: {
+          financialYear: leaseScope.financialYear,
+          period: leaseScope.period,
+          returnType: leaseScope.returnType,
+          artifactType: leaseScope.artifactType,
+        },
+        status: "running",
+        leaseUpdatedAt: now.toISOString(),
+      },
+      [PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex]: {
+        schemaVersion: "1.0",
+        ledgerIdsByPlanRoot: {
+          [allSupportedFullFiscalYearPlanRootKey(planRoot)]: ledger.ledgerId,
+        },
+      },
+      [allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)]: ledger,
+    });
+
+    await import("../../src/entrypoints/background");
+
+    await expect(
+      sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
+    ).resolves.toMatchObject({
+      ok: true,
+      allSupportedFullFiscalYearFlowSummary: {
+        status: "running",
+        summaryIdentity: planRoot,
+        totalTargets: ledger.targets.length,
+      },
+    });
   });
 
   it("leaves validated offscreen staging messages for the offscreen document", async () => {

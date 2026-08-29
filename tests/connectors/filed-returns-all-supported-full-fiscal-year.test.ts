@@ -4,6 +4,7 @@ import {
   expandAllSupportedFullFiscalYearTargetPlan,
   isAllSupportedFullFiscalYearRequest,
 } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import { getFiledReturnsFinancialYearOptions } from "../../src/connectors/gst/filed-returns-scope";
 import { isPackMessage } from "../../src/connectors/gst/messages";
 
 describe("all-supported full-fiscal-year plan", () => {
@@ -92,6 +93,22 @@ describe("all-supported full-fiscal-year plan", () => {
       isAllSupportedFullFiscalYearRequest({
         ...request,
         returnType: "GSTR-3B",
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects syntactically valid financial years outside the canonical supported range", () => {
+    const supportedFinancialYear = getFiledReturnsFinancialYearOptions()[0]!;
+
+    expect(createAllSupportedFullFiscalYearRequest(supportedFinancialYear)).toEqual({
+      kind: "all-supported-returns-full-fiscal-year",
+      financialYear: supportedFinancialYear,
+    });
+    expect(createAllSupportedFullFiscalYearRequest("2099-00")).toBeNull();
+    expect(
+      isAllSupportedFullFiscalYearRequest({
+        kind: "all-supported-returns-full-fiscal-year",
+        financialYear: "2099-00",
       }),
     ).toBe(false);
   });

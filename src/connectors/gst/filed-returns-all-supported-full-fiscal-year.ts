@@ -10,6 +10,10 @@ import {
   FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
   type FiledReturnsAllSupportedFullFiscalYearRequest,
 } from "./filed-returns-contracts";
+import {
+  getFiledReturnsFinancialYearOptions,
+  isFiledReturnsFinancialYear as hasConsecutiveFinancialYear,
+} from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
 export interface FiledReturnsAllSupportedFullFiscalYearPlanTarget {
@@ -106,7 +110,9 @@ export function expandAllSupportedFullFiscalYearTargetPlan(
 }
 
 function isFiledReturnsFinancialYear(input: unknown): input is string {
-  return typeof input === "string" && /^20\d{2}-\d{2}$/.test(input);
+  return (
+    hasConsecutiveFinancialYear(input) && getFiledReturnsFinancialYearOptions().includes(input)
+  );
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

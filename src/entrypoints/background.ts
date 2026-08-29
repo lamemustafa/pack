@@ -311,6 +311,16 @@ async function handleMessage(
       await reconcileTerminalFiledReturnsDownload(browser.downloads, {
         storageKeys: filedReturnsStorageKeys(),
       }).catch(() => undefined);
+      const allSupportedFullFiscalYearFlowSummary =
+        await readCurrentAllSupportedFullFiscalYearFlowSummary({
+          storageKeys: filedReturnsStorageKeys(),
+        });
+      // All-supported runs use one atomic lease for mutual exclusion, but that
+      // lease cannot represent their cross-return progress. While the root is
+      // active, its authoritative ledger must win the panel refresh.
+      if (allSupportedFullFiscalYearFlowSummary?.status === "running") {
+        return { ok: true, allSupportedFullFiscalYearFlowSummary };
+      }
       const flowSummary = await readCurrentFiledReturnsFlowSummary({
         storageKeys: filedReturnsStorageKeys(),
       });
@@ -319,10 +329,6 @@ async function handleMessage(
       if (flowSummary && !["complete", "cancelled"].includes(flowSummary.status)) {
         return { ok: true, flowSummary };
       }
-      const allSupportedFullFiscalYearFlowSummary =
-        await readCurrentAllSupportedFullFiscalYearFlowSummary({
-          storageKeys: filedReturnsStorageKeys(),
-        });
       if (allSupportedFullFiscalYearFlowSummary) {
         return { ok: true, allSupportedFullFiscalYearFlowSummary };
       }
