@@ -49,7 +49,8 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
     !fullYearFlowAvailable &&
     summary &&
     isFullFiscalYearScope(summary.scope) &&
-    hasUnresolvedFiledReturnsRecovery(summary)
+    hasUnresolvedFiledReturnsRecovery(summary) &&
+    summary.flowStep.safeSignals.includes("full-fiscal-year-download-unconfirmed")
       ? "This build cannot continue the saved full-year run. Cancel it before starting another download."
       : summary?.flowStep.safeMessage;
 
