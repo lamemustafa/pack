@@ -1,8 +1,8 @@
 # Design tokens
 
-Colour is defined once, in the `:root` block of `src/styles/global.css`, and nowhere else. The other
-three of four stylesheets — `panel.css`, `popup.css`, and `popup-controls.css` — contain no colour
-literal at all.
+The canonical colour definitions belong in the `:root` block of `src/styles/global.css`. The other
+three of four stylesheets — `panel.css`, `popup.css`, and `popup-controls.css` — are all subject to
+the literal ban; none is an exemption.
 
 ## The rule
 
