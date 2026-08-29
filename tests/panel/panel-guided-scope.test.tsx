@@ -130,8 +130,25 @@ describe("panel guided scope", () => {
     expect(steps[3]?.options.map((option) => option.value)).toContain("JSON");
   });
 
-  it("derives the period hint from exactly the production options it renders", () => {
+  it("keeps a saved full-year value visible but disabled in the production period step", () => {
     const periodStep = panelGuidedSteps(PANEL_TEST_SCOPE).find((step) => step.key === "period");
+    if (!periodStep) throw new Error("Expected a period step.");
+
+    const displayed = panelGuidedStepForDisplay(periodStep, false);
+    const labels = displayed.options.map((option) => option.label);
+
+    expect(displayed.options[0]).toEqual({
+      value: FULL_FISCAL_YEAR_PERIOD,
+      label: "Full fiscal year (saved run)",
+      disabled: true,
+    });
+    expect(displayed.hint).toBe(`Choose one of: ${labels.join(", ")}.`);
+  });
+
+  it("derives a new production period hint from exactly its selectable options", () => {
+    const periodStep = panelGuidedSteps({ ...PANEL_TEST_SCOPE, period: "April" }).find(
+      (step) => step.key === "period",
+    );
     if (!periodStep) throw new Error("Expected a period step.");
 
     const displayed = panelGuidedStepForDisplay(periodStep, false);
