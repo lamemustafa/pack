@@ -254,7 +254,7 @@ html[data-pack-surface="popup"] #root {
   flex: 0 0 auto;
   border: 0;
   border-radius: 6px;
-  background: transparent;
+  background: var(--pack-surface-transparent);
   color: var(--pack-ink-link);
   padding: 2px 0;
   font-size: 0.75rem;
@@ -332,10 +332,10 @@ html[data-pack-surface="popup"] #root {
 .portal-status-card,
 .flow-panel,
 .recovery-panel {
-  border: 1px solid rgba(174, 189, 203, 0.72);
+  border: 1px solid var(--pack-overlay-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 8px 22px rgba(22, 41, 61, 0.08);
+  background: var(--pack-overlay-surface);
+  box-shadow: 0 8px 22px var(--pack-overlay-shadow);
 }
 
 .portal-status-card {
@@ -347,15 +347,15 @@ html[data-pack-surface="popup"] #root {
 
 .portal-status-card-ready,
 .portal-status-card-success {
-  border-color: rgba(112, 179, 144, 0.72);
+  border-color: var(--pack-success-overlay-border);
 }
 
 .portal-status-card-warning {
-  border-color: rgba(218, 188, 109, 0.72);
+  border-color: var(--pack-warning-overlay-border);
 }
 
 .portal-status-card-danger {
-  border-color: rgba(218, 131, 121, 0.72);
+  border-color: var(--pack-danger-overlay-border);
 }
 
 .status-icon {
