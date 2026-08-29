@@ -34,15 +34,19 @@ describe("the Required checks aggregate", () => {
     expect(aggregate).not.toMatch(/\*\)\s*;;\s*esac/);
   });
 
-  it("reruns when a thread is resolved, not only when one is replied to", async () => {
-    // The disposition sequence is reply, wait for the run, then resolve — so the run the reply
-    // triggers evaluates a thread that is still open, and the resolve emits no comment event.
-    // Without this trigger the gate keeps that stale failing verdict with nothing to refresh it.
+  it("declares only triggers GitHub accepts", async () => {
+    // `pull_request_review_thread` is a webhook event, not an Actions trigger. Declaring it made
+    // the workflow unloadable: GitHub produced a run named after the file, with no jobs, so the
+    // gate stopped running altogether — strictly worse than the gap it was meant to close.
+    //
+    // `workflow_dispatch` is not the answer either. This job checks out untrusted pull-request head
+    // code, and `ci-workflow.test.ts` asserts it stays undispatchable for that reason.
     const workflow = await readFile(path.join(workflowsDir, "review-gate.yml"), "utf8");
 
-    expect(workflow).toContain("pull_request_review_thread:");
-    expect(workflow).toMatch(/pull_request_review_thread:\s*\n\s*types: \[resolved, unresolved\]/);
-    expect(workflow).toContain("github.event_name == 'pull_request_review_thread'");
+    // Assert on the declaration, not the word: the comment above explains why both are absent.
+    expect(workflow).not.toMatch(/^ {2}pull_request_review_thread:/m);
+    expect(workflow).not.toMatch(/^ {2}workflow_dispatch:/m);
+    expect(workflow).toMatch(/^ {2}pull_request_review_comment:/m);
   });
 
   it("is published only by the job that runs the full gate", async () => {

@@ -7,11 +7,6 @@ on:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
-  # Resolving a thread is not a comment event. Without this, the ordinary disposition sequence --
-  # reply, let the run finish, then resolve -- leaves the gate holding the verdict it reached while
-  # the thread was still open, with nothing left to retrigger it.
-  pull_request_review_thread:
-    types: [resolved, unresolved]
 
 permissions:
   contents: read
@@ -23,8 +18,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' ||
       github.event_name == 'pull_request_review' ||
-      github.event_name == 'pull_request_review_comment' ||
-      github.event_name == 'pull_request_review_thread'
+      github.event_name == 'pull_request_review_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
@@ -121,11 +115,15 @@ jobs:
   # prevent: reconcile does not run the preflight or install steps, so a `review-gate` job that
   # failed for a non-review reason could still be overwritten with a passing `Required checks`.
   #
-  # The gap it was covering is closed by listening for the resolve itself. A reply alone is not
-  # enough: the ordinary sequence is reply, wait for the run, then resolve, so the run triggered by
-  # the reply evaluates a thread that is still open. `pull_request_review_thread` reruns this same
-  # job — preflight included — after the resolve, which is what the scheduled path could not do
-  # safely.
+  # The gap it was covering is closed by the order a disposition is made in, not by more wiring.
+  # Resolving a thread raises no event this workflow can subscribe to: `pull_request_review_thread`
+  # is a webhook event and not an Actions trigger, and declaring it makes the workflow unloadable.
+  # `workflow_dispatch` is not available either — this job checks out untrusted pull-request head
+  # code, and `ci-workflow` asserts it stays undispatchable for exactly that reason.
+  #
+  # So resolve the thread first, then post the reply. The reply raises
+  # `pull_request_review_comment: created`, and that run sees the thread already closed. Replying
+  # first leaves this job holding the verdict it reached while the thread was still open.
   required-checks:
     name: Required checks
     if: ${{ always() }}
