@@ -57,10 +57,12 @@ function GuidedScopeHarness({
   onStart = () => undefined,
   portalSignedIn,
   savedRun,
+  scopeLockedForReview = false,
 }: {
   onStart?: (scope: FiledReturnsDownloadScope) => void;
   portalSignedIn: boolean;
   savedRun: FiledReturnsFlowSummary | null;
+  scopeLockedForReview?: boolean;
 }) {
   const [scope, setScope] = React.useState<FiledReturnsDownloadScope>(PANEL_TEST_SCOPE);
   return (
@@ -72,7 +74,7 @@ function GuidedScopeHarness({
       portalSignedIn={portalSignedIn}
       savedRun={savedRun}
       scope={scope}
-      scopeLockedForReview={false}
+      scopeLockedForReview={scopeLockedForReview}
       onScopeChange={setScope}
       onStart={onStart}
     />
@@ -211,6 +213,29 @@ describe("panel guided scope interaction", () => {
     root = null;
     vi.useRealTimers();
     vi.unstubAllEnvs();
+  });
+
+  it("does not offer an unavailable full-year resume in a packaged build", async () => {
+    vi.stubEnv("MODE", "production");
+    await mountGuidedScope({
+      portalSignedIn: true,
+      savedRun: completedPanelSummary({
+        status: "blocked",
+        currentPeriod: "April",
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "blocked",
+          safeSignals: [],
+          safeMessage: "Synthetic saved full-year run.",
+        },
+      }),
+      scopeLockedForReview: true,
+    });
+    await clickButtonContaining("Choose return, year and period");
+
+    expect(container.textContent).toContain("Cancel it before starting another scope.");
+    expect(container.textContent).not.toContain("Resume or discard it");
   });
 
   it.each([false, true])("preserves existing focus on mount (StrictMode: %s)", async (strict) => {

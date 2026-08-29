@@ -283,8 +283,9 @@ export function PanelGuidedScope({
       </div>
       {scopeLockedForReview && flowSummary?.currentPeriod ? (
         <p className="scope-note scope-note-warning" role="status">
-          A saved run is paused at {flowSummary.currentPeriod}. Resume or discard it before starting
-          another scope.
+          {!alphaSurfacesEnabled && isFullFiscalYearScope(flowSummary.scope)
+            ? "A saved full-year run needs attention. Cancel it before starting another scope."
+            : `A saved run is paused at ${flowSummary.currentPeriod}. Resume or discard it before starting another scope.`}
         </p>
       ) : null}
       <CatalogueLimits />

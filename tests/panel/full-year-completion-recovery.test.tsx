@@ -133,4 +133,28 @@ describe("whole-panel unresolved completion recovery", () => {
     expect(markup).not.toContain("Resume saved period");
     expect(markup).toContain(summary.flowStep.safeMessage);
   });
+
+  it("replaces the packaged panel recovery reason when a full-year retry is withheld", () => {
+    vi.stubEnv("MODE", "production");
+    const summary = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("download-unconfirmed"),
+      RECOVERY_NOW,
+    );
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={panelController({
+          scope: summary.scope,
+          scopedFlowSummary: summary,
+          recoverySummary: summary,
+          lastRunSummary: summary,
+          scopeLockedForReview: true,
+        })}
+      />,
+    );
+
+    expect(markup).toContain(
+      "This build cannot continue the saved full-year run. Cancel it before starting another download.",
+    );
+    expect(markup).not.toContain(summary.flowStep.safeMessage);
+  });
 });

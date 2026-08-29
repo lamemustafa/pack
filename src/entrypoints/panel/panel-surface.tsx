@@ -45,6 +45,13 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
   const running = pack.effectiveBusy !== null || summary?.status === "running";
   const fullYearFlowAvailable = isPackAlphaBuildMode(import.meta.env.MODE);
+  const recoveryReason =
+    !fullYearFlowAvailable &&
+    summary &&
+    isFullFiscalYearScope(summary.scope) &&
+    hasUnresolvedFiledReturnsRecovery(summary)
+      ? "This build cannot continue the saved full-year run. Cancel it before starting another download."
+      : summary?.flowStep.safeMessage;
 
   useRefreshOnReturn(pack.refreshPortalContext, pack.refreshFlowSummary);
 
@@ -142,9 +149,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               </>
             )}
             {hasRecoveryActions(summary ?? null) ? (
-              <p className="panel-recovery-reason">
-                Why Pack paused: {summary?.flowStep.safeMessage}
-              </p>
+              <p className="panel-recovery-reason">Why Pack paused: {recoveryReason}</p>
             ) : null}
             {hasRecoveryActions(summary ?? null) ? (
               <RecoveryActions
