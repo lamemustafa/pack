@@ -83,6 +83,21 @@ describe("full-year warning without a usable period", () => {
       expect(callbacks.onOpenPortal).not.toHaveBeenCalled();
     },
   );
+
+  it("withholds a saved full-year retry when the enclosing build cannot run it", () => {
+    const summary = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("blocked"),
+      RECOVERY_NOW,
+    );
+    const presentation = getPopupPresentationState(null, summary, null);
+
+    expect(
+      getInlinePrimaryAction(presentation, summary, {
+        ...actions(),
+        fullYearFlowAvailable: false,
+      }),
+    ).toBeNull();
+  });
 });
 
 describe.each(["direct", "parsed"] as const)("%s final-ZIP status precedence", (source) => {

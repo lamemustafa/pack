@@ -45,13 +45,13 @@ let dom: JSDOM;
 let root: Root | null = null;
 let container: Element;
 
-async function mount(fullYearFlowAvailable: boolean) {
+async function mount(fullYearFlowAvailable: boolean, portalReady = true) {
   root = createRoot(container);
   await act(async () => {
     root?.render(
       <RecoveryActions
         busy={null}
-        portalReady
+        portalReady={portalReady}
         summary={SAVED_FULL_YEAR}
         fullYearFlowAvailable={fullYearFlowAvailable}
         onAcknowledgeInterruptedRun={() => undefined}
@@ -99,6 +99,12 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     const labels = buttonLabels();
     expect(labels.some((label) => /Cancel|Discard saved run$/.test(label))).toBe(true);
     expect(container.textContent).toContain("This build cannot continue a full-year run");
+  });
+
+  it("does not promise a hidden retry when the portal is unavailable", async () => {
+    await mount(false, false);
+
+    expect(container.textContent).not.toContain("Open a signed-in GST Portal tab before");
   });
 
   it("keeps both controls in a build that may run it", async () => {
