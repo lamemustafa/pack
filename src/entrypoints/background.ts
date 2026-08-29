@@ -316,9 +316,13 @@ async function handleMessage(
           storageKeys: filedReturnsStorageKeys(),
         });
       // All-supported runs use one atomic lease for mutual exclusion, but that
-      // lease cannot represent their cross-return progress. While the root is
-      // active, its authoritative ledger must win the panel refresh.
-      if (allSupportedFullFiscalYearFlowSummary?.status === "running") {
+      // lease cannot represent their cross-return progress or recovery. Any
+      // unresolved root therefore remains authoritative over its compatibility
+      // lease, including after the lease becomes stale.
+      if (
+        allSupportedFullFiscalYearFlowSummary &&
+        !["complete", "cancelled"].includes(allSupportedFullFiscalYearFlowSummary.status)
+      ) {
         return { ok: true, allSupportedFullFiscalYearFlowSummary };
       }
       const flowSummary = await readCurrentFiledReturnsFlowSummary({

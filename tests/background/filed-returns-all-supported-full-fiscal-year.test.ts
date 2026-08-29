@@ -258,7 +258,7 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(savedLedger().targets[1]).toMatchObject({ status: "running", attempts: 1 });
   });
 
-  it("continues a saved pending-only checkpoint against its original target plan", async () => {
+  it("continues a partial checkpoint with only pending work against its original target plan", async () => {
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
     if (!expansion.ok) throw new Error("expected all-supported plan");
     const checkpoint = createAllSupportedFullFiscalYearLedger(
@@ -267,7 +267,9 @@ describe("all-supported full-fiscal-year worker", () => {
       FILED_RETURNS_MONTHS.slice(0, 3),
       new Date("2026-07-14T23:58:00.000Z"),
     );
-    await persistAllSupportedFullFiscalYearLedger(deps, checkpoint);
+    const partialCheckpoint = { ...checkpoint, status: "partial" as const };
+    expect(partialCheckpoint.status).toBe("partial");
+    await persistAllSupportedFullFiscalYearLedger(deps, partialCheckpoint);
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
@@ -275,8 +277,8 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(response).toMatchObject({
       allSupportedFullFiscalYearFlowSummary: { status: "complete" },
     });
-    expect(runner).toHaveBeenCalledTimes(checkpoint.targets.length);
-    expect(savedLedger().targetPlan).toEqual(checkpoint.targetPlan);
+    expect(runner).toHaveBeenCalledTimes(partialCheckpoint.targets.length);
+    expect(savedLedger().targetPlan).toEqual(partialCheckpoint.targetPlan);
   });
 
   it("creates a new completed plan when the current eligible period has advanced", async () => {
@@ -295,6 +297,20 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(savedLedger().ledgerId).not.toBe(completedPlan.ledgerId);
     expect(savedLedger().targetPlan.length).toBeGreaterThan(completedPlan.targetPlan.length);
     expect(runner.mock.calls.length).toBeGreaterThan(completedCallCount);
+  });
+
+  it("does not replace a completed plan when clock correction narrows eligibility", async () => {
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const completedPlan = savedLedger();
+    const completedCallCount = runner.mock.calls.length;
+    deps.now = () => new Date("2026-06-15T00:00:00.000Z");
+
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    expect(savedLedger().ledgerId).toBe(completedPlan.ledgerId);
+    expect(runner).toHaveBeenCalledTimes(completedCallCount);
   });
 
   it("surfaces a malformed saved-plan index without starting portal work", async () => {

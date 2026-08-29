@@ -129,7 +129,7 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
     if (
       ledger.status === "complete" &&
       periodPlan.length > 0 &&
-      ledger.eligibleThrough !== periodPlan.at(-1)
+      periodPlan.length > persistedPeriodPlanLength(ledger)
     ) {
       const expansion = expandAllSupportedFullFiscalYearTargetPlan();
       if (!expansion.ok) {
@@ -211,7 +211,22 @@ async function continueSavedAllSupportedFullFiscalYearRun(
     }
     return allSupportedResponse(ledger, stale ? interruptedRunStep(ledger) : activeRunStep(ledger));
   }
+  if (
+    ledger.status === "partial" &&
+    ledger.targets.every((target) =>
+      ["pending", ...POSITIVE_TARGET_STATUSES].includes(target.status),
+    )
+  ) {
+    return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
+  }
   return allSupportedResponse(ledger, unresolvedRunStep(ledger));
+}
+
+function persistedPeriodPlanLength(ledger: FiledReturnsAllSupportedFullFiscalYearLedger): number {
+  const firstReturnType = ledger.targetPlan[0]?.returnType;
+  return firstReturnType
+    ? ledger.targetPlan.filter((target) => target.returnType === firstReturnType).length
+    : 0;
 }
 
 function allSupportedZipOwners(
