@@ -111,6 +111,27 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(container.textContent).not.toContain("Open a signed-in GST Portal tab before");
   });
 
+  it.each(["blocked", "failed"] as const)(
+    "replaces hidden %s retry guidance in the packaged recovery block",
+    async (targetStatus) => {
+      const summary = {
+        ...SAVED_FULL_YEAR,
+        flowStep: {
+          ...SAVED_FULL_YEAR.flowStep,
+          safeMessage: "Resolve the GST Portal page, then retry this period.",
+        },
+        fullFiscalYearRecovery: {
+          ...SAVED_FULL_YEAR.fullFiscalYearRecovery,
+          targetStatus,
+        },
+      };
+      await mount(false, true, summary);
+
+      expect(container.textContent).toContain(`The saved full-year target is ${targetStatus}`);
+      expect(container.textContent).not.toContain("then retry this period");
+    },
+  );
+
   it("withholds fresh starts from a full-year target review", async () => {
     const targetReview = {
       ...SAVED_FULL_YEAR,
