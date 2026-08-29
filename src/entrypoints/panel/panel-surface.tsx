@@ -16,7 +16,7 @@ import { getPopupPresentationState, isGstSignInRequired } from "../popup/present
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
-import { PanelGuidedScope } from "./panel-guided-scope";
+import { PanelGuidedScope, isPackAlphaBuildMode } from "./panel-guided-scope";
 
 export type PackPanelController = ReturnType<typeof usePackPopupController>;
 
@@ -146,6 +146,10 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
             ) : null}
             {hasRecoveryActions(summary ?? null) ? (
               <RecoveryActions
+                // Withheld everywhere else in a packaged build, the full-year flow was still
+                // reachable here: a ledger persisted by an earlier release renders recovery
+                // controls that resume or restart it.
+                fullYearFlowAvailable={isPackAlphaBuildMode(import.meta.env.MODE)}
                 busy={pack.effectiveBusy}
                 collapsed
                 /*

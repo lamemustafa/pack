@@ -19,6 +19,19 @@ export interface RecoveryActionsProps {
   onStartFresh: () => void;
   collapsed?: boolean;
   showPortalRetryReason?: boolean;
+  /**
+   * Whether this build may run a full fiscal year at all.
+   *
+   * A packaged build that withholds the full-year surface can still meet a ledger persisted by
+   * an earlier release, and the controls below would happily resume or restart it -- so the
+   * capability would be reachable through recovery after being withheld everywhere else.
+   *
+   * Gating cannot simply hide the whole block: that would strand the reader with a saved run
+   * they can see and cannot dismiss. Only the two controls that re-enter the flow are
+   * withheld; cancelling and recording an observation stay, because both are local and are the
+   * way out.
+   */
+  fullYearFlowAvailable?: boolean;
 }
 
 export function RecoveryActions({
@@ -33,6 +46,7 @@ export function RecoveryActions({
   onStartFresh,
   collapsed = false,
   showPortalRetryReason = true,
+  fullYearFlowAvailable = true,
 }: RecoveryActionsProps) {
   const [moreOpen, setMoreOpen] = React.useState(!collapsed);
   const recoveryState = getRecoveryActionState(summary);
@@ -169,32 +183,41 @@ export function RecoveryActions({
                   account is currently open.
                 </p>
               ) : null}
-              <button
-                type="button"
-                className={collapsed ? "secondary" : undefined}
-                disabled={retryDisabled}
-                aria-describedby={
-                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
-                }
-                onClick={onRetryFullFiscalYearTarget}
-              >
-                {busy === "retry-full-fiscal-year-target"
-                  ? "Retrying..."
-                  : getSavedFullFiscalYearActionDecision(summary).label}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={retryDisabled}
-                aria-describedby={
-                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
-                }
-                onClick={onStartFresh}
-              >
-                {busy === "start-fresh-filed-returns-flow"
-                  ? "Starting fresh..."
-                  : "Discard saved run and start selected download"}
-              </button>
+              {fullYearFlowAvailable ? (
+                <>
+                  <button
+                    type="button"
+                    className={collapsed ? "secondary" : undefined}
+                    disabled={retryDisabled}
+                    aria-describedby={
+                      portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                    }
+                    onClick={onRetryFullFiscalYearTarget}
+                  >
+                    {busy === "retry-full-fiscal-year-target"
+                      ? "Retrying..."
+                      : getSavedFullFiscalYearActionDecision(summary).label}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={retryDisabled}
+                    aria-describedby={
+                      portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                    }
+                    onClick={onStartFresh}
+                  >
+                    {busy === "start-fresh-filed-returns-flow"
+                      ? "Starting fresh..."
+                      : "Discard saved run and start selected download"}
+                  </button>
+                </>
+              ) : (
+                <p className="muted">
+                  This build cannot continue a full-year run. Cancelling below removes the saved run
+                  and its local files.
+                </p>
+              )}
               {canManuallyObserveFullYear ? (
                 <button
                   type="button"
