@@ -121,7 +121,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
           safeMessage: "Resolve the GST Portal page, then retry this period.",
         },
         fullFiscalYearRecovery: {
-          ...SAVED_FULL_YEAR.fullFiscalYearRecovery,
+          ...SAVED_FULL_YEAR.fullFiscalYearRecovery!,
           targetStatus,
         },
       };
