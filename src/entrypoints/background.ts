@@ -315,6 +315,19 @@ async function handleMessage(
         await readCurrentAllSupportedFullFiscalYearFlowSummary({
           storageKeys: filedReturnsStorageKeys(),
         });
+      const flowSummary = await readCurrentFiledReturnsFlowSummary({
+        storageKeys: filedReturnsStorageKeys(),
+      });
+      // A stale compatibility lease has the only acknowledgement route. Show
+      // it long enough to clear that lease; the next summary read returns the
+      // authoritative all-supported root and its retained recovery state.
+      if (
+        allSupportedFullFiscalYearFlowSummary &&
+        !["complete", "cancelled"].includes(allSupportedFullFiscalYearFlowSummary.status) &&
+        isStaleAllSupportedCompatibilityLease(flowSummary, allSupportedFullFiscalYearFlowSummary)
+      ) {
+        return { ok: true, flowSummary };
+      }
       // All-supported runs use one atomic lease for mutual exclusion, but that
       // lease cannot represent their cross-return progress or recovery. Any
       // unresolved root therefore remains authoritative over its compatibility
@@ -325,9 +338,6 @@ async function handleMessage(
       ) {
         return { ok: true, allSupportedFullFiscalYearFlowSummary };
       }
-      const flowSummary = await readCurrentFiledReturnsFlowSummary({
-        storageKeys: filedReturnsStorageKeys(),
-      });
       // An atomic recovery is the only record that can authorise work on its
       // exact target. Do not bury it behind retained all-supported history.
       if (flowSummary && !["complete", "cancelled"].includes(flowSummary.status)) {
@@ -399,6 +409,21 @@ async function handleMessage(
   }
 
   return { ok: false, error: "Unsupported Pack message." };
+}
+
+function isStaleAllSupportedCompatibilityLease(
+  flowSummary: Awaited<ReturnType<typeof readCurrentFiledReturnsFlowSummary>>,
+  allSupportedSummary: NonNullable<
+    Awaited<ReturnType<typeof readCurrentAllSupportedFullFiscalYearFlowSummary>>
+  >,
+): boolean {
+  return Boolean(
+    flowSummary &&
+    flowSummary.status === "blocked" &&
+    flowSummary.scope.period === "FULL_FISCAL_YEAR" &&
+    flowSummary.scope.financialYear === allSupportedSummary.summaryIdentity.financialYear &&
+    flowSummary.flowStep.safeSignals.includes("filed-returns-run-needs-review"),
+  );
 }
 
 function isFiledReturnsObservationEnvelope(input: unknown): boolean {
