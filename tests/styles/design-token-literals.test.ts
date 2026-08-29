@@ -1,11 +1,16 @@
-import { readFile, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const STYLES_ROOT = join(process.cwd(), "src/styles");
 const GLOBAL_STYLESHEET = join(STYLES_ROOT, "global.css");
-const COLOR_LITERAL =
-  /#[\da-f]{3,8}\b|\b(?:color|color-mix|device-cmyk|hsl|hsla|hwb|lab|lch|light-dark|oklab|oklch|rgb|rgba)\([^)]*\)|(?<![-\w])(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blue|brown|chartreuse|coral|cornflowerblue|crimson|cyan|darkblue|darkcyan|darkgray|darkgreen|darkgrey|darkorange|darkred|deeppink|deepskyblue|dodgerblue|fuchsia|gold|goldenrod|gray|green|grey|hotpink|indigo|ivory|khaki|lavender|lime|magenta|maroon|navy|olive|orange|orchid|pink|plum|purple|rebeccapurple|red|salmon|silver|skyblue|tan|teal|tomato|transparent|turquoise|violet|white|yellow)(?![-\w])/gi;
+const CSS_NAMED_COLORS =
+  "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen transparent currentcolor";
+const COLOR_LITERAL = new RegExp(
+  `#[\\da-f]{3,8}\\b|\\b(?:color|color-mix|device-cmyk|hsl|hsla|hwb|lab|lch|light-dark|oklab|oklch|rgb|rgba)\\([^)]*\\)|(?<![-\\w])(?:${CSS_NAMED_COLORS.replaceAll(" ", "|")})(?![-\\w])`,
+  "gi",
+);
 const ROOT_BLOCK = /:root\s*\{[\s\S]*?\}/g;
 
 async function stylesheetPaths(directory = STYLES_ROOT): Promise<string[]> {
@@ -25,16 +30,21 @@ function colorLiteralsOutsideCanonicalRoot(path: string, css: string): readonly 
   return [...source.matchAll(COLOR_LITERAL)].map((match) => match[0]);
 }
 
-describe("design token color literals", () => {
-  it("allows literal token definitions only inside global.css's :root", async () => {
-    const violations = await Promise.all(
-      (await stylesheetPaths()).map(async (path) => {
+async function literalViolations(directory = STYLES_ROOT): Promise<readonly string[]> {
+  const paths = await stylesheetPaths(directory);
+  return (
+    await Promise.all(
+      paths.map(async (path) => {
         const literals = colorLiteralsOutsideCanonicalRoot(path, await readFile(path, "utf8"));
         return literals.length === 0 ? [] : [`${path}: ${literals.join(", ")}`];
       }),
-    );
+    )
+  ).flat();
+}
 
-    expect(violations.flat()).toEqual([]);
+describe("design token color literals", () => {
+  it("allows literal token definitions only inside global.css's :root", async () => {
+    expect(await literalViolations()).toEqual([]);
   });
 
   it.each([
@@ -44,6 +54,7 @@ describe("design token color literals", () => {
     ["oklch(62% 0.24 29)"],
     ["color(display-p3 1 0 0)"],
     ["rebeccapurple"],
+    ["firebrick"],
     ["transparent"],
   ])("detects the non-token color literal %s", (literal) => {
     expect(
@@ -61,5 +72,18 @@ describe("design token color literals", () => {
         ":root { --local: #ff0000; }",
       ),
     ).toEqual(["#ff0000"]);
+  });
+
+  it("rejects a literal discovered from the stylesheet filesystem", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pack-style-literal-"));
+    try {
+      await writeFile(join(directory, "component.css"), ".row { color: firebrick; }");
+
+      await expect(literalViolations(directory)).resolves.toEqual([
+        `${join(directory, "component.css")}: firebrick`,
+      ]);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
   });
 });
