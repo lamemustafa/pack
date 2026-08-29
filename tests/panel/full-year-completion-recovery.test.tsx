@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { summariseFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
@@ -14,6 +14,14 @@ vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
 
 describe("whole-panel unresolved completion recovery", () => {
+  beforeEach(() => {
+    vi.stubEnv("MODE", "alpha");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it.each(RECOVERY_TARGET_STATUSES)(
     "renders %s as recovery, without a completion announcement",
     (status) => {
