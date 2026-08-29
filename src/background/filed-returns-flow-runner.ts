@@ -250,6 +250,7 @@ export async function startFiledReturnsDownloadFlow(
 async function allSupportedPlanStartLockResponse(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
+  resumableRoot?: FiledReturnsAllSupportedFullFiscalYearRequest,
 ): Promise<PackMessageResponse | null> {
   if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
   const state = await readAllSupportedPlanLedgersStorageState(deps);
@@ -272,7 +273,14 @@ async function allSupportedPlanStartLockResponse(
     };
   }
   if (
-    !state.ledgers.some((ledger) => ledger.status !== "complete" && ledger.status !== "cancelled")
+    !state.ledgers.some(
+      (ledger) =>
+        ledger.status !== "complete" &&
+        ledger.status !== "cancelled" &&
+        (!resumableRoot ||
+          ledger.planRoot.kind !== resumableRoot.kind ||
+          ledger.planRoot.financialYear !== resumableRoot.financialYear),
+    )
   ) {
     return null;
   }
@@ -325,6 +333,25 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
   if (targetReviewState.state === "valid") {
     return responseForFiledReturnsTargetReview(targetReviewState.review);
   }
+  const retainedPlans = await readPlanLedgersStorageState(deps);
+  if (retainedPlans.state === "malformed") {
+    return retainedFullFiscalYearPlanLockResponse(leaseScope);
+  }
+  for (const ledger of await readRetainedPlanLedgers(deps)) {
+    const replaceable =
+      ledger.status === "complete" &&
+      canCompleteFullFiscalYearLedger(ledger) &&
+      !ledger.zipDownloadAttempt &&
+      !hasRetainedFullFiscalYearStaging(ledger);
+    if (!replaceable) {
+      const response = responseForExistingLedger(ledger, deps.now?.() ?? new Date(), {
+        blockRetainedStaging: true,
+      });
+      if (response) return response;
+    }
+  }
+  const allSupportedLock = await allSupportedPlanStartLockResponse(leaseScope, deps, request);
+  if (allSupportedLock) return allSupportedLock;
 
   const activeRun = await acquireFiledReturnsRun(leaseScope, deps);
   if ("response" in activeRun) return activeRun.response;
@@ -345,6 +372,27 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+function retainedFullFiscalYearPlanLockResponse(
+  scope: FiledReturnsDownloadScope,
+): PackMessageResponse {
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["full-fiscal-year-ledger-malformed", "full-fiscal-year-opfs-retained"],
+      safeMessage:
+        "Pack could not verify retained fiscal-year recovery before starting the all-supported plan.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Clear local Pack data before starting another return.",
+        canResume: false,
+      },
+    },
+  };
 }
 
 function allSupportedLeaseScope(

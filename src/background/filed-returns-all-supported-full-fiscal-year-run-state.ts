@@ -77,9 +77,15 @@ export async function readAllSupportedPlanLedgersStorageState(
   const ledgerIds = Object.values(index.ledgerIdsByPlanRoot);
   if (new Set(ledgerIds).size !== ledgerIds.length) return { state: "malformed" };
   const expectedPlanKeys = ledgerIds.map(allSupportedFullFiscalYearPlanStorageKey);
+  if (expectedPlanKeys.some((key) => !planKeys.includes(key))) {
+    return { state: "malformed" };
+  }
+  const supersededPlanKeys = planKeys.filter((key) => !expectedPlanKeys.includes(key));
   if (
-    expectedPlanKeys.length !== planKeys.length ||
-    expectedPlanKeys.some((key) => !planKeys.includes(key))
+    !supersededPlanKeys.every((key) => {
+      const ledger = values[key];
+      return isAllSupportedFullFiscalYearLedger(ledger) && canReplaceLedger(ledger);
+    })
   ) {
     return { state: "malformed" };
   }

@@ -429,7 +429,7 @@ async function finishAllSupportedFinalZip(
         ...(noArtifacts ? [] : ["all-supported-full-fiscal-year-zip-downloaded"]),
       ]),
     ),
-    safeMessage: `Pack completed the selected fiscal-year returns for FY ${completed.planRoot.financialYear}.`,
+    safeMessage: zipStep.safeMessage,
   });
 }
 
@@ -448,7 +448,9 @@ function toAllSupportedSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
-  const zipDelivered = ledger.zipPhase === "cleaned-after-download";
+  const zipDelivered =
+    ledger.zipPhase === "cleaned-after-download" ||
+    ledger.zipPhase === "downloaded-cleanup-pending";
   const flowStepScope = scopeForTarget(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,

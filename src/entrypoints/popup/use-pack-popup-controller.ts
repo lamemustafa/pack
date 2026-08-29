@@ -250,11 +250,13 @@ export function usePackPopupController() {
         setFiledReturnsFlowSummary(null);
       } else if (response.ok && "flowStep" in response) {
         summaryRefreshEpoch.current += 1;
-        actionErrorSource.current = null;
-        setActionError(null);
         if ("flowSummary" in response && response.flowSummary) {
+          actionErrorSource.current = null;
+          setActionError(null);
           setFiledReturnsFlowSummary(response.flowSummary);
           setScopeState(response.flowSummary.scope);
+        } else {
+          showActionError(response.flowStep.safeMessage);
         }
       } else {
         showActionError(

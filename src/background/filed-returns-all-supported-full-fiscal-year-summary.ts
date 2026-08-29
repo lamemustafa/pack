@@ -47,7 +47,9 @@ export function toAllSupportedFullFiscalYearSummary(
   now = new Date(),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   const flowStep = summaryStep(ledger, now);
-  const zipDelivered = ledger.zipPhase === "cleaned-after-download";
+  const zipDelivered =
+    ledger.zipPhase === "cleaned-after-download" ||
+    ledger.zipPhase === "downloaded-cleanup-pending";
   const flowStepScope = scopeForTarget(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
