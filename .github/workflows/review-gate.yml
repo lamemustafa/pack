@@ -95,3 +95,41 @@ jobs:
           --expected-head-oid "${{ steps.resolve-pr.outputs.head_sha }}"
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # The single context branch protection requires.
+  #
+  # `Review gate (scheduled)` was required alongside the PR-triggered gate, but it is published by a
+  # cron workflow, and GitHub runs schedules best-effort: on this repository it fired roughly every
+  # seven hours rather than the declared fifteen minutes. A required context that only a throttled
+  # scheduler can publish makes every merge wait on that scheduler, so a green PR sits BLOCKED with
+  # nothing wrong with it.
+  #
+  # Collapsing to one always-running context fixes that without lowering the bar: this job fails
+  # whenever the gate it needs failed or was cancelled, and passes only when that gate succeeded or
+  # was legitimately skipped. A gate that passed on *any* upstream result would be a false pass in
+  # new clothes.
+  #
+  # The reconcile workflow publishes this same context, because resolving a thread without leaving a
+  # reply raises no pull_request event and so cannot retrigger the job below. That path is the only
+  # one able to refresh this context when review state changes without a push.
+  required-checks:
+    name: Required checks
+    if: ${{ always() }}
+    needs: [review-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify no required job failed
+        shell: bash
+        env:
+          REVIEW_GATE_RESULT: ${{ needs.review-gate.result }}
+        run: |
+          set -euo pipefail
+          echo "review-gate: ${REVIEW_GATE_RESULT}"
+          case "${REVIEW_GATE_RESULT}" in
+            success|skipped) ;;
+            *)
+              echo "Required job 'Review gate' reported '${REVIEW_GATE_RESULT}'." >&2
+              exit 1
+              ;;
+          esac
