@@ -16,6 +16,7 @@ vi.mock("wxt/browser", () => ({
 import { PanelSurface, type PackPanelController } from "../../src/entrypoints/panel/panel-surface";
 import { PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
 import { panelFullFiscalYearPresets } from "../../src/entrypoints/panel/panel-guided-scope-model";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 import {
   PANEL_TEST_SCOPE,
   completedPanelSummary,
@@ -234,7 +235,23 @@ describe("panel guided scope interaction", () => {
     });
     await clickButtonContaining("Choose return, year and period");
 
-    expect(container.textContent).toContain("Cancel it before starting another scope.");
+    expect(container.textContent).toContain(
+      getRecoveryFlowAvailability(
+        completedPanelSummary({
+          status: "blocked",
+          currentPeriod: "April",
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "blocked",
+            safeSignals: [],
+            safeMessage: "Synthetic saved full-year run.",
+          },
+        }),
+        false,
+        true,
+      ).guidance!,
+    );
     expect(container.textContent).not.toContain("Resume or discard it");
   });
 

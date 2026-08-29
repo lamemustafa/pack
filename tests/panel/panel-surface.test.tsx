@@ -13,6 +13,7 @@ vi.mock("wxt/browser", () => ({
 }));
 
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 import { completedPanelSummary, panelController } from "./panel-controller.test-helpers";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
@@ -251,7 +252,8 @@ describe("panel surface", () => {
       />,
     );
 
-    expect(markup).toContain("Pack needs a local recovery decision.");
+    expect(markup).toContain(getRecoveryFlowAvailability(blockedRecovery, false).message!);
+    expect(markup).not.toContain(blockedRecovery.flowStep.safeMessage);
     expect(markup).toContain("Recovery options");
     expect(markup).not.toContain("Checking this tab");
   });

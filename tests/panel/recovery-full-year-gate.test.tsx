@@ -7,6 +7,7 @@ import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-ret
 vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 
 import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 
 /**
  * A packaged build withholds the full-year surface everywhere it is offered -- but a ledger
@@ -102,7 +103,9 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
 
     const labels = buttonLabels();
     expect(labels.some((label) => /Cancel|Discard saved run$/.test(label))).toBe(true);
-    expect(container.textContent).toContain("This build cannot continue a full-year run");
+    expect(container.textContent).toContain(
+      getRecoveryFlowAvailability(SAVED_FULL_YEAR, false).message!,
+    );
   });
 
   it("does not promise a hidden retry when the portal is unavailable", async () => {
@@ -127,8 +130,12 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       };
       await mount(false, true, summary);
 
-      expect(container.textContent).toContain(`The saved full-year target is ${targetStatus}`);
-      expect(container.textContent).not.toContain("then retry this period");
+      const recovery = getRecoveryFlowAvailability(summary, false);
+      expect(container.textContent).toContain(recovery.message!);
+      expect(container.textContent).not.toContain(summary.flowStep.safeMessage);
+      expect(
+        recovery.mentionedActions.every((action) => recovery.availableActions.includes(action)),
+      ).toBe(true);
     },
   );
 
@@ -144,7 +151,11 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     await mount(false, true, targetReview);
 
     expect(container.textContent).not.toContain("Discard saved state and start selected download");
-    expect(container.textContent).toContain("This build cannot start a full-year run");
+    const recovery = getRecoveryFlowAvailability(targetReview, false);
+    expect(container.textContent).toContain(recovery.message!);
+    expect(
+      recovery.mentionedActions.every((action) => recovery.availableActions.includes(action)),
+    ).toBe(true);
     expect(container.textContent).toContain("Cancel and reset");
   });
 

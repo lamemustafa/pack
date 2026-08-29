@@ -1,9 +1,6 @@
 import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
-import {
-  FULL_FISCAL_YEAR_PERIOD,
-  isFullFiscalYearScope,
-} from "../../connectors/gst/filed-returns-scope";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import { filedReturnsPlanCoverageMessage } from "../../connectors/gst/filed-returns-durable-status";
 import type { PopupPresentationState } from "./presentation-state";
 import { canReconcileFiledReturnsTarget, RunProgress } from "./run-summary";
@@ -11,11 +8,11 @@ import {
   getFullFiscalYearCleanupCopy,
   hasConfirmedSinglePeriodBrowserDownload,
   hasFiledReturnsDownloadFilenameOverride,
-  hasUnresolvedFiledReturnsRecovery,
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
 import { getSavedFullFiscalYearActionDecision } from "./recovery-actions";
+import { getRecoveryFlowAvailability } from "./recovery-flow-availability";
 
 export interface InlineStatusProps {
   busy: string | null;
@@ -151,15 +148,10 @@ function getInlineStatusCopy(
   summary: FiledReturnsFlowSummary | null,
   fullYearFlowAvailable = true,
 ): { body: string; icon: string; title: string; tone: "warning" | "success" | "neutral" } | null {
-  if (
-    !fullYearFlowAvailable &&
-    presentation.kind !== "error" &&
-    summary &&
-    isFullFiscalYearScope(summary.scope) &&
-    hasUnresolvedFiledReturnsRecovery(summary)
-  ) {
+  const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
+  if (presentation.kind !== "error" && recoveryAvailability.isWithheldFullYearRecovery) {
     return {
-      body: "This build cannot continue the saved full-year run. Cancel it before starting another download.",
+      body: recoveryAvailability.guidance!,
       icon: "!",
       title: "Saved full-year run needs attention",
       tone: "warning",
@@ -398,7 +390,12 @@ export function getInlinePrimaryAction(
 
   const signals = new Set(summary.flowStep.safeSignals);
   if (presentation.kind === "blocked" && summary.currentPeriod && summary.fullFiscalYearRecovery) {
-    if (actions.fullYearFlowAvailable === false) return null;
+    if (
+      !getRecoveryFlowAvailability(summary, actions.fullYearFlowAvailable ?? true)
+        .canContinueFullYear
+    ) {
+      return null;
+    }
     const { gerund, label } = getSavedFullFiscalYearActionDecision(summary);
     return {
       label,

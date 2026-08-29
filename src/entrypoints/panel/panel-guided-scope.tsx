@@ -17,6 +17,7 @@ import {
   getScopeMatchedFiledReturnsSummary,
 } from "../popup/flow-summary";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
+import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import {
   panelFullFiscalYearPresets,
   panelGuidedStepForDisplay,
@@ -64,6 +65,11 @@ export function PanelGuidedScope({
     panelGuidedStepForDisplay(candidate, alphaSurfacesEnabled),
   );
   const step = steps[activeStep] ?? steps[0];
+  const recoveryAvailability = getRecoveryFlowAvailability(
+    flowSummary,
+    alphaSurfacesEnabled,
+    scopeLockedForReview,
+  );
   const [, refreshPresetSnapshot] = React.useState(0);
   // The panel can stay mounted while a new period becomes eligible. Read the
   // financial year and its period plan from the same render-time snapshot so
@@ -283,8 +289,8 @@ export function PanelGuidedScope({
       </div>
       {scopeLockedForReview && flowSummary?.currentPeriod ? (
         <p className="scope-note scope-note-warning" role="status">
-          {!alphaSurfacesEnabled && isFullFiscalYearScope(flowSummary.scope)
-            ? "A saved full-year run needs attention. Cancel it before starting another scope."
+          {recoveryAvailability.isWithheldFullYearRecovery
+            ? recoveryAvailability.guidance
             : `A saved run is paused at ${flowSummary.currentPeriod}. Resume or discard it before starting another scope.`}
         </p>
       ) : null}

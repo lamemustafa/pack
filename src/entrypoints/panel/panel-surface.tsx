@@ -14,6 +14,7 @@ import { PackSummary } from "../popup/pack-summary";
 import { TargetEvidence } from "../popup/target-evidence";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
+import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
 import { PanelGuidedScope, isPackAlphaBuildMode } from "./panel-guided-scope";
@@ -45,16 +46,8 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
   const running = pack.effectiveBusy !== null || summary?.status === "running";
   const fullYearFlowAvailable = isPackAlphaBuildMode(import.meta.env.MODE);
-  const recoveryReason =
-    !fullYearFlowAvailable &&
-    summary &&
-    isFullFiscalYearScope(summary.scope) &&
-    hasUnresolvedFiledReturnsRecovery(summary) &&
-    presentation.kind !== "error" &&
-    (summary.flowStep.safeSignals.includes("full-fiscal-year-download-unconfirmed") ||
-      ["blocked", "failed"].includes(summary.fullFiscalYearRecovery?.targetStatus ?? ""))
-      ? "This build cannot continue the saved full-year run. Cancel it before starting another download."
-      : summary?.flowStep.safeMessage;
+  const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
+  const recoveryReason = recoveryAvailability.message;
 
   useRefreshOnReturn(pack.refreshPortalContext, pack.refreshFlowSummary);
 
@@ -122,7 +115,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               summary={summary}
             />
             {terminalSummary && presentation.kind === "session-expired" ? (
-              <p className="panel-recovery-reason">{summary?.flowStep.safeMessage}</p>
+              <p className="panel-recovery-reason">{recoveryReason}</p>
             ) : null}
             {summary ? <PackSummary scope={pack.scope} summary={pack.scopedFlowSummary} /> : null}
             {/* Below the pack card, above the recovery actions: a reader who
@@ -310,14 +303,11 @@ function getSavedRunBlock(
     null,
     isFullFiscalYearScope(savedRun.scope),
   );
-  if (
-    isFullFiscalYearScope(savedRun.scope) &&
-    !fullYearFlowAvailable &&
-    hasUnresolvedFiledReturnsRecovery(savedRun)
-  ) {
+  const recoveryAvailability = getRecoveryFlowAvailability(savedRun, fullYearFlowAvailable);
+  if (recoveryAvailability.isWithheldFullYearRecovery) {
     return {
       disabled: true,
-      label: "Cancel the saved full-year run before starting another download.",
+      label: recoveryAvailability.guidance!,
     };
   }
   // An enabled action still blocks other scopes when recovery is outstanding: the retained

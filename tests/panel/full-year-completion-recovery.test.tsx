@@ -12,6 +12,7 @@ import { panelController } from "./panel-controller.test-helpers";
 
 vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 
 describe("whole-panel unresolved completion recovery", () => {
   beforeEach(() => {
@@ -152,9 +153,29 @@ describe("whole-panel unresolved completion recovery", () => {
       />,
     );
 
-    expect(markup).toContain(
-      "This build cannot continue the saved full-year run. Cancel it before starting another download.",
-    );
+    expect(markup).toContain(getRecoveryFlowAvailability(summary, false).message!);
     expect(markup).not.toContain(summary.flowStep.safeMessage);
+  });
+
+  it("uses the recovery availability source for the session-expired row", () => {
+    const summary = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("download-unconfirmed"),
+      RECOVERY_NOW,
+    );
+    delete summary.fullFiscalYearRecovery;
+    summary.status = "cancelled";
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={panelController({
+          context: { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
+          scope: summary.scope,
+          scopedFlowSummary: summary,
+          recoverySummary: summary,
+          lastRunSummary: summary,
+        })}
+      />,
+    );
+
+    expect(markup).toContain(getRecoveryFlowAvailability(summary, true).message!);
   });
 });
