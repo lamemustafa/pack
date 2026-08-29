@@ -327,7 +327,10 @@ async function runAllSupportedFullFiscalYearTargets(
     }
     await persistAllSupportedFullFiscalYearLedger(deps, ledger);
 
-    if (POSITIVE_TARGET_STATUSES.has(targetStatus)) continue;
+    const persistedTarget = ledger.targets.find(
+      (target) => target.targetId === nextTarget.targetId,
+    );
+    if (persistedTarget && POSITIVE_TARGET_STATUSES.has(persistedTarget.status)) continue;
     return allSupportedResponse(ledger, flowStep);
   }
 }

@@ -308,7 +308,10 @@ describe("panel guided scope interaction", () => {
     });
 
     expect(expectedPlan).not.toBeNull();
-    expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith(expectedPlan);
+    expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith({
+      kind: expectedPlan!.kind,
+      financialYear: expectedPlan!.financialYear,
+    });
   });
 
   it("wires the alpha all-returns recipe from the composed panel", async () => {
@@ -323,6 +326,62 @@ describe("panel guided scope interaction", () => {
 
     expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ kind: "all-supported-returns-full-fiscal-year" }),
+    );
+  });
+
+  it("locks every new preset while an all-supported plan needs review", async () => {
+    await mount(
+      {
+        overrides: {
+          allSupportedFullFiscalYearFlowSummary: {
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2025-26",
+            },
+            status: "blocked",
+            updatedAt: "2026-08-27T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: [
+              {
+                targetId: "synthetic-target",
+                financialYear: "2025-26",
+                period: "April",
+                returnType: "GSTR-3B",
+                artifactType: "PDF",
+                outcome: "needs-review",
+              },
+            ],
+            totalTargets: 1,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "blocked",
+              safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+              safeMessage: "Synthetic all-supported review.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>(".panel-preset")).map((button) => ({
+        disabled: button.disabled,
+        label: button.textContent,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          disabled: true,
+          label: expect.stringContaining("Everything this year"),
+        }),
+      ]),
+    );
+    expect(container.textContent).toContain(
+      "Clear local data and discard the saved all-supported plan before starting another return.",
     );
   });
 

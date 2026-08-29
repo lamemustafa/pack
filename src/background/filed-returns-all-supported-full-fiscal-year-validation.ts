@@ -13,6 +13,7 @@ import {
   isFiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
+  expandAllSupportedFullFiscalYearTargetPlan,
   isAllSupportedFullFiscalYearRequest,
   type FiledReturnsAllSupportedFullFiscalYearPlanTarget,
 } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
@@ -266,20 +267,17 @@ function isTargetPlan(
   if (!Array.isArray(input) || input.length === 0) return false;
   const periods = canonicalFullFiscalYearPlanPeriods(financialYear, eligibleThrough);
   if (!periods) return false;
-  const returnTypes = new Set<string>();
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  if (!expansion.ok || input.length !== expansion.targets.length * periods.length) return false;
   let index = 0;
-  while (index < input.length) {
-    const first = input[index];
-    if (!isPlanTarget(first, financialYear) || returnTypes.has(first.returnType)) return false;
-    returnTypes.add(first.returnType);
+  for (const expectedReturn of expansion.targets) {
     for (const period of periods) {
       const target = input[index];
       if (
         !isPlanTarget(target, financialYear) ||
-        target.returnType !== first.returnType ||
+        target.returnType !== expectedReturn.returnType ||
         target.period !== period ||
-        target.artifactType !== first.artifactType ||
-        !sameArtifacts(target.concreteArtifactTypes, first.concreteArtifactTypes)
+        target.artifactType !== expectedReturn.artifactType
       ) {
         return false;
       }

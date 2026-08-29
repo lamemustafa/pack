@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/connectors/gst/filed-returns-contracts";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
+import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import {
   createAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearTargetPlan,
@@ -14,6 +15,7 @@ import {
   readAllSupportedPlanLedgersStorageState,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
 import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
+import { toAllSupportedFullFiscalYearSummary } from "../../src/background/filed-returns-all-supported-full-fiscal-year-summary";
 
 const stored = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 const browserMocks = vi.hoisted(() => ({
@@ -89,6 +91,44 @@ describe("all-supported full-fiscal-year ledger", () => {
     expect(isAllSupportedFullFiscalYearLedger(shortened)).toBe(false);
   });
 
+  it("rejects a plan that substitutes a recognised return type for the canonical group", () => {
+    const ledger = createLedger();
+    const substituted = {
+      ...ledger,
+      targetPlan: ledger.targetPlan.map((target, index) =>
+        index < PERIODS.length ? { ...target, returnType: "GSTR-9" } : target,
+      ),
+      targets: ledger.targets.map((target, index) =>
+        index < PERIODS.length ? { ...target, returnType: "GSTR-9" } : target,
+      ),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(substituted)).toBe(false);
+  });
+
+  it("keeps a completed no-artifact plan complete after reopening", () => {
+    const ledger = createLedger();
+    const complete = {
+      ...ledger,
+      status: "complete" as const,
+      zipPhase: "cleaned-without-export" as const,
+      targets: ledger.targets.map((target) => ({
+        ...target,
+        status: "not-filed" as const,
+        ...canonicalDurableTargetStatus(target, "not-filed", ["filed-return-positively-not-filed"]),
+      })),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(complete)).toBe(true);
+    expect(toAllSupportedFullFiscalYearSummary(complete).flowStep).toMatchObject({
+      state: "downloaded",
+      safeSignals: expect.arrayContaining([
+        "all-supported-full-fiscal-year-complete",
+        "all-supported-full-fiscal-year-no-zip-artifacts",
+      ]),
+    });
+  });
+
   it("rejects a plan whose immutable concrete-artifact snapshot changes", () => {
     const ledger = createLedger();
     const mutatedArtifacts = [...ledger.targetPlan[0]!.concreteArtifactTypes].reverse();
@@ -144,6 +184,37 @@ describe("all-supported full-fiscal-year ledger", () => {
     await expect(readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, PLAN_ROOT)).resolves.toEqual(
       ledger,
     );
+  });
+
+  it("serializes concurrent root-plan writes without dropping either index mapping", async () => {
+    const first = createLedger(NOW);
+    const secondRoot = { ...PLAN_ROOT, financialYear: "2026-27" } as const;
+    const second = createAllSupportedFullFiscalYearLedger(
+      secondRoot,
+      expandedPlan(),
+      PERIODS,
+      new Date("2026-08-27T00:00:01.000Z"),
+    );
+
+    await Promise.all([
+      persistAllSupportedFullFiscalYearLedger(deps, first),
+      persistAllSupportedFullFiscalYearLedger(deps, second),
+    ]);
+
+    expect(stored.current["all-supported-index"]).toEqual({
+      schemaVersion: "1.0",
+      ledgerIdsByPlanRoot: {
+        [allSupportedFullFiscalYearPlanRootKey(first.planRoot)]: first.ledgerId,
+        [allSupportedFullFiscalYearPlanRootKey(second.planRoot)]: second.ledgerId,
+      },
+    });
+    await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toMatchObject({
+      state: "valid",
+      ledgers: expect.arrayContaining([
+        expect.objectContaining({ ledgerId: first.ledgerId }),
+        expect.objectContaining({ ledgerId: second.ledgerId }),
+      ]),
+    });
   });
 
   it("fails closed when an all-supported index is malformed, even without plan records", async () => {

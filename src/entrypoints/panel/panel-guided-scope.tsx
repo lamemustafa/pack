@@ -122,6 +122,7 @@ export function PanelGuidedScope({
               plan={allReturnsPreset}
               portalReady={portalSignedIn}
               onStart={onStartAllReturnsFullYear}
+              onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
             />
           ) : null}
           {presets.map((preset) => {
@@ -323,12 +324,14 @@ function AllReturnsPreset({
   plan,
   portalReady,
   onStart,
+  onStalePlan,
 }: {
   busy: string | null;
   externalBlock: { disabled: true; label: string } | null;
   plan: PanelAllReturnsFullYearPreset;
   portalReady: boolean;
   onStart: (plan: PanelAllReturnsFullYearPlan) => void;
+  onStalePlan: () => void;
 }) {
   const disabled = !portalReady || busy !== null || externalBlock?.disabled === true;
   const disabledReason =
@@ -348,7 +351,25 @@ function AllReturnsPreset({
         disabled={disabled}
         aria-describedby={disabledReason ? "preset-all-returns-reason" : undefined}
         aria-label={`${plan.label} for all supported returns. ${countLabel}.`}
-        onClick={() => onStart(plan)}
+        onClick={() => {
+          const currentAsOf = new Date();
+          const currentFinancialYear = getFiledReturnsFinancialYearOptions(currentAsOf)[0];
+          const currentPlan = currentFinancialYear
+            ? panelAllReturnsFullYearPreset(currentFinancialYear, currentAsOf)
+            : null;
+          if (
+            !currentPlan ||
+            currentPlan.financialYear !== plan.financialYear ||
+            currentPlan.returnCount !== plan.returnCount ||
+            currentPlan.targetPeriodCount !== plan.targetPeriodCount ||
+            currentPlan.artifactCount !== plan.artifactCount ||
+            currentPlan.fileCount !== plan.fileCount
+          ) {
+            onStalePlan();
+            return;
+          }
+          onStart({ kind: plan.kind, financialYear: plan.financialYear });
+        }}
       >
         <span>{plan.label} · all supported returns</span>
         <span className="panel-preset-count">{countLabel}</span>

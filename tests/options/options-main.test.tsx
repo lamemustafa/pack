@@ -46,6 +46,21 @@ describe("options local-data failure presentation", () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: "PACK_CLEAR_LOCAL_DATA" });
   });
 
+  it("announces an explicit saved-plan discard after local data is cleared", async () => {
+    mocks.sendMessage.mockResolvedValue({ ok: true, cleared: true });
+    const clearButton = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent === "Clear local data and discard saved plans",
+    );
+    if (!clearButton) throw new Error("Expected the local-data discard action.");
+
+    await act(async () => {
+      clearButton.click();
+      await Promise.resolve();
+    });
+
+    expect(document.body.textContent).toContain("Pack local and session storage keys cleared.");
+  });
+
   it.each([
     ["Probe data URL download", "Pack could not start the synthetic download probe. Try again."],
     [

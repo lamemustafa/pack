@@ -43,6 +43,7 @@ import {
   readRetainedPlanLedgers,
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
+import { readAllSupportedPlanLedgersStorageState } from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
   malformedTargetReviewResponse,
@@ -85,6 +86,7 @@ export interface FiledReturnsFlowRunnerDeps {
   ) => Promise<PackMessageResponse>;
   storageKeys: {
     activeRun?: string;
+    allSupportedFullFiscalYearLedgerIndex?: string;
     completion: string;
     fullFiscalYearLedger: string;
     fullFiscalYearLedgerIndex?: string;
@@ -144,6 +146,8 @@ export async function startFiledReturnsDownloadFlow(
   if (targetReviewState.state === "valid") {
     return responseForFiledReturnsTargetReview(targetReviewState.review);
   }
+  const allSupportedLock = await allSupportedPlanStartLockResponse(scope, deps);
+  if (allSupportedLock) return allSupportedLock;
 
   const activeRun = await acquireFiledReturnsRun(scope, deps);
   if ("response" in activeRun) return activeRun.response;
@@ -241,6 +245,53 @@ export async function startFiledReturnsDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+async function allSupportedPlanStartLockResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse | null> {
+  if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
+  const state = await readAllSupportedPlanLedgersStorageState(deps);
+  if (state.state === "malformed") {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+        safeMessage:
+          "Pack could not verify the saved all-supported fiscal-year plan index before starting another return.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Clear local Pack data before starting another return.",
+          canResume: false,
+        },
+      },
+    };
+  }
+  if (
+    !state.ledgers.some((ledger) => ledger.status !== "complete" && ledger.status !== "cancelled")
+  ) {
+    return null;
+  }
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+      safeMessage:
+        "Pack retained an all-supported fiscal-year plan and will not start overlapping return work.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Clear local data and discard the saved plan before starting another return.",
+        canResume: false,
+      },
+    },
+  };
 }
 
 /**

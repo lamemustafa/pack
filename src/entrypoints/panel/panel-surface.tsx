@@ -52,6 +52,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy);
+  const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -176,7 +177,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               <PanelGuidedScope
                 busy={pack.effectiveBusy}
                 context={pack.context}
-                externalBlock={savedRunBlock}
+                externalBlock={savedRunBlock ?? allSupportedRunBlock}
                 flowSummary={pack.scopedFlowSummary}
                 portalSignedIn={portalSignedIn}
                 savedRun={savedRun}
@@ -325,4 +326,16 @@ function getSavedRunBlock(
   // fiscal-year ZIP is offered a retry, not a replacement run under a different scope.
   if (!action.disabled && !hasUnresolvedFiledReturnsRecovery(savedRun)) return null;
   return { disabled: true, label: action.label };
+}
+
+function getAllSupportedRunBlock(
+  summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
+  busy: string | null,
+): { disabled: true; label: string } | null {
+  if (!summary || busy !== null || ["complete", "cancelled"].includes(summary.status)) return null;
+  return {
+    disabled: true,
+    label:
+      "Clear local data and discard the saved all-supported plan before starting another return.",
+  };
 }

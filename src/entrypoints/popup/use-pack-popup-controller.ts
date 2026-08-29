@@ -298,7 +298,10 @@ export function usePackPopupController() {
       await withBusy("start-all-supported-filed-returns-full-fiscal-year-flow", async () => {
         const response = await sendPackMessage({
           type: "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
-          payload: plan,
+          payload: {
+            kind: plan.kind,
+            financialYear: plan.financialYear,
+          },
         });
         applyFlowResponse(response);
       });

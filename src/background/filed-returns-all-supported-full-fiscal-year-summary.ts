@@ -97,6 +97,7 @@ function summaryStep(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   now: Date,
 ): PortalFlowStepResult {
+  const noArtifacts = ledger.zipPhase === "cleaned-without-export";
   const current =
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
     ledger.targets[0]!;
@@ -126,13 +127,23 @@ function summaryStep(
       safeMessage: "Pack is still checking the selected fiscal-year returns.",
     };
   }
-  if (ledger.status === "complete" && ledger.zipPhase === "cleaned-after-download") {
+  if (
+    ledger.status === "complete" &&
+    (ledger.zipPhase === "cleaned-after-download" || ledger.zipPhase === "cleaned-without-export")
+  ) {
     return {
       connectorId,
       scopeId,
       state: "downloaded",
-      safeSignals: ["all-supported-full-fiscal-year-complete"],
-      safeMessage: "Pack confirmed the final fiscal-year ZIP download.",
+      safeSignals: [
+        "all-supported-full-fiscal-year-complete",
+        ...(noArtifacts
+          ? ["all-supported-full-fiscal-year-no-zip-artifacts"]
+          : ["all-supported-full-fiscal-year-zip-downloaded"]),
+      ],
+      safeMessage: noArtifacts
+        ? "Pack completed the selected fiscal-year returns; no filed-return artifacts were available for a ZIP."
+        : "Pack confirmed the final fiscal-year ZIP download.",
     };
   }
   return {

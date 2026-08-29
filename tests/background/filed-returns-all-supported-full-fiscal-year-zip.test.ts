@@ -6,8 +6,12 @@ import {
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
 import type { FiledReturnsAllSupportedFullFiscalYearTarget } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
 import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/connectors/gst/filed-returns-contracts";
+import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { isPackOffscreenBlobUrlMessage } from "../../src/connectors/gst/filed-returns-offscreen-validation";
-import type { PortalFlowStepResult } from "../../src/connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsDownloadDiagnostic,
+  PortalFlowStepResult,
+} from "../../src/connectors/gst/filed-returns-contracts";
 
 const mocks = vi.hoisted(() => {
   const reservation = { bind: vi.fn(), release: vi.fn() };
@@ -64,8 +68,8 @@ describe("all-supported full-fiscal-year ZIP", () => {
     mocks.createOffscreenFiledReturnZipUrl.mockResolvedValue({
       status: "created",
       blobUrl: "blob:pack-owned/all-supported-full-year-zip",
-      zipEntryCount: 2,
-      artifactEntryCount: 2,
+      zipEntryCount: 7,
+      artifactEntryCount: 7,
       summaryEntryCount: 0,
       summary: { status: "failed", reasonCategory: "generation-failed" },
     });
@@ -91,11 +95,11 @@ describe("all-supported full-fiscal-year ZIP", () => {
     expect(mocks.createOffscreenFiledReturnZipUrl).toHaveBeenCalledWith(
       ledger.ledgerId,
       expect.objectContaining({
-        entryCount: 2,
-        entries: [
+        entryCount: 7,
+        entries: expect.arrayContaining([
           { artifactType: "PDF", entryNames: ["gstr-1/april-summary.pdf"], returnType: "GSTR-1" },
           { artifactType: "JSON", entryNames: ["gstr-3b/april-data.json"], returnType: "GSTR-3B" },
-        ],
+        ]),
         summaryPlan: expect.arrayContaining([
           expect.objectContaining({ period: "April", returnType: "GSTR-1" }),
           expect.objectContaining({ period: "April", returnType: "GSTR-3B" }),
@@ -184,10 +188,7 @@ function completedLedger() {
       kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
       financialYear: "2025-26",
     },
-    [
-      { returnType: "GSTR-1", artifactType: "PDF", concreteArtifactTypes: ["PDF"] },
-      { returnType: "GSTR-3B", artifactType: "JSON", concreteArtifactTypes: ["JSON"] },
-    ],
+    expandedPlan(),
     ["April"],
     NOW,
   );
@@ -217,33 +218,59 @@ function completeStep() {
 function stagedTargetStep(
   target: FiledReturnsAllSupportedFullFiscalYearTarget,
 ): PortalFlowStepResult {
-  const artifactType = target.concreteArtifactTypes[0]!;
-  return {
-    connectorId: "gst" as const,
-    downloadDiagnostic: {
+  const diagnostics: FiledReturnsDownloadDiagnostic[] = target.concreteArtifactTypes.map(
+    (artifactType) => ({
       actionId: `action-12345678-${artifactType.toLowerCase()}`,
       artifactType,
       byteCountClass: "non-empty" as const,
       downloadPathClass: "captured-portal-request-data" as const,
       endpointClass:
         target.returnType === "GSTR-1"
-          ? "gstr1-pdf-portal-blob-captured-download"
-          : "gstr3b-main-world-json-captured-download",
+          ? artifactType === "EXCEL"
+            ? "gstr1-excel-portal-blob-captured-download"
+            : "gstr1-pdf-portal-blob-captured-download"
+          : target.returnType === "GSTR-3B"
+            ? artifactType === "JSON"
+              ? "gstr3b-main-world-json-captured-download"
+              : "gstr3b-portal-blob-captured-download"
+            : artifactType === "JSON"
+              ? "gstr2b-main-world-json-captured-download"
+              : "gstr2b-portal-blob-captured-download",
       eventType: "filed-return-download-path" as const,
       financialYear: target.financialYear,
-      mimeClass: artifactType === "PDF" ? ("pdf" as const) : ("json" as const),
+      mimeClass:
+        artifactType === "PDF"
+          ? ("pdf" as const)
+          : artifactType === "JSON"
+            ? ("json" as const)
+            : ("spreadsheet" as const),
       period: target.period,
       returnType: target.returnType,
       schemaVersion: "1.0" as const,
       status: "downloaded" as const,
-    },
+    }),
+  );
+  return {
+    connectorId: "gst" as const,
+    downloadDiagnostic: diagnostics[diagnostics.length - 1]!,
+    downloadDiagnostics: diagnostics,
     safeMessage: "Pack staged the target-bound artifact.",
     safeSignals: [
-      `filed-return-artifact-downloaded:${artifactType}`,
+      ...target.concreteArtifactTypes.map(
+        (artifactType) => `filed-return-artifact-downloaded:${artifactType}`,
+      ),
       "all-supported-full-fiscal-year-opfs-staged",
-      `all-supported-full-fiscal-year-opfs-staged:${artifactType}`,
+      ...target.concreteArtifactTypes.map(
+        (artifactType) => `all-supported-full-fiscal-year-opfs-staged:${artifactType}`,
+      ),
     ],
     scopeId: "gst-filed-returns-private-v0",
     state: "downloaded" as const,
   };
+}
+
+function expandedPlan() {
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  if (!expansion.ok) throw new Error("expected all-supported return plan");
+  return expansion.targets;
 }

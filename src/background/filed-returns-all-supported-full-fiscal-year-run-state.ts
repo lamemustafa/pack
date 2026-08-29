@@ -1,4 +1,5 @@
 import { browser } from "wxt/browser";
+import { runFiledReturnsOperationCriticalSection } from "./filed-returns-active-run";
 import { ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX } from "./storage-keys";
 import type { FiledReturnsAllSupportedFullFiscalYearIdentity } from "../connectors/gst/filed-returns-contracts";
 import { canCompleteAllSupportedFullFiscalYearLedger } from "./filed-returns-all-supported-full-fiscal-year-ledger";
@@ -101,6 +102,15 @@ export async function persistAllSupportedFullFiscalYearLedger(
   deps: LedgerStorageDeps,
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
 ): Promise<void> {
+  return runFiledReturnsOperationCriticalSection(() =>
+    persistAllSupportedFullFiscalYearLedgerWithinOperation(deps, ledger),
+  );
+}
+
+async function persistAllSupportedFullFiscalYearLedgerWithinOperation(
+  deps: LedgerStorageDeps,
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+): Promise<void> {
   const indexKey = requireIndexKey(deps);
   if (!isAllSupportedFullFiscalYearLedger(ledger)) {
     throw new Error("Pack could not verify the all-supported full-year ledger before saving it.");
@@ -133,6 +143,15 @@ export async function persistAllSupportedFullFiscalYearLedger(
 }
 
 export async function removeAllSupportedFullFiscalYearLedger(
+  deps: LedgerStorageDeps,
+  ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "ledgerId" | "planRoot">,
+): Promise<void> {
+  return runFiledReturnsOperationCriticalSection(() =>
+    removeAllSupportedFullFiscalYearLedgerWithinOperation(deps, ledger),
+  );
+}
+
+async function removeAllSupportedFullFiscalYearLedgerWithinOperation(
   deps: LedgerStorageDeps,
   ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "ledgerId" | "planRoot">,
 ): Promise<void> {
