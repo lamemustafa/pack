@@ -51,6 +51,8 @@ export function getRecoveryFlowAvailability(
       targetStatus === "download-unconfirmed" ||
       targetStatus === "failed" ||
       summary?.flowStep.safeSignals.includes("filed-returns-target-review-required") === true ||
+      summary?.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required") ===
+        true ||
       summary?.flowStep.safeSignals.includes("artifact-acquisition-session-proof-expired") === true;
     return {
       availableActions: ["cancel-saved-full-year-run"],

@@ -26,4 +26,19 @@ describe("full-year recovery flow availability", () => {
       );
     },
   );
+
+  it("replaces resume-confirmation guidance when a packaged build withholds the flow", () => {
+    const summary = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("pending"),
+      RECOVERY_NOW,
+    );
+    summary.flowStep.safeSignals.push("full-fiscal-year-resume-confirmation-required");
+    const recovery = getRecoveryFlowAvailability(summary, false);
+
+    expect(recovery.canContinueFullYear).toBe(false);
+    expect(recovery.message).toBe(recovery.guidance);
+    expect(
+      recovery.mentionedActions.every((action) => recovery.availableActions.includes(action)),
+    ).toBe(true);
+  });
 });
