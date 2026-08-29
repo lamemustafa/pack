@@ -181,6 +181,35 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
 
+  it("does not let Start fresh discard another recovery while an all-supported plan needs review", async () => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    allSupportedRunStateMocks.readAllSupportedPlanLedgersStorageState.mockResolvedValue({
+      state: "valid",
+      ledgers: [{ status: "blocked" }],
+    });
+
+    const response = await startFreshFiledReturnsDownloadFlow(
+      {
+        scope: requestedScope,
+        recovery: { kind: "target-review", scope: retainedScope },
+      },
+      { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: { safeSignals: ["all-supported-full-fiscal-year-run-needs-action"] },
+    });
+    expect(mocks.readFiledReturnsTargetReview).not.toHaveBeenCalled();
+    expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+    expect(mocks.resolveUnconfirmedFiledReturnsDownload).not.toHaveBeenCalled();
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
   it("returns a blocked reason when target-review storage cannot be read before a start", async () => {
     const requestedScope = {
       artifactType: "PDF",

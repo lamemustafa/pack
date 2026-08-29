@@ -640,6 +640,8 @@ export async function startFreshFiledReturnsDownloadFlow(
   payload: FiledReturnsFreshStartPayload,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
+  const allSupportedLock = await allSupportedPlanStartLockResponse(payload.scope, deps);
+  if (allSupportedLock) return allSupportedLock;
   let fullFiscalYearRecoveryFailure: PackMessageResponse | null = null;
   if (payload.recovery.kind === "target-review") {
     const targetReview = await readFiledReturnsTargetReview(payload.recovery.scope, deps);
