@@ -1,4 +1,5 @@
 import { browser } from "wxt/browser";
+import { ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX } from "./storage-keys";
 import type { FiledReturnsAllSupportedFullFiscalYearIdentity } from "../connectors/gst/filed-returns-contracts";
 import { canCompleteAllSupportedFullFiscalYearLedger } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import {
@@ -8,7 +9,7 @@ import {
   type FiledReturnsAllSupportedFullFiscalYearLedger,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
 
-const PLAN_STORAGE_KEY_PREFIX = "pack:filed-returns-all-supported-plan:";
+const PLAN_STORAGE_KEY_PREFIX = ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX;
 const PLAN_INDEX_SCHEMA_VERSION = "1.0";
 
 type AllSupportedPlanLedgerIndex = {

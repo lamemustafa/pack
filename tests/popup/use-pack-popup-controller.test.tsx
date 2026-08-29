@@ -630,7 +630,7 @@ describe("popup background failure presentation", () => {
     currentSummary = advancedSummary;
     await act(async () => {
       mocks.changeListeners.forEach((listener) =>
-        listener({ "pack:filed-returns-plan:synthetic": { newValue: {} } }, "local"),
+        listener({ "pack:filed-returns-all-supported-plan:synthetic": { newValue: {} } }, "local"),
       );
       await Promise.resolve();
       await Promise.resolve();

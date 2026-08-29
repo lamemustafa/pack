@@ -76,6 +76,7 @@ const deps: FiledReturnsFlowRunnerDeps & {
 
 beforeEach(() => {
   stored.values = {};
+  deps.now = () => NOW;
   vi.clearAllMocks();
   zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
   zip.reconcile.mockResolvedValue(unconfirmedZipStep());
@@ -157,7 +158,11 @@ describe("all-supported full-fiscal-year worker", () => {
     zip.discard
       .mockResolvedValueOnce(["all-supported-full-fiscal-year-opfs-clear-failed"])
       .mockResolvedValueOnce(["all-supported-full-fiscal-year-opfs-cleared"]);
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const attemptedScopes: string[] = [];
+    const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
+      attemptedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
+      return notFiledStep();
+    });
 
     const first = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -209,7 +214,7 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(zip.export).not.toHaveBeenCalled();
   });
 
-  it("resumes a stale interrupted target without replaying its completed predecessor", async () => {
+  it("keeps a stale running target in explicit review without replaying it", async () => {
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
     if (!expansion.ok) throw new Error("expected all-supported plan");
     const interruptedAt = new Date("2026-07-14T23:58:00.000Z");
@@ -241,14 +246,115 @@ describe("all-supported full-fiscal-year worker", () => {
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
     expect(response).toMatchObject({
+      allSupportedFullFiscalYearFlowSummary: { status: "running" },
+      flowStep: {
+        state: "user-action-required",
+        safeSignals: ["all-supported-full-fiscal-year-run-interrupted"],
+      },
+    });
+    expect(runner).not.toHaveBeenCalled();
+    expect(attemptedScopes).toEqual([]);
+    expect(savedLedger().targets[0]).toMatchObject({ status: "not-filed", attempts: 0 });
+    expect(savedLedger().targets[1]).toMatchObject({ status: "running", attempts: 1 });
+  });
+
+  it("continues a saved pending-only checkpoint against its original target plan", async () => {
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported plan");
+    const checkpoint = createAllSupportedFullFiscalYearLedger(
+      request,
+      expansion.targets,
+      FILED_RETURNS_MONTHS.slice(0, 3),
+      new Date("2026-07-14T23:58:00.000Z"),
+    );
+    await persistAllSupportedFullFiscalYearLedger(deps, checkpoint);
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    expect(response).toMatchObject({
       allSupportedFullFiscalYearFlowSummary: { status: "complete" },
     });
-    expect(runner).toHaveBeenCalledTimes(interrupted.targets.length - 1);
-    expect(attemptedScopes).not.toContain(
-      `${interrupted.targets[0]!.returnType}:${interrupted.targets[0]!.period}`,
+    expect(runner).toHaveBeenCalledTimes(checkpoint.targets.length);
+    expect(savedLedger().targetPlan).toEqual(checkpoint.targetPlan);
+  });
+
+  it("creates a new completed plan when the current eligible period has advanced", async () => {
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const completedPlan = savedLedger();
+    const completedCallCount = runner.mock.calls.length;
+    deps.now = () => new Date("2026-08-15T00:00:00.000Z");
+
+    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    expect(response).toMatchObject({
+      allSupportedFullFiscalYearFlowSummary: { status: "complete" },
+    });
+    expect(savedLedger().ledgerId).not.toBe(completedPlan.ledgerId);
+    expect(savedLedger().targetPlan.length).toBeGreaterThan(completedPlan.targetPlan.length);
+    expect(runner.mock.calls.length).toBeGreaterThan(completedCallCount);
+  });
+
+  it("surfaces a malformed saved-plan index without starting portal work", async () => {
+    stored.values["all-supported-index"] = { schemaVersion: "2.0", ledgerIdsByPlanRoot: {} };
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+      },
+    });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("blocks a saved target when the current catalogue no longer matches its artifact snapshot", async () => {
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported plan");
+    const checkpoint = createAllSupportedFullFiscalYearLedger(
+      request,
+      expansion.targets,
+      FILED_RETURNS_MONTHS.slice(0, 3),
+      new Date("2026-07-14T23:58:00.000Z"),
     );
-    expect(savedLedger().targets[0]).toMatchObject({ status: "not-filed", attempts: 0 });
-    expect(savedLedger().targets[1]).toMatchObject({ status: "not-filed", attempts: 2 });
+    const snapshotTarget = checkpoint.targets.find(
+      (target) => target.artifactType === "PDF_AND_EXCEL",
+    );
+    if (!snapshotTarget) throw new Error("expected composite artifact target");
+    const changedSnapshot = ["PDF", "EXCEL", "JSON"] as const;
+    checkpoint.targetPlan = checkpoint.targetPlan.map((target) =>
+      target.returnType === snapshotTarget.returnType
+        ? { ...target, concreteArtifactTypes: changedSnapshot }
+        : target,
+    );
+    checkpoint.targets = checkpoint.targets.map((target) =>
+      target.returnType === snapshotTarget.returnType
+        ? { ...target, concreteArtifactTypes: changedSnapshot }
+        : target,
+    );
+    await persistAllSupportedFullFiscalYearLedger(deps, checkpoint);
+    const attemptedScopes: string[] = [];
+    const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
+      attemptedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
+      return notFiledStep();
+    });
+
+    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    expect(response).toMatchObject({
+      allSupportedFullFiscalYearFlowSummary: { status: "blocked" },
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-artifact-snapshot-mismatch"],
+      },
+    });
+    expect(attemptedScopes).not.toContain(
+      `${snapshotTarget.returnType}:${snapshotTarget.period}:${snapshotTarget.artifactType}`,
+    );
   });
 
   it("reconciles only the exact persisted final ZIP ID after a worker restart", async () => {

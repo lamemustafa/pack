@@ -18,6 +18,7 @@ import {
 } from "../../connectors/gst/filed-returns-scope";
 import {
   FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX,
+  ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX,
   PACK_LOCAL_STORAGE_KEYS,
   PACK_SESSION_STORAGE_KEYS,
 } from "../../background/storage-keys";
@@ -217,9 +218,14 @@ export function usePackPopupController() {
             PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun,
             PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedger,
             PACK_LOCAL_STORAGE_KEYS.fullFiscalYearLedgerIndex,
+            PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex,
             PACK_LOCAL_STORAGE_KEYS.targetReview,
           ].some((key) => Boolean(changes[key]))) ||
-        Object.keys(changes).some((key) => key.startsWith(FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX));
+        Object.keys(changes).some(
+          (key) =>
+            key.startsWith(FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX) ||
+            key.startsWith(ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX),
+        );
       if (!summaryChanged) {
         return;
       }

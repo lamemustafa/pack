@@ -22,7 +22,6 @@ import {
   markAllSupportedFullFiscalYearTargetRunning,
   markAllSupportedFullFiscalYearTargetTerminal,
   nextRunnableAllSupportedFullFiscalYearTarget,
-  resumeAllSupportedFullFiscalYearLedger,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
@@ -119,13 +118,33 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
   runSinglePeriod: SinglePeriodRunner,
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
+  const periodPlan = getFiledReturnsFullFiscalYearPeriods(request.financialYear, now);
+  const storageState = await readAllSupportedPlanLedgersStorageState(deps);
+  if (storageState.state !== "valid") {
+    return { ok: true, flowStep: malformedSavedPlanIndexStep(request.financialYear) };
+  }
   let ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
 
   if (ledger) {
+    if (
+      ledger.status === "complete" &&
+      periodPlan.length > 0 &&
+      ledger.eligibleThrough !== periodPlan.at(-1)
+    ) {
+      const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+      if (!expansion.ok) {
+        return {
+          ok: true,
+          flowStep: expansionFailureStep(request.financialYear, expansion.reason),
+        };
+      }
+      ledger = createAllSupportedFullFiscalYearLedger(request, expansion.targets, periodPlan, now);
+      await persistAllSupportedFullFiscalYearLedger(deps, ledger);
+      return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
+    }
     return continueSavedAllSupportedFullFiscalYearRun(deps, ledger, runSinglePeriod);
   }
 
-  const periodPlan = getFiledReturnsFullFiscalYearPeriods(request.financialYear, now);
   if (periodPlan.length === 0) {
     return { ok: true, flowStep: noEligiblePeriodsStep(request.financialYear) };
   }
@@ -186,23 +205,11 @@ async function continueSavedAllSupportedFullFiscalYearRun(
   // can establish what happened to the first browser request.
   if (ledger.zipPhase) return allSupportedResponse(ledger, finalZipReviewStep(ledger));
   if (ledger.status === "running") {
-    if (
-      isAllSupportedFullFiscalYearLedgerStale(ledger, deps.now?.() ?? new Date()) &&
-      ledger.targets.some((target) => target.status === "running")
-    ) {
-      // Only a target that was durably marked running is returned to pending.
-      // Completed targets and every final-ZIP phase were handled above, so a
-      // restart can continue the exact saved plan without replaying either.
-      const resumed = resumeAllSupportedFullFiscalYearLedger(ledger, deps.now?.() ?? new Date());
-      await persistAllSupportedFullFiscalYearLedger(deps, resumed);
-      return runAllSupportedFullFiscalYearTargets(deps, resumed, runSinglePeriod);
+    const stale = isAllSupportedFullFiscalYearLedgerStale(ledger, deps.now?.() ?? new Date());
+    if (!ledger.targets.some((target) => target.status === "running")) {
+      return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
     }
-    return allSupportedResponse(
-      ledger,
-      isAllSupportedFullFiscalYearLedgerStale(ledger, deps.now?.() ?? new Date())
-        ? interruptedRunStep(ledger)
-        : activeRunStep(ledger),
-    );
+    return allSupportedResponse(ledger, stale ? interruptedRunStep(ledger) : activeRunStep(ledger));
   }
   return allSupportedResponse(ledger, unresolvedRunStep(ledger));
 }
@@ -229,6 +236,18 @@ async function runAllSupportedFullFiscalYearTargets(
     if (!nextTarget) return exportAllSupportedFinalZip(deps, ledger);
 
     const scope = scopeForTarget(nextTarget);
+    if (!matchesConcreteArtifactSnapshot(nextTarget)) {
+      const blocked = targetArtifactSnapshotMismatchStep(nextTarget);
+      ledger = markAllSupportedFullFiscalYearTargetTerminal(
+        ledger,
+        nextTarget.targetId,
+        "blocked",
+        blocked,
+        deps.now?.() ?? new Date(),
+      );
+      await persistAllSupportedFullFiscalYearLedger(deps, ledger);
+      return allSupportedResponse(ledger, blocked);
+    }
     const previousSignals = nextTarget.safeSignals;
     let systemErrorPredecessor: SystemErrorPredecessor = "initial";
     ledger = markAllSupportedFullFiscalYearTargetRunning(
@@ -522,6 +541,33 @@ function concreteArtifactTypes(scope: FiledReturnsDownloadScope) {
   return concreteFiledReturnsArtifactTypesForSelection(scope.returnType, scope.artifactType);
 }
 
+function matchesConcreteArtifactSnapshot(
+  target: Pick<
+    FiledReturnsAllSupportedFullFiscalYearTarget,
+    "artifactType" | "concreteArtifactTypes" | "returnType"
+  >,
+): boolean {
+  const current = concreteFiledReturnsArtifactTypesForSelection(
+    target.returnType,
+    target.artifactType,
+  );
+  return (
+    current.length === target.concreteArtifactTypes.length &&
+    current.every((artifactType, index) => artifactType === target.concreteArtifactTypes[index])
+  );
+}
+
+function malformedSavedPlanIndexStep(financialYear: string): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: `all-supported-full-fiscal-year:${financialYear}`,
+    state: "blocked",
+    safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+    safeMessage:
+      "Pack could not verify the saved all-supported fiscal-year plan index. Clear the affected local recovery state before starting again.",
+  };
+}
+
 function mergeRetriedArtifactSignals(
   previousSignals: readonly string[],
   flowStep: PortalFlowStepResult,
@@ -718,6 +764,19 @@ function targetErrorStep(
       "pack-error:CONTENT_SCRIPT_UNAVAILABLE",
     ],
     safeMessage: `Pack stopped while checking ${target.period}. The GST tab could not be reached safely.`,
+  };
+}
+
+function targetArtifactSnapshotMismatchStep(
+  target: FiledReturnsAllSupportedFullFiscalYearTarget,
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(target.returnType),
+    state: "blocked",
+    safeSignals: ["all-supported-full-fiscal-year-artifact-snapshot-mismatch"],
+    safeMessage:
+      "Pack retained the saved artifact selection, but the current extension cannot safely resume it after its supported formats changed.",
   };
 }
 

@@ -528,7 +528,14 @@ async function getLedgerFileHandle(
   if (!isCanonicalFiledReturnZipEntryName(zipPath, returnType)) {
     throw new Error("Invalid ZIP entry name.");
   }
-  return directory.getFileHandle(zipPath, { create });
+  const path = zipPath.split("/");
+  if (path.length === 1) return directory.getFileHandle(path[0]!, { create });
+  const [returnTypeDirectory, fileName] = path;
+  if (path.length !== 2 || !returnTypeDirectory || !fileName) {
+    throw new Error("Invalid ZIP entry path.");
+  }
+  const nestedDirectory = await directory.getDirectoryHandle(returnTypeDirectory, { create });
+  return nestedDirectory.getFileHandle(fileName, { create });
 }
 
 function matchesExpectedZipEntryPlan(

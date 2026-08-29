@@ -10,6 +10,8 @@ export const PACK_LOCAL_STORAGE_KEYS = {
 } as const;
 
 export const FILED_RETURNS_PLAN_STORAGE_KEY_PREFIX = "pack:filed-returns-plan:";
+export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX =
+  "pack:filed-returns-all-supported-plan:";
 
 export const PACK_SESSION_STORAGE_KEYS = {
   lastContext: "pack:last-context",

@@ -67,22 +67,22 @@ function isSummaryPlan(
         expectedReturnTypeForEntry(expected, expectedReturnType) === entry.returnType,
     );
     const slot = matchingSlot ? expectedZipEntrySlot(matchingSlot, expectedReturnType) : undefined;
+    const hasExpectedSlot = slot !== undefined && expectedSlots.has(slot);
     if (
       identities.has(identity) ||
-      !slot ||
       !isFiledReturnsFinancialYear(entry.financialYear) ||
       !FILED_RETURNS_MONTHS.includes(entry.period) ||
-      (staged && (entry.entryNames.length < 1 || !expectedSlots.has(slot))) ||
+      (staged && (entry.entryNames.length < 1 || !hasExpectedSlot)) ||
       (staged &&
         entry.entryNames.some((entryName) => !entryNameMatchesPeriod(entryName, entry.period))) ||
       (!staged && entry.entryNames.length !== 0) ||
-      (staged && plannedStagedSlots.has(slot))
+      (staged && slot !== undefined && plannedStagedSlots.has(slot))
     ) {
       return false;
     }
     identities.add(identity);
     financialYears.add(entry.financialYear);
-    if (staged) plannedStagedSlots.add(slot);
+    if (staged && slot) plannedStagedSlots.add(slot);
   }
   return (
     financialYears.size === 1 &&

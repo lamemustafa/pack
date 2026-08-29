@@ -311,6 +311,14 @@ async function handleMessage(
       await reconcileTerminalFiledReturnsDownload(browser.downloads, {
         storageKeys: filedReturnsStorageKeys(),
       }).catch(() => undefined);
+      const flowSummary = await readCurrentFiledReturnsFlowSummary({
+        storageKeys: filedReturnsStorageKeys(),
+      });
+      // An atomic recovery is the only record that can authorise work on its
+      // exact target. Do not bury it behind retained all-supported history.
+      if (flowSummary && !["complete", "cancelled"].includes(flowSummary.status)) {
+        return { ok: true, flowSummary };
+      }
       const allSupportedFullFiscalYearFlowSummary =
         await readCurrentAllSupportedFullFiscalYearFlowSummary({
           storageKeys: filedReturnsStorageKeys(),
@@ -320,9 +328,7 @@ async function handleMessage(
       }
       return {
         ok: true,
-        flowSummary: await readCurrentFiledReturnsFlowSummary({
-          storageKeys: filedReturnsStorageKeys(),
-        }),
+        flowSummary,
       };
     }
     case "PACK_GET_ACTIVE_FILED_RETURNS_RUN":
