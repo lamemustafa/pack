@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const STYLES_ROOT = join(process.cwd(), "src/styles");
+const SOURCE_ROOT = join(process.cwd(), "src");
+const STYLES_ROOT = join(SOURCE_ROOT, "styles");
 const GLOBAL_STYLESHEET = join(STYLES_ROOT, "global.css");
 const CSS_NAMED_COLORS =
   "aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen transparent currentcolor";
@@ -17,8 +18,9 @@ const ROOT_BLOCK = /:root\s*\{[\s\S]*?\}/g;
 const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
 const CSS_STRING = /(["'])(?:\\.|(?!\1)[^\\])*\1/g;
 const DECLARATION_VALUE = /(?:^|[;{])\s*(?:--[\w-]+|[\w-]+)\s*:\s*([^;{}]+)/g;
+const CSS_URL = /url\([^)]*\)/gi;
 
-async function stylesheetPaths(directory = STYLES_ROOT): Promise<string[]> {
+async function stylesheetPaths(directory = SOURCE_ROOT): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(
     entries.map(async (entry) => {
@@ -33,13 +35,16 @@ async function stylesheetPaths(directory = STYLES_ROOT): Promise<string[]> {
 function colorLiteralsOutsideCanonicalRoot(path: string, css: string): readonly string[] {
   const source = path === GLOBAL_STYLESHEET ? css.replace(ROOT_BLOCK, "") : css;
   return [...source.replace(CSS_COMMENT, "").matchAll(DECLARATION_VALUE)].flatMap((declaration) =>
-    [...(declaration[1] ?? "").replace(CSS_STRING, "").matchAll(COLOR_LITERAL)].map(
-      (match) => match[0],
-    ),
+    [
+      ...(declaration[1] ?? "")
+        .replace(CSS_STRING, "")
+        .replace(CSS_URL, "")
+        .matchAll(COLOR_LITERAL),
+    ].map((match) => match[0]),
   );
 }
 
-async function literalViolations(directory = STYLES_ROOT): Promise<readonly string[]> {
+async function literalViolations(directory = SOURCE_ROOT): Promise<readonly string[]> {
   const paths = await stylesheetPaths(directory);
   return (
     await Promise.all(
@@ -102,13 +107,25 @@ describe("design token color literals", () => {
     ).toEqual([]);
   });
 
+  it("ignores hexadecimal URL fragments in declaration values", () => {
+    expect(
+      colorLiteralsOutsideCanonicalRoot(
+        join(STYLES_ROOT, "panel.css"),
+        ".row { filter: url(#abcde); }",
+      ),
+    ).toEqual([]);
+  });
+
   it("rejects a literal discovered from the stylesheet filesystem", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pack-style-literal-"));
     try {
-      await writeFile(join(directory, "component.css"), ".row { color: firebrick; }");
+      const entrypointStyles = join(directory, "entrypoints", "options");
+      const componentStylesheet = join(entrypointStyles, "options.css");
+      await mkdir(entrypointStyles, { recursive: true });
+      await writeFile(componentStylesheet, ".row { color: firebrick; }");
 
       await expect(literalViolations(directory)).resolves.toEqual([
-        `${join(directory, "component.css")}: firebrick`,
+        `${componentStylesheet}: firebrick`,
       ]);
     } finally {
       await rm(directory, { force: true, recursive: true });

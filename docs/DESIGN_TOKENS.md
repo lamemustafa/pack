@@ -49,7 +49,7 @@ The same pattern held elsewhere: 28 background literals were 6 intents, and 23 b
 |                                                       | Before |                After |
 | ----------------------------------------------------- | -----: | -------------------: |
 | Colour literals outside `:root`                       |    157 |                **0** |
-| Colour-token definitions                              |    102 | 40 (all definitions) |
+| Colour-token definitions                              |     19 | 40 (all definitions) |
 | `var(--pack-*)` references                            |     31 |                  175 |
 | Distinct colours rendered across the 9 preview states |     36 |               **20** |
 | WCAG AA failures across 165 rendered text nodes       |      5 |                **0** |
