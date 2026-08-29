@@ -1,6 +1,9 @@
 import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
-import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
+import {
+  FULL_FISCAL_YEAR_PERIOD,
+  isFullFiscalYearScope,
+} from "../../connectors/gst/filed-returns-scope";
 import { filedReturnsPlanCoverageMessage } from "../../connectors/gst/filed-returns-durable-status";
 import type { PopupPresentationState } from "./presentation-state";
 import { canReconcileFiledReturnsTarget, RunProgress } from "./run-summary";
@@ -8,6 +11,7 @@ import {
   getFullFiscalYearCleanupCopy,
   hasConfirmedSinglePeriodBrowserDownload,
   hasFiledReturnsDownloadFilenameOverride,
+  hasUnresolvedFiledReturnsRecovery,
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
@@ -45,7 +49,7 @@ export function InlineStatus({
     if (checkingCleanup && !wasCheckingCleanup.current) statusRef.current?.focus();
     wasCheckingCleanup.current = checkingCleanup;
   }, [checkingCleanup]);
-  const copy = getInlineStatusCopy(presentation, summary);
+  const copy = getInlineStatusCopy(presentation, summary, fullYearFlowAvailable);
   if (!copy) return null;
   const planCoverageMessage = summary
     ? filedReturnsPlanCoverageMessage(summary.scope, summary.status, summary.flowStep.safeSignals)
@@ -145,7 +149,21 @@ export function hasInlinePrimaryAction(
 function getInlineStatusCopy(
   presentation: PopupPresentationState,
   summary: FiledReturnsFlowSummary | null,
+  fullYearFlowAvailable = true,
 ): { body: string; icon: string; title: string; tone: "warning" | "success" | "neutral" } | null {
+  if (
+    !fullYearFlowAvailable &&
+    summary &&
+    isFullFiscalYearScope(summary.scope) &&
+    hasUnresolvedFiledReturnsRecovery(summary)
+  ) {
+    return {
+      body: "This build cannot continue the saved full-year run. Cancel or record a local observation before starting another download.",
+      icon: "!",
+      title: "Saved full-year run needs attention",
+      tone: "warning",
+    };
+  }
   if (presentation.kind === "downloading") {
     const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
     return {

@@ -1,5 +1,6 @@
 import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
 import { canRetryFiledReturnsTargetWithoutPortal } from "./flow-summary";
 import {
   canReconcileFiledReturnsTarget,
@@ -60,6 +61,8 @@ export function RecoveryActions({
     !signals.has("filed-returns-target-manually-observed");
   const canReconcileTarget = canReconcileFiledReturnsTarget(summary);
   const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
+  const fullYearTargetReviewUnavailable =
+    needsTargetReview && isFullFiscalYearScope(summary.scope) && !fullYearFlowAvailable;
   const retryDisabled = busy !== null || !portalReady;
   // Reconciling the browser download and retrying local cleanup both return locally in
   // retryFiledReturnsTargetDownloadFlow before any portal action, so they must not require
@@ -68,7 +71,10 @@ export function RecoveryActions({
     ? busy !== null
     : retryDisabled;
   const portalDisabledReason =
-    !portalReady && showPortalRetryReason && !(needsFullFiscalYearReview && !fullYearFlowAvailable)
+    !portalReady &&
+    showPortalRetryReason &&
+    !(needsFullFiscalYearReview && !fullYearFlowAvailable) &&
+    !fullYearTargetReviewUnavailable
       ? recoveryPortalDisabledReason(summary, {
           needsFullFiscalYearReview,
           needsTargetReview,
@@ -134,19 +140,26 @@ export function RecoveryActions({
                       : "Retry local cleanup"}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="secondary"
-                disabled={retryDisabled}
-                aria-describedby={
-                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
-                }
-                onClick={onStartFresh}
-              >
-                {busy === "start-fresh-filed-returns-flow"
-                  ? "Starting fresh..."
-                  : "Discard saved state and start selected download"}
-              </button>
+              {fullYearTargetReviewUnavailable ? (
+                <p className="muted">
+                  This build cannot start a full-year run. Cancel the saved state below before
+                  starting another download.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={retryDisabled}
+                  aria-describedby={
+                    portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                  }
+                  onClick={onStartFresh}
+                >
+                  {busy === "start-fresh-filed-returns-flow"
+                    ? "Starting fresh..."
+                    : "Discard saved state and start selected download"}
+                </button>
+              )}
               {canManuallyResolveTarget ? (
                 <button
                   type="button"

@@ -302,7 +302,11 @@ function getSavedRunBlock(
     null,
     isFullFiscalYearScope(savedRun.scope),
   );
-  if (isFullFiscalYearScope(savedRun.scope) && !fullYearFlowAvailable) {
+  if (
+    isFullFiscalYearScope(savedRun.scope) &&
+    !fullYearFlowAvailable &&
+    hasUnresolvedFiledReturnsRecovery(savedRun)
+  ) {
     return {
       disabled: true,
       label: "Cancel the saved full-year run before starting another download.",
