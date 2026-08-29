@@ -153,6 +153,7 @@ function getInlineStatusCopy(
 ): { body: string; icon: string; title: string; tone: "warning" | "success" | "neutral" } | null {
   if (
     !fullYearFlowAvailable &&
+    presentation.kind !== "error" &&
     summary &&
     isFullFiscalYearScope(summary.scope) &&
     hasUnresolvedFiledReturnsRecovery(summary)
