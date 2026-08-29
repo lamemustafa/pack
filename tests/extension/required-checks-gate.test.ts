@@ -34,6 +34,17 @@ describe("the Required checks aggregate", () => {
     expect(aggregate).not.toMatch(/\*\)\s*;;\s*esac/);
   });
 
+  it("reruns when a thread is resolved, not only when one is replied to", async () => {
+    // The disposition sequence is reply, wait for the run, then resolve — so the run the reply
+    // triggers evaluates a thread that is still open, and the resolve emits no comment event.
+    // Without this trigger the gate keeps that stale failing verdict with nothing to refresh it.
+    const workflow = await readFile(path.join(workflowsDir, "review-gate.yml"), "utf8");
+
+    expect(workflow).toContain("pull_request_review_thread:");
+    expect(workflow).toMatch(/pull_request_review_thread:\s*\n\s*types: \[resolved, unresolved\]/);
+    expect(workflow).toContain("github.event_name == 'pull_request_review_thread'");
+  });
+
   it("is published only by the job that runs the full gate", async () => {
     // An earlier revision had the scheduled reconcile publish this same context, so that a thread
     // resolved without a reply could refresh it. Reconcile does not run the preflight or install

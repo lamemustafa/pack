@@ -7,6 +7,11 @@ on:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
+  # Resolving a thread is not a comment event. Without this, the ordinary disposition sequence --
+  # reply, let the run finish, then resolve -- leaves the gate holding the verdict it reached while
+  # the thread was still open, with nothing left to retrigger it.
+  pull_request_review_thread:
+    types: [resolved, unresolved]
 
 permissions:
   contents: read
@@ -18,7 +23,8 @@ jobs:
     if: >-
       github.event_name == 'pull_request' ||
       github.event_name == 'pull_request_review' ||
-      github.event_name == 'pull_request_review_comment'
+      github.event_name == 'pull_request_review_comment' ||
+      github.event_name == 'pull_request_review_thread'
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
@@ -115,9 +121,11 @@ jobs:
   # prevent: reconcile does not run the preflight or install steps, so a `review-gate` job that
   # failed for a non-review reason could still be overwritten with a passing `Required checks`.
   #
-  # The gap it was covering is one the process already forbids. This workflow fires on
-  # `pull_request_review_comment: created`, and a disposition must carry a reply — a partial reply is
-  # not a disposition — so every legitimate close retriggers this job on its own.
+  # The gap it was covering is closed by listening for the resolve itself. A reply alone is not
+  # enough: the ordinary sequence is reply, wait for the run, then resolve, so the run triggered by
+  # the reply evaluates a thread that is still open. `pull_request_review_thread` reruns this same
+  # job — preflight included — after the resolve, which is what the scheduled path could not do
+  # safely.
   required-checks:
     name: Required checks
     if: ${{ always() }}
