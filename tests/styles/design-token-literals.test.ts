@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const STYLES_ROOT = join(process.cwd(), "src/styles");
-const COLOR_LITERAL = /#[\da-f]{3,8}\b/gi;
+const GLOBAL_STYLESHEET = join(STYLES_ROOT, "global.css");
+const COLOR_LITERAL =
+  /#[\da-f]{3,8}\b|\b(?:color|color-mix|device-cmyk|hsl|hsla|hwb|lab|lch|light-dark|oklab|oklch|rgb|rgba)\([^)]*\)|(?<![-\w])(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blue|brown|chartreuse|coral|cornflowerblue|crimson|cyan|darkblue|darkcyan|darkgray|darkgreen|darkgrey|darkorange|darkred|deeppink|deepskyblue|dodgerblue|fuchsia|gold|goldenrod|gray|green|grey|hotpink|indigo|ivory|khaki|lavender|lime|magenta|maroon|navy|olive|orange|orchid|pink|plum|purple|rebeccapurple|red|salmon|silver|skyblue|tan|teal|tomato|transparent|turquoise|violet|white|yellow)(?![-\w])/gi;
 const ROOT_BLOCK = /:root\s*\{[\s\S]*?\}/g;
 
 async function stylesheetPaths(directory = STYLES_ROOT): Promise<string[]> {
@@ -18,15 +20,16 @@ async function stylesheetPaths(directory = STYLES_ROOT): Promise<string[]> {
   return nested.flat();
 }
 
-function colorLiteralsOutsideRoot(css: string): readonly string[] {
-  return [...css.replace(ROOT_BLOCK, "").matchAll(COLOR_LITERAL)].map((match) => match[0]);
+function colorLiteralsOutsideCanonicalRoot(path: string, css: string): readonly string[] {
+  const source = path === GLOBAL_STYLESHEET ? css.replace(ROOT_BLOCK, "") : css;
+  return [...source.matchAll(COLOR_LITERAL)].map((match) => match[0]);
 }
 
 describe("design token color literals", () => {
-  it("allows literal token definitions only inside :root", async () => {
+  it("allows literal token definitions only inside global.css's :root", async () => {
     const violations = await Promise.all(
       (await stylesheetPaths()).map(async (path) => {
-        const literals = colorLiteralsOutsideRoot(await readFile(path, "utf8"));
+        const literals = colorLiteralsOutsideCanonicalRoot(path, await readFile(path, "utf8"));
         return literals.length === 0 ? [] : [`${path}: ${literals.join(", ")}`];
       }),
     );
@@ -34,9 +37,29 @@ describe("design token color literals", () => {
     expect(violations.flat()).toEqual([]);
   });
 
-  it("does not treat a component color literal as a token", () => {
+  it.each([
+    ["#ff0000"],
+    ["rgb(255 0 0)"],
+    ["hsl(0 100% 50%)"],
+    ["oklch(62% 0.24 29)"],
+    ["color(display-p3 1 0 0)"],
+    ["rebeccapurple"],
+    ["transparent"],
+  ])("detects the non-token color literal %s", (literal) => {
     expect(
-      colorLiteralsOutsideRoot(":root { --pack-ink: #172033; } .row { color: #ff0000; }"),
+      colorLiteralsOutsideCanonicalRoot(
+        join(STYLES_ROOT, "panel.css"),
+        `.row { color: ${literal}; }`,
+      ),
+    ).toEqual([literal]);
+  });
+
+  it("does not exempt a component :root block", () => {
+    expect(
+      colorLiteralsOutsideCanonicalRoot(
+        join(STYLES_ROOT, "panel.css"),
+        ":root { --local: #ff0000; }",
+      ),
     ).toEqual(["#ff0000"]);
   });
 });
