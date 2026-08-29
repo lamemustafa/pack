@@ -34,12 +34,14 @@ describe("the Required checks aggregate", () => {
     expect(aggregate).not.toMatch(/\*\)\s*;;\s*esac/);
   });
 
-  it("is refreshable without a push, because resolving a thread raises no pull_request event", async () => {
-    // A thread resolved with no reply retriggers nothing, so the pull-request-side job keeps its
-    // last result. Only the reconcile pass can update the context after that, which is why it must
-    // publish this same name.
+  it("is published only by the job that runs the full gate", async () => {
+    // An earlier revision had the scheduled reconcile publish this same context, so that a thread
+    // resolved without a reply could refresh it. Reconcile does not run the preflight or install
+    // steps, so it could conclude success for a `review-gate` job that had failed for a non-review
+    // reason — a false pass in the gate meant to prevent exactly that.
     const reconcile = await readFile(path.join(workflowsDir, "review-gate-reconcile.yml"), "utf8");
 
-    expect(reconcile).toContain('--check-name "Required checks"');
+    expect(reconcile).not.toContain("Required checks");
+    expect(reconcile).not.toContain("--check-name");
   });
 });

@@ -11,10 +11,7 @@ import {
   runGhText,
 } from "./lib/github-cli-retry.mjs";
 
-// The published context name. Overridable so the same reconcile pass can also refresh the
-// aggregate context branch protection requires: a thread resolved without a reply retriggers no
-// pull_request event, so the PR-side gate keeps its last result and only this path can update it.
-const CHECK_RUN_NAME = readOptionalArg("--check-name") ?? "Review gate (scheduled)";
+const CHECK_RUN_NAME = "Review gate (scheduled)";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
@@ -24,12 +21,6 @@ const EXIT_VERDICTS = new Map([
   [2, { conclusion: "action_required", title: "Scheduled review gate could not evaluate" }],
 ]);
 const rawArgs = process.argv.slice(2);
-function readOptionalArg(flag) {
-  const index = process.argv.slice(2).indexOf(flag);
-  if (index < 0) return undefined;
-  const value = process.argv.slice(2)[index + 1];
-  return value && !value.startsWith("--") ? value : undefined;
-}
 const repo = readArg("--repo", true);
 const detailsUrl = readArg("--details-url", true);
 const retryAttempts = readIntegerArg("--retry-attempts", DEFAULT_GH_RETRY_ATTEMPTS, 1);

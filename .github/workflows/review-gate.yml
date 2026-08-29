@@ -109,9 +109,15 @@ jobs:
   # was legitimately skipped. A gate that passed on *any* upstream result would be a false pass in
   # new clothes.
   #
-  # The reconcile workflow publishes this same context, because resolving a thread without leaving a
-  # reply raises no pull_request event and so cannot retrigger the job below. That path is the only
-  # one able to refresh this context when review state changes without a push.
+  # Published only from here, deliberately. An earlier revision had the scheduled reconcile publish
+  # this context too, to cover a thread resolved without a reply — which raises no pull_request event
+  # and so cannot retrigger the job below. That reintroduced the very failure this job exists to
+  # prevent: reconcile does not run the preflight or install steps, so a `review-gate` job that
+  # failed for a non-review reason could still be overwritten with a passing `Required checks`.
+  #
+  # The gap it was covering is one the process already forbids. This workflow fires on
+  # `pull_request_review_comment: created`, and a disposition must carry a reply — a partial reply is
+  # not a disposition — so every legitimate close retriggers this job on its own.
   required-checks:
     name: Required checks
     if: ${{ always() }}
