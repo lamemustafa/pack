@@ -68,7 +68,7 @@ export function RecoveryActions({
     ? busy !== null
     : retryDisabled;
   const portalDisabledReason =
-    !portalReady && showPortalRetryReason
+    !portalReady && showPortalRetryReason && !(needsFullFiscalYearReview && !fullYearFlowAvailable)
       ? recoveryPortalDisabledReason(summary, {
           needsFullFiscalYearReview,
           needsTargetReview,

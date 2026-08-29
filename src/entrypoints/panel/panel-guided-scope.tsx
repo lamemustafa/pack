@@ -191,15 +191,17 @@ export function PanelGuidedScope({
   const scopeExternalBlock = savedRunForScope ? null : externalBlock;
   const guidedExternalBlock =
     scopeExternalBlock ??
-    (!alphaSurfacesEnabled && isFullFiscalYearScope(scope)
-      ? {
-          disabled: true as const,
-          label: "This full-year flow is available only in a source build qualified for alpha use.",
-        }
-      : null) ??
-    (portalSignedIn || canRetryFullFiscalYearZipWithoutPortal(scopeSummary)
+    (canRetryFullFiscalYearZipWithoutPortal(scopeSummary)
       ? null
-      : { disabled: true as const, label: "Open a signed-in GST Portal tab to continue." });
+      : !alphaSurfacesEnabled && isFullFiscalYearScope(scope)
+        ? {
+            disabled: true as const,
+            label:
+              "This full-year flow is available only in a source build qualified for alpha use.",
+          }
+        : portalSignedIn
+          ? null
+          : { disabled: true as const, label: "Open a signed-in GST Portal tab to continue." });
 
   return (
     <section

@@ -15,6 +15,7 @@ import { getSavedFullFiscalYearActionDecision } from "./recovery-actions";
 
 export interface InlineStatusProps {
   busy: string | null;
+  fullYearFlowAvailable?: boolean;
   portalReady: boolean;
   onOpenPortal: () => void;
   onRestartTarget: () => void;
@@ -26,6 +27,7 @@ export interface InlineStatusProps {
 
 export function InlineStatus({
   busy,
+  fullYearFlowAvailable = true,
   portalReady,
   onOpenPortal,
   onRestartTarget,
@@ -55,6 +57,7 @@ export function InlineStatus({
     onRestartTarget,
     onRetryFullFiscalYearTarget,
     onRetryTarget,
+    fullYearFlowAvailable,
   });
   const portalDisabledReason = portalReady ? null : (primaryAction?.portalDisabledReason ?? null);
 
@@ -361,7 +364,11 @@ export function getInlinePrimaryAction(
   summary: FiledReturnsFlowSummary | null,
   actions: Pick<
     InlineStatusProps,
-    "onOpenPortal" | "onRestartTarget" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
+    | "fullYearFlowAvailable"
+    | "onOpenPortal"
+    | "onRestartTarget"
+    | "onRetryFullFiscalYearTarget"
+    | "onRetryTarget"
   >,
 ): InlinePrimaryAction | null {
   if (presentation.kind === "error") {
@@ -372,6 +379,7 @@ export function getInlinePrimaryAction(
 
   const signals = new Set(summary.flowStep.safeSignals);
   if (presentation.kind === "blocked" && summary.currentPeriod && summary.fullFiscalYearRecovery) {
+    if (actions.fullYearFlowAvailable === false) return null;
     const { gerund, label } = getSavedFullFiscalYearActionDecision(summary);
     return {
       label,

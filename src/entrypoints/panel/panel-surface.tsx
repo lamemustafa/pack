@@ -101,6 +101,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
           <>
             <InlineStatus
               busy={pack.effectiveBusy}
+              fullYearFlowAvailable={isPackAlphaBuildMode(import.meta.env.MODE)}
               onOpenPortal={openPortal}
               onRestartTarget={() => void pack.startFiledReturnsFlow()}
               onRetryFullFiscalYearTarget={() => void pack.retryFullFiscalYearTarget()}
