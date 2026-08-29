@@ -109,7 +109,9 @@ describe("full-year warning without a usable period", () => {
         summary={summary}
       />,
     );
-    expect(markup).toContain("This build cannot continue the saved full-year run");
+    expect(markup).toContain(
+      "This build cannot continue the saved full-year run. Cancel it before starting another download.",
+    );
     expect(markup).not.toContain("retry this period to continue the remaining periods");
   });
 });

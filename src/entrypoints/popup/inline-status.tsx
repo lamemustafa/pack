@@ -158,7 +158,7 @@ function getInlineStatusCopy(
     hasUnresolvedFiledReturnsRecovery(summary)
   ) {
     return {
-      body: "This build cannot continue the saved full-year run. Cancel or record a local observation before starting another download.",
+      body: "This build cannot continue the saved full-year run. Cancel it before starting another download.",
       icon: "!",
       title: "Saved full-year run needs attention",
       tone: "warning",
