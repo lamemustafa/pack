@@ -56,7 +56,7 @@ export async function readCurrentAllSupportedFullFiscalYearFlowSummary(
       { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
       now,
     ),
-    terminalPlanRoots(state.ledgers),
+    allSupportedTerminalPlanRoots(state.ledgers),
   );
 }
 
@@ -64,7 +64,7 @@ export function toAllSupportedFullFiscalYearSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   now = new Date(),
   leaseIsLive = false,
-  allTerminalPlanRoots = terminalPlanRoots([ledger]),
+  allTerminalPlanRoots = allSupportedTerminalPlanRoots([ledger]),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   const flowStep = summaryStep(ledger, now, leaseIsLive);
   const zipDelivered =
@@ -106,7 +106,7 @@ export function toAllSupportedFullFiscalYearSummary(
   };
 }
 
-function terminalPlanRoots(
+export function allSupportedTerminalPlanRoots(
   ledgers: readonly FiledReturnsAllSupportedFullFiscalYearLedger[],
 ): NonNullable<FiledReturnsAllSupportedFullFiscalYearFlowSummary["terminalPlanRoots"]> {
   return ledgers.flatMap((ledger) => {
