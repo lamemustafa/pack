@@ -235,6 +235,38 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-returns-target-review-required",
   "financial-year-selected",
   "flow-step-limit-reached",
+  "all-supported-full-fiscal-year-no-zip-artifacts",
+  "all-supported-full-fiscal-year-no-eligible-periods",
+  "all-supported-full-fiscal-year-opfs-cleared",
+  "all-supported-full-fiscal-year-opfs-staged",
+  "all-supported-full-fiscal-year-opfs-retained",
+  "all-supported-full-fiscal-year-artifact-staging-incomplete",
+  "all-supported-full-fiscal-year-artifact-snapshot-mismatch",
+  "all-supported-full-fiscal-year-complete",
+  "all-supported-full-fiscal-year-final-zip-manual-review",
+  "all-supported-full-fiscal-year-local-cleanup-retry",
+  "all-supported-full-fiscal-year-plan-no-full-fiscal-year-returns",
+  "all-supported-full-fiscal-year-plan-index-malformed",
+  "all-supported-full-fiscal-year-plan-return-has-no-offered-artifacts",
+  "all-supported-full-fiscal-year-run-active",
+  "all-supported-full-fiscal-year-run-interrupted",
+  "all-supported-full-fiscal-year-run-needs-action",
+  "all-supported-full-fiscal-year-target-artifact-staging-incomplete",
+  "all-supported-full-fiscal-year-target-error",
+  "all-supported-full-fiscal-year-target-running",
+  "all-supported-full-fiscal-year-targets-complete",
+  "all-supported-full-fiscal-year-zip-artifact-staging-incomplete",
+  "all-supported-full-fiscal-year-zip-download-id-missing",
+  "all-supported-full-fiscal-year-zip-download-id-not-found",
+  "all-supported-full-fiscal-year-zip-download-search-unavailable",
+  "all-supported-full-fiscal-year-zip-download-started",
+  "all-supported-full-fiscal-year-zip-download-state-unknown",
+  "all-supported-full-fiscal-year-zip-download-unconfirmed",
+  "all-supported-full-fiscal-year-zip-downloaded",
+  "all-supported-full-fiscal-year-zip-entry-count-mismatch",
+  "all-supported-full-fiscal-year-zip-ledger-invalid",
+  "all-supported-full-fiscal-year-zip-reconciled-by-id",
+  "all-supported-full-fiscal-year-zip-target-plan-invalid",
   "full-fiscal-year-artifact-staging-incomplete",
   "full-fiscal-year-complete",
   "full-fiscal-year-completed-staging-cleanup-failed",
@@ -415,6 +447,32 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "text-summary-pdf-gstr2b",
   "target-period-verified",
 ]);
+
+/**
+ * Sanity ceilings for a persisted ZIP entry count, one per plan kind.
+ *
+ * These bound an *observed* count -- the value comes off the assembled ZIP, not from a
+ * prediction -- so their job is to refuse an implausible number, not to cap a run. Each is
+ * the largest legitimate bundle for its kind plus the derived entries Pack writes itself,
+ * and `tests/connectors/filed-returns-zip-entry-ceilings.test.ts`
+ * re-derives the artifact half from the catalogue so adding a return type or a format fails
+ * that test rather than silently exceeding a bound.
+ *
+ * Deliberately per kind. Sharing one ceiling across `full-fiscal-year` and
+ * `all-supported-full-fiscal-year` raised the single-return ceiling from 38 to 108 as a side
+ * effect of admitting the cross-return bundle -- widening a guard on a shipped path by three
+ * times to make room for a new one.
+ */
+const ZIP_ENTRY_COUNT_CEILINGS = {
+  // One period, every format a return type offers.
+  "single-period": 3,
+  // 36 artifacts (GSTR-2B, the widest single return: 12 periods x 3 formats) + 2 derived.
+  "full-fiscal-year": 38,
+  // 84 artifacts (GSTR-3B 24 + GSTR-1 24 + GSTR-2B 36) + one mixed-plan summary. Mixed plans
+  // do not receive a return-specific workbook. Not 108: that assumed three formats for all
+  // three return types, and only GSTR-2B offers three.
+  "all-supported-full-fiscal-year": 85,
+} as const;
 
 const BROWSER_DOWNLOAD_ERROR_SUFFIXES = new Set([
   "file-blocked",
@@ -653,14 +711,18 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
       signal,
     );
   if (artifactSignal) return true;
-  const stagedArtifact = /^(?:full-fiscal-year|single-period)-opfs-staged:(PDF|JSON|EXCEL)$/.exec(
-    signal,
-  );
+  const stagedArtifact =
+    /^(?:all-supported-full-fiscal-year|full-fiscal-year|single-period)-opfs-staged:(PDF|JSON|EXCEL)$/.exec(
+      signal,
+    );
   if (stagedArtifact) return true;
-  const missingArtifact = /^full-fiscal-year-artifact-not-staged:(PDF|JSON|EXCEL)$/.exec(signal);
+  const missingArtifact =
+    /^(?:all-supported-full-fiscal-year|full-fiscal-year)-artifact-not-staged:(PDF|JSON|EXCEL)$/.exec(
+      signal,
+    );
   if (missingArtifact) return true;
   const systemErrorPredecessor =
-    /^full-fiscal-year-system-error-preceded-by:(artifact-trigger|detail-navigation|initial|other|portal-navigation)$/.exec(
+    /^(?:all-supported-full-fiscal-year|full-fiscal-year)-system-error-preceded-by:(artifact-trigger|detail-navigation|initial|other|portal-navigation)$/.exec(
       signal,
     );
   if (systemErrorPredecessor) return true;
@@ -676,12 +738,13 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
   const browserError = /^browser-download-error-([a-z0-9-]+)$/.exec(signal);
   if (browserError) return BROWSER_DOWNLOAD_ERROR_SUFFIXES.has(browserError[1] ?? "");
   const zipCount =
-    /^(full-fiscal-year|single-period)-zip-(?:actual-entry-count|entry-count|expected-entry-count):(\d{1,2})$/.exec(
+    /^(all-supported-full-fiscal-year|full-fiscal-year|single-period)-zip-(?:actual-entry-count|entry-count|expected-entry-count):(\d{1,3})$/.exec(
       signal,
     );
   if (zipCount) {
     const count = Number(zipCount[2]);
-    return zipCount[1] === "single-period" ? count <= 3 : count <= 38;
+    const ceiling = ZIP_ENTRY_COUNT_CEILINGS[zipCount[1] as keyof typeof ZIP_ENTRY_COUNT_CEILINGS];
+    return ceiling !== undefined && count <= ceiling;
   }
   if (
     // `workbook-only` is listed with the summary signals, not matched by a
@@ -712,16 +775,20 @@ export function isDurableFiledReturnsSignal(signal: string): boolean {
     const count = Number(summaryRowCount[1]);
     return count >= 1 && count <= 100_000;
   }
-  const opfsStageError = /^(full-fiscal-year|single-period)-opfs-stage-error:([a-z-]+)$/.exec(
-    signal,
-  );
+  const opfsStageError =
+    /^(all-supported-full-fiscal-year|full-fiscal-year|single-period)-opfs-stage-error:([a-z-]+)$/.exec(
+      signal,
+    );
   if (opfsStageError) return OPFS_STAGE_ERROR_CATEGORIES.has(opfsStageError[2] ?? "");
   const opfsClearError =
-    /^(filed-returns|full-fiscal-year|single-period)-opfs-clear-error:([a-z-]+)$/.exec(signal);
+    /^(all-supported-full-fiscal-year|filed-returns|full-fiscal-year|single-period)-opfs-clear-error:([a-z-]+)$/.exec(
+      signal,
+    );
   if (opfsClearError) return OPFS_CLEAR_ERROR_CATEGORIES.has(opfsClearError[2] ?? "");
-  const zipExportError = /^(full-fiscal-year|single-period)-zip-export-error:([a-z-]+)$/.exec(
-    signal,
-  );
+  const zipExportError =
+    /^(all-supported-full-fiscal-year|full-fiscal-year|single-period)-zip-export-error:([a-z-]+)$/.exec(
+      signal,
+    );
   if (zipExportError) return ZIP_EXPORT_ERROR_CATEGORIES.has(zipExportError[2] ?? "");
   const scopedReturnSignal = /^filed-(gstr1|gstr2b|gstr3b)-(.+)$/.exec(signal);
   if (scopedReturnSignal) {

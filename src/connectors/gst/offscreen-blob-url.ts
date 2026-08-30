@@ -1,3 +1,23 @@
+/**
+ * How many staged artifacts a ZIP creation message may name, per plan kind.
+ *
+ * These count only the staged entries the caller sends; the summary and workbook the offscreen
+ * document writes itself are not in `expectedEntries` and must not be added here.
+ *
+ * A single ceiling of 36 covered every caller until a plan could span return types. A complete
+ * cross-return year stages 84 -- GSTR-3B 24, GSTR-1 24, GSTR-2B 36 -- so the listener rejected
+ * the creation message outright once six or more periods were eligible, and every file that had
+ * already been staged successfully ended in an export failure.
+ *
+ * The kind is read from `expectedReturnType`, which both single-return callers set and the
+ * cross-return caller omits, because one return type is exactly what a single-return ZIP can
+ * name. `tests/connectors/filed-returns-zip-entry-ceilings.test.ts` re-derives both numbers from
+ * the catalogue, so adding a return type or an offered format fails there rather than silently
+ * exceeding one of these.
+ */
+const MAX_SINGLE_RETURN_ZIP_ENTRIES = 36;
+const MAX_MIXED_PLAN_ZIP_ENTRIES = 84;
+
 import { isFiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsConcreteArtifactType } from "./filed-returns-artifacts";
@@ -45,7 +65,8 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
   payload: {
     requestId: string;
     ledgerId: string;
-    expectedReturnType: FiledReturnsReturnType;
+    /** Legacy one-return ZIP plans use this default; heterogeneous plans bind every entry. */
+    expectedReturnType?: FiledReturnsReturnType;
     expectedEntryCount: number;
     expectedEntries: PackOffscreenFiledReturnZipExpectedEntry[];
     generatedAt: string;
@@ -56,6 +77,8 @@ export interface PackOffscreenCreateFiledReturnZipMessage {
 export interface PackOffscreenFiledReturnZipExpectedEntry {
   artifactType: FiledReturnsConcreteArtifactType;
   entryNames: string[];
+  /** Required when the enclosing ZIP plan has no single return type. */
+  returnType?: FiledReturnsReturnType;
 }
 
 // These are the only filename-free ZIP failures produced by the offscreen
@@ -276,11 +299,15 @@ export function isPackOffscreenBlobUrlMessageShape(
       ]) &&
       isBoundedString(input.payload.ledgerId, 1, 120) &&
       isIsoTimestamp(input.payload.generatedAt) &&
-      isFiledReturnsReturnType(input.payload.expectedReturnType) &&
+      (input.payload.expectedReturnType === undefined ||
+        isFiledReturnsReturnType(input.payload.expectedReturnType)) &&
       typeof expectedEntryCount === "number" &&
       Number.isInteger(expectedEntryCount) &&
       expectedEntryCount >= 1 &&
-      expectedEntryCount <= 36 &&
+      expectedEntryCount <=
+        (input.payload.expectedReturnType === undefined
+          ? MAX_MIXED_PLAN_ZIP_ENTRIES
+          : MAX_SINGLE_RETURN_ZIP_ENTRIES) &&
       isExpectedZipEntryPlanShape(expectedEntries) &&
       expectedEntries.length === expectedEntryCount &&
       (input.payload.summaryPlan === undefined ||
@@ -306,7 +333,7 @@ export function isPackOffscreenBlobUrlMessageShape(
 }
 
 function isFiledReturnsSummaryPlanShape(input: unknown): input is FiledReturnsSummaryPlanEntry[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return false;
+  if (!Array.isArray(input) || input.length < 1 || input.length > 108) return false;
   const financialYears = new Set<string>();
   for (const candidate of input) {
     if (
@@ -358,13 +385,17 @@ function isBoundedString(value: unknown, minLength: number, maxLength: number): 
 function isExpectedZipEntryPlanShape(
   input: unknown,
 ): input is PackOffscreenFiledReturnZipExpectedEntry[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return false;
+  if (!Array.isArray(input) || input.length < 1 || input.length > 108) return false;
   for (const candidate of input) {
-    if (!isRecord(candidate) || !hasOnlyKeys(candidate, ["artifactType", "entryNames"])) {
+    if (
+      !isRecord(candidate) ||
+      !hasOnlyKeys(candidate, ["artifactType", "entryNames", "returnType"])
+    ) {
       return false;
     }
     if (
       !isFiledReturnsConcreteArtifactType(candidate.artifactType) ||
+      (candidate.returnType !== undefined && !isFiledReturnsReturnType(candidate.returnType)) ||
       !Array.isArray(candidate.entryNames) ||
       candidate.entryNames.length < 1 ||
       candidate.entryNames.length > 2 ||

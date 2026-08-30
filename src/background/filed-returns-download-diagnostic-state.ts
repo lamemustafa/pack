@@ -136,7 +136,7 @@ export function hasPositiveFiledReturnsDownloadEvidence(
   input: FiledReturnsDownloadDiagnosticState,
   binding: DiagnosticBinding,
   safeSignals: readonly string[],
-  stagingKind: "full-fiscal-year" | "single-period" | null,
+  stagingKind: "all-supported-full-fiscal-year" | "full-fiscal-year" | "single-period" | null,
 ): boolean {
   if (!isValidFiledReturnsDownloadDiagnosticState(input, binding)) return false;
   const diagnostics = diagnosticsFromState(input);
@@ -281,7 +281,7 @@ function isValidDownloadDiagnostic(input: unknown, binding: DiagnosticBinding): 
 function isPositiveArtifactDiagnostic(
   diagnostic: FiledReturnsDownloadDiagnostic,
   safeSignals: readonly string[],
-  stagingKind: "full-fiscal-year" | "single-period" | null,
+  stagingKind: "all-supported-full-fiscal-year" | "full-fiscal-year" | "single-period" | null,
 ): boolean {
   if (diagnostic.status !== "downloaded" || diagnostic.byteCountClass !== "non-empty") {
     return false;

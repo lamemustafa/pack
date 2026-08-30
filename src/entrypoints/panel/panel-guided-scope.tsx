@@ -19,9 +19,12 @@ import {
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import {
+  panelAllReturnsFullYearPreset,
   panelFullFiscalYearPresets,
   panelGuidedStepForDisplay,
   panelGuidedSteps,
+  type PanelAllReturnsFullYearPlan,
+  type PanelAllReturnsFullYearPreset,
   updatePanelGuidedScope,
 } from "./panel-guided-scope-model";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
@@ -34,6 +37,7 @@ export function PanelGuidedScope({
   busy,
   context,
   externalBlock,
+  allReturnsExternalBlock,
   flowSummary,
   portalSignedIn,
   savedRun,
@@ -41,10 +45,13 @@ export function PanelGuidedScope({
   scopeLockedForReview,
   onScopeChange,
   onStart,
+  onStartAllReturnsFullYear,
 }: {
   busy: string | null;
   context: PortalContext | null;
   externalBlock: { disabled: true; label: string } | null;
+  /** The saved all-supported plan blocks other scopes without blocking its own resume. */
+  allReturnsExternalBlock?: { disabled: true; label: string } | null;
   flowSummary: FiledReturnsFlowSummary | null;
   portalSignedIn: boolean;
   savedRun: FiledReturnsFlowSummary | null;
@@ -52,6 +59,12 @@ export function PanelGuidedScope({
   scopeLockedForReview: boolean;
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: (scope: FiledReturnsDownloadScope) => void;
+  /**
+   * The all-returns root is intentionally separate from an atomic scope. Until
+   * its background message is wired, omitting this callback keeps the preset
+   * out of the panel rather than exposing a control that cannot complete.
+   */
+  onStartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan) => void;
 }) {
   // Keep this expression in the panel module: Vite replaces it during a WXT
   // production build, so the alpha JSX below is removed from packaged output.
@@ -85,6 +98,10 @@ export function PanelGuidedScope({
     alphaSurfacesEnabled && currentFinancialYear
       ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
       : [];
+  const allReturnsPreset =
+    alphaSurfacesEnabled && currentFinancialYear
+      ? panelAllReturnsFullYearPreset(currentFinancialYear, presetAsOf)
+      : null;
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -108,6 +125,16 @@ export function PanelGuidedScope({
       <section className="panel-presets" aria-labelledby="panel-presets-title">
         <h2 id="panel-presets-title">What do you need?</h2>
         <div className="panel-preset-list">
+          {allReturnsPreset && onStartAllReturnsFullYear ? (
+            <AllReturnsPreset
+              busy={busy}
+              externalBlock={allReturnsExternalBlock ?? externalBlock}
+              plan={allReturnsPreset}
+              portalReady={portalSignedIn}
+              onStart={onStartAllReturnsFullYear}
+              onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
+            />
+          ) : null}
           {presets.map((preset) => {
             const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
             const summaryForPreset = savedRunForPreset ?? flowSummary;
@@ -302,6 +329,75 @@ export function PanelGuidedScope({
       <CatalogueLimits />
     </section>
   );
+}
+
+function AllReturnsPreset({
+  busy,
+  externalBlock,
+  plan,
+  portalReady,
+  onStart,
+  onStalePlan,
+}: {
+  busy: string | null;
+  externalBlock: { disabled: true; label: string } | null;
+  plan: PanelAllReturnsFullYearPreset;
+  portalReady: boolean;
+  onStart: (plan: PanelAllReturnsFullYearPlan) => void;
+  onStalePlan: () => void;
+}) {
+  const disabled = !portalReady || busy !== null || externalBlock?.disabled === true;
+  const disabledReason =
+    externalBlock?.label ??
+    (busy !== null
+      ? "Pack is processing another action."
+      : portalReady
+        ? null
+        : "Open a signed-in GST Portal tab to continue.");
+  const countLabel = `${plan.returnCount} ${plural(plan.returnCount, "return")} · ${plan.targetPeriodCount} return ${plural(plan.targetPeriodCount, "period")} · ${plan.artifactCount} ${plural(plan.artifactCount, "format")} · ${plan.fileCount} ${plural(plan.fileCount, "file")} · one ZIP`;
+
+  return (
+    <React.Fragment>
+      <button
+        className="panel-preset panel-everything-preset"
+        type="button"
+        disabled={disabled}
+        aria-describedby={disabledReason ? "preset-all-returns-reason" : undefined}
+        aria-label={`${plan.label} for all supported returns. ${countLabel}.`}
+        onClick={() => {
+          const currentAsOf = new Date();
+          const currentFinancialYear = getFiledReturnsFinancialYearOptions(currentAsOf)[0];
+          const currentPlan = currentFinancialYear
+            ? panelAllReturnsFullYearPreset(currentFinancialYear, currentAsOf)
+            : null;
+          if (
+            !currentPlan ||
+            currentPlan.financialYear !== plan.financialYear ||
+            currentPlan.returnCount !== plan.returnCount ||
+            currentPlan.targetPeriodCount !== plan.targetPeriodCount ||
+            currentPlan.artifactCount !== plan.artifactCount ||
+            currentPlan.fileCount !== plan.fileCount
+          ) {
+            onStalePlan();
+            return;
+          }
+          onStart({ kind: plan.kind, financialYear: plan.financialYear });
+        }}
+      >
+        <span>{plan.label} · all supported returns</span>
+        <span className="panel-preset-count">{countLabel}</span>
+      </button>
+      {disabledReason ? (
+        <p className="panel-preset-reason" id="preset-all-returns-reason">
+          {disabledReason}
+        </p>
+      ) : null}
+    </React.Fragment>
+  );
+}
+
+function plural(count: number, singular: string): string {
+  return count === 1 ? singular : `${singular}s`;
 }
 
 function ActiveScope({ scope }: { scope: FiledReturnsDownloadScope }) {

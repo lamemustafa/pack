@@ -7,11 +7,14 @@ import type {
 } from "../../core/contracts";
 import type {
   FiledReturnsMainWorldCaptureRequest,
+  FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsFlowSummary,
+  FiledReturnsAllSupportedFullFiscalYearRequest,
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
   PortalFlowStepResult,
 } from "./filed-returns-contracts";
+import { isAllSupportedFullFiscalYearRequest } from "./filed-returns-all-supported-full-fiscal-year";
 import type { ArtifactRequest, ArtifactFailureReason } from "./artifact-source";
 import {
   FULL_FISCAL_YEAR_PERIOD,
@@ -82,6 +85,10 @@ export type PackMessage =
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
   | { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
+  | {
+      type: "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW";
+      payload: FiledReturnsAllSupportedFullFiscalYearRequest;
+    }
   | {
       type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
       payload: FiledReturnsFreshStartPayload;
@@ -157,7 +164,19 @@ export type PackMessageResponse =
       flowSummary?: FiledReturnsFlowSummary;
       observation?: PortalObservation | null;
     }
+  | {
+      ok: true;
+      flowStep: PortalFlowStepResult;
+      /** Present as `undefined` so existing atomic-flow readers can safely
+       * discriminate this response without treating it as an atomic summary. */
+      flowSummary?: never;
+      allSupportedFullFiscalYearFlowSummary: FiledReturnsAllSupportedFullFiscalYearFlowSummary;
+    }
   | { ok: true; flowSummary: FiledReturnsFlowSummary | null }
+  | {
+      ok: true;
+      allSupportedFullFiscalYearFlowSummary: FiledReturnsAllSupportedFullFiscalYearFlowSummary | null;
+    }
   | { ok: true; manifest: ArchiveManifest | null }
   | { ok: true; downloaded: number; manifest: ArchiveManifest }
   | { ok: true; downloadPromptProbe: DownloadPromptProbeResult }
@@ -261,6 +280,8 @@ export function isPackMessage(
       return isFiledReturnsDownloadScope(input.payload);
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
+    case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+      return isAllSupportedFullFiscalYearRequest(input.payload);
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsFreshStartPayload(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":

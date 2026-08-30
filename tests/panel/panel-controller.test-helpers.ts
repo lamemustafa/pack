@@ -18,6 +18,7 @@ export function panelController(overrides: Partial<PackPanelController> = {}): P
   return {
     acknowledgeInterruptedRun: async () => undefined,
     actionError: null,
+    allSupportedFullFiscalYearFlowSummary: null,
     context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
     effectiveBusy: null,
     lastRunSummary: null,
@@ -33,6 +34,7 @@ export function panelController(overrides: Partial<PackPanelController> = {}): P
     scopedFlowSummary: null,
     setScope: () => undefined,
     startFiledReturnsFlow: async () => undefined,
+    startAllSupportedFullFiscalYearFlow: async () => undefined,
     startFreshFiledReturnsFlow: async () => undefined,
     ...overrides,
   };

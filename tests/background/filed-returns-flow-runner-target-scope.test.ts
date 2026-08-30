@@ -48,6 +48,9 @@ const fullFiscalYearRunStateMocks = vi.hoisted(() => ({
   readPlanLedgersStorageState: vi.fn(),
   readRetainedPlanLedgers: vi.fn(),
 }));
+const allSupportedRunStateMocks = vi.hoisted(() => ({
+  readAllSupportedPlanLedgersStorageState: vi.fn(),
+}));
 
 vi.mock("../../src/background/filed-returns-target-review", async (importOriginal) => ({
   ...(await importOriginal<typeof FiledReturnsTargetReviewModule>()),
@@ -67,6 +70,10 @@ vi.mock(
     readPlanLedgersStorageState: fullFiscalYearRunStateMocks.readPlanLedgersStorageState,
     readRetainedPlanLedgers: fullFiscalYearRunStateMocks.readRetainedPlanLedgers,
   }),
+);
+vi.mock(
+  "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state",
+  () => allSupportedRunStateMocks,
 );
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
   createMalformedArtifactAcquisitionCheckpointReference:
@@ -121,6 +128,10 @@ describe("filed returns retained target scoping", () => {
     });
     fullFiscalYearRunStateMocks.readMalformedLedgerState.mockResolvedValue(null);
     fullFiscalYearRunStateMocks.readRetainedPlanLedgers.mockResolvedValue([]);
+    allSupportedRunStateMocks.readAllSupportedPlanLedgersStorageState.mockResolvedValue({
+      state: "valid",
+      ledgers: [],
+    });
   });
 
   it.each([
@@ -141,6 +152,62 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.responseForFiledReturnsTargetReview).toHaveBeenCalledOnce();
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
     expect(response).toMatchObject({ flowStep: { safeSignals: ["retained-gstr2b-review"] } });
+  });
+
+  it("blocks an atomic start while an all-supported plan needs review", async () => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    allSupportedRunStateMocks.readAllSupportedPlanLedgersStorageState.mockResolvedValue({
+      state: "valid",
+      ledgers: [{ status: "blocked" }],
+    });
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" },
+    } as never);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+      },
+    });
+    expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
+  it("does not let Start fresh discard another recovery while an all-supported plan needs review", async () => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    allSupportedRunStateMocks.readAllSupportedPlanLedgersStorageState.mockResolvedValue({
+      state: "valid",
+      ledgers: [{ status: "blocked" }],
+    });
+
+    const response = await startFreshFiledReturnsDownloadFlow(
+      {
+        scope: requestedScope,
+        recovery: { kind: "target-review", scope: retainedScope },
+      },
+      { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: { safeSignals: ["all-supported-full-fiscal-year-run-needs-action"] },
+    });
+    expect(mocks.readFiledReturnsTargetReview).not.toHaveBeenCalled();
+    expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+    expect(mocks.resolveUnconfirmedFiledReturnsDownload).not.toHaveBeenCalled();
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
 
   it("returns a blocked reason when target-review storage cannot be read before a start", async () => {

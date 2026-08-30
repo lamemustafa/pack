@@ -88,7 +88,7 @@ export async function exportSinglePeriodFiledReturnsZip({
     clearSignalPrefix: "single-period",
     completeStep,
     ledgerId,
-    scope,
+    expectedReturnType: scope.returnType,
     safeMessage:
       completeStep.state === "partial"
         ? completeStep.safeMessage

@@ -141,9 +141,11 @@ describe("durable filed-return download reconciler", () => {
 
   it("passes a terminal ID to the fiscal-year reconciler after inline ownership ends", async () => {
     const fixture = downloadsWithState("complete");
+    const reconcileAllSupportedFullFiscalYearZip = vi.fn(async () => true);
     const reconcileFullFiscalYearZip = vi.fn(async () => true);
     const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
       readCurrentReview: async () => null,
+      reconcileAllSupportedFullFiscalYearZip,
       reconcileFullFiscalYearZip,
       storageKeys: {},
     });
@@ -156,19 +158,25 @@ describe("durable filed-return download reconciler", () => {
 
     fixture.emit({ id: 41, state: { current: "complete" } });
     await vi.waitFor(() => expect(reconcileFullFiscalYearZip).toHaveBeenCalledWith(41));
+    await vi.waitFor(() => expect(reconcileAllSupportedFullFiscalYearZip).toHaveBeenCalledWith(41));
     dispose();
   });
 
   it("reconciles a persisted fiscal-year ZIP checkpoint when the worker starts", async () => {
     const fixture = downloadsWithState("in_progress");
+    const reconcilePersistedAllSupportedFullFiscalYearZip = vi.fn(async () => true);
     const reconcilePersistedFullFiscalYearZip = vi.fn(async () => true);
     const dispose = installFiledReturnsDurableDownloadReconciler(fixture.downloads, {
       readCurrentReview: async () => null,
+      reconcilePersistedAllSupportedFullFiscalYearZip,
       reconcilePersistedFullFiscalYearZip,
       storageKeys: {},
     });
 
     await vi.waitFor(() => expect(reconcilePersistedFullFiscalYearZip).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(reconcilePersistedAllSupportedFullFiscalYearZip).toHaveBeenCalledOnce(),
+    );
     dispose();
   });
 

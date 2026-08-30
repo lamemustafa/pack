@@ -44,7 +44,10 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const portalSignedIn = portalReady && !isGstSignInRequired(pack.context);
   const portalAccessDenied = pack.context?.pageKind === "gst-access-denied";
   const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
-  const running = pack.effectiveBusy !== null || summary?.status === "running";
+  const allSupportedSummary = pack.allSupportedFullFiscalYearFlowSummary;
+  const allSupportedRunning = allSupportedSummary?.status === "running";
+  const running =
+    pack.effectiveBusy !== null || summary?.status === "running" || allSupportedRunning;
   const fullYearFlowAvailable = isPackAlphaBuildMode(import.meta.env.MODE);
   const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
   const recoveryReason = recoveryAvailability.message;
@@ -53,6 +56,11 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
+  const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
+  // The saved plan blocks other scopes, but not its own resume: the runner retries the saved ZIP or
+  // cleanup phase when this same start is invoked again, and blocking that leaves discarding the
+  // plan as the only route out of a recoverable state.
+  const allReturnsRunBlock = allSupportedSummary?.resumeAvailable ? null : allSupportedRunBlock;
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -69,6 +77,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const runComplete = presentation.kind === "complete" && !hasRecoveryActions(summary ?? null);
 
   const showFlow =
+    Boolean(allSupportedSummary) ||
     hasRecoveryActions(summary ?? null) ||
     terminalSummary ||
     ((portalReady || canRetryFullFiscalYearZipWithoutPortal(summary)) &&
@@ -103,6 +112,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
       <div className="panel-body">
         {showFlow ? (
           <>
+            {allSupportedSummary ? <AllSupportedRunStatus summary={allSupportedSummary} /> : null}
             <InlineStatus
               busy={pack.effectiveBusy}
               fullYearFlowAvailable={fullYearFlowAvailable}
@@ -178,7 +188,8 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               <PanelGuidedScope
                 busy={pack.effectiveBusy}
                 context={pack.context}
-                externalBlock={savedRunBlock}
+                externalBlock={savedRunBlock ?? allSupportedRunBlock}
+                allReturnsExternalBlock={savedRunBlock ?? allReturnsRunBlock}
                 flowSummary={pack.scopedFlowSummary}
                 portalSignedIn={portalSignedIn}
                 savedRun={savedRun}
@@ -186,6 +197,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 scopeLockedForReview={pack.scopeLockedForReview}
                 onScopeChange={pack.setScope}
                 onStart={(scope) => void pack.startFiledReturnsFlow(scope)}
+                onStartAllReturnsFullYear={(plan) =>
+                  void pack.startAllSupportedFullFiscalYearFlow(plan)
+                }
               />
             )}
           </>
@@ -208,6 +222,24 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
         </p>
       </footer>
     </main>
+  );
+}
+
+function AllSupportedRunStatus({
+  summary,
+}: {
+  summary: NonNullable<PackPanelController["allSupportedFullFiscalYearFlowSummary"]>;
+}) {
+  const saved = summary.targetEvidence.filter((target) => target.outcome === "saved").length;
+  return (
+    <section className="panel-all-supported-run" aria-label="All supported returns progress">
+      <p aria-live="polite">
+        <strong>
+          {saved} of {summary.totalTargets} saved
+        </strong>
+      </p>
+      <p>{summary.flowStep.safeMessage}</p>
+    </section>
   );
 }
 
@@ -314,4 +346,16 @@ function getSavedRunBlock(
   // fiscal-year ZIP is offered a retry, not a replacement run under a different scope.
   if (!action.disabled && !hasUnresolvedFiledReturnsRecovery(savedRun)) return null;
   return { disabled: true, label: action.label };
+}
+
+function getAllSupportedRunBlock(
+  summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
+  busy: string | null,
+): { disabled: true; label: string } | null {
+  if (!summary || busy !== null || ["complete", "cancelled"].includes(summary.status)) return null;
+  return {
+    disabled: true,
+    label:
+      "Clear local data and discard the saved all-supported plan before starting another return.",
+  };
 }

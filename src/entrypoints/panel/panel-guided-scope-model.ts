@@ -1,4 +1,9 @@
-import type { FiledReturnsDownloadScope } from "../../connectors/gst/filed-returns-contracts";
+import {
+  FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+  type FiledReturnsAllSupportedFullFiscalYearRequest,
+  type FiledReturnsDownloadScope,
+} from "../../connectors/gst/filed-returns-contracts";
+import { expandAllSupportedFullFiscalYearTargetPlan } from "../../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import type { FiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifact-types";
 import { filedReturnsArtifactLabel } from "../../connectors/gst/filed-returns-artifacts";
 import {
@@ -53,6 +58,25 @@ export interface PanelFullFiscalYearPreset {
 }
 
 /**
+ * This is deliberately not a `FiledReturnsDownloadScope`: that type remains an
+ * atomic portal target. The root action needs its own callback and eventual
+ * message contract so it cannot be mistaken for one selected return.
+ */
+export type PanelAllReturnsFullYearPlan = FiledReturnsAllSupportedFullFiscalYearRequest;
+
+export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPlan {
+  readonly label: string;
+  /** Number of catalogue rows represented by this one root plan. */
+  readonly returnCount: number;
+  /** One return-period target for each eligible catalogue row and period. */
+  readonly targetPeriodCount: number;
+  /** Concrete portal formats selected across every eligible return. */
+  readonly artifactCount: number;
+  /** The maximum concrete portal-file requests before not-filed outcomes. */
+  readonly fileCount: number;
+}
+
+/**
  * The home view is a projection of the canonical catalogue, rather than its own list of
  * returns. A supported full-year row gets a preset as soon as it has catalogue data; the
  * label, default artifact and advertised number are all read from the same sources the run uses.
@@ -90,6 +114,45 @@ export function panelFullFiscalYearPresets(
       },
     ];
   });
+}
+
+/**
+ * Build the panel's root-plan affordance from the same canonical catalogue as
+ * individual presets. A missing period, return, or offered artifact leaves no
+ * safe expansion, so the control is absent rather than pretending an empty
+ * plan is actionable.
+ */
+export function panelAllReturnsFullYearPreset(
+  financialYear: string,
+  asOf = new Date(),
+  catalogue: readonly PresetCatalogueEntry[] = supportedFiledReturnsCatalogueEntries(),
+): PanelAllReturnsFullYearPreset | null {
+  const periodCount = getFiledReturnsFullFiscalYearPeriods(financialYear, asOf).length;
+  if (periodCount === 0) return null;
+
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan({
+    catalogueEntries: catalogue.map(({ returnType, capability }) => ({
+      returnType,
+      fullFiscalYear: capability.fullFiscalYear,
+    })),
+    offeredArtifacts: filedReturnsOfferedArtifacts,
+  });
+  if (!expansion.ok) return null;
+
+  const artifactCount = expansion.targets.reduce(
+    (count, target) => count + target.concreteArtifactTypes.length,
+    0,
+  );
+
+  return {
+    kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+    financialYear,
+    label: "Everything this year",
+    returnCount: expansion.targets.length,
+    targetPeriodCount: periodCount * expansion.targets.length,
+    artifactCount,
+    fileCount: periodCount * artifactCount,
+  };
 }
 
 const PERIOD_STEP_COPY = {

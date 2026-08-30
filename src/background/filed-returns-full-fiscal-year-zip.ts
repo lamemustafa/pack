@@ -95,7 +95,7 @@ export async function exportFullFiscalYearZip(
     clearSignalPrefix: "full-fiscal-year",
     completeStep,
     ledgerId: ledger.ledgerId,
-    scope: ledger.scope,
+    expectedReturnType: ledger.scope.returnType,
     safeMessage: "Pack exported the fiscal-year return files as one local zip.",
     startRejectedMessage:
       "Pack prepared the fiscal-year zip, but the browser rejected the final save.",

@@ -79,6 +79,27 @@ html[data-pack-surface="panel"] body {
   padding: 16px;
 }
 
+.panel-all-supported-run {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--pack-border-subtle);
+  margin: 0 0 12px;
+  padding: 0 0 12px;
+}
+
+.panel-all-supported-run p {
+  margin: 0;
+  color: var(--pack-ink-secondary);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.panel-all-supported-run strong {
+  color: var(--pack-ink-primary);
+  font-family: var(--pack-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 .panel-body h2 {
   margin: 0 0 14px;
   color: var(--pack-ink-primary);
