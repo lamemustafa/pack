@@ -1,6 +1,7 @@
 import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { canRetryFiledReturnsTargetWithoutPortal } from "./flow-summary";
+import { getRecoveryFlowAvailability } from "./recovery-flow-availability";
 import {
   canReconcileFiledReturnsTarget,
   DiagnosticSignals,
@@ -19,6 +20,19 @@ export interface RecoveryActionsProps {
   onStartFresh: () => void;
   collapsed?: boolean;
   showPortalRetryReason?: boolean;
+  /**
+   * Whether this build may run a full fiscal year at all.
+   *
+   * A packaged build that withholds the full-year surface can still meet a ledger persisted by
+   * an earlier release, and the controls below would happily resume or restart it -- so the
+   * capability would be reachable through recovery after being withheld everywhere else.
+   *
+   * Gating cannot simply hide the whole block: that would strand the reader with a saved run
+   * they can see and cannot dismiss. Only the two controls that re-enter the flow are
+   * withheld; cancelling and recording an observation stay, because both are local and are the
+   * way out.
+   */
+  fullYearFlowAvailable?: boolean;
 }
 
 export function RecoveryActions({
@@ -33,10 +47,12 @@ export function RecoveryActions({
   onStartFresh,
   collapsed = false,
   showPortalRetryReason = true,
+  fullYearFlowAvailable = true,
 }: RecoveryActionsProps) {
   const [moreOpen, setMoreOpen] = React.useState(!collapsed);
   const recoveryState = getRecoveryActionState(summary);
   if (!summary || !recoveryState.visible) return null;
+  const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
   const { needsFullFiscalYearReview, needsRunReview, needsTargetReview, runActive, signals } =
     recoveryState;
   const canManuallyObserveFullYear =
@@ -46,6 +62,8 @@ export function RecoveryActions({
     !signals.has("filed-returns-target-manually-observed");
   const canReconcileTarget = canReconcileFiledReturnsTarget(summary);
   const canRetryTargetCleanup = signals.has("filed-returns-target-local-cleanup-required");
+  const fullYearTargetReviewUnavailable =
+    needsTargetReview && recoveryAvailability.isWithheldFullYearRecovery;
   const retryDisabled = busy !== null || !portalReady;
   // Reconciling the browser download and retrying local cleanup both return locally in
   // retryFiledReturnsTargetDownloadFlow before any portal action, so they must not require
@@ -54,7 +72,10 @@ export function RecoveryActions({
     ? busy !== null
     : retryDisabled;
   const portalDisabledReason =
-    !portalReady && showPortalRetryReason
+    !portalReady &&
+    showPortalRetryReason &&
+    !(needsFullFiscalYearReview && !fullYearFlowAvailable) &&
+    !fullYearTargetReviewUnavailable
       ? recoveryPortalDisabledReason(summary, {
           needsFullFiscalYearReview,
           needsTargetReview,
@@ -96,7 +117,7 @@ export function RecoveryActions({
           {needsTargetReview ? (
             <>
               <p className="muted">
-                Why Pack paused: {targetReviewRecoveryMessage(summary, signals)}
+                Why Pack paused: {targetReviewRecoveryMessage(recoveryAvailability)}
               </p>
               {hasDiagnosticSignals(summary) ? (
                 <details className="diagnostic-details">
@@ -120,19 +141,23 @@ export function RecoveryActions({
                       : "Retry local cleanup"}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="secondary"
-                disabled={retryDisabled}
-                aria-describedby={
-                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
-                }
-                onClick={onStartFresh}
-              >
-                {busy === "start-fresh-filed-returns-flow"
-                  ? "Starting fresh..."
-                  : "Discard saved state and start selected download"}
-              </button>
+              {fullYearTargetReviewUnavailable ? (
+                <p className="muted">{recoveryAvailability.guidance}</p>
+              ) : (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={retryDisabled}
+                  aria-describedby={
+                    portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                  }
+                  onClick={onStartFresh}
+                >
+                  {busy === "start-fresh-filed-returns-flow"
+                    ? "Starting fresh..."
+                    : "Discard saved state and start selected download"}
+                </button>
+              )}
               {canManuallyResolveTarget ? (
                 <button
                   type="button"
@@ -162,39 +187,46 @@ export function RecoveryActions({
           ) : null}
           {needsFullFiscalYearReview ? (
             <>
-              <p className="muted">Why Pack paused: {summary.flowStep.safeMessage}</p>
-              {signals.has("full-fiscal-year-resume-confirmation-required") ? (
+              <p className="muted">Why Pack paused: {recoveryAvailability.message}</p>
+              {recoveryAvailability.canContinueFullYear &&
+              signals.has("full-fiscal-year-resume-confirmation-required") ? (
                 <p className="muted">
                   This saved run is not bound to a GST account. Continue only if the same GST
                   account is currently open.
                 </p>
               ) : null}
-              <button
-                type="button"
-                className={collapsed ? "secondary" : undefined}
-                disabled={retryDisabled}
-                aria-describedby={
-                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
-                }
-                onClick={onRetryFullFiscalYearTarget}
-              >
-                {busy === "retry-full-fiscal-year-target"
-                  ? "Retrying..."
-                  : getSavedFullFiscalYearActionDecision(summary).label}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={retryDisabled}
-                aria-describedby={
-                  portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
-                }
-                onClick={onStartFresh}
-              >
-                {busy === "start-fresh-filed-returns-flow"
-                  ? "Starting fresh..."
-                  : "Discard saved run and start selected download"}
-              </button>
+              {recoveryAvailability.canContinueFullYear ? (
+                <>
+                  <button
+                    type="button"
+                    className={collapsed ? "secondary" : undefined}
+                    disabled={retryDisabled}
+                    aria-describedby={
+                      portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                    }
+                    onClick={onRetryFullFiscalYearTarget}
+                  >
+                    {busy === "retry-full-fiscal-year-target"
+                      ? "Retrying..."
+                      : getSavedFullFiscalYearActionDecision(summary).label}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={retryDisabled}
+                    aria-describedby={
+                      portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                    }
+                    onClick={onStartFresh}
+                  >
+                    {busy === "start-fresh-filed-returns-flow"
+                      ? "Starting fresh..."
+                      : "Discard saved run and start selected download"}
+                  </button>
+                </>
+              ) : (
+                <p className="muted">{recoveryAvailability.guidance}</p>
+              )}
               {canManuallyObserveFullYear ? (
                 <button
                   type="button"
@@ -271,14 +303,10 @@ function recoveryPortalDisabledReason(
   return `Open a signed-in GST Portal tab before ${gerund} or starting again.`;
 }
 
-function targetReviewRecoveryMessage(
-  summary: FiledReturnsFlowSummary,
-  signals: ReadonlySet<string>,
-): string {
-  if (signals.has("artifact-acquisition-session-proof-expired")) {
-    return "The extension reload cleared Pack's temporary exact-download proof. Check Browser Downloads, then start fresh or cancel and reset.";
-  }
-  return summary.flowStep.safeMessage;
+function targetReviewRecoveryMessage({
+  message,
+}: ReturnType<typeof getRecoveryFlowAvailability>): string {
+  return message ?? "Pack needs a saved-run review.";
 }
 
 export function hasRecoveryActions(summary: FiledReturnsFlowSummary | null): boolean {

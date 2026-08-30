@@ -89,8 +89,11 @@ const HISTORICAL_RECORDS = new Map([
 // correction and was found by review rather than by us.
 const RETIRED_CLAIMS: readonly { pattern: RegExp; why: string }[] = [
   {
-    pattern: /\balpha\b/i,
-    why: "the published package is a pre-1.0 beta; 'alpha' understates the release",
+    // `Alpha:` ends in a colon, so a trailing \b would need a word character after it -- and the
+    // retired wording is followed by a space. The guard silently permitted the exact prefix it
+    // exists to reject. Each alternative now carries its own boundary.
+    pattern: /\b(?:Alpha:|source-first alpha\b|alpha with no Store release\b)/i,
+    why: "the published package is a pre-1.0 beta; source-only alpha wording must not describe the Store release",
   },
   {
     pattern: /source-build experimental/i,

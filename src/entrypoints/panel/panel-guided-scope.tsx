@@ -17,11 +17,18 @@ import {
   getScopeMatchedFiledReturnsSummary,
 } from "../popup/flow-summary";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
+import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import {
   panelFullFiscalYearPresets,
+  panelGuidedStepForDisplay,
   panelGuidedSteps,
   updatePanelGuidedScope,
 } from "./panel-guided-scope-model";
+import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
+
+export function isPackAlphaBuildMode(buildMode: string): boolean {
+  return buildMode === "alpha";
+}
 
 export function PanelGuidedScope({
   busy,
@@ -46,22 +53,38 @@ export function PanelGuidedScope({
   onScopeChange: (scope: FiledReturnsDownloadScope) => void;
   onStart: (scope: FiledReturnsDownloadScope) => void;
 }) {
+  // Keep this expression in the panel module: Vite replaces it during a WXT
+  // production build, so the alpha JSX below is removed from packaged output.
+  // Deliberately the literal comparison rather than `isPackAlphaBuildMode`, despite the duplication.
+  // A direct `import.meta.env.MODE === "alpha"` constant-folds at build time, so the alpha JSX below
+  // is dead-code eliminated from a packaged build. Routing it through a function call defeats that:
+  // the branch survives, the `data-pack-alpha-surface` marker reaches the bundle, and
+  // `verify-extension-package` fails -- which is how this was caught.
+  const alphaSurfacesEnabled = import.meta.env.MODE === "alpha";
   const [view, setView] = React.useState<"presets" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
   const selectRef = React.useRef<HTMLSelectElement>(null);
   const presetDoorRef = React.useRef<HTMLButtonElement>(null);
   const focusTarget = React.useRef<"preset-door" | "select" | null>(null);
-  const steps = panelGuidedSteps(scope);
+  const steps = panelGuidedSteps(scope).map((candidate) =>
+    panelGuidedStepForDisplay(candidate, alphaSurfacesEnabled),
+  );
   const step = steps[activeStep] ?? steps[0];
+  const recoveryAvailability = getRecoveryFlowAvailability(
+    flowSummary,
+    alphaSurfacesEnabled,
+    scopeLockedForReview,
+  );
   const [, refreshPresetSnapshot] = React.useState(0);
   // The panel can stay mounted while a new period becomes eligible. Read the
   // financial year and its period plan from the same render-time snapshot so
   // a focus-driven parent refresh cannot combine a current FY with old periods.
   const presetAsOf = new Date();
   const currentFinancialYear = getFiledReturnsFinancialYearOptions(presetAsOf)[0];
-  const presets = currentFinancialYear
-    ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
-    : [];
+  const presets =
+    alphaSurfacesEnabled && currentFinancialYear
+      ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
+      : [];
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -179,12 +202,24 @@ export function PanelGuidedScope({
   const scopeExternalBlock = savedRunForScope ? null : externalBlock;
   const guidedExternalBlock =
     scopeExternalBlock ??
-    (portalSignedIn || canRetryFullFiscalYearZipWithoutPortal(scopeSummary)
+    (canRetryFullFiscalYearZipWithoutPortal(scopeSummary)
       ? null
-      : { disabled: true as const, label: "Open a signed-in GST Portal tab to continue." });
+      : !alphaSurfacesEnabled && isFullFiscalYearScope(scope)
+        ? {
+            disabled: true as const,
+            label:
+              "This full-year flow is available only in a source build qualified for alpha use.",
+          }
+        : portalSignedIn
+          ? null
+          : { disabled: true as const, label: "Open a signed-in GST Portal tab to continue." });
 
   return (
-    <section className="panel-guide" aria-labelledby="panel-guide-title">
+    <section
+      className="panel-guide"
+      aria-labelledby="panel-guide-title"
+      {...(alphaSurfacesEnabled ? { "data-pack-alpha-surface": "full-fiscal-year" } : {})}
+    >
       <div
         className="panel-guide-progress"
         role="status"
@@ -222,7 +257,7 @@ export function PanelGuidedScope({
           }
         >
           {step.options.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option key={option.value} value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
           ))}
@@ -259,8 +294,9 @@ export function PanelGuidedScope({
       </div>
       {scopeLockedForReview && flowSummary?.currentPeriod ? (
         <p className="scope-note scope-note-warning" role="status">
-          A saved run is paused at {flowSummary.currentPeriod}. Resume or discard it before starting
-          another scope.
+          {recoveryAvailability.isWithheldFullYearRecovery
+            ? recoveryAvailability.guidance
+            : `A saved run is paused at ${flowSummary.currentPeriod}. Resume or discard it before starting another scope.`}
         </p>
       ) : null}
       <CatalogueLimits />

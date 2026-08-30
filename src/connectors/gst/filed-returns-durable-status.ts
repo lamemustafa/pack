@@ -206,10 +206,17 @@ export function canonicalDurableSummaryMessage(
     .join(" ");
 }
 
+/**
+ * `fullYearFlowAvailable` decides whether the remedy sentence is included, not whether the reader
+ * is told anything. A packaged build removes the full-year period option and blocks that scope, so
+ * "Start this year again" would name an action the build refuses -- but the fact that the run
+ * covered a narrower plan than is now eligible is still true and still worth saying.
+ */
 export function filedReturnsPlanCoverageMessage(
   scope: FiledReturnsDownloadScope,
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
+  fullYearFlowAvailable = true,
 ): string {
   if (
     scope.period !== FULL_FISCAL_YEAR_PERIOD ||
@@ -220,7 +227,9 @@ export function filedReturnsPlanCoverageMessage(
     )
   )
     return "";
-  return "This run covers its original plan; more periods are eligible now. Start this year again to include them.";
+  return fullYearFlowAvailable
+    ? "This run covers its original plan; more periods are eligible now. Start this year again to include them."
+    : "This run covers its original plan; more periods are eligible now.";
 }
 
 function canonicalDurableTargetMessage(

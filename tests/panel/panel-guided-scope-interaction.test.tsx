@@ -16,6 +16,7 @@ vi.mock("wxt/browser", () => ({
 import { PanelSurface, type PackPanelController } from "../../src/entrypoints/panel/panel-surface";
 import { PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
 import { panelFullFiscalYearPresets } from "../../src/entrypoints/panel/panel-guided-scope-model";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 import {
   PANEL_TEST_SCOPE,
   completedPanelSummary,
@@ -57,10 +58,12 @@ function GuidedScopeHarness({
   onStart = () => undefined,
   portalSignedIn,
   savedRun,
+  scopeLockedForReview = false,
 }: {
   onStart?: (scope: FiledReturnsDownloadScope) => void;
   portalSignedIn: boolean;
   savedRun: FiledReturnsFlowSummary | null;
+  scopeLockedForReview?: boolean;
 }) {
   const [scope, setScope] = React.useState<FiledReturnsDownloadScope>(PANEL_TEST_SCOPE);
   return (
@@ -72,7 +75,7 @@ function GuidedScopeHarness({
       portalSignedIn={portalSignedIn}
       savedRun={savedRun}
       scope={scope}
-      scopeLockedForReview={false}
+      scopeLockedForReview={scopeLockedForReview}
       onScopeChange={setScope}
       onStart={onStart}
     />
@@ -196,6 +199,7 @@ function guideControlCount(): number {
 
 describe("panel guided scope interaction", () => {
   beforeEach(() => {
+    vi.stubEnv("MODE", "alpha");
     dom = new JSDOM("<div id='root'></div>", {
       pretendToBeVisual: true,
       url: "https://extension.test",
@@ -209,6 +213,46 @@ describe("panel guided scope interaction", () => {
     if (root) await act(async () => root?.unmount());
     root = null;
     vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("does not offer an unavailable full-year resume in a packaged build", async () => {
+    vi.stubEnv("MODE", "production");
+    await mountGuidedScope({
+      portalSignedIn: true,
+      savedRun: completedPanelSummary({
+        status: "blocked",
+        currentPeriod: "April",
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "blocked",
+          safeSignals: [],
+          safeMessage: "Synthetic saved full-year run.",
+        },
+      }),
+      scopeLockedForReview: true,
+    });
+    await clickButtonContaining("Choose return, year and period");
+
+    expect(container.textContent).toContain(
+      getRecoveryFlowAvailability(
+        completedPanelSummary({
+          status: "blocked",
+          currentPeriod: "April",
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "blocked",
+            safeSignals: [],
+            safeMessage: "Synthetic saved full-year run.",
+          },
+        }),
+        false,
+        true,
+      ).guidance!,
+    );
+    expect(container.textContent).not.toContain("Resume or discard it");
   });
 
   it.each([false, true])("preserves existing focus on mount (StrictMode: %s)", async (strict) => {
@@ -251,6 +295,9 @@ describe("panel guided scope interaction", () => {
     expect(container.textContent).toContain("Choose return, year and period");
     expect(container.textContent).not.toContain("Catalogue & limits");
     expect(container.textContent).not.toContain("Step 1 of 4");
+
+    await clickButtonContaining("Choose return, year and period");
+    expect(container.innerHTML).toContain("data-pack-alpha-surface");
   });
 
   it("gives every disabled preset a resolvable reason", async () => {
@@ -533,7 +580,10 @@ describe("panel guided scope interaction", () => {
     const expectedSteps = [
       ["Return", "Choose one supported return for this run."],
       ["Financial year", "Pack keeps each run within one financial year."],
-      ["Filed period", "Choose one month or the full fiscal year."],
+      [
+        "Filed period",
+        "Choose one of: Full fiscal year, April, May, June, July, August, September, October, November, December, January, February, March.",
+      ],
       ["File", "Choose one artifact selection offered for this return."],
     ] as const;
     await mount();

@@ -99,6 +99,7 @@ function renderSummary(
 
 describe("whole-panel cleanup action", () => {
   beforeEach(() => {
+    vi.stubEnv("MODE", "alpha");
     dom = new JSDOM("<div id='root'></div>", {
       pretendToBeVisual: true,
       url: "https://extension.test",
@@ -112,6 +113,7 @@ describe("whole-panel cleanup action", () => {
     if (root) await act(async () => root?.unmount());
     root = null;
     dom.window.close();
+    vi.unstubAllEnvs();
   });
 
   it.each(CLEANUP_ACTION_CASES)(
