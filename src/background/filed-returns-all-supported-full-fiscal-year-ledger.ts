@@ -71,6 +71,31 @@ export function allSupportedResumeIsProductive(
   return false;
 }
 
+/**
+ * Classifies a productive retry by whether it can advance solely from Pack's
+ * persisted local evidence or needs the signed-in portal again. Keeping this
+ * alongside the productivity predicate prevents summary refreshes and action
+ * responses from disagreeing about the same saved ZIP phase.
+ */
+export function allSupportedResumeMode(
+  ledger: Pick<
+    FiledReturnsAllSupportedFullFiscalYearLedger,
+    "status" | "zipPhase" | "targets" | "zipDownloadAttempt"
+  >,
+): "local-only" | "portal" | null {
+  if (!allSupportedResumeIsProductive(ledger)) return null;
+  if (
+    ledger.zipPhase === "download-observing" ||
+    ledger.zipPhase === "export-pending" ||
+    ledger.zipPhase === "export-retry-pending" ||
+    ledger.zipPhase === "downloaded-cleanup-pending" ||
+    ledger.zipPhase === "no-artifacts-cleanup-pending"
+  ) {
+    return "local-only";
+  }
+  return "portal";
+}
+
 export function createAllSupportedFullFiscalYearLedger(
   planRoot: FiledReturnsAllSupportedFullFiscalYearIdentity,
   returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],

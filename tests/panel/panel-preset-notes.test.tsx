@@ -35,6 +35,12 @@ function declaredColor(className: string): string | undefined {
   return /(?:^|;)\s*color\s*:\s*([^;]+)/.exec(rule?.[1] ?? "")?.[1]?.trim();
 }
 
+function declaredProperty(selector: string, property: string): string | undefined {
+  const escapedSelector = selector.replaceAll(".", "\\.").replaceAll(" ", "\\s+");
+  const rule = new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, "m").exec(PANEL_STYLESHEET);
+  return new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`).exec(rule?.[1] ?? "")?.[1]?.trim();
+}
+
 let dom: JSDOM;
 let root: Root | null = null;
 let container: Element;
@@ -116,5 +122,15 @@ describe("preset cards", () => {
       expect(color).toBeDefined();
       expect(color).not.toBe(warningColor);
     }
+  });
+
+  it("lets the rendered all-returns count wrap inside the narrow panel card", async () => {
+    await render();
+
+    const count = container.querySelector(".panel-everything-preset .panel-preset-count");
+    expect(count?.textContent).toContain("up to 84 files");
+    expect(declaredProperty(".panel-everything-preset .panel-preset-count", "white-space")).toBe(
+      "normal",
+    );
   });
 });

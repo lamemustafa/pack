@@ -383,6 +383,8 @@ describe("panel guided scope interaction", () => {
   });
 
   it("wires the last-year alpha recipe from the composed panel without substituting this year", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-30T00:00:00.000Z"));
     const onStartAllReturnsFullYear = vi.fn();
     await mount(
       { overrides: { startAllSupportedFullFiscalYearFlow: onStartAllReturnsFullYear } },

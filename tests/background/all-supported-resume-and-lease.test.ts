@@ -99,9 +99,10 @@ describe("whether resuming would actually advance the plan", () => {
       ...runningLedger("download-observing" as never),
       zipDownloadAttempt: { requestedAt: STALE_AT, downloadId: 7 },
     } as never;
-    expect(
-      toAllSupportedFullFiscalYearSummary(withDownload, LONG_AFTER, true).resumeAvailable,
-    ).toBe(true);
+    expect(toAllSupportedFullFiscalYearSummary(withDownload, LONG_AFTER, true)).toMatchObject({
+      resumeAvailable: true,
+      resumeMode: "local-only",
+    });
   });
 
   it("does not advance at download-observing without one", () => {

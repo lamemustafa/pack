@@ -163,6 +163,10 @@ html[data-pack-surface="panel"] body {
   min-height: 48px;
 }
 
+.panel-everything-preset .panel-preset-count {
+  white-space: normal;
+}
+
 .panel-everything-preset-primary {
   min-height: 56px;
   padding-block: 12px;

@@ -167,7 +167,11 @@ describe("all-supported full-fiscal-year worker", () => {
     const first = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
     expect(first).toMatchObject({
-      allSupportedFullFiscalYearFlowSummary: { status: "blocked" },
+      allSupportedFullFiscalYearFlowSummary: {
+        status: "blocked",
+        resumeAvailable: true,
+        resumeMode: "local-only",
+      },
     });
     expect(savedLedger()).toMatchObject({ zipPhase: "downloaded-cleanup-pending" });
     const second = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);

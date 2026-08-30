@@ -7,7 +7,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
-  allSupportedResumeIsProductive,
+  allSupportedResumeMode,
   isAllSupportedFullFiscalYearLedgerStale,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import { isFiledReturnsRunLeaseLive } from "./filed-returns-active-run";
@@ -74,16 +74,10 @@ export function toAllSupportedFullFiscalYearSummary(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
   );
-  const resumeAvailable = allSupportedResumeIsProductive(ledger);
+  const resumeMode = allSupportedResumeMode(ledger);
   return {
-    resumeAvailable,
-    ...(resumeAvailable
-      ? {
-          resumeMode: isLocalOnlyResumePhase(ledger.zipPhase)
-            ? ("local-only" as const)
-            : ("portal" as const),
-        }
-      : {}),
+    resumeAvailable: resumeMode !== null,
+    ...(resumeMode ? { resumeMode } : {}),
     ...(allTerminalPlanRoots.length > 0 ? { terminalPlanRoots: allTerminalPlanRoots } : {}),
     summaryIdentity: { ...ledger.planRoot },
     status:
@@ -110,17 +104,6 @@ export function toAllSupportedFullFiscalYearSummary(
     flowStepScope,
     flowStep,
   };
-}
-
-function isLocalOnlyResumePhase(
-  phase: FiledReturnsAllSupportedFullFiscalYearLedger["zipPhase"],
-): boolean {
-  return [
-    "export-pending",
-    "export-retry-pending",
-    "downloaded-cleanup-pending",
-    "no-artifacts-cleanup-pending",
-  ].includes(phase ?? "");
 }
 
 function terminalPlanRoots(

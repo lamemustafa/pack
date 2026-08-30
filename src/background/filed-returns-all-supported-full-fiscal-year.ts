@@ -16,7 +16,7 @@ import type {
 } from "./filed-returns-flow-runner";
 import type { SinglePeriodRunner } from "./filed-returns-full-fiscal-year";
 import {
-  allSupportedResumeIsProductive,
+  allSupportedResumeMode,
   canCompleteAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearLedger,
   isAllSupportedFullFiscalYearLedgerStale,
@@ -468,6 +468,7 @@ function toAllSupportedSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
+  const resumeMode = allSupportedResumeMode(ledger);
   const zipDelivered =
     ledger.zipPhase === "cleaned-after-download" ||
     ledger.zipPhase === "downloaded-cleanup-pending";
@@ -476,7 +477,8 @@ function toAllSupportedSummary(
       ledger.targets[0]!,
   );
   return {
-    resumeAvailable: allSupportedResumeIsProductive(ledger),
+    resumeAvailable: resumeMode !== null,
+    ...(resumeMode ? { resumeMode } : {}),
     summaryIdentity: { ...ledger.planRoot },
     status: ledger.status,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
