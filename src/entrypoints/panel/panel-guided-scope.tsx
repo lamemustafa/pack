@@ -196,7 +196,7 @@ export function PanelGuidedScope({
                   preset.scope.returnType,
                   preset.scope.artifactType ?? "PDF",
                 ).map((note) => (
-                  <p className="panel-preset-reason" key={note}>
+                  <p className="panel-preset-note" key={note}>
                     {note}
                   </p>
                 ))}

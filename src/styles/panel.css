@@ -165,6 +165,12 @@ html[data-pack-surface="panel"] body {
   font-size: 0.75rem;
 }
 
+.panel-preset-note {
+  margin: -2px 0 2px;
+  color: var(--pack-ink-muted);
+  font-size: 0.75rem;
+}
+
 .panel-preset-door-wrap {
   border-top: 1px solid var(--pack-border-subtle);
   margin-top: 2px;
