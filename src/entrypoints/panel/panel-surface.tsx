@@ -58,6 +58,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
   const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
+  const allReturnsTerminalBlock = getAllSupportedTerminalBlock(allSupportedSummary);
   // The saved plan blocks other scopes, but not its own resume: the runner retries the saved ZIP or
   // cleanup phase when this same start is invoked again, and blocking that leaves discarding the
   // plan as the only route out of a recoverable state.
@@ -193,6 +194,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 context={pack.context}
                 externalBlock={savedRunBlock ?? allSupportedRunBlock}
                 allReturnsExternalBlock={savedRunBlock ?? allSupportedRunBlock}
+                {...(allReturnsTerminalBlock ? { allReturnsTerminalBlock } : {})}
                 {...(allReturnsResumePlan ? { allReturnsResumePlan } : {})}
                 flowSummary={pack.scopedFlowSummary}
                 portalSignedIn={portalSignedIn}
@@ -357,23 +359,31 @@ function getAllSupportedRunBlock(
   busy: string | null,
 ): { disabled: true; label: string } | null {
   if (!summary || busy !== null) return null;
+  if (["complete", "cancelled"].includes(summary.status)) return null;
+  return {
+    disabled: true,
+    label:
+      "Clear local data and discard the saved all-supported plan before starting another return.",
+  };
+}
+
+function getAllSupportedTerminalBlock(
+  summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
+): { financialYear: string; label: string } | null {
+  if (!summary) return null;
   if (summary.status === "complete") {
     return {
-      disabled: true,
+      financialYear: summary.summaryIdentity.financialYear,
       label:
         "Pack already completed this all-supported plan. Clear local data before starting it again.",
     };
   }
   if (summary.status === "cancelled") {
     return {
-      disabled: true,
+      financialYear: summary.summaryIdentity.financialYear,
       label:
-        "Pack retained this cancelled all-supported plan. Clear local data before starting another return.",
+        "Pack retained this cancelled all-supported plan. Clear local data before starting it again.",
     };
   }
-  return {
-    disabled: true,
-    label:
-      "Clear local data and discard the saved all-supported plan before starting another return.",
-  };
+  return null;
 }

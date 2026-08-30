@@ -53,7 +53,7 @@ function savedAllReturnsEvidence(
         financialYear,
         period,
         returnType,
-        artifactType: "PDF" as const,
+        artifactType: "PDF_AND_EXCEL" as const,
         outcome: "pending" as const,
       }),
     ),
@@ -543,7 +543,7 @@ describe("panel guided scope interaction", () => {
     const current = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
     ).find((button) => button.textContent?.includes("Everything this year"));
-    expect(current?.textContent).toContain("3 returns · 4 periods each · up to 12 files");
+    expect(current?.textContent).toContain("3 returns · 4 periods each · up to 28 files");
     expect(container.textContent).toContain("Saved plan · 4 eligible periods retained.");
     await act(async () => {
       current?.dispatchEvent(realmEvent("click"));
@@ -555,7 +555,52 @@ describe("panel guided scope interaction", () => {
     });
   });
 
-  it("does not leave a completed all-returns recipe as a silent no-op", async () => {
+  it("refreshes a resumable recipe before its relative year label becomes stale", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-31T00:00:00.000Z"));
+    const onStartAllReturnsFullYear = vi.fn();
+    await mount(
+      {
+        overrides: {
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: true,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2024-25",
+            },
+            status: "partial",
+            updatedAt: "2026-03-31T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2024-25", ["April", "May", "June", "July"]),
+            totalTargets: 28,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "partial",
+              safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+              safeMessage: "Synthetic all-supported recovery.",
+            },
+          },
+          startAllSupportedFullFiscalYearFlow: onStartAllReturnsFullYear,
+        },
+      },
+      false,
+      false,
+    );
+
+    vi.setSystemTime(new Date("2026-04-01T00:00:00.000Z"));
+    await clickButtonContaining("Everything last year");
+    expect(onStartAllReturnsFullYear).not.toHaveBeenCalled();
+
+    await clickButtonContaining("Everything in 2024-25");
+    expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith({
+      kind: "all-supported-returns-full-fiscal-year",
+      financialYear: "2024-25",
+    });
+  });
+
+  it("blocks only a completed all-returns root instead of valid new scopes", async () => {
     await mount(
       {
         overrides: {
@@ -590,7 +635,13 @@ describe("panel guided scope interaction", () => {
       container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
     );
     expect(allReturns).toHaveLength(2);
-    expect(allReturns.every((preset) => preset.disabled)).toBe(true);
+    expect(allReturns[0]?.disabled).toBe(true);
+    expect(allReturns[1]?.disabled).toBe(false);
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>(".panel-preset"))
+        .filter((preset) => !preset.classList.contains("panel-everything-preset"))
+        .every((preset) => !preset.disabled),
+    ).toBe(true);
     expect(container.textContent).toContain(
       "Pack already completed this all-supported plan. Clear local data before starting it again.",
     );

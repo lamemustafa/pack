@@ -37,6 +37,7 @@ export function PanelGuidedScope({
   context,
   externalBlock,
   allReturnsExternalBlock,
+  allReturnsTerminalBlock,
   allReturnsResumePlan,
   flowSummary,
   portalSignedIn,
@@ -52,6 +53,8 @@ export function PanelGuidedScope({
   externalBlock: { disabled: true; label: string } | null;
   /** The saved all-supported plan blocks other scopes without blocking its own resume. */
   allReturnsExternalBlock?: { disabled: true; label: string } | null;
+  /** A terminal saved plan blocks only the root it owns; other recipes stay available. */
+  allReturnsTerminalBlock?: { financialYear: string; label: string } | null;
   /** The one saved root plan allowed through its otherwise blocking recovery state. */
   allReturnsResumePlan?: PanelAllReturnsFullYearResumePlan;
   flowSummary: FiledReturnsFlowSummary | null;
@@ -145,7 +148,9 @@ export function PanelGuidedScope({
                   externalBlock={
                     allReturnsResumePlan?.financialYear === preset.financialYear
                       ? null
-                      : (allReturnsExternalBlock ?? externalBlock)
+                      : allReturnsTerminalBlock?.financialYear === preset.financialYear
+                        ? { disabled: true, label: allReturnsTerminalBlock.label }
+                        : (allReturnsExternalBlock ?? externalBlock)
                   }
                   primary={preset.financialYear === financialYears[1]}
                   plan={preset}
@@ -400,6 +405,11 @@ function AllReturnsPreset({
         aria-label={`${displayedPlan.label} for all supported returns. ${countLabel}. ${displayedPlan.note}`}
         onClick={() => {
           if (resumePlan) {
+            const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, new Date());
+            if (!currentPlan || currentPlan.label !== plan.label) {
+              onStalePlan();
+              return;
+            }
             onStart({ kind: plan.kind, financialYear: plan.financialYear });
             return;
           }

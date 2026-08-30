@@ -6,7 +6,10 @@ import {
 } from "../../connectors/gst/filed-returns-contracts";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import type { FiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifact-types";
-import { filedReturnsArtifactLabel } from "../../connectors/gst/filed-returns-artifacts";
+import {
+  concreteFiledReturnsArtifactTypesForSelection,
+  filedReturnsArtifactLabel,
+} from "../../connectors/gst/filed-returns-artifacts";
 import {
   filedReturnsCapability,
   filedReturnsOfferedArtifacts,
@@ -105,15 +108,30 @@ export function panelAllReturnsFullYearResumePlan(
 
   const periods = new Set(targets.map((target) => target.period));
   const returnTypes = new Set(targets.map((target) => target.returnType));
-  const artifacts = new Set(targets.map((target) => `${target.returnType}:${target.artifactType}`));
-  if (periods.size === 0 || returnTypes.size === 0 || artifacts.size === 0) return null;
+  const artifactCount = Array.from(
+    new Map(
+      targets.map((target) => [
+        `${target.returnType}:${target.artifactType}`,
+        concreteFiledReturnsArtifactTypesForSelection(target.returnType, target.artifactType)
+          .length,
+      ]),
+    ).values(),
+  ).reduce((count, concreteCount) => count + concreteCount, 0);
+  const fileCount = targets.reduce(
+    (count, target) =>
+      count +
+      concreteFiledReturnsArtifactTypesForSelection(target.returnType, target.artifactType).length,
+    0,
+  );
+  if (periods.size === 0 || returnTypes.size === 0 || artifactCount === 0 || fileCount === 0)
+    return null;
 
   return {
     financialYear: summary.summaryIdentity.financialYear,
     returnCount: returnTypes.size,
     periodCount: periods.size,
-    artifactCount: artifacts.size,
-    fileCount: targets.length,
+    artifactCount,
+    fileCount,
   };
 }
 
