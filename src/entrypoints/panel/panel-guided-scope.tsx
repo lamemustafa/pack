@@ -399,7 +399,7 @@ function AllReturnsPreset({
         note: `Saved plan · ${resumePlan.periodCount} eligible ${plural(resumePlan.periodCount, "period")} retained.`,
       }
     : plan;
-  const countLabel = `${displayedPlan.returnCount} ${plural(displayedPlan.returnCount, "return")} · ${displayedPlan.periodCount} ${plural(displayedPlan.periodCount, "period")} each · up to ${displayedPlan.fileCount} ${plural(displayedPlan.fileCount, "file")} · ZIP when files are available`;
+  const countLabel = `${displayedPlan.returnCount} ${plural(displayedPlan.returnCount, "return")} · ${displayedPlan.periodCount} ${plural(displayedPlan.periodCount, "period")} each · up to ${displayedPlan.fileCount} ${plural(displayedPlan.fileCount, "file")} · one ZIP`;
   const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
 
   return (

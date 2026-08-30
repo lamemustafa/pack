@@ -363,7 +363,7 @@ describe("panel guided scope interaction", () => {
     expect(dom.window.document.activeElement).toBe(previousControl);
     expect(presets[0]?.textContent).toContain("Everything last year · all supported returns");
     expect(presets[0]?.textContent).toContain(
-      "3 returns · 12 periods each · up to 84 files · ZIP when files are available",
+      "3 returns · 12 periods each · up to 84 files · one ZIP",
     );
     expect(container.textContent).toContain("Complete financial year.");
     expect(presets[1]?.textContent).toContain("Everything this year · all supported returns");
