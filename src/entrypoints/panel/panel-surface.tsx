@@ -18,7 +18,10 @@ import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
 import { PanelGuidedScope, isPackAlphaBuildMode } from "./panel-guided-scope";
-import { panelAllReturnsFullYearResumePlan } from "./panel-guided-scope-model";
+import {
+  panelAllReturnsFullYearPreset,
+  panelAllReturnsFullYearResumePlan,
+} from "./panel-guided-scope-model";
 
 export type PackPanelController = ReturnType<typeof usePackPopupController>;
 
@@ -65,6 +68,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const allReturnsResumePlan = allSupportedSummary?.resumeAvailable
     ? panelAllReturnsFullYearResumePlan(allSupportedSummary)
     : null;
+  const allReturnsResumeLocalOnly = allSupportedResumeIsLocalOnly(allSupportedSummary);
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -197,7 +201,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 {...(allReturnsTerminalBlock ? { allReturnsTerminalBlock } : {})}
                 {...(allReturnsResumePlan ? { allReturnsResumePlan } : {})}
                 flowSummary={pack.scopedFlowSummary}
-                portalSignedIn={portalSignedIn}
+                portalSignedIn={portalSignedIn || allReturnsResumeLocalOnly}
                 savedRun={savedRun}
                 scope={pack.scope}
                 scopeLockedForReview={pack.scopeLockedForReview}
@@ -372,6 +376,9 @@ function getAllSupportedTerminalBlock(
 ): { financialYear: string; label: string } | null {
   if (!summary) return null;
   if (summary.status === "complete") {
+    const savedPlan = panelAllReturnsFullYearResumePlan(summary);
+    const currentPlan = panelAllReturnsFullYearPreset(summary.summaryIdentity.financialYear);
+    if (savedPlan && currentPlan && currentPlan.periodCount > savedPlan.periodCount) return null;
     return {
       financialYear: summary.summaryIdentity.financialYear,
       label:
@@ -386,4 +393,17 @@ function getAllSupportedTerminalBlock(
     };
   }
   return null;
+}
+
+function allSupportedResumeIsLocalOnly(
+  summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
+): boolean {
+  if (!summary?.resumeAvailable) return false;
+  return summary.flowStep.safeSignals.some((signal) =>
+    [
+      "all-supported-full-fiscal-year-targets-complete",
+      "all-supported-full-fiscal-year-zip-downloaded",
+      "all-supported-full-fiscal-year-no-zip-artifacts",
+    ].includes(signal),
+  );
 }

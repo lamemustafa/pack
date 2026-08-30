@@ -614,8 +614,21 @@ describe("panel guided scope interaction", () => {
             completedAt: "2026-08-30T00:00:00.000Z",
             updatedAt: "2026-08-30T00:00:00.000Z",
             completedTargetIds: [],
-            targetEvidence: savedAllReturnsEvidence("2025-26", ["April"]),
-            totalTargets: 3,
+            targetEvidence: savedAllReturnsEvidence("2025-26", [
+              "April",
+              "May",
+              "June",
+              "July",
+              "August",
+              "September",
+              "October",
+              "November",
+              "December",
+              "January",
+              "February",
+              "March",
+            ]),
+            totalTargets: 84,
             flowStepScope: PANEL_TEST_SCOPE,
             flowStep: {
               connectorId: "gst",
@@ -645,6 +658,83 @@ describe("panel guided scope interaction", () => {
     expect(container.textContent).toContain(
       "Pack already completed this all-supported plan. Clear local data before starting it again.",
     );
+  });
+
+  it("allows a completed current-year root to expand when a new period is eligible", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+    await mount(
+      {
+        overrides: {
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            status: "complete",
+            completedAt: "2026-08-30T00:00:00.000Z",
+            updatedAt: "2026-08-30T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            totalTargets: 28,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    const current = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
+    ).find((button) => button.textContent?.includes("Everything this year"));
+    expect(current?.textContent).toContain("5 periods each");
+    expect(current?.disabled).toBe(false);
+  });
+
+  it("allows a known local-only all-returns recovery without a signed-in portal tab", async () => {
+    await mount(
+      {
+        overrides: {
+          context: { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: true,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2025-26",
+            },
+            status: "partial",
+            updatedAt: "2026-08-30T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2025-26", ["April", "May", "June", "July"]),
+            totalTargets: 28,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-targets-complete"],
+              safeMessage: "Synthetic local ZIP recovery.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    const saved = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
+    ).find((button) => button.textContent?.includes("Everything last year"));
+    expect(saved?.disabled).toBe(false);
   });
 
   it("locks every new preset while an all-supported plan needs review", async () => {
