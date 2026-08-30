@@ -376,6 +376,32 @@ function malformedActiveRunStep(
   };
 }
 
+/**
+ * Whether a run lease is still being renewed right now.
+ *
+ * The lease is the only evidence that distinguishes a worker that stopped from one that is simply
+ * busy: it renews every ten seconds, while a long atomic step -- the content-message timeout alone
+ * is sixty -- writes nothing to the record it belongs to. A reader that judges by age alone calls
+ * the second case interrupted, and tells the user the worker stopped while it is mid-target.
+ *
+ * Absent or malformed state answers false, which is the fail-closed direction: it lets the
+ * age-based projection stand rather than suppressing a genuine interruption.
+ */
+export async function isFiledReturnsRunLeaseLive(
+  deps: FiledReturnsActiveRunDeps,
+  now: Date,
+): Promise<boolean> {
+  const key = deps.storageKeys.activeRun;
+  if (!key) return false;
+  try {
+    const values = await browser.storage.local.get(key);
+    const stored = activeRunStorageState(values[key], now);
+    return stored.state === "valid" && !isInterruptedFiledReturnsRun(stored.run, now);
+  } catch {
+    return false;
+  }
+}
+
 export function isInterruptedFiledReturnsRun(run: ActiveFiledReturnsRun, now: Date): boolean {
   return now.getTime() - Date.parse(run.leaseUpdatedAt) > ACTIVE_RUN_REVIEW_MS;
 }

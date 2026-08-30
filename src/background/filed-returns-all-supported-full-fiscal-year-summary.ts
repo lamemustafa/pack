@@ -7,6 +7,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isAllSupportedFullFiscalYearLedgerStale } from "./filed-returns-all-supported-full-fiscal-year-ledger";
+import { isFiledReturnsRunLeaseLive } from "./filed-returns-active-run";
 import {
   readAllSupportedPlanLedgersStorageState,
   type AllSupportedPlanLedgersStorageState,
@@ -22,7 +23,7 @@ const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>
 ]);
 
 export interface AllSupportedFullFiscalYearCurrentStateDeps {
-  storageKeys: { allSupportedFullFiscalYearLedgerIndex?: string };
+  storageKeys: { allSupportedFullFiscalYearLedgerIndex?: string; activeRun?: string };
   now?: () => Date;
 }
 
@@ -38,13 +39,27 @@ export async function readCurrentAllSupportedFullFiscalYearFlowSummary(
   if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
   const state = await readAllSupportedPlanLedgersStorageState(deps);
   if (state.state !== "valid") return null;
-  const ledger = currentLedger(state, deps.now?.() ?? new Date());
-  return ledger ? toAllSupportedFullFiscalYearSummary(ledger, deps.now?.() ?? new Date()) : null;
+  const now = deps.now?.() ?? new Date();
+  const ledger = currentLedger(state, now);
+  if (!ledger) return null;
+  // The root records no heartbeat while an atomic child is running, and a child may legitimately
+  // take longer than the root's staleness window -- the content-message timeout alone is sixty
+  // seconds. The run's own lease renews every ten, so a live lease is the evidence that the worker
+  // is still there, and age alone is not.
+  return toAllSupportedFullFiscalYearSummary(
+    ledger,
+    now,
+    await isFiledReturnsRunLeaseLive(
+      { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
+      now,
+    ),
+  );
 }
 
 export function toAllSupportedFullFiscalYearSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   now = new Date(),
+  leaseIsLive = false,
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   const flowStep = summaryStep(ledger, now);
   const zipDelivered =
@@ -54,10 +69,19 @@ export function toAllSupportedFullFiscalYearSummary(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
   );
+  // The phases the runner retries when the same start is invoked again. Everything else is either
+  // terminal or has no saved work to resume.
+  const resumeAvailable =
+    ledger.zipPhase === "export-retry-pending" ||
+    ledger.zipPhase === "downloaded-cleanup-pending" ||
+    ledger.zipPhase === "no-artifacts-cleanup-pending";
   return {
+    resumeAvailable,
     summaryIdentity: { ...ledger.planRoot },
     status:
-      isAllSupportedFullFiscalYearLedgerStale(ledger, now) && ledger.status === "running"
+      isAllSupportedFullFiscalYearLedgerStale(ledger, now) &&
+      ledger.status === "running" &&
+      !leaseIsLive
         ? "blocked"
         : ledger.status,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),

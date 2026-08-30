@@ -37,6 +37,7 @@ export function PanelGuidedScope({
   busy,
   context,
   externalBlock,
+  allReturnsExternalBlock,
   flowSummary,
   portalSignedIn,
   savedRun,
@@ -49,6 +50,8 @@ export function PanelGuidedScope({
   busy: string | null;
   context: PortalContext | null;
   externalBlock: { disabled: true; label: string } | null;
+  /** The saved all-supported plan blocks other scopes without blocking its own resume. */
+  allReturnsExternalBlock?: { disabled: true; label: string } | null;
   flowSummary: FiledReturnsFlowSummary | null;
   portalSignedIn: boolean;
   savedRun: FiledReturnsFlowSummary | null;
@@ -125,7 +128,7 @@ export function PanelGuidedScope({
           {allReturnsPreset && onStartAllReturnsFullYear ? (
             <AllReturnsPreset
               busy={busy}
-              externalBlock={externalBlock}
+              externalBlock={allReturnsExternalBlock ?? externalBlock}
               plan={allReturnsPreset}
               portalReady={portalSignedIn}
               onStart={onStartAllReturnsFullYear}

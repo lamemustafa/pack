@@ -376,6 +376,7 @@ describe("panel guided scope interaction", () => {
       {
         overrides: {
           allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
             summaryIdentity: {
               kind: "all-supported-returns-full-fiscal-year",
               financialYear: "2025-26",

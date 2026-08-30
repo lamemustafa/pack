@@ -424,8 +424,12 @@ async function finishAllSupportedFinalZip(
       ...zipStep,
       state: "blocked",
       safeSignals: [...zipStep.safeSignals, "all-supported-full-fiscal-year-local-cleanup-retry"],
-      safeMessage:
-        "Pack confirmed the final fiscal-year ZIP, but could not clear its temporary local staging.",
+      // The phase selection above already distinguishes these two paths; the message must too. On
+      // the no-artifacts path nothing was exported, so claiming a confirmed ZIP sends the reader
+      // looking in Downloads for a file that was never created.
+      safeMessage: noArtifacts
+        ? "No filed returns were available to save, and Pack could not clear its temporary local staging."
+        : "Pack confirmed the final fiscal-year ZIP, but could not clear its temporary local staging.",
     });
   }
 
@@ -471,6 +475,11 @@ function toAllSupportedSummary(
       ledger.targets[0]!,
   );
   return {
+    // Same rule as the durable projection: only the phases the runner retries on a repeated start.
+    resumeAvailable:
+      ledger.zipPhase === "export-retry-pending" ||
+      ledger.zipPhase === "downloaded-cleanup-pending" ||
+      ledger.zipPhase === "no-artifacts-cleanup-pending",
     summaryIdentity: { ...ledger.planRoot },
     status: ledger.status,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),

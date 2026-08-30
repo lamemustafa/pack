@@ -418,6 +418,13 @@ export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   /** The atomic target scope to which the current flow step is bound. */
   flowStepScope: FiledReturnsDownloadScope;
   flowStep: PortalFlowStepResult;
+  /**
+   * Whether re-invoking this same all-supported start resumes the saved plan rather than beginning
+   * a new one. The runner saves `export-retry-pending` and `downloaded-cleanup-pending` precisely so
+   * that phase can be retried; a surface that blocks every non-terminal run hides the only route to
+   * those branches and leaves discarding the plan as the sole option.
+   */
+  resumeAvailable: boolean;
 }
 
 /**

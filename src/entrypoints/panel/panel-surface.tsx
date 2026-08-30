@@ -57,6 +57,10 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
   const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
+  // The saved plan blocks other scopes, but not its own resume: the runner retries the saved ZIP or
+  // cleanup phase when this same start is invoked again, and blocking that leaves discarding the
+  // plan as the only route out of a recoverable state.
+  const allReturnsRunBlock = allSupportedSummary?.resumeAvailable ? null : allSupportedRunBlock;
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -185,6 +189,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 busy={pack.effectiveBusy}
                 context={pack.context}
                 externalBlock={savedRunBlock ?? allSupportedRunBlock}
+                allReturnsExternalBlock={savedRunBlock ?? allReturnsRunBlock}
                 flowSummary={pack.scopedFlowSummary}
                 portalSignedIn={portalSignedIn}
                 savedRun={savedRun}
