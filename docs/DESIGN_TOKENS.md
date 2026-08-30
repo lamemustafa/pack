@@ -50,8 +50,8 @@ The same pattern held elsewhere: 28 background literals were 6 intents, and 23 b
 |                                                       | Before |                After |
 | ----------------------------------------------------- | -----: | -------------------: |
 | Colour literals outside `:root`                       |    157 |                **0** |
-| Distinct literals                                     |    102 | 34 (all definitions) |
-| `var(--pack-*)` references                            |     31 |                  175 |
+| Colour-token definitions                              |     19 | 40 (all definitions) |
+| `var(--pack-*)` references                            |     31 |                  233 |
 | Distinct colours rendered across the 9 preview states |     36 |               **20** |
 | WCAG AA failures across 165 rendered text nodes       |      5 |                **0** |
 
@@ -64,7 +64,7 @@ its effective background was recomputed.
 Grouped as they are defined. Surfaces run lightest ground to darkest fill. Each ink passes AA
 against the surfaces it is actually paired with — not against every surface: inverse ink belongs on
 inverse surfaces, and 27 of the 63 possible combinations fail. See `DESIGN.md` for the measurement
-and issue #171 for the absent detector.
+and `tests/styles/design-token-literals.test.ts` for the literal detector.
 
 - **Surface** — `surface`, `surface-raised`, `surface-muted`, `canvas`, `surface-inset`,
   `surface-accent-soft`, `surface-sunken`, `surface-accent`, `surface-accent-strong`,
@@ -76,6 +76,8 @@ and issue #171 for the absent detector.
 - **Action** — `action`, `action-hover`
 - **Status** — `success-fg` / `-bg` / `-border` / `-solid`, `warning-fg` / `-bg` / `-border`,
   `danger-fg` / `-bg` / `-border`
+- **Overlay** — `surface-transparent`, `overlay-border`, `overlay-surface`, and
+  `success-`, `warning-`, and `danger-overlay-border`
 
 Status triads are foreground, background and border for one condition. Use all three together; a
 status background without its border reads as an accident.
