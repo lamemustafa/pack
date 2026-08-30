@@ -18,6 +18,7 @@ import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
 import { PanelGuidedScope, isPackAlphaBuildMode } from "./panel-guided-scope";
+import { panelAllReturnsFullYearResumePlan } from "./panel-guided-scope-model";
 
 export type PackPanelController = ReturnType<typeof usePackPopupController>;
 
@@ -60,9 +61,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   // The saved plan blocks other scopes, but not its own resume: the runner retries the saved ZIP or
   // cleanup phase when this same start is invoked again, and blocking that leaves discarding the
   // plan as the only route out of a recoverable state.
-  const allReturnsResumeFinancialYear = allSupportedSummary?.resumeAvailable
-    ? allSupportedSummary.summaryIdentity.financialYear
-    : undefined;
+  const allReturnsResumePlan = allSupportedSummary?.resumeAvailable
+    ? panelAllReturnsFullYearResumePlan(allSupportedSummary)
+    : null;
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -192,7 +193,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 context={pack.context}
                 externalBlock={savedRunBlock ?? allSupportedRunBlock}
                 allReturnsExternalBlock={savedRunBlock ?? allSupportedRunBlock}
-                {...(allReturnsResumeFinancialYear ? { allReturnsResumeFinancialYear } : {})}
+                {...(allReturnsResumePlan ? { allReturnsResumePlan } : {})}
                 flowSummary={pack.scopedFlowSummary}
                 portalSignedIn={portalSignedIn}
                 savedRun={savedRun}
@@ -355,7 +356,21 @@ function getAllSupportedRunBlock(
   summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
   busy: string | null,
 ): { disabled: true; label: string } | null {
-  if (!summary || busy !== null || ["complete", "cancelled"].includes(summary.status)) return null;
+  if (!summary || busy !== null) return null;
+  if (summary.status === "complete") {
+    return {
+      disabled: true,
+      label:
+        "Pack already completed this all-supported plan. Clear local data before starting it again.",
+    };
+  }
+  if (summary.status === "cancelled") {
+    return {
+      disabled: true,
+      label:
+        "Pack retained this cancelled all-supported plan. Clear local data before starting another return.",
+    };
+  }
   return {
     disabled: true,
     label:

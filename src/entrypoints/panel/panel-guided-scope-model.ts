@@ -1,5 +1,6 @@
 import {
   FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+  type FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   type FiledReturnsAllSupportedFullFiscalYearRequest,
   type FiledReturnsDownloadScope,
 } from "../../connectors/gst/filed-returns-contracts";
@@ -76,6 +77,44 @@ export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPl
   readonly artifactCount: number;
   /** The maximum concrete portal-file requests before not-filed outcomes. */
   readonly fileCount: number;
+}
+
+/**
+ * The durable plan details a recovery card needs. This deliberately comes
+ * from persisted target evidence rather than a calendar re-expansion: an
+ * interrupted plan resumes its immutable target list.
+ */
+export interface PanelAllReturnsFullYearResumePlan {
+  readonly financialYear: string;
+  readonly returnCount: number;
+  readonly periodCount: number;
+  readonly artifactCount: number;
+  readonly fileCount: number;
+}
+
+export function panelAllReturnsFullYearResumePlan(
+  summary: Pick<
+    FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+    "summaryIdentity" | "targetEvidence"
+  >,
+): PanelAllReturnsFullYearResumePlan | null {
+  const targets = summary.targetEvidence.filter(
+    (target) => target.financialYear === summary.summaryIdentity.financialYear,
+  );
+  if (targets.length === 0) return null;
+
+  const periods = new Set(targets.map((target) => target.period));
+  const returnTypes = new Set(targets.map((target) => target.returnType));
+  const artifacts = new Set(targets.map((target) => `${target.returnType}:${target.artifactType}`));
+  if (periods.size === 0 || returnTypes.size === 0 || artifacts.size === 0) return null;
+
+  return {
+    financialYear: summary.summaryIdentity.financialYear,
+    returnCount: returnTypes.size,
+    periodCount: periods.size,
+    artifactCount: artifacts.size,
+    fileCount: targets.length,
+  };
 }
 
 /**

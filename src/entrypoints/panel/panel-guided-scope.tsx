@@ -23,6 +23,7 @@ import {
   panelGuidedSteps,
   type PanelAllReturnsFullYearPlan,
   type PanelAllReturnsFullYearPreset,
+  type PanelAllReturnsFullYearResumePlan,
   updatePanelGuidedScope,
 } from "./panel-guided-scope-model";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
@@ -36,7 +37,7 @@ export function PanelGuidedScope({
   context,
   externalBlock,
   allReturnsExternalBlock,
-  allReturnsResumeFinancialYear,
+  allReturnsResumePlan,
   flowSummary,
   portalSignedIn,
   savedRun,
@@ -52,7 +53,7 @@ export function PanelGuidedScope({
   /** The saved all-supported plan blocks other scopes without blocking its own resume. */
   allReturnsExternalBlock?: { disabled: true; label: string } | null;
   /** The one saved root plan allowed through its otherwise blocking recovery state. */
-  allReturnsResumeFinancialYear?: string;
+  allReturnsResumePlan?: PanelAllReturnsFullYearResumePlan;
   flowSummary: FiledReturnsFlowSummary | null;
   portalSignedIn: boolean;
   savedRun: FiledReturnsFlowSummary | null;
@@ -102,9 +103,9 @@ export function PanelGuidedScope({
       : [];
   const allReturnsFinancialYears = [
     ...financialYears.slice(0, 2),
-    ...(allReturnsResumeFinancialYear &&
-    !financialYears.slice(0, 2).includes(allReturnsResumeFinancialYear)
-      ? [allReturnsResumeFinancialYear]
+    ...(allReturnsResumePlan &&
+    !financialYears.slice(0, 2).includes(allReturnsResumePlan.financialYear)
+      ? [allReturnsResumePlan.financialYear]
       : []),
   ];
   const allReturnsPresets = alphaSurfacesEnabled
@@ -142,12 +143,15 @@ export function PanelGuidedScope({
                   key={preset.financialYear}
                   busy={busy}
                   externalBlock={
-                    allReturnsResumeFinancialYear === preset.financialYear
+                    allReturnsResumePlan?.financialYear === preset.financialYear
                       ? null
                       : (allReturnsExternalBlock ?? externalBlock)
                   }
                   primary={preset.financialYear === financialYears[1]}
                   plan={preset}
+                  {...(allReturnsResumePlan?.financialYear === preset.financialYear
+                    ? { resumePlan: allReturnsResumePlan }
+                    : {})}
                   portalReady={portalSignedIn}
                   onStart={onStartAllReturnsFullYear}
                   onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
@@ -355,6 +359,7 @@ function AllReturnsPreset({
   primary,
   plan,
   portalReady,
+  resumePlan,
   onStart,
   onStalePlan,
 }: {
@@ -363,6 +368,7 @@ function AllReturnsPreset({
   primary: boolean;
   plan: PanelAllReturnsFullYearPreset;
   portalReady: boolean;
+  resumePlan?: PanelAllReturnsFullYearResumePlan;
   onStart: (plan: PanelAllReturnsFullYearPlan) => void;
   onStalePlan: () => void;
 }) {
@@ -374,7 +380,14 @@ function AllReturnsPreset({
       : portalReady
         ? null
         : "Open a signed-in GST Portal tab to continue.");
-  const countLabel = `${plan.returnCount} ${plural(plan.returnCount, "return")} · ${plan.periodCount} ${plural(plan.periodCount, "period")} each · ${plan.fileCount} ${plural(plan.fileCount, "file")} · one ZIP`;
+  const displayedPlan = resumePlan
+    ? {
+        ...plan,
+        ...resumePlan,
+        note: `Saved plan · ${resumePlan.periodCount} eligible ${plural(resumePlan.periodCount, "period")} retained.`,
+      }
+    : plan;
+  const countLabel = `${displayedPlan.returnCount} ${plural(displayedPlan.returnCount, "return")} · ${displayedPlan.periodCount} ${plural(displayedPlan.periodCount, "period")} each · up to ${displayedPlan.fileCount} ${plural(displayedPlan.fileCount, "file")} · ZIP when files are available`;
   const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
 
   return (
@@ -384,8 +397,12 @@ function AllReturnsPreset({
         type="button"
         disabled={disabled}
         aria-describedby={disabledReason ? disabledReasonId : undefined}
-        aria-label={`${plan.label} for all supported returns. ${countLabel}. ${plan.note}`}
+        aria-label={`${displayedPlan.label} for all supported returns. ${countLabel}. ${displayedPlan.note}`}
         onClick={() => {
+          if (resumePlan) {
+            onStart({ kind: plan.kind, financialYear: plan.financialYear });
+            return;
+          }
           const currentAsOf = new Date();
           const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, currentAsOf);
           if (
@@ -404,7 +421,7 @@ function AllReturnsPreset({
           onStart({ kind: plan.kind, financialYear: plan.financialYear });
         }}
       >
-        <span>{plan.label} · all supported returns</span>
+        <span>{displayedPlan.label} · all supported returns</span>
         <span className="panel-preset-count">{countLabel}</span>
       </button>
       {disabledReason ? (
@@ -412,7 +429,7 @@ function AllReturnsPreset({
           {disabledReason}
         </p>
       ) : null}
-      <p className="panel-preset-note">{plan.note}</p>
+      <p className="panel-preset-note">{displayedPlan.note}</p>
     </React.Fragment>
   );
 }

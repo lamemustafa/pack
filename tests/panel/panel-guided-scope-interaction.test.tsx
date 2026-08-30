@@ -3,11 +3,16 @@ import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
 } from "../../src/connectors/gst/filed-returns-contracts";
 import { supportedFiledReturnsCatalogueEntries } from "../../src/connectors/gst/filed-returns-catalogue";
-import { getFiledReturnsFullFiscalYearPeriods } from "../../src/connectors/gst/filed-returns-scope";
+import {
+  getFiledReturnsFullFiscalYearPeriods,
+  type FiledReturnsMonth,
+} from "../../src/connectors/gst/filed-returns-scope";
+import type { FiledReturnsReturnType } from "../../src/connectors/gst/filed-returns-return-types";
 
 vi.mock("wxt/browser", () => ({
   browser: { tabs: { create: vi.fn() } },
@@ -35,6 +40,24 @@ function realmEvent(type: string): Event {
     Event: new (eventType: string, init?: { bubbles?: boolean }) => Event;
   };
   return new RealmEvent(type, { bubbles: true });
+}
+
+function savedAllReturnsEvidence(
+  financialYear: string,
+  periods: readonly FiledReturnsMonth[],
+): FiledReturnsAllSupportedFullFiscalYearTargetEvidence[] {
+  return periods.flatMap((period) =>
+    (["GSTR-3B", "GSTR-1", "GSTR-2B"] as const satisfies readonly FiledReturnsReturnType[]).map(
+      (returnType) => ({
+        targetId: `${financialYear}:${period}:${returnType}`,
+        financialYear,
+        period,
+        returnType,
+        artifactType: "PDF" as const,
+        outcome: "pending" as const,
+      }),
+    ),
+  );
 }
 
 function Harness({
@@ -339,7 +362,9 @@ describe("panel guided scope interaction", () => {
     expect(presets.length).toBeGreaterThan(0);
     expect(dom.window.document.activeElement).toBe(previousControl);
     expect(presets[0]?.textContent).toContain("Everything last year · all supported returns");
-    expect(presets[0]?.textContent).toContain("3 returns · 12 periods each · 84 files · one ZIP");
+    expect(presets[0]?.textContent).toContain(
+      "3 returns · 12 periods each · up to 84 files · ZIP when files are available",
+    );
     expect(container.textContent).toContain("Complete financial year.");
     expect(presets[1]?.textContent).toContain("Everything this year · all supported returns");
     expect(container.textContent).toContain("Partial year · 4 eligible periods so far.");
@@ -411,8 +436,8 @@ describe("panel guided scope interaction", () => {
             status: "blocked",
             updatedAt: "2026-08-27T00:00:00.000Z",
             completedTargetIds: [],
-            targetEvidence: [],
-            totalTargets: 1,
+            targetEvidence: savedAllReturnsEvidence("2025-26", ["April", "May", "June", "July"]),
+            totalTargets: 12,
             flowStepScope: PANEL_TEST_SCOPE,
             flowStep: {
               connectorId: "gst",
@@ -454,8 +479,8 @@ describe("panel guided scope interaction", () => {
             status: "blocked",
             updatedAt: "2027-04-01T00:00:00.000Z",
             completedTargetIds: [],
-            targetEvidence: [],
-            totalTargets: 1,
+            targetEvidence: savedAllReturnsEvidence("2025-26", ["April", "May", "June", "July"]),
+            totalTargets: 12,
             flowStepScope: PANEL_TEST_SCOPE,
             flowStep: {
               connectorId: "gst",
@@ -479,6 +504,96 @@ describe("panel guided scope interaction", () => {
     expect(allReturns[0]?.disabled).toBe(false);
     expect(allReturns[1]?.textContent).toContain("Everything last year");
     expect(allReturns[1]?.disabled).toBe(true);
+  });
+
+  it("retains the persisted periods when a resumable plan is older than the current calendar snapshot", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+    const onStartAllReturnsFullYear = vi.fn();
+    await mount(
+      {
+        overrides: {
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: true,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            status: "partial",
+            updatedAt: "2026-09-01T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            totalTargets: 12,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "partial",
+              safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+              safeMessage: "Synthetic all-supported recovery.",
+            },
+          },
+          startAllSupportedFullFiscalYearFlow: onStartAllReturnsFullYear,
+        },
+      },
+      false,
+      false,
+    );
+
+    const current = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
+    ).find((button) => button.textContent?.includes("Everything this year"));
+    expect(current?.textContent).toContain("3 returns · 4 periods each · up to 12 files");
+    expect(container.textContent).toContain("Saved plan · 4 eligible periods retained.");
+    await act(async () => {
+      current?.dispatchEvent(realmEvent("click"));
+      await Promise.resolve();
+    });
+    expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith({
+      kind: "all-supported-returns-full-fiscal-year",
+      financialYear: "2026-27",
+    });
+  });
+
+  it("does not leave a completed all-returns recipe as a silent no-op", async () => {
+    await mount(
+      {
+        overrides: {
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2025-26",
+            },
+            status: "complete",
+            completedAt: "2026-08-30T00:00:00.000Z",
+            updatedAt: "2026-08-30T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2025-26", ["April"]),
+            totalTargets: 3,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    const allReturns = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
+    );
+    expect(allReturns).toHaveLength(2);
+    expect(allReturns.every((preset) => preset.disabled)).toBe(true);
+    expect(container.textContent).toContain(
+      "Pack already completed this all-supported plan. Clear local data before starting it again.",
+    );
   });
 
   it("locks every new preset while an all-supported plan needs review", async () => {
