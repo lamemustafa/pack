@@ -100,14 +100,18 @@ export function PanelGuidedScope({
     alphaSurfacesEnabled && currentFinancialYear
       ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
       : [];
+  const allReturnsFinancialYears = [
+    ...financialYears.slice(0, 2),
+    ...(allReturnsResumeFinancialYear &&
+    !financialYears.slice(0, 2).includes(allReturnsResumeFinancialYear)
+      ? [allReturnsResumeFinancialYear]
+      : []),
+  ];
   const allReturnsPresets = alphaSurfacesEnabled
-    ? financialYears
-        .slice(0, 2)
-        .reverse()
-        .flatMap((financialYear) => {
-          const preset = panelAllReturnsFullYearPreset(financialYear, presetAsOf);
-          return preset ? [preset] : [];
-        })
+    ? allReturnsFinancialYears.reverse().flatMap((financialYear) => {
+        const preset = panelAllReturnsFullYearPreset(financialYear, presetAsOf);
+        return preset ? [preset] : [];
+      })
     : [];
 
   React.useEffect(() => {
@@ -371,6 +375,7 @@ function AllReturnsPreset({
         ? null
         : "Open a signed-in GST Portal tab to continue.");
   const countLabel = `${plan.returnCount} ${plural(plan.returnCount, "return")} · ${plan.periodCount} ${plural(plan.periodCount, "period")} each · ${plan.fileCount} ${plural(plan.fileCount, "file")} · one ZIP`;
+  const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
 
   return (
     <React.Fragment>
@@ -378,7 +383,7 @@ function AllReturnsPreset({
         className={`panel-preset panel-everything-preset${primary ? " panel-everything-preset-primary" : ""}`}
         type="button"
         disabled={disabled}
-        aria-describedby={disabledReason ? "preset-all-returns-reason" : undefined}
+        aria-describedby={disabledReason ? disabledReasonId : undefined}
         aria-label={`${plan.label} for all supported returns. ${countLabel}. ${plan.note}`}
         onClick={() => {
           const currentAsOf = new Date();
@@ -403,7 +408,7 @@ function AllReturnsPreset({
         <span className="panel-preset-count">{countLabel}</span>
       </button>
       {disabledReason ? (
-        <p className="panel-preset-reason" id="preset-all-returns-reason">
+        <p className="panel-preset-reason" id={disabledReasonId}>
           {disabledReason}
         </p>
       ) : null}

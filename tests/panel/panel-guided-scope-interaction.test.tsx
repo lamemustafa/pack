@@ -439,6 +439,48 @@ describe("panel guided scope interaction", () => {
     expect(allReturns[1]?.disabled).toBe(true);
   });
 
+  it("keeps an older saved all-returns financial year available to resume", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2027-04-01T00:00:00.000Z"));
+    await mount(
+      {
+        overrides: {
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: true,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2025-26",
+            },
+            status: "blocked",
+            updatedAt: "2027-04-01T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: [],
+            totalTargets: 1,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "blocked",
+              safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+              safeMessage: "Synthetic all-supported recovery.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    const allReturns = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
+    );
+    expect(allReturns).toHaveLength(2);
+    expect(allReturns[0]?.textContent).toContain("Everything in 2025-26");
+    expect(allReturns[0]?.disabled).toBe(false);
+    expect(allReturns[1]?.textContent).toContain("Everything last year");
+    expect(allReturns[1]?.disabled).toBe(true);
+  });
+
   it("locks every new preset while an all-supported plan needs review", async () => {
     await mount(
       {
@@ -514,6 +556,8 @@ describe("panel guided scope interaction", () => {
       container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
     );
     expect(presets.length).toBeGreaterThan(0);
+    const reasonIds = presets.map((preset) => preset.getAttribute("aria-describedby"));
+    expect(new Set(reasonIds).size).toBe(reasonIds.length);
     for (const preset of presets) {
       expect(preset.disabled).toBe(true);
       const reasonId = preset.getAttribute("aria-describedby");
