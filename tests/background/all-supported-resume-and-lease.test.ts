@@ -60,18 +60,17 @@ describe("an all-supported root whose child is still working", () => {
   });
 });
 
-describe("a saved all-supported plan the runner can continue", () => {
+describe("whether resuming would actually advance the plan", () => {
+  // Mirrors the branches of `continueSavedAllSupportedFullFiscalYearRun` that do work. A branch
+  // returning the same interrupted or review state unchanged must not enable the control, or the
+  // reader presses something that cannot help; withholding it on a genuinely resumable plan leaves
+  // discarding as the only way out. Two earlier attempts erred in each direction.
   it.each([
     ["export-pending"],
     ["export-retry-pending"],
-    ["download-observing"],
     ["downloaded-cleanup-pending"],
     ["no-artifacts-cleanup-pending"],
-    [undefined],
-  ])("reports a non-terminal plan at phase %s as resumable", (phase) => {
-    // Invoking the same start routes to `continueSavedAllSupportedFullFiscalYearRun`, which handles
-    // every one of these. Naming a subset diverged from the runner and disabled the preset for
-    // plans it would have resumed.
+  ])("advances at %s", (phase) => {
     const summary = toAllSupportedFullFiscalYearSummary(
       runningLedger(phase as never),
       LONG_AFTER,
@@ -80,7 +79,43 @@ describe("a saved all-supported plan the runner can continue", () => {
     expect(summary.resumeAvailable).toBe(true);
   });
 
-  it.each([["complete"], ["cancelled"]])("reports a %s plan as not resumable", (status) => {
+  it("advances at download-observing once a browser download is recorded", () => {
+    const withDownload = {
+      ...runningLedger("download-observing" as never),
+      zipDownloadAttempt: { requestedAt: STALE_AT, downloadId: 7 },
+    } as never;
+    expect(
+      toAllSupportedFullFiscalYearSummary(withDownload, LONG_AFTER, true).resumeAvailable,
+    ).toBe(true);
+  });
+
+  it("does not advance at download-observing without one", () => {
+    // The runner returns the manual-review step unchanged in that case.
+    expect(
+      toAllSupportedFullFiscalYearSummary(
+        runningLedger("download-observing" as never),
+        LONG_AFTER,
+        true,
+      ).resumeAvailable,
+    ).toBe(false);
+  });
+
+  it("does not advance while a target is still marked running", () => {
+    // That ledger belongs to the interrupted projection, not to a resume.
+    expect(
+      toAllSupportedFullFiscalYearSummary(runningLedger(), LONG_AFTER, true).resumeAvailable,
+    ).toBe(false);
+  });
+
+  it("advances when running with no target left running", () => {
+    const idle = {
+      ...runningLedger(),
+      targets: [{ ...runningLedger().targets[0]!, status: "pending" }],
+    } as never;
+    expect(toAllSupportedFullFiscalYearSummary(idle, LONG_AFTER, true).resumeAvailable).toBe(true);
+  });
+
+  it.each([["complete"], ["cancelled"]])("does not advance a %s root", (status) => {
     const terminal = { ...runningLedger(), status } as never;
     expect(toAllSupportedFullFiscalYearSummary(terminal, LONG_AFTER, true).resumeAvailable).toBe(
       false,

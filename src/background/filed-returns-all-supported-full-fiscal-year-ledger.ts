@@ -25,6 +25,52 @@ const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>
   "not-filed",
 ]);
 
+/**
+ * Whether invoking the same all-supported start again would actually advance this ledger.
+ *
+ * Mirrors the branches of `continueSavedAllSupportedFullFiscalYearRun` that do work, and only
+ * those. The distinction matters at the surface: a branch that returns the same interrupted,
+ * unresolved or manual-review state without changing the ledger leaves the reader pressing a
+ * control that cannot help, while withholding the control on a genuinely resumable plan leaves
+ * discarding it as the only way out.
+ *
+ * Two earlier attempts got this wrong in opposite directions -- three ZIP phases was too narrow,
+ * every non-terminal status too broad -- so it is written against the runner's branches directly.
+ */
+export function allSupportedResumeIsProductive(
+  ledger: Pick<
+    FiledReturnsAllSupportedFullFiscalYearLedger,
+    "status" | "zipPhase" | "targets" | "zipDownloadAttempt"
+  >,
+): boolean {
+  const phase = ledger.zipPhase;
+  if (phase === "download-observing") {
+    // The runner reconciles only against a recorded browser download; without one it returns the
+    // manual-review step unchanged.
+    return typeof ledger.zipDownloadAttempt?.downloadId === "number";
+  }
+  if (
+    phase === "export-pending" ||
+    phase === "export-retry-pending" ||
+    phase === "downloaded-cleanup-pending" ||
+    phase === "no-artifacts-cleanup-pending"
+  ) {
+    return true;
+  }
+  // Any other recorded phase, cleaned included, returns a terminal or review step unchanged.
+  if (phase) return false;
+  if (ledger.status === "running") {
+    // A target still marked running belongs to the interrupted projection, not to a resume.
+    return !ledger.targets.some((target) => target.status === "running");
+  }
+  if (ledger.status === "partial") {
+    return ledger.targets.every((target) =>
+      ["pending", ...POSITIVE_TARGET_STATUSES].includes(target.status),
+    );
+  }
+  return false;
+}
+
 export function createAllSupportedFullFiscalYearLedger(
   planRoot: FiledReturnsAllSupportedFullFiscalYearIdentity,
   returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],

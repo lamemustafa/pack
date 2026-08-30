@@ -6,7 +6,10 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
-import { isAllSupportedFullFiscalYearLedgerStale } from "./filed-returns-all-supported-full-fiscal-year-ledger";
+import {
+  allSupportedResumeIsProductive,
+  isAllSupportedFullFiscalYearLedgerStale,
+} from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import { isFiledReturnsRunLeaseLive } from "./filed-returns-active-run";
 import {
   readAllSupportedPlanLedgersStorageState,
@@ -69,12 +72,7 @@ export function toAllSupportedFullFiscalYearSummary(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
   );
-  // Whatever the runner will resume, rather than a restatement of some of it. Invoking the same
-  // all-supported start on a saved ledger routes to `continueSavedAllSupportedFullFiscalYearRun`,
-  // which handles the observing, export and cleanup phases and the running or partial checkpoints
-  // alike; only a terminal root has nothing to continue. Naming a subset here diverged from the
-  // runner and disabled the preset for saved plans it would have resumed.
-  const resumeAvailable = ledger.status !== "complete" && ledger.status !== "cancelled";
+  const resumeAvailable = allSupportedResumeIsProductive(ledger);
   return {
     resumeAvailable,
     summaryIdentity: { ...ledger.planRoot },
