@@ -24,7 +24,7 @@ describe("all-returns panel presets", () => {
       kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
       financialYear,
       label: "Everything this year",
-      note: `Partial year · ${periodCount} filed periods so far.`,
+      note: `Partial year · ${periodCount} eligible periods so far.`,
       returnCount: eligible.length,
       periodCount,
       artifactCount,

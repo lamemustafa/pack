@@ -48,7 +48,7 @@ describe("panel guided scope", () => {
     expect(markup).toContain("Everything last year · all supported returns");
     expect(markup).toContain("Complete financial year.");
     expect(markup).toContain("Everything this year · all supported returns");
-    expect(markup).toContain("Partial year · 4 filed periods so far.");
+    expect(markup).toContain("Partial year · 4 eligible periods so far.");
     expect(markup).toContain("This year&#x27;s GSTR-3B");
     expect(markup).toContain("This year&#x27;s GSTR-1");
     expect(markup).toContain("This year&#x27;s GSTR-2B");

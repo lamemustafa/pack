@@ -154,10 +154,10 @@ export function panelAllReturnsFullYearPreset(
         : `Everything in ${financialYear}`;
   const note =
     financialYearPosition === 0
-      ? `Partial year · ${periodCount} filed ${periodCount === 1 ? "period" : "periods"} so far.`
+      ? `Partial year · ${periodCount} eligible ${periodCount === 1 ? "period" : "periods"} so far.`
       : financialYearPosition === 1
         ? "Complete financial year."
-        : `${periodCount} filed ${periodCount === 1 ? "period" : "periods"}.`;
+        : `${periodCount} eligible ${periodCount === 1 ? "period" : "periods"}.`;
 
   return {
     kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,

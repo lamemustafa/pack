@@ -60,7 +60,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   // The saved plan blocks other scopes, but not its own resume: the runner retries the saved ZIP or
   // cleanup phase when this same start is invoked again, and blocking that leaves discarding the
   // plan as the only route out of a recoverable state.
-  const allReturnsRunBlock = allSupportedSummary?.resumeAvailable ? null : allSupportedRunBlock;
+  const allReturnsResumeFinancialYear = allSupportedSummary?.resumeAvailable
+    ? allSupportedSummary.summaryIdentity.financialYear
+    : undefined;
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -189,7 +191,8 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 busy={pack.effectiveBusy}
                 context={pack.context}
                 externalBlock={savedRunBlock ?? allSupportedRunBlock}
-                allReturnsExternalBlock={savedRunBlock ?? allReturnsRunBlock}
+                allReturnsExternalBlock={savedRunBlock ?? allSupportedRunBlock}
+                {...(allReturnsResumeFinancialYear ? { allReturnsResumeFinancialYear } : {})}
                 flowSummary={pack.scopedFlowSummary}
                 portalSignedIn={portalSignedIn}
                 savedRun={savedRun}

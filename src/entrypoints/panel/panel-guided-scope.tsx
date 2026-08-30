@@ -36,6 +36,7 @@ export function PanelGuidedScope({
   context,
   externalBlock,
   allReturnsExternalBlock,
+  allReturnsResumeFinancialYear,
   flowSummary,
   portalSignedIn,
   savedRun,
@@ -50,6 +51,8 @@ export function PanelGuidedScope({
   externalBlock: { disabled: true; label: string } | null;
   /** The saved all-supported plan blocks other scopes without blocking its own resume. */
   allReturnsExternalBlock?: { disabled: true; label: string } | null;
+  /** The one saved root plan allowed through its otherwise blocking recovery state. */
+  allReturnsResumeFinancialYear?: string;
   flowSummary: FiledReturnsFlowSummary | null;
   portalSignedIn: boolean;
   savedRun: FiledReturnsFlowSummary | null;
@@ -134,7 +137,11 @@ export function PanelGuidedScope({
                 <AllReturnsPreset
                   key={preset.financialYear}
                   busy={busy}
-                  externalBlock={allReturnsExternalBlock ?? externalBlock}
+                  externalBlock={
+                    allReturnsResumeFinancialYear === preset.financialYear
+                      ? null
+                      : (allReturnsExternalBlock ?? externalBlock)
+                  }
                   primary={preset.financialYear === financialYears[1]}
                   plan={preset}
                   portalReady={portalSignedIn}
@@ -379,6 +386,8 @@ function AllReturnsPreset({
           if (
             !currentPlan ||
             currentPlan.financialYear !== plan.financialYear ||
+            currentPlan.label !== plan.label ||
+            currentPlan.note !== plan.note ||
             currentPlan.returnCount !== plan.returnCount ||
             currentPlan.periodCount !== plan.periodCount ||
             currentPlan.artifactCount !== plan.artifactCount ||
