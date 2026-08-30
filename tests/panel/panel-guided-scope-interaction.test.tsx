@@ -275,14 +275,14 @@ describe("panel guided scope interaction", () => {
     expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
   });
 
-  it("never exceeds four controls while advancing and focuses the active field", async () => {
+  it("never exceeds three controls while advancing and focuses the active field", async () => {
     await mount();
-    expect(guideControlCount()).toBe(4);
+    expect(guideControlCount()).toBe(3);
 
     for (let step = 2; step <= 4; step += 1) {
       await clickButton("Continue");
       expect(container.textContent).toContain(`Step ${step} of 4`);
-      expect(guideControlCount()).toBe(4);
+      expect(guideControlCount()).toBe(3);
       expect(dom.window.document.activeElement).toBe(
         container.querySelector(".panel-guide select"),
       );
@@ -339,9 +339,7 @@ describe("panel guided scope interaction", () => {
     expect(dom.window.document.activeElement).toBe(previousControl);
     expect(presets[0]?.classList.contains("panel-everything-preset")).toBe(true);
     expect(presets[0]?.textContent).toContain("Everything this year · all supported returns");
-    expect(presets[0]?.textContent).toMatch(
-      /\d+ returns? · \d+ return periods? · \d+ formats? · \d+ files? · one ZIP/,
-    );
+    expect(presets[0]?.textContent).toContain("3 returns · 4 periods each · 28 files · one ZIP");
     expect(presets[0]?.getAttribute("aria-label")).toContain("all supported returns");
 
     await act(async () => {
@@ -743,7 +741,7 @@ describe("panel guided scope interaction", () => {
 
     expect(container.textContent).toContain("Step 1 of 4");
     expect(container.querySelectorAll(".panel-guide-scope")).toHaveLength(1);
-    expect(guideControlCount()).toBe(4);
+    expect(guideControlCount()).toBe(3);
     expect(dom.window.document.activeElement).toBe(container.querySelector(".panel-guide select"));
   });
 
@@ -780,27 +778,15 @@ describe("panel guided scope interaction", () => {
     ]);
   });
 
-  it("keeps all unsupported declarations out of every interactive option", async () => {
+  it("keeps unavailable returns out of the interactive options and off the panel", async () => {
     await mount();
     const optionValues = Array.from(container.querySelectorAll("option"), (option) => option.value);
 
     expect(optionValues).toEqual(
       supportedFiledReturnsCatalogueEntries().map((entry) => entry.returnType),
     );
-    expect(
-      Array.from(container.querySelectorAll(".panel-catalogue h3"), (heading) =>
-        heading.textContent?.trim(),
-      ),
-    ).toEqual(["Available 3", "Not available in Pack 5"]);
-    expect(
-      Array.from(
-        container.querySelectorAll(".panel-catalogue ul"),
-        (list) => list.querySelectorAll(":scope > li").length,
-      ),
-    ).toEqual([3, 5]);
-    expect(
-      container.querySelectorAll(".panel-catalogue button, .panel-catalogue select"),
-    ).toHaveLength(0);
+    expect(container.textContent).not.toContain("Catalogue & limits");
+    expect(container.textContent).not.toContain("GSTR-9");
   });
 
   it("carries a scope-matched review refusal into the final action", async () => {

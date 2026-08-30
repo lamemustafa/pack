@@ -6,7 +6,7 @@ import {
   panelGuidedStepForDisplay,
   panelGuidedSteps,
 } from "../../src/entrypoints/panel/panel-guided-scope-model";
-import { CatalogueLimits, PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
+import { PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
 import { PANEL_TEST_SCOPE } from "./panel-controller.test-helpers";
 import { FILED_RETURNS_PERIODICITIES } from "../../src/connectors/gst/filed-returns-capabilities";
 
@@ -25,10 +25,6 @@ function renderGuide() {
       onStart={vi.fn()}
     />,
   );
-}
-
-function renderCatalogue() {
-  return renderToStaticMarkup(<CatalogueLimits />);
 }
 
 describe("panel guided scope", () => {
@@ -54,57 +50,6 @@ describe("panel guided scope", () => {
     expect(markup).toContain("Choose return, year and period");
     expect(markup).not.toContain("Catalogue &amp; limits");
     expect(markup).not.toContain("Step 1 of 4");
-  });
-
-  it("keeps unsupported catalogue rows descriptive and out of the select", () => {
-    const markup = renderCatalogue();
-    expect(markup).toContain("GSTR-9");
-    expect(markup).toContain("Ledgers");
-    expect(markup).toContain("Not available in Pack <span>5</span>");
-    expect(markup).toContain("<span>GSTR-9</span><span>Annual</span>");
-    expect(markup).toContain("<span>Ledgers</span><span>None</span>");
-  });
-
-  it("shows concrete artifact availability for every supported catalogue row", () => {
-    const markup = renderCatalogue();
-
-    expect(markup).toContain(
-      "Monthly or quarterly, as set on the GST Portal · Filed return (PDF) · Portal data (JSON)",
-    );
-    expect(markup).toContain(
-      "Monthly (quarterly filing is not currently supported by Pack) · Summary (PDF) · E-invoice details (Excel)",
-    );
-    expect(markup).toContain("Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)");
-  });
-
-  it("groups availability once instead of repeating the same decision on every row", () => {
-    const markup = renderCatalogue();
-
-    expect(markup).toContain("3 available · 5 unavailable");
-    expect(markup).toContain("Available <span>3</span>");
-    expect(markup).toContain("Not available in Pack <span>5</span>");
-    expect(markup.match(/not available in Pack/gi)).toHaveLength(1);
-  });
-
-  it.each([
-    [
-      "GSTR-3B",
-      "Monthly or quarterly, as set on the GST Portal · Filed return (PDF) · Portal data (JSON)",
-    ],
-    [
-      "GSTR-1",
-      "Monthly (quarterly filing is not currently supported by Pack) · Summary (PDF) · E-invoice details (Excel)",
-    ],
-    ["GSTR-2B", "Monthly · Summary (PDF) · Details (Excel) · Portal data (JSON)"],
-    ["GSTR-9", "Annual"],
-    ["GSTR-9C", "Annual"],
-    ["GSTR-4A", "Quarterly"],
-    ["IFF", "Monthly"],
-    ["Ledgers", "None"],
-  ])("renders the declared %s catalogue decision", (label, decision) => {
-    const markup = renderCatalogue();
-
-    expect(markup).toContain(`<span>${label}</span><span>${decision}</span>`);
   });
 
   it("derives four exact scope steps from the selected catalogue row", () => {
