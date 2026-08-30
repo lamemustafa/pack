@@ -25,7 +25,7 @@ describe("everything-this-year panel preset", () => {
       financialYear,
       label: "Everything this year",
       returnCount: eligible.length,
-      targetPeriodCount: eligible.length * periodCount,
+      periodCount,
       artifactCount,
       fileCount: artifactCount * periodCount,
     });

@@ -7,8 +7,6 @@ import type {
 import {
   filedReturnsCapability,
   filedReturnsCapabilityRunNotes,
-  filedReturnsCatalogueEntries,
-  type FiledReturnsCatalogueEntry,
 } from "../../connectors/gst/filed-returns-capabilities";
 import { getFiledReturnsFinancialYearOptions } from "../../connectors/gst/filed-returns-scope";
 import { ScopeFormAction } from "../popup/components";
@@ -326,7 +324,6 @@ export function PanelGuidedScope({
             : `A saved run is paused at ${flowSummary.currentPeriod}. Resume or discard it before starting another scope.`}
         </p>
       ) : null}
-      <CatalogueLimits />
     </section>
   );
 }
@@ -354,7 +351,7 @@ function AllReturnsPreset({
       : portalReady
         ? null
         : "Open a signed-in GST Portal tab to continue.");
-  const countLabel = `${plan.returnCount} ${plural(plan.returnCount, "return")} · ${plan.targetPeriodCount} return ${plural(plan.targetPeriodCount, "period")} · ${plan.artifactCount} ${plural(plan.artifactCount, "format")} · ${plan.fileCount} ${plural(plan.fileCount, "file")} · one ZIP`;
+  const countLabel = `${plan.returnCount} ${plural(plan.returnCount, "return")} · ${plan.periodCount} ${plural(plan.periodCount, "period")} each · ${plan.fileCount} ${plural(plan.fileCount, "file")} · one ZIP`;
 
   return (
     <React.Fragment>
@@ -374,7 +371,7 @@ function AllReturnsPreset({
             !currentPlan ||
             currentPlan.financialYear !== plan.financialYear ||
             currentPlan.returnCount !== plan.returnCount ||
-            currentPlan.targetPeriodCount !== plan.targetPeriodCount ||
+            currentPlan.periodCount !== plan.periodCount ||
             currentPlan.artifactCount !== plan.artifactCount ||
             currentPlan.fileCount !== plan.fileCount
           ) {
@@ -428,67 +425,4 @@ function ActiveScope({ scope }: { scope: FiledReturnsDownloadScope }) {
       </dl>
     </div>
   );
-}
-
-export function CatalogueLimits() {
-  const entries = filedReturnsCatalogueEntries();
-  const available = entries.filter((entry) => entry.capability.supportStatus === "supported");
-  const unavailable = entries.filter((entry) => entry.capability.supportStatus === "unsupported");
-  return (
-    <details className="panel-catalogue">
-      <summary>
-        Catalogue &amp; limits
-        <span>
-          {available.length} available · {unavailable.length} unavailable
-        </span>
-      </summary>
-      <p>Available rows show selectable files. Other rows are reference only.</p>
-      <CatalogueGroup heading="Available" entries={available} />
-      <CatalogueGroup
-        className="panel-catalogue-unavailable"
-        heading="Not available in Pack"
-        entries={unavailable}
-      />
-    </details>
-  );
-}
-
-function CatalogueGroup({
-  className,
-  entries,
-  heading,
-}: {
-  className?: string;
-  entries: FiledReturnsCatalogueEntry[];
-  heading: string;
-}) {
-  return (
-    <section className={className}>
-      <h3>
-        {heading} <span>{entries.length}</span>
-      </h3>
-      <ul>
-        {entries.map(({ returnType, capability }) => {
-          const artifactLabels = Object.values(capability.artifacts).map(
-            (artifact) => artifact.label,
-          );
-          return (
-            <li key={returnType}>
-              <span>{capability.label}</span>
-              <span>
-                {capability.cadenceLabel ?? sentenceCase(capability.periodicity)}
-                {capability.supportStatus === "supported"
-                  ? ` · ${artifactLabels.join(" · ")}`
-                  : null}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function sentenceCase(value: string): string {
-  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
