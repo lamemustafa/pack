@@ -68,8 +68,8 @@ export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPl
   readonly label: string;
   /** Number of catalogue rows represented by this one root plan. */
   readonly returnCount: number;
-  /** One return-period target for each eligible catalogue row and period. */
-  readonly targetPeriodCount: number;
+  /** Eligible filing periods for each represented return. */
+  readonly periodCount: number;
   /** Concrete portal formats selected across every eligible return. */
   readonly artifactCount: number;
   /** The maximum concrete portal-file requests before not-filed outcomes. */
@@ -149,7 +149,7 @@ export function panelAllReturnsFullYearPreset(
     financialYear,
     label: "Everything this year",
     returnCount: expansion.targets.length,
-    targetPeriodCount: periodCount * expansion.targets.length,
+    periodCount,
     artifactCount,
     fileCount: periodCount * artifactCount,
   };
