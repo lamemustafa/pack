@@ -61,7 +61,7 @@ export function toAllSupportedFullFiscalYearSummary(
   now = new Date(),
   leaseIsLive = false,
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
-  const flowStep = summaryStep(ledger, now);
+  const flowStep = summaryStep(ledger, now, leaseIsLive);
   const zipDelivered =
     ledger.zipPhase === "cleaned-after-download" ||
     ledger.zipPhase === "downloaded-cleanup-pending";
@@ -69,12 +69,12 @@ export function toAllSupportedFullFiscalYearSummary(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
   );
-  // The phases the runner retries when the same start is invoked again. Everything else is either
-  // terminal or has no saved work to resume.
-  const resumeAvailable =
-    ledger.zipPhase === "export-retry-pending" ||
-    ledger.zipPhase === "downloaded-cleanup-pending" ||
-    ledger.zipPhase === "no-artifacts-cleanup-pending";
+  // Whatever the runner will resume, rather than a restatement of some of it. Invoking the same
+  // all-supported start on a saved ledger routes to `continueSavedAllSupportedFullFiscalYearRun`,
+  // which handles the observing, export and cleanup phases and the running or partial checkpoints
+  // alike; only a terminal root has nothing to continue. Naming a subset here diverged from the
+  // runner and disabled the preset for saved plans it would have resumed.
+  const resumeAvailable = ledger.status !== "complete" && ledger.status !== "cancelled";
   return {
     resumeAvailable,
     summaryIdentity: { ...ledger.planRoot },
@@ -122,6 +122,7 @@ function currentLedger(
 function summaryStep(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   now: Date,
+  leaseIsLive: boolean,
 ): PortalFlowStepResult {
   const noArtifacts = ledger.zipPhase === "cleaned-without-export";
   const current =
@@ -129,7 +130,13 @@ function summaryStep(
     ledger.targets[0]!;
   const connectorId = "gst" as const;
   const scopeId = filedReturnScopeId(current.returnType);
-  if (ledger.status === "running" && isAllSupportedFullFiscalYearLedgerStale(ledger, now)) {
+  // The status projection below already refuses to call a leased run interrupted; the message has
+  // to agree, or the panel shows "running" while telling the reader Pack stopped.
+  if (
+    ledger.status === "running" &&
+    isAllSupportedFullFiscalYearLedgerStale(ledger, now) &&
+    !leaseIsLive
+  ) {
     return {
       connectorId,
       scopeId,

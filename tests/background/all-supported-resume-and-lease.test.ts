@@ -60,12 +60,18 @@ describe("an all-supported root whose child is still working", () => {
   });
 });
 
-describe("a saved all-supported plan the runner can retry", () => {
+describe("a saved all-supported plan the runner can continue", () => {
   it.each([
+    ["export-pending"],
     ["export-retry-pending"],
+    ["download-observing"],
     ["downloaded-cleanup-pending"],
     ["no-artifacts-cleanup-pending"],
-  ])("reports %s as resumable", (phase) => {
+    [undefined],
+  ])("reports a non-terminal plan at phase %s as resumable", (phase) => {
+    // Invoking the same start routes to `continueSavedAllSupportedFullFiscalYearRun`, which handles
+    // every one of these. Naming a subset diverged from the runner and disabled the preset for
+    // plans it would have resumed.
     const summary = toAllSupportedFullFiscalYearSummary(
       runningLedger(phase as never),
       LONG_AFTER,
@@ -74,9 +80,26 @@ describe("a saved all-supported plan the runner can retry", () => {
     expect(summary.resumeAvailable).toBe(true);
   });
 
-  it("reports a plan with no saved phase as not resumable", () => {
-    expect(
-      toAllSupportedFullFiscalYearSummary(runningLedger(), LONG_AFTER, true).resumeAvailable,
-    ).toBe(false);
+  it.each([["complete"], ["cancelled"]])("reports a %s plan as not resumable", (status) => {
+    const terminal = { ...runningLedger(), status } as never;
+    expect(toAllSupportedFullFiscalYearSummary(terminal, LONG_AFTER, true).resumeAvailable).toBe(
+      false,
+    );
+  });
+});
+
+describe("the message a leased run shows", () => {
+  it("does not say Pack stopped while the lease is live", () => {
+    // Status and flow-step message must agree: "running" beside "Pack stopped" is the
+    // contradiction the reader actually sees.
+    const summary = toAllSupportedFullFiscalYearSummary(runningLedger(), LONG_AFTER, true);
+    expect(summary.status).toBe("running");
+    expect(summary.flowStep.safeMessage).not.toMatch(/stopped|interrupted/i);
+  });
+
+  it("says so once the lease is not live", () => {
+    const summary = toAllSupportedFullFiscalYearSummary(runningLedger(), LONG_AFTER, false);
+    expect(summary.status).toBe("blocked");
+    expect(summary.flowStep.safeMessage).toMatch(/stopped|interrupted/i);
   });
 });

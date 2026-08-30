@@ -475,11 +475,9 @@ function toAllSupportedSummary(
       ledger.targets[0]!,
   );
   return {
-    // Same rule as the durable projection: only the phases the runner retries on a repeated start.
-    resumeAvailable:
-      ledger.zipPhase === "export-retry-pending" ||
-      ledger.zipPhase === "downloaded-cleanup-pending" ||
-      ledger.zipPhase === "no-artifacts-cleanup-pending",
+    // Same rule as the durable projection: a saved ledger that is not terminal is one this same
+    // start will continue.
+    resumeAvailable: ledger.status !== "complete" && ledger.status !== "cancelled",
     summaryIdentity: { ...ledger.planRoot },
     status: ledger.status,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
