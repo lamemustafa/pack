@@ -19,7 +19,10 @@ import {
   markAllSupportedFullFiscalYearTargetTerminal,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
 import { persistAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
-import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
+import {
+  FILED_RETURNS_MONTHS,
+  getFiledReturnsFullFiscalYearPeriods,
+} from "../../src/connectors/gst/filed-returns-scope";
 
 const stored = vi.hoisted(() => ({ values: {} as Record<string, unknown> }));
 const zip = vi.hoisted(() => ({
@@ -135,6 +138,30 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(zip.export).toHaveBeenCalledOnce();
   });
 
+  it("keeps every retained terminal root in a completed action response", async () => {
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(
+      { ...request, financialYear: "2025-26" },
+      deps,
+      runner,
+    );
+
+    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    expect(response).toMatchObject({
+      allSupportedFullFiscalYearFlowSummary: {
+        terminalPlanRoots: [
+          { financialYear: "2025-26", status: "complete", periodCount: 12 },
+          {
+            financialYear: "2026-27",
+            status: "complete",
+            periodCount: getFiledReturnsFullFiscalYearPeriods("2026-27", NOW).length,
+          },
+        ],
+      },
+    });
+  });
+
   it("stops at the first unresolved target and never starts a final ZIP", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
 
@@ -167,7 +194,11 @@ describe("all-supported full-fiscal-year worker", () => {
     const first = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
     expect(first).toMatchObject({
-      allSupportedFullFiscalYearFlowSummary: { status: "blocked" },
+      allSupportedFullFiscalYearFlowSummary: {
+        status: "blocked",
+        resumeAvailable: true,
+        resumeMode: "local-only",
+      },
     });
     expect(savedLedger()).toMatchObject({ zipPhase: "downloaded-cleanup-pending" });
     const second = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);

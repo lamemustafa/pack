@@ -18,6 +18,10 @@ import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
 import { PanelGuidedScope, isPackAlphaBuildMode } from "./panel-guided-scope";
+import {
+  panelAllReturnsFullYearPreset,
+  panelAllReturnsFullYearResumePlan,
+} from "./panel-guided-scope-model";
 
 export type PackPanelController = ReturnType<typeof usePackPopupController>;
 
@@ -57,10 +61,14 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
   const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
+  const allReturnsTerminalBlocks = getAllSupportedTerminalBlocks(allSupportedSummary);
   // The saved plan blocks other scopes, but not its own resume: the runner retries the saved ZIP or
   // cleanup phase when this same start is invoked again, and blocking that leaves discarding the
   // plan as the only route out of a recoverable state.
-  const allReturnsRunBlock = allSupportedSummary?.resumeAvailable ? null : allSupportedRunBlock;
+  const allReturnsResumePlan = allSupportedSummary?.resumeAvailable
+    ? panelAllReturnsFullYearResumePlan(allSupportedSummary)
+    : null;
+  const allReturnsResumeLocalOnly = allSupportedResumeIsLocalOnly(allSupportedSummary);
 
   /**
    * Which surface owns the body. Mirrors the popup deliberately: a terminal run, a retained
@@ -189,9 +197,11 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 busy={pack.effectiveBusy}
                 context={pack.context}
                 externalBlock={savedRunBlock ?? allSupportedRunBlock}
-                allReturnsExternalBlock={savedRunBlock ?? allReturnsRunBlock}
+                allReturnsExternalBlock={savedRunBlock ?? allSupportedRunBlock}
+                {...(allReturnsTerminalBlocks.length > 0 ? { allReturnsTerminalBlocks } : {})}
+                {...(allReturnsResumePlan ? { allReturnsResumePlan } : {})}
                 flowSummary={pack.scopedFlowSummary}
-                portalSignedIn={portalSignedIn}
+                portalSignedIn={portalSignedIn || allReturnsResumeLocalOnly}
                 savedRun={savedRun}
                 scope={pack.scope}
                 scopeLockedForReview={pack.scopeLockedForReview}
@@ -352,10 +362,47 @@ function getAllSupportedRunBlock(
   summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
   busy: string | null,
 ): { disabled: true; label: string } | null {
-  if (!summary || busy !== null || ["complete", "cancelled"].includes(summary.status)) return null;
+  if (!summary || busy !== null) return null;
+  if (["complete", "cancelled"].includes(summary.status)) return null;
   return {
     disabled: true,
     label:
       "Clear local data and discard the saved all-supported plan before starting another return.",
   };
+}
+
+function getAllSupportedTerminalBlocks(
+  summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
+): readonly { financialYear: string; label: string }[] {
+  const terminalRoots =
+    summary?.terminalPlanRoots ??
+    (summary && ["complete", "cancelled"].includes(summary.status)
+      ? [
+          {
+            financialYear: summary.summaryIdentity.financialYear,
+            status: summary.status,
+            periodCount: panelAllReturnsFullYearResumePlan(summary)?.periodCount ?? 0,
+          },
+        ]
+      : []);
+  return terminalRoots.flatMap((root) => {
+    const currentPlan = panelAllReturnsFullYearPreset(root.financialYear);
+    if (root.status === "complete" && currentPlan && currentPlan.periodCount > root.periodCount)
+      return [];
+    return [
+      {
+        financialYear: root.financialYear,
+        label:
+          root.status === "complete"
+            ? "Pack already completed this all-supported plan. Clear local data before starting it again."
+            : "Pack retained this cancelled all-supported plan. Clear local data before starting another return.",
+      },
+    ];
+  });
+}
+
+function allSupportedResumeIsLocalOnly(
+  summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
+): boolean {
+  return summary?.resumeAvailable === true && summary.resumeMode === "local-only";
 }

@@ -77,6 +77,21 @@ describe("whether resuming would actually advance the plan", () => {
       true,
     );
     expect(summary.resumeAvailable).toBe(true);
+    expect(summary.resumeMode).toBe("local-only");
+  });
+
+  it("retains every terminal root in the summary projection", () => {
+    const terminalRoots = [
+      { financialYear: "2025-26", status: "complete" as const, periodCount: 12 },
+      { financialYear: "2026-27", status: "cancelled" as const, periodCount: 4 },
+    ];
+    const summary = toAllSupportedFullFiscalYearSummary(
+      runningLedger(),
+      LONG_AFTER,
+      true,
+      terminalRoots,
+    );
+    expect(summary.terminalPlanRoots).toEqual(terminalRoots);
   });
 
   it("advances at download-observing once a browser download is recorded", () => {
@@ -84,9 +99,10 @@ describe("whether resuming would actually advance the plan", () => {
       ...runningLedger("download-observing" as never),
       zipDownloadAttempt: { requestedAt: STALE_AT, downloadId: 7 },
     } as never;
-    expect(
-      toAllSupportedFullFiscalYearSummary(withDownload, LONG_AFTER, true).resumeAvailable,
-    ).toBe(true);
+    expect(toAllSupportedFullFiscalYearSummary(withDownload, LONG_AFTER, true)).toMatchObject({
+      resumeAvailable: true,
+      resumeMode: "local-only",
+    });
   });
 
   it("does not advance at download-observing without one", () => {

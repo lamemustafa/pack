@@ -1,11 +1,15 @@
 import {
   FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+  type FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   type FiledReturnsAllSupportedFullFiscalYearRequest,
   type FiledReturnsDownloadScope,
 } from "../../connectors/gst/filed-returns-contracts";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import type { FiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifact-types";
-import { filedReturnsArtifactLabel } from "../../connectors/gst/filed-returns-artifacts";
+import {
+  concreteFiledReturnsArtifactTypesForSelection,
+  filedReturnsArtifactLabel,
+} from "../../connectors/gst/filed-returns-artifacts";
 import {
   filedReturnsCapability,
   filedReturnsOfferedArtifacts,
@@ -66,6 +70,8 @@ export type PanelAllReturnsFullYearPlan = FiledReturnsAllSupportedFullFiscalYear
 
 export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPlan {
   readonly label: string;
+  /** A factual note about whether the selected financial year is complete. */
+  readonly note: string;
   /** Number of catalogue rows represented by this one root plan. */
   readonly returnCount: number;
   /** Eligible filing periods for each represented return. */
@@ -74,6 +80,59 @@ export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPl
   readonly artifactCount: number;
   /** The maximum concrete portal-file requests before not-filed outcomes. */
   readonly fileCount: number;
+}
+
+/**
+ * The durable plan details a recovery card needs. This deliberately comes
+ * from persisted target evidence rather than a calendar re-expansion: an
+ * interrupted plan resumes its immutable target list.
+ */
+export interface PanelAllReturnsFullYearResumePlan {
+  readonly financialYear: string;
+  readonly returnCount: number;
+  readonly periodCount: number;
+  readonly artifactCount: number;
+  readonly fileCount: number;
+}
+
+export function panelAllReturnsFullYearResumePlan(
+  summary: Pick<
+    FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+    "summaryIdentity" | "targetEvidence"
+  >,
+): PanelAllReturnsFullYearResumePlan | null {
+  const targets = summary.targetEvidence.filter(
+    (target) => target.financialYear === summary.summaryIdentity.financialYear,
+  );
+  if (targets.length === 0) return null;
+
+  const periods = new Set(targets.map((target) => target.period));
+  const returnTypes = new Set(targets.map((target) => target.returnType));
+  const artifactCount = Array.from(
+    new Map(
+      targets.map((target) => [
+        `${target.returnType}:${target.artifactType}`,
+        concreteFiledReturnsArtifactTypesForSelection(target.returnType, target.artifactType)
+          .length,
+      ]),
+    ).values(),
+  ).reduce((count, concreteCount) => count + concreteCount, 0);
+  const fileCount = targets.reduce(
+    (count, target) =>
+      count +
+      concreteFiledReturnsArtifactTypesForSelection(target.returnType, target.artifactType).length,
+    0,
+  );
+  if (periods.size === 0 || returnTypes.size === 0 || artifactCount === 0 || fileCount === 0)
+    return null;
+
+  return {
+    financialYear: summary.summaryIdentity.financialYear,
+    returnCount: returnTypes.size,
+    periodCount: periods.size,
+    artifactCount,
+    fileCount,
+  };
 }
 
 /**
@@ -143,11 +202,25 @@ export function panelAllReturnsFullYearPreset(
     (count, target) => count + target.concreteArtifactTypes.length,
     0,
   );
+  const financialYearPosition = getFiledReturnsFinancialYearOptions(asOf).indexOf(financialYear);
+  const label =
+    financialYearPosition === 0
+      ? "Everything this year"
+      : financialYearPosition === 1
+        ? "Everything last year"
+        : `Everything in ${financialYear}`;
+  const note =
+    financialYearPosition === 0
+      ? `Partial year · ${periodCount} eligible ${periodCount === 1 ? "period" : "periods"} so far.`
+      : financialYearPosition === 1
+        ? "Complete financial year."
+        : `${periodCount} eligible ${periodCount === 1 ? "period" : "periods"}.`;
 
   return {
     kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
     financialYear,
-    label: "Everything this year",
+    label,
+    note,
     returnCount: expansion.targets.length,
     periodCount,
     artifactCount,

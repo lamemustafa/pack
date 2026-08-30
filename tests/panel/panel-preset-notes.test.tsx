@@ -9,6 +9,7 @@ vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 
 import { PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
 import { filedReturnsCapabilityRunNotes } from "../../src/connectors/gst/filed-returns-capabilities";
+import { panelAllReturnsFullYearPreset } from "../../src/entrypoints/panel/panel-guided-scope-model";
 import { PANEL_TEST_SCOPE } from "./panel-controller.test-helpers";
 
 /**
@@ -34,6 +35,12 @@ function declaredColor(className: string): string | undefined {
   return /(?:^|;)\s*color\s*:\s*([^;]+)/.exec(rule?.[1] ?? "")?.[1]?.trim();
 }
 
+function declaredProperty(selector: string, property: string): string | undefined {
+  const escapedSelector = selector.replaceAll(".", "\\.").replaceAll(" ", "\\s+");
+  const rule = new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, "m").exec(PANEL_STYLESHEET);
+  return new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`).exec(rule?.[1] ?? "")?.[1]?.trim();
+}
+
 let dom: JSDOM;
 let root: Root | null = null;
 let container: Element;
@@ -53,6 +60,7 @@ function render() {
         scopeLockedForReview={false}
         onScopeChange={() => undefined}
         onStart={() => undefined}
+        onStartAllReturnsFullYear={() => undefined}
       />,
     );
     await Promise.resolve();
@@ -64,6 +72,8 @@ describe("preset cards", () => {
     // The recipe cards exist only in the alpha surface; without this the component renders no
     // cards at all and every assertion below passes without touching what it claims to guard.
     vi.stubEnv("MODE", "alpha");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-30T00:00:00.000Z"));
     dom = new JSDOM("<div id='root'></div>", { pretendToBeVisual: true, url: "https://x.test" });
     Object.assign(globalThis, { document: dom.window.document, window: dom.window });
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -73,18 +83,25 @@ describe("preset cards", () => {
   afterEach(async () => {
     if (root) await act(async () => root?.unmount());
     root = null;
+    vi.useRealTimers();
     vi.unstubAllEnvs();
   });
 
-  it("render the capability notes without the warning styling a disabled reason uses", async () => {
+  it("renders factual recipe and capability notes without the warning styling a disabled reason uses", async () => {
     await render();
 
     // Read the notes from the catalogue rather than restating them, so this keeps holding if
     // their wording changes.
+    const allReturnsNotes = ["2025-26", "2026-27"].flatMap((financialYear) => {
+      const preset = panelAllReturnsFullYearPreset(financialYear, new Date());
+      return preset ? [preset.note] : [];
+    });
     const notes = [
+      ...allReturnsNotes,
       ...filedReturnsCapabilityRunNotes("GSTR-1", "PDF_AND_EXCEL"),
       ...filedReturnsCapabilityRunNotes("GSTR-2B", "PDF_AND_EXCEL"),
     ];
+    expect(allReturnsNotes).toHaveLength(2);
     expect(notes.length).toBeGreaterThan(0);
 
     // Guard the precondition: if no card rendered, everything below would be vacuous.
@@ -105,5 +122,15 @@ describe("preset cards", () => {
       expect(color).toBeDefined();
       expect(color).not.toBe(warningColor);
     }
+  });
+
+  it("lets the rendered all-returns count wrap inside the narrow panel card", async () => {
+    await render();
+
+    const count = container.querySelector(".panel-everything-preset .panel-preset-count");
+    expect(count?.textContent).toContain("up to 84 files");
+    expect(declaredProperty(".panel-everything-preset .panel-preset-count", "white-space")).toBe(
+      "normal",
+    );
   });
 });

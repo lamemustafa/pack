@@ -23,6 +23,7 @@ import {
   panelGuidedSteps,
   type PanelAllReturnsFullYearPlan,
   type PanelAllReturnsFullYearPreset,
+  type PanelAllReturnsFullYearResumePlan,
   updatePanelGuidedScope,
 } from "./panel-guided-scope-model";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
@@ -36,6 +37,8 @@ export function PanelGuidedScope({
   context,
   externalBlock,
   allReturnsExternalBlock,
+  allReturnsTerminalBlocks,
+  allReturnsResumePlan,
   flowSummary,
   portalSignedIn,
   savedRun,
@@ -50,6 +53,10 @@ export function PanelGuidedScope({
   externalBlock: { disabled: true; label: string } | null;
   /** The saved all-supported plan blocks other scopes without blocking its own resume. */
   allReturnsExternalBlock?: { disabled: true; label: string } | null;
+  /** A terminal saved plan blocks only the root it owns; other recipes stay available. */
+  allReturnsTerminalBlocks?: readonly { financialYear: string; label: string }[];
+  /** The one saved root plan allowed through its otherwise blocking recovery state. */
+  allReturnsResumePlan?: PanelAllReturnsFullYearResumePlan;
   flowSummary: FiledReturnsFlowSummary | null;
   portalSignedIn: boolean;
   savedRun: FiledReturnsFlowSummary | null;
@@ -91,15 +98,25 @@ export function PanelGuidedScope({
   // financial year and its period plan from the same render-time snapshot so
   // a focus-driven parent refresh cannot combine a current FY with old periods.
   const presetAsOf = new Date();
-  const currentFinancialYear = getFiledReturnsFinancialYearOptions(presetAsOf)[0];
+  const financialYears = getFiledReturnsFinancialYearOptions(presetAsOf);
+  const currentFinancialYear = financialYears[0];
   const presets =
     alphaSurfacesEnabled && currentFinancialYear
       ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
       : [];
-  const allReturnsPreset =
-    alphaSurfacesEnabled && currentFinancialYear
-      ? panelAllReturnsFullYearPreset(currentFinancialYear, presetAsOf)
-      : null;
+  const allReturnsFinancialYears = [
+    ...financialYears.slice(0, 2),
+    ...(allReturnsResumePlan &&
+    !financialYears.slice(0, 2).includes(allReturnsResumePlan.financialYear)
+      ? [allReturnsResumePlan.financialYear]
+      : []),
+  ];
+  const allReturnsPresets = alphaSurfacesEnabled
+    ? allReturnsFinancialYears.reverse().flatMap((financialYear) => {
+        const preset = panelAllReturnsFullYearPreset(financialYear, presetAsOf);
+        return preset ? [preset] : [];
+      })
+    : [];
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -123,16 +140,36 @@ export function PanelGuidedScope({
       <section className="panel-presets" aria-labelledby="panel-presets-title">
         <h2 id="panel-presets-title">What do you need?</h2>
         <div className="panel-preset-list">
-          {allReturnsPreset && onStartAllReturnsFullYear ? (
-            <AllReturnsPreset
-              busy={busy}
-              externalBlock={allReturnsExternalBlock ?? externalBlock}
-              plan={allReturnsPreset}
-              portalReady={portalSignedIn}
-              onStart={onStartAllReturnsFullYear}
-              onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
-            />
-          ) : null}
+          {onStartAllReturnsFullYear
+            ? allReturnsPresets.map((preset) => (
+                <AllReturnsPreset
+                  key={preset.financialYear}
+                  busy={busy}
+                  externalBlock={
+                    allReturnsResumePlan?.financialYear === preset.financialYear
+                      ? null
+                      : allReturnsTerminalBlocks?.find(
+                            (block) => block.financialYear === preset.financialYear,
+                          )
+                        ? {
+                            disabled: true,
+                            label: allReturnsTerminalBlocks.find(
+                              (block) => block.financialYear === preset.financialYear,
+                            )!.label,
+                          }
+                        : (allReturnsExternalBlock ?? externalBlock)
+                  }
+                  primary={preset.financialYear === financialYears[1]}
+                  plan={preset}
+                  {...(allReturnsResumePlan?.financialYear === preset.financialYear
+                    ? { resumePlan: allReturnsResumePlan }
+                    : {})}
+                  portalReady={portalSignedIn}
+                  onStart={onStartAllReturnsFullYear}
+                  onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
+                />
+              ))
+            : null}
           {presets.map((preset) => {
             const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
             const summaryForPreset = savedRunForPreset ?? flowSummary;
@@ -331,15 +368,19 @@ export function PanelGuidedScope({
 function AllReturnsPreset({
   busy,
   externalBlock,
+  primary,
   plan,
   portalReady,
+  resumePlan,
   onStart,
   onStalePlan,
 }: {
   busy: string | null;
   externalBlock: { disabled: true; label: string } | null;
+  primary: boolean;
   plan: PanelAllReturnsFullYearPreset;
   portalReady: boolean;
+  resumePlan?: PanelAllReturnsFullYearResumePlan;
   onStart: (plan: PanelAllReturnsFullYearPlan) => void;
   onStalePlan: () => void;
 }) {
@@ -351,25 +392,41 @@ function AllReturnsPreset({
       : portalReady
         ? null
         : "Open a signed-in GST Portal tab to continue.");
-  const countLabel = `${plan.returnCount} ${plural(plan.returnCount, "return")} · ${plan.periodCount} ${plural(plan.periodCount, "period")} each · ${plan.fileCount} ${plural(plan.fileCount, "file")} · one ZIP`;
+  const displayedPlan = resumePlan
+    ? {
+        ...plan,
+        ...resumePlan,
+        note: `Saved plan · ${resumePlan.periodCount} eligible ${plural(resumePlan.periodCount, "period")} retained.`,
+      }
+    : plan;
+  const countLabel = `${displayedPlan.returnCount} ${plural(displayedPlan.returnCount, "return")} · ${displayedPlan.periodCount} ${plural(displayedPlan.periodCount, "period")} each · up to ${displayedPlan.fileCount} ${plural(displayedPlan.fileCount, "file")} · one ZIP`;
+  const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
 
   return (
     <React.Fragment>
       <button
-        className="panel-preset panel-everything-preset"
+        className={`panel-preset panel-everything-preset${primary ? " panel-everything-preset-primary" : ""}`}
         type="button"
         disabled={disabled}
-        aria-describedby={disabledReason ? "preset-all-returns-reason" : undefined}
-        aria-label={`${plan.label} for all supported returns. ${countLabel}.`}
+        aria-describedby={disabledReason ? disabledReasonId : undefined}
+        aria-label={`${displayedPlan.label} for all supported returns. ${countLabel}. ${displayedPlan.note}`}
         onClick={() => {
+          if (resumePlan) {
+            const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, new Date());
+            if (!currentPlan || currentPlan.label !== plan.label) {
+              onStalePlan();
+              return;
+            }
+            onStart({ kind: plan.kind, financialYear: plan.financialYear });
+            return;
+          }
           const currentAsOf = new Date();
-          const currentFinancialYear = getFiledReturnsFinancialYearOptions(currentAsOf)[0];
-          const currentPlan = currentFinancialYear
-            ? panelAllReturnsFullYearPreset(currentFinancialYear, currentAsOf)
-            : null;
+          const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, currentAsOf);
           if (
             !currentPlan ||
             currentPlan.financialYear !== plan.financialYear ||
+            currentPlan.label !== plan.label ||
+            currentPlan.note !== plan.note ||
             currentPlan.returnCount !== plan.returnCount ||
             currentPlan.periodCount !== plan.periodCount ||
             currentPlan.artifactCount !== plan.artifactCount ||
@@ -381,14 +438,15 @@ function AllReturnsPreset({
           onStart({ kind: plan.kind, financialYear: plan.financialYear });
         }}
       >
-        <span>{plan.label} · all supported returns</span>
+        <span>{displayedPlan.label} · all supported returns</span>
         <span className="panel-preset-count">{countLabel}</span>
       </button>
       {disabledReason ? (
-        <p className="panel-preset-reason" id="preset-all-returns-reason">
+        <p className="panel-preset-reason" id={disabledReasonId}>
           {disabledReason}
         </p>
       ) : null}
+      <p className="panel-preset-note">{displayedPlan.note}</p>
     </React.Fragment>
   );
 }

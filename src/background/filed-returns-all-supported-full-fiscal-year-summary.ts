@@ -7,7 +7,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
-  allSupportedResumeIsProductive,
+  allSupportedResumeMode,
   isAllSupportedFullFiscalYearLedgerStale,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import { isFiledReturnsRunLeaseLive } from "./filed-returns-active-run";
@@ -56,6 +56,7 @@ export async function readCurrentAllSupportedFullFiscalYearFlowSummary(
       { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
       now,
     ),
+    allSupportedTerminalPlanRoots(state.ledgers),
   );
 }
 
@@ -63,6 +64,7 @@ export function toAllSupportedFullFiscalYearSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   now = new Date(),
   leaseIsLive = false,
+  allTerminalPlanRoots = allSupportedTerminalPlanRoots([ledger]),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   const flowStep = summaryStep(ledger, now, leaseIsLive);
   const zipDelivered =
@@ -72,9 +74,11 @@ export function toAllSupportedFullFiscalYearSummary(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
   );
-  const resumeAvailable = allSupportedResumeIsProductive(ledger);
+  const resumeMode = allSupportedResumeMode(ledger);
   return {
-    resumeAvailable,
+    resumeAvailable: resumeMode !== null,
+    ...(resumeMode ? { resumeMode } : {}),
+    ...(allTerminalPlanRoots.length > 0 ? { terminalPlanRoots: allTerminalPlanRoots } : {}),
     summaryIdentity: { ...ledger.planRoot },
     status:
       isAllSupportedFullFiscalYearLedgerStale(ledger, now) &&
@@ -100,6 +104,21 @@ export function toAllSupportedFullFiscalYearSummary(
     flowStepScope,
     flowStep,
   };
+}
+
+export function allSupportedTerminalPlanRoots(
+  ledgers: readonly FiledReturnsAllSupportedFullFiscalYearLedger[],
+): NonNullable<FiledReturnsAllSupportedFullFiscalYearFlowSummary["terminalPlanRoots"]> {
+  return ledgers.flatMap((ledger) => {
+    if (ledger.status !== "complete" && ledger.status !== "cancelled") return [];
+    return [
+      {
+        financialYear: ledger.planRoot.financialYear,
+        status: ledger.status,
+        periodCount: new Set(ledger.targets.map((target) => target.period)).size,
+      },
+    ];
+  });
 }
 
 function currentLedger(

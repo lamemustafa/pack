@@ -16,7 +16,7 @@ import type {
 } from "./filed-returns-flow-runner";
 import type { SinglePeriodRunner } from "./filed-returns-full-fiscal-year";
 import {
-  allSupportedResumeIsProductive,
+  allSupportedResumeMode,
   canCompleteAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearLedger,
   isAllSupportedFullFiscalYearLedgerStale,
@@ -24,6 +24,7 @@ import {
   markAllSupportedFullFiscalYearTargetTerminal,
   nextRunnableAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
+import { allSupportedTerminalPlanRoots } from "./filed-returns-all-supported-full-fiscal-year-summary";
 import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
@@ -176,7 +177,7 @@ async function continueSavedAllSupportedFullFiscalYearRun(
       downloadId < 0 ||
       allSupportedZipOwners(storageState.ledgers, downloadId).length !== 1
     ) {
-      return allSupportedResponse(ledger, finalZipReviewStep(ledger));
+      return allSupportedResponse(deps, ledger, finalZipReviewStep(ledger));
     }
     return reconcileAllSupportedFinalZip(deps, ledger);
   }
@@ -199,18 +200,22 @@ async function continueSavedAllSupportedFullFiscalYearRun(
     });
   }
   if (ledger.zipPhase && isCleanedZipPhase(ledger.zipPhase)) {
-    return allSupportedResponse(ledger, completedRunStep(ledger));
+    return allSupportedResponse(deps, ledger, completedRunStep(ledger));
   }
   // A saved final-download intent without an exact browser download ID is
   // deliberately not replayed. Neither a new portal run nor a replacement ZIP
   // can establish what happened to the first browser request.
-  if (ledger.zipPhase) return allSupportedResponse(ledger, finalZipReviewStep(ledger));
+  if (ledger.zipPhase) return allSupportedResponse(deps, ledger, finalZipReviewStep(ledger));
   if (ledger.status === "running") {
     const stale = isAllSupportedFullFiscalYearLedgerStale(ledger, deps.now?.() ?? new Date());
     if (!ledger.targets.some((target) => target.status === "running")) {
       return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
     }
-    return allSupportedResponse(ledger, stale ? interruptedRunStep(ledger) : activeRunStep(ledger));
+    return allSupportedResponse(
+      deps,
+      ledger,
+      stale ? interruptedRunStep(ledger) : activeRunStep(ledger),
+    );
   }
   if (
     ledger.status === "partial" &&
@@ -220,7 +225,7 @@ async function continueSavedAllSupportedFullFiscalYearRun(
   ) {
     return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
   }
-  return allSupportedResponse(ledger, unresolvedRunStep(ledger));
+  return allSupportedResponse(deps, ledger, unresolvedRunStep(ledger));
 }
 
 function persistedPeriodPlanLength(ledger: FiledReturnsAllSupportedFullFiscalYearLedger): number {
@@ -262,7 +267,7 @@ async function runAllSupportedFullFiscalYearTargets(
         deps.now?.() ?? new Date(),
       );
       await persistAllSupportedFullFiscalYearLedger(deps, ledger);
-      return allSupportedResponse(ledger, blocked);
+      return allSupportedResponse(deps, ledger, blocked);
     }
     const previousSignals = nextTarget.safeSignals;
     let systemErrorPredecessor: SystemErrorPredecessor = "initial";
@@ -320,7 +325,7 @@ async function runAllSupportedFullFiscalYearTargets(
         deps.now?.() ?? new Date(),
       );
       await persistAllSupportedFullFiscalYearLedger(deps, ledger);
-      return allSupportedResponse(ledger, errorStep);
+      return allSupportedResponse(deps, ledger, errorStep);
     }
 
     const flowStep = requireAllSupportedArtifactsStaged(
@@ -347,7 +352,7 @@ async function runAllSupportedFullFiscalYearTargets(
       (target) => target.targetId === nextTarget.targetId,
     );
     if (persistedTarget && POSITIVE_TARGET_STATUSES.has(persistedTarget.status)) continue;
-    return allSupportedResponse(ledger, flowStep);
+    return allSupportedResponse(deps, ledger, flowStep);
   }
 }
 
@@ -358,7 +363,7 @@ async function exportAllSupportedFinalZip(
   if (!canCompleteAllSupportedFullFiscalYearLedger(initialLedger)) {
     const blocked = withBlockedStatus(initialLedger, deps.now?.() ?? new Date());
     await persistAllSupportedFullFiscalYearLedger(deps, blocked);
-    return allSupportedResponse(blocked, unresolvedRunStep(blocked));
+    return allSupportedResponse(deps, blocked, unresolvedRunStep(blocked));
   }
   let ledger =
     initialLedger.zipPhase === "export-pending" || initialLedger.zipPhase === "export-retry-pending"
@@ -387,7 +392,7 @@ async function reconcileAllSupportedFinalZip(
   if (!canCompleteAllSupportedFullFiscalYearLedger(ledger)) {
     const blocked = withBlockedStatus(ledger, deps.now?.() ?? new Date());
     await persistAllSupportedFullFiscalYearLedger(deps, blocked);
-    return allSupportedResponse(blocked, unresolvedRunStep(blocked));
+    return allSupportedResponse(deps, blocked, unresolvedRunStep(blocked));
   }
   return finishAllSupportedFinalZip(
     deps,
@@ -407,7 +412,7 @@ async function finishAllSupportedFinalZip(
         ? ledger
         : withZipPhase(ledger, deps.now?.() ?? new Date(), "export-retry-pending");
     await persistAllSupportedFullFiscalYearLedger(deps, next);
-    return allSupportedResponse(next, zipStep);
+    return allSupportedResponse(deps, next, zipStep);
   }
 
   const noArtifacts = zipStep.safeSignals.includes(
@@ -421,7 +426,7 @@ async function finishAllSupportedFinalZip(
       noArtifacts ? "no-artifacts-cleanup-pending" : "downloaded-cleanup-pending",
     );
     await persistAllSupportedFullFiscalYearLedger(deps, pendingCleanup);
-    return allSupportedResponse(pendingCleanup, {
+    return allSupportedResponse(deps, pendingCleanup, {
       ...zipStep,
       state: "blocked",
       safeSignals: [...zipStep.safeSignals, "all-supported-full-fiscal-year-local-cleanup-retry"],
@@ -440,7 +445,7 @@ async function finishAllSupportedFinalZip(
     noArtifacts ? "cleaned-without-export" : "cleaned-after-download",
   );
   await persistAllSupportedFullFiscalYearLedger(deps, completed);
-  return allSupportedResponse(completed, {
+  return allSupportedResponse(deps, completed, {
     ...zipStep,
     safeSignals: Array.from(
       new Set([
@@ -453,21 +458,31 @@ async function finishAllSupportedFinalZip(
   });
 }
 
-function allSupportedResponse(
+async function allSupportedResponse(
+  deps: AllSupportedRunnerDeps,
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
-): PackMessageResponse {
+): Promise<PackMessageResponse> {
+  const storageState = await readAllSupportedPlanLedgersStorageState(deps);
   return {
     ok: true,
     flowStep,
-    allSupportedFullFiscalYearFlowSummary: toAllSupportedSummary(ledger, flowStep),
+    allSupportedFullFiscalYearFlowSummary: toAllSupportedSummary(
+      ledger,
+      flowStep,
+      storageState.state === "valid"
+        ? allSupportedTerminalPlanRoots(storageState.ledgers)
+        : allSupportedTerminalPlanRoots([ledger]),
+    ),
   };
 }
 
 function toAllSupportedSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
+  allTerminalPlanRoots = allSupportedTerminalPlanRoots([ledger]),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
+  const resumeMode = allSupportedResumeMode(ledger);
   const zipDelivered =
     ledger.zipPhase === "cleaned-after-download" ||
     ledger.zipPhase === "downloaded-cleanup-pending";
@@ -476,7 +491,9 @@ function toAllSupportedSummary(
       ledger.targets[0]!,
   );
   return {
-    resumeAvailable: allSupportedResumeIsProductive(ledger),
+    resumeAvailable: resumeMode !== null,
+    ...(resumeMode ? { resumeMode } : {}),
+    ...(allTerminalPlanRoots.length > 0 ? { terminalPlanRoots: allTerminalPlanRoots } : {}),
     summaryIdentity: { ...ledger.planRoot },
     status: ledger.status,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
