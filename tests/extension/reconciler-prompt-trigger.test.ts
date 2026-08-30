@@ -34,14 +34,36 @@ describe("the trusted reconciler", () => {
     expect(workflow).toContain("github.event.issue.pull_request != null");
   });
 
+  it("reconciles the pull request the prompt event names, not just a rotating slice", async () => {
+    // The pass walks a wall-clock rotating slice of four. Without routing, a comment on #X can spend
+    // the whole run on four other pull requests and leave #X's required check exactly as stale as
+    // before: a new finding still showing green, or a valid disposition still showing red.
+    const workflow = await readFile(path.join(workflowsDir, "review-gate-reconcile.yml"), "utf8");
+    const publisher = await readFile(
+      path.join(process.cwd(), "scripts", "publish-review-gate-check.mjs"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("--prioritise-pr");
+    expect(workflow).toContain("steps.prompt-pr.outputs.number");
+    expect(publisher).toContain('readIntegerArg("--prioritise-pr"');
+    // Ineligible is not an error, but it must be said rather than pass silently.
+    expect(publisher).toContain("reconciling the rotating slice only");
+  });
+
   it("still runs trusted default-branch code, never a pull request head", async () => {
     // The property that makes this verdict worth requiring. `review-gate.yml` checks out the pull
     // request's own head and runs the gate from it, so an author can edit the job that judges them;
     // this one must not acquire that shape.
     const workflow = await readFile(path.join(workflowsDir, "review-gate-reconcile.yml"), "utf8");
 
+    // Assert the checkout, not the substring: this workflow legitimately reads a triggering run's
+    // head sha from the event payload to name a pull request, which is not the same as running that
+    // pull request's code.
     expect(workflow).toContain("ref: ${{ github.event.repository.default_branch }}");
-    expect(workflow).not.toContain("head_sha");
-    expect(workflow).not.toContain("head_repo");
+    expect(workflow).not.toMatch(/ref: \$\{\{ github\.event\.(?!repository\.default_branch)/);
+    expect(workflow).not.toContain("repository: ${{");
+    // And no event-controlled text reaches a shell, which is the injection surface here.
+    expect(workflow).not.toMatch(/env:[\s\S]*?\$\{\{ github\.event\.(issue|workflow_run|comment)/);
   });
 });

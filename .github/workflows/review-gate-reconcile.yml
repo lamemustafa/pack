@@ -58,6 +58,34 @@ jobs:
         with:
           node-version: 22.13.0
 
+      # A prompt event concerns exactly one pull request; the reconcile pass otherwise walks a
+      # rotating slice that may not include it. Read entirely from the event payload file and the
+      # built-in event name -- no `github.event.*` is interpolated into this trusted workflow, which
+      # keeps the shell free of attacker-controlled text.
+      - name: Resolve the pull request a prompt event names
+        id: prompt-pr
+        if: github.event_name == 'issue_comment' || github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          number=""
+          if [ "${GITHUB_EVENT_NAME}" = "issue_comment" ]; then
+            number="$(jq -r '.issue.number // empty' "${GITHUB_EVENT_PATH}")"
+          else
+            head_sha="$(jq -r '.workflow_run.head_sha // empty' "${GITHUB_EVENT_PATH}")"
+            if printf '%s' "${head_sha}" | grep -Eq '^[0-9a-f]{40}$'; then
+              number="$(gh api "repos/${REPO}/commits/${head_sha}/pulls" \
+                --jq 'map(select(.state == "open")) | .[0].number // empty' || true)"
+            fi
+          fi
+          if ! printf '%s' "${number}" | grep -Eq '^[0-9]+$'; then
+            number=""
+          fi
+          echo "Prompt event ${GITHUB_EVENT_NAME} names pull request '${number:-none}'."
+          echo "number=${number:-0}" >> "${GITHUB_OUTPUT}"
+
       - name: Reconcile open pull request checks
         env:
           GH_TOKEN: ${{ github.token }}
@@ -66,4 +94,5 @@ jobs:
           --repo "${{ github.repository }}"
           --reconcile-open-prs
           --max-prs 4
+          --prioritise-pr "${{ steps.prompt-pr.outputs.number || 0 }}"
           --details-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

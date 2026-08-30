@@ -69,7 +69,28 @@ function reconcileOpenPullRequests() {
   }
 
   const start = eligible.length === 0 ? 0 : (selectionOffset * maxPrs) % eligible.length;
-  const selected = [...eligible.slice(start), ...eligible.slice(0, start)].slice(0, maxPrs);
+  let selected = [...eligible.slice(start), ...eligible.slice(0, start)].slice(0, maxPrs);
+
+  // A prompt event names one pull request, and the rotating slice above does not know that. Without
+  // this, a comment on #X can spend the whole pass reconciling four other pull requests and leave
+  // #X's required check exactly as stale as before — a new finding still shows a passing gate, or a
+  // valid disposition still shows a failing one, until a later run happens to select it.
+  const prioritisedNumber = readIntegerArg("--prioritise-pr", 0, 0);
+  if (prioritisedNumber > 0) {
+    const prioritised = eligible.find((pr) => pr.number === prioritisedNumber);
+    if (prioritised) {
+      selected = [prioritised, ...selected.filter((pr) => pr.number !== prioritisedNumber)].slice(
+        0,
+        Math.max(maxPrs, 1),
+      );
+    } else {
+      // Not an error: the named pull request may be a draft, a fork head, or already closed. Say so,
+      // because silence here would look identical to having reconciled it.
+      console.log(
+        `Prompt event names #${prioritisedNumber}, which is not eligible for a trusted scheduled check; reconciling the rotating slice only.`,
+      );
+    }
+  }
   if (eligible.length > maxPrs) {
     console.warn(
       `Review gate schedule cap hit: processing ${maxPrs} of ${eligible.length} eligible pull requests.`,

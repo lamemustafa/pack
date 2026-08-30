@@ -460,6 +460,56 @@ describe("PR-head Review gate check publisher", () => {
   });
 });
 
+describe("prompt-event prioritisation", () => {
+  it("reconciles the named pull request even when the rotating slice excludes it", () => {
+    // A prompt event concerns one pull request, but the pass walks a wall-clock rotating slice.
+    // Without prioritisation a comment on #5 can spend the run on #1 and leave #5's required check
+    // exactly as stale as before.
+    const pulls = [pull(1), pull(2), pull(3), pull(5)];
+
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0", "--prioritise-pr", "5"],
+      pulls,
+      cleanReviewFixture(),
+    );
+    const publications = calls.filter((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(publications).toHaveLength(1);
+    expect(publications[0]).toContain(`head_sha=${"5".repeat(40)}`);
+  });
+
+  it("says so rather than passing silently when the named pull request is not eligible", () => {
+    // A draft, a fork head, or an already-closed pull request is not an error — but silence would
+    // look identical to having reconciled it.
+    const pulls = [pull(1), pull(2, { draft: true })];
+
+    const { result } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0", "--prioritise-pr", "2"],
+      pulls,
+      cleanReviewFixture(),
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Prompt event names #2");
+    expect(result.stdout).toContain("reconciling the rotating slice only");
+  });
+
+  it("leaves the rotation untouched when no pull request is named", () => {
+    const pulls = [pull(1), pull(2)];
+
+    const { calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0", "--prioritise-pr", "0"],
+      pulls,
+      cleanReviewFixture(),
+    );
+    const publications = calls.filter((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(publications).toHaveLength(1);
+    expect(publications[0]).toContain(`head_sha=${headSha}`);
+  });
+});
+
 function runPublisher(exitCode: number, responses: Array<{ status: number; stderr?: string }>) {
   return runScript(["--head-sha", headSha, "--exit-code", String(exitCode)], [], {}, responses);
 }
