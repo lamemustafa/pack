@@ -303,7 +303,7 @@ describe("panel guided scope interaction", () => {
     expect(container.innerHTML).toContain("data-pack-alpha-surface");
   });
 
-  it("places everything-this-year first without moving focus on initial mount", async () => {
+  it("places complete last-year retrieval first and starts its exact financial year without moving focus", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
     const previousControl = dom.window.document.createElement("button");
@@ -311,9 +311,7 @@ describe("panel guided scope interaction", () => {
     dom.window.document.body.append(previousControl);
     previousControl.focus();
     const onStartAllReturnsFullYear = vi.fn();
-    const expectedPlan = panelAllReturnsFullYearPreset(
-      getFiledReturnsFullFiscalYearPeriods("2026-27").length > 0 ? "2026-27" : "2025-26",
-    );
+    const expectedPlan = panelAllReturnsFullYearPreset("2025-26");
 
     root = createRoot(container);
     await act(async () => {
@@ -338,10 +336,13 @@ describe("panel guided scope interaction", () => {
     const presets = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
     );
+    expect(presets.length).toBeGreaterThan(0);
     expect(dom.window.document.activeElement).toBe(previousControl);
-    expect(presets[0]?.classList.contains("panel-everything-preset")).toBe(true);
-    expect(presets[0]?.textContent).toContain("Everything this year · all supported returns");
-    expect(presets[0]?.textContent).toContain("3 returns · 4 periods each · 28 files · one ZIP");
+    expect(presets[0]?.textContent).toContain("Everything last year · all supported returns");
+    expect(presets[0]?.textContent).toContain("3 returns · 12 periods each · 84 files · one ZIP");
+    expect(container.textContent).toContain("Complete financial year.");
+    expect(presets[1]?.textContent).toContain("Everything this year · all supported returns");
+    expect(container.textContent).toContain("Partial year · 4 filed periods so far.");
     expect(presets[0]?.getAttribute("aria-label")).toContain("all supported returns");
 
     await act(async () => {
@@ -356,7 +357,7 @@ describe("panel guided scope interaction", () => {
     });
   });
 
-  it("wires the alpha all-returns recipe from the composed panel", async () => {
+  it("wires the last-year alpha recipe from the composed panel without substituting this year", async () => {
     const onStartAllReturnsFullYear = vi.fn();
     await mount(
       { overrides: { startAllSupportedFullFiscalYearFlow: onStartAllReturnsFullYear } },
@@ -364,10 +365,13 @@ describe("panel guided scope interaction", () => {
       false,
     );
 
-    await clickButtonContaining("Everything this year");
+    await clickButtonContaining("Everything last year");
 
     expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ kind: "all-supported-returns-full-fiscal-year" }),
+      expect.objectContaining({
+        kind: "all-supported-returns-full-fiscal-year",
+        financialYear: "2025-26",
+      }),
     );
   });
 
@@ -419,7 +423,7 @@ describe("panel guided scope interaction", () => {
       expect.arrayContaining([
         expect.objectContaining({
           disabled: true,
-          label: expect.stringContaining("Everything this year"),
+          label: expect.stringContaining("Everything last year"),
         }),
       ]),
     );

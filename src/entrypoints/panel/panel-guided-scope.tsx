@@ -91,15 +91,21 @@ export function PanelGuidedScope({
   // financial year and its period plan from the same render-time snapshot so
   // a focus-driven parent refresh cannot combine a current FY with old periods.
   const presetAsOf = new Date();
-  const currentFinancialYear = getFiledReturnsFinancialYearOptions(presetAsOf)[0];
+  const financialYears = getFiledReturnsFinancialYearOptions(presetAsOf);
+  const currentFinancialYear = financialYears[0];
   const presets =
     alphaSurfacesEnabled && currentFinancialYear
       ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
       : [];
-  const allReturnsPreset =
-    alphaSurfacesEnabled && currentFinancialYear
-      ? panelAllReturnsFullYearPreset(currentFinancialYear, presetAsOf)
-      : null;
+  const allReturnsPresets = alphaSurfacesEnabled
+    ? financialYears
+        .slice(0, 2)
+        .reverse()
+        .flatMap((financialYear) => {
+          const preset = panelAllReturnsFullYearPreset(financialYear, presetAsOf);
+          return preset ? [preset] : [];
+        })
+    : [];
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -123,16 +129,20 @@ export function PanelGuidedScope({
       <section className="panel-presets" aria-labelledby="panel-presets-title">
         <h2 id="panel-presets-title">What do you need?</h2>
         <div className="panel-preset-list">
-          {allReturnsPreset && onStartAllReturnsFullYear ? (
-            <AllReturnsPreset
-              busy={busy}
-              externalBlock={allReturnsExternalBlock ?? externalBlock}
-              plan={allReturnsPreset}
-              portalReady={portalSignedIn}
-              onStart={onStartAllReturnsFullYear}
-              onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
-            />
-          ) : null}
+          {onStartAllReturnsFullYear
+            ? allReturnsPresets.map((preset) => (
+                <AllReturnsPreset
+                  key={preset.financialYear}
+                  busy={busy}
+                  externalBlock={allReturnsExternalBlock ?? externalBlock}
+                  primary={preset.financialYear === financialYears[1]}
+                  plan={preset}
+                  portalReady={portalSignedIn}
+                  onStart={onStartAllReturnsFullYear}
+                  onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
+                />
+              ))
+            : null}
           {presets.map((preset) => {
             const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
             const summaryForPreset = savedRunForPreset ?? flowSummary;
@@ -331,6 +341,7 @@ export function PanelGuidedScope({
 function AllReturnsPreset({
   busy,
   externalBlock,
+  primary,
   plan,
   portalReady,
   onStart,
@@ -338,6 +349,7 @@ function AllReturnsPreset({
 }: {
   busy: string | null;
   externalBlock: { disabled: true; label: string } | null;
+  primary: boolean;
   plan: PanelAllReturnsFullYearPreset;
   portalReady: boolean;
   onStart: (plan: PanelAllReturnsFullYearPlan) => void;
@@ -356,17 +368,14 @@ function AllReturnsPreset({
   return (
     <React.Fragment>
       <button
-        className="panel-preset panel-everything-preset"
+        className={`panel-preset panel-everything-preset${primary ? " panel-everything-preset-primary" : ""}`}
         type="button"
         disabled={disabled}
         aria-describedby={disabledReason ? "preset-all-returns-reason" : undefined}
-        aria-label={`${plan.label} for all supported returns. ${countLabel}.`}
+        aria-label={`${plan.label} for all supported returns. ${countLabel}. ${plan.note}`}
         onClick={() => {
           const currentAsOf = new Date();
-          const currentFinancialYear = getFiledReturnsFinancialYearOptions(currentAsOf)[0];
-          const currentPlan = currentFinancialYear
-            ? panelAllReturnsFullYearPreset(currentFinancialYear, currentAsOf)
-            : null;
+          const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, currentAsOf);
           if (
             !currentPlan ||
             currentPlan.financialYear !== plan.financialYear ||
@@ -389,6 +398,7 @@ function AllReturnsPreset({
           {disabledReason}
         </p>
       ) : null}
+      <p className="panel-preset-note">{plan.note}</p>
     </React.Fragment>
   );
 }

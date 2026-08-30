@@ -5,10 +5,10 @@ import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/con
 import { getFiledReturnsFullFiscalYearPeriods } from "../../src/connectors/gst/filed-returns-scope";
 import { panelAllReturnsFullYearPreset } from "../../src/entrypoints/panel/panel-guided-scope-model";
 
-const AS_OF = new Date("2026-08-26T00:00:00.000Z");
+const AS_OF = new Date("2026-08-30T00:00:00.000Z");
 
-describe("everything-this-year panel preset", () => {
-  it("derives one root plan and every displayed count from the eligible catalogue", () => {
+describe("all-returns panel presets", () => {
+  it("derives the current-year label, partial-year note, and every displayed count from the eligible catalogue", () => {
     const financialYear = "2026-27";
     const preset = panelAllReturnsFullYearPreset(financialYear, AS_OF);
     const eligible = supportedFiledReturnsCatalogueEntries().filter(
@@ -24,10 +24,24 @@ describe("everything-this-year panel preset", () => {
       kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
       financialYear,
       label: "Everything this year",
+      note: `Partial year · ${periodCount} filed periods so far.`,
       returnCount: eligible.length,
       periodCount,
       artifactCount,
       fileCount: artifactCount * periodCount,
+    });
+  });
+
+  it("labels the preceding complete financial year without a second label constant", () => {
+    const preset = panelAllReturnsFullYearPreset("2025-26", AS_OF);
+
+    expect(preset).not.toBeNull();
+    expect(preset).toMatchObject({
+      financialYear: "2025-26",
+      label: "Everything last year",
+      note: "Complete financial year.",
+      periodCount: 12,
+      fileCount: 84,
     });
   });
 

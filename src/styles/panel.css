@@ -121,7 +121,7 @@ html[data-pack-surface="panel"] body {
 
 .panel-preset-list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .panel-preset {
@@ -157,6 +157,23 @@ html[data-pack-surface="panel"] body {
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.panel-everything-preset {
+  min-height: 48px;
+}
+
+.panel-everything-preset-primary {
+  min-height: 56px;
+  padding-block: 12px;
+}
+
+.panel-everything-preset-primary > span:first-child {
+  font-size: 0.875rem;
+}
+
+.panel-everything-preset-primary .panel-preset-count {
+  font-size: 0.75rem;
 }
 
 .panel-preset-reason {

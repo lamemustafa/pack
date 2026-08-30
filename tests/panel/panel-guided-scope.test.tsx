@@ -23,6 +23,7 @@ function renderGuide() {
       scopeLockedForReview={false}
       onScopeChange={vi.fn()}
       onStart={vi.fn()}
+      onStartAllReturnsFullYear={vi.fn()}
     />,
   );
 }
@@ -36,14 +37,18 @@ describe("panel guided scope", () => {
     vi.unstubAllEnvs();
   });
 
-  it("holds the initial view to the three presets and the advanced door", () => {
+  it("orders a complete-year recipe, a partial-year recipe, return recipes, and the advanced door", () => {
     const markup = renderGuide();
     const controlCount =
       (markup.match(/<select/g) ?? []).length +
       (markup.match(/<button/g) ?? []).length +
       (markup.match(/<summary/g) ?? []).length;
 
-    expect(controlCount).toBe(4);
+    expect(controlCount).toBe(6);
+    expect(markup).toContain("Everything last year · all supported returns");
+    expect(markup).toContain("Complete financial year.");
+    expect(markup).toContain("Everything this year · all supported returns");
+    expect(markup).toContain("Partial year · 4 filed periods so far.");
     expect(markup).toContain("This year&#x27;s GSTR-3B");
     expect(markup).toContain("This year&#x27;s GSTR-1");
     expect(markup).toContain("This year&#x27;s GSTR-2B");
