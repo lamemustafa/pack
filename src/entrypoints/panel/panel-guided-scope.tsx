@@ -37,7 +37,7 @@ export function PanelGuidedScope({
   context,
   externalBlock,
   allReturnsExternalBlock,
-  allReturnsTerminalBlock,
+  allReturnsTerminalBlocks,
   allReturnsResumePlan,
   flowSummary,
   portalSignedIn,
@@ -54,7 +54,7 @@ export function PanelGuidedScope({
   /** The saved all-supported plan blocks other scopes without blocking its own resume. */
   allReturnsExternalBlock?: { disabled: true; label: string } | null;
   /** A terminal saved plan blocks only the root it owns; other recipes stay available. */
-  allReturnsTerminalBlock?: { financialYear: string; label: string } | null;
+  allReturnsTerminalBlocks?: readonly { financialYear: string; label: string }[];
   /** The one saved root plan allowed through its otherwise blocking recovery state. */
   allReturnsResumePlan?: PanelAllReturnsFullYearResumePlan;
   flowSummary: FiledReturnsFlowSummary | null;
@@ -148,8 +148,15 @@ export function PanelGuidedScope({
                   externalBlock={
                     allReturnsResumePlan?.financialYear === preset.financialYear
                       ? null
-                      : allReturnsTerminalBlock?.financialYear === preset.financialYear
-                        ? { disabled: true, label: allReturnsTerminalBlock.label }
+                      : allReturnsTerminalBlocks?.find(
+                            (block) => block.financialYear === preset.financialYear,
+                          )
+                        ? {
+                            disabled: true,
+                            label: allReturnsTerminalBlocks.find(
+                              (block) => block.financialYear === preset.financialYear,
+                            )!.label,
+                          }
                         : (allReturnsExternalBlock ?? externalBlock)
                   }
                   primary={preset.financialYear === financialYears[1]}

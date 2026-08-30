@@ -707,6 +707,7 @@ describe("panel guided scope interaction", () => {
           context: { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
           allSupportedFullFiscalYearFlowSummary: {
             resumeAvailable: true,
+            resumeMode: "local-only",
             summaryIdentity: {
               kind: "all-supported-returns-full-fiscal-year",
               financialYear: "2025-26",

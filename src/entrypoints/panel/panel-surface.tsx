@@ -61,7 +61,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const savedRun = pack.lastRunSummary;
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
   const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
-  const allReturnsTerminalBlock = getAllSupportedTerminalBlock(allSupportedSummary);
+  const allReturnsTerminalBlocks = getAllSupportedTerminalBlocks(allSupportedSummary);
   // The saved plan blocks other scopes, but not its own resume: the runner retries the saved ZIP or
   // cleanup phase when this same start is invoked again, and blocking that leaves discarding the
   // plan as the only route out of a recoverable state.
@@ -198,7 +198,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 context={pack.context}
                 externalBlock={savedRunBlock ?? allSupportedRunBlock}
                 allReturnsExternalBlock={savedRunBlock ?? allSupportedRunBlock}
-                {...(allReturnsTerminalBlock ? { allReturnsTerminalBlock } : {})}
+                {...(allReturnsTerminalBlocks.length > 0 ? { allReturnsTerminalBlocks } : {})}
                 {...(allReturnsResumePlan ? { allReturnsResumePlan } : {})}
                 flowSummary={pack.scopedFlowSummary}
                 portalSignedIn={portalSignedIn || allReturnsResumeLocalOnly}
@@ -371,39 +371,38 @@ function getAllSupportedRunBlock(
   };
 }
 
-function getAllSupportedTerminalBlock(
+function getAllSupportedTerminalBlocks(
   summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
-): { financialYear: string; label: string } | null {
-  if (!summary) return null;
-  if (summary.status === "complete") {
-    const savedPlan = panelAllReturnsFullYearResumePlan(summary);
-    const currentPlan = panelAllReturnsFullYearPreset(summary.summaryIdentity.financialYear);
-    if (savedPlan && currentPlan && currentPlan.periodCount > savedPlan.periodCount) return null;
-    return {
-      financialYear: summary.summaryIdentity.financialYear,
-      label:
-        "Pack already completed this all-supported plan. Clear local data before starting it again.",
-    };
-  }
-  if (summary.status === "cancelled") {
-    return {
-      financialYear: summary.summaryIdentity.financialYear,
-      label:
-        "Pack retained this cancelled all-supported plan. Clear local data before starting it again.",
-    };
-  }
-  return null;
+): readonly { financialYear: string; label: string }[] {
+  const terminalRoots =
+    summary?.terminalPlanRoots ??
+    (summary && ["complete", "cancelled"].includes(summary.status)
+      ? [
+          {
+            financialYear: summary.summaryIdentity.financialYear,
+            status: summary.status,
+            periodCount: panelAllReturnsFullYearResumePlan(summary)?.periodCount ?? 0,
+          },
+        ]
+      : []);
+  return terminalRoots.flatMap((root) => {
+    const currentPlan = panelAllReturnsFullYearPreset(root.financialYear);
+    if (root.status === "complete" && currentPlan && currentPlan.periodCount > root.periodCount)
+      return [];
+    return [
+      {
+        financialYear: root.financialYear,
+        label:
+          root.status === "complete"
+            ? "Pack already completed this all-supported plan. Clear local data before starting it again."
+            : "Pack retained this cancelled all-supported plan. Clear local data before starting another return.",
+      },
+    ];
+  });
 }
 
 function allSupportedResumeIsLocalOnly(
   summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
 ): boolean {
-  if (!summary?.resumeAvailable) return false;
-  return summary.flowStep.safeSignals.some((signal) =>
-    [
-      "all-supported-full-fiscal-year-targets-complete",
-      "all-supported-full-fiscal-year-zip-downloaded",
-      "all-supported-full-fiscal-year-no-zip-artifacts",
-    ].includes(signal),
-  );
+  return summary?.resumeAvailable === true && summary.resumeMode === "local-only";
 }

@@ -425,6 +425,14 @@ export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
    * those branches and leaves discarding the plan as the sole option.
    */
   resumeAvailable: boolean;
+  /** Whether the productive saved-plan branch is ZIP/export/cleanup-only. */
+  resumeMode?: "local-only" | "portal";
+  /** Every retained terminal root, so no recipe silently targets old completion. */
+  terminalPlanRoots?: readonly {
+    financialYear: string;
+    status: "complete" | "cancelled";
+    periodCount: number;
+  }[];
 }
 
 /**

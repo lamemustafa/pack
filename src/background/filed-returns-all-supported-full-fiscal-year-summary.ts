@@ -56,6 +56,7 @@ export async function readCurrentAllSupportedFullFiscalYearFlowSummary(
       { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
       now,
     ),
+    terminalPlanRoots(state.ledgers),
   );
 }
 
@@ -63,6 +64,7 @@ export function toAllSupportedFullFiscalYearSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   now = new Date(),
   leaseIsLive = false,
+  allTerminalPlanRoots = terminalPlanRoots([ledger]),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   const flowStep = summaryStep(ledger, now, leaseIsLive);
   const zipDelivered =
@@ -75,6 +77,14 @@ export function toAllSupportedFullFiscalYearSummary(
   const resumeAvailable = allSupportedResumeIsProductive(ledger);
   return {
     resumeAvailable,
+    ...(resumeAvailable
+      ? {
+          resumeMode: isLocalOnlyResumePhase(ledger.zipPhase)
+            ? ("local-only" as const)
+            : ("portal" as const),
+        }
+      : {}),
+    ...(allTerminalPlanRoots.length > 0 ? { terminalPlanRoots: allTerminalPlanRoots } : {}),
     summaryIdentity: { ...ledger.planRoot },
     status:
       isAllSupportedFullFiscalYearLedgerStale(ledger, now) &&
@@ -100,6 +110,32 @@ export function toAllSupportedFullFiscalYearSummary(
     flowStepScope,
     flowStep,
   };
+}
+
+function isLocalOnlyResumePhase(
+  phase: FiledReturnsAllSupportedFullFiscalYearLedger["zipPhase"],
+): boolean {
+  return [
+    "export-pending",
+    "export-retry-pending",
+    "downloaded-cleanup-pending",
+    "no-artifacts-cleanup-pending",
+  ].includes(phase ?? "");
+}
+
+function terminalPlanRoots(
+  ledgers: readonly FiledReturnsAllSupportedFullFiscalYearLedger[],
+): NonNullable<FiledReturnsAllSupportedFullFiscalYearFlowSummary["terminalPlanRoots"]> {
+  return ledgers.flatMap((ledger) => {
+    if (ledger.status !== "complete" && ledger.status !== "cancelled") return [];
+    return [
+      {
+        financialYear: ledger.planRoot.financialYear,
+        status: ledger.status,
+        periodCount: new Set(ledger.targets.map((target) => target.period)).size,
+      },
+    ];
+  });
 }
 
 function currentLedger(
