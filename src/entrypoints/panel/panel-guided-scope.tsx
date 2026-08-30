@@ -6,6 +6,7 @@ import type {
 } from "../../connectors/gst/filed-returns-contracts";
 import {
   filedReturnsCapability,
+  filedReturnsCapabilityRunNotes,
   filedReturnsCatalogueEntries,
   type FiledReturnsCatalogueEntry,
 } from "../../connectors/gst/filed-returns-capabilities";
@@ -193,6 +194,14 @@ export function PanelGuidedScope({
                     {disabledReason}
                   </p>
                 ) : null}
+                {filedReturnsCapabilityRunNotes(
+                  preset.scope.returnType,
+                  preset.scope.artifactType ?? "PDF",
+                ).map((note) => (
+                  <p className="panel-preset-note" key={note}>
+                    {note}
+                  </p>
+                ))}
               </React.Fragment>
             );
           })}
