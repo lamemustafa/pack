@@ -78,9 +78,12 @@ describe("Pack CI workflow", () => {
 
     expect(trustedWorkflow).toContain("workflow_dispatch:");
     expect(trustedWorkflow).toContain('schedule:\n    - cron: "*/15 * * * *"');
-    expect(trustedWorkflow).toContain(
-      "concurrency:\n  group: review-gate-reconcile\n  cancel-in-progress: false",
-    );
+    // The pin was on the literal group name; the property it protects is that a sweep never runs
+    // concurrently with another sweep. Prompt events now take a group per pull request, because a
+    // shared group lets GitHub evict a pending run and lose that event entirely.
+    expect(trustedWorkflow).toContain("cancel-in-progress: false");
+    expect(trustedWorkflow).toContain("group: >-\n    review-gate-reconcile-${{");
+    expect(trustedWorkflow).toContain("'sweep'");
     expect(trustedWorkflow).not.toContain("pull_request:");
     expect(trustedWorkflow).not.toContain("pull_request_review:");
     expect(trustedWorkflow).not.toContain("pull_request_review_comment:");

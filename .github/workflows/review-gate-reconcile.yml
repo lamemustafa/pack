@@ -25,8 +25,18 @@ permissions:
   issues: read
   pull-requests: read
 
+# Scheduled and dispatched passes serialise on one group, as before: they sweep every eligible pull
+# request and must not write checks concurrently. Prompt events get a group per pull request, because
+# a shared group makes GitHub replace a pending run when another enters it -- even with
+# `cancel-in-progress: false` -- and the evicted event's pull request may be in neither the running
+# nor the replacement slice, which is the staleness these triggers exist to remove.
 concurrency:
-  group: review-gate-reconcile
+  group: >-
+    review-gate-reconcile-${{
+      (github.event_name == 'issue_comment' && format('pr-{0}', github.event.issue.number)) ||
+      (github.event_name == 'workflow_run' && format('run-{0}', github.event.workflow_run.head_sha)) ||
+      'sweep'
+    }}
   cancel-in-progress: false
 
 jobs:
@@ -76,8 +86,15 @@ jobs:
           else
             head_sha="$(jq -r '.workflow_run.head_sha // empty' "${GITHUB_EVENT_PATH}")"
             if printf '%s' "${head_sha}" | grep -Eq '^[0-9a-f]{40}$'; then
+              # No `|| true`. A rate-limited or unavailable lookup would otherwise become pull
+              # request 0, and the run would quietly reconcile the rotating slice while reporting
+              # success -- leaving the pull request that raised the event exactly as stale as before,
+              # with nothing said about why.
               number="$(gh api "repos/${REPO}/commits/${head_sha}/pulls" \
-                --jq 'map(select(.state == "open")) | .[0].number // empty' || true)"
+                --jq 'map(select(.state == "open")) | .[0].number // empty')"
+            else
+              echo "Prompt event carried no usable head commit; refusing to guess a pull request." >&2
+              exit 1
             fi
           fi
           if ! printf '%s' "${number}" | grep -Eq '^[0-9]+$'; then

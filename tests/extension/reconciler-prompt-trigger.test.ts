@@ -51,6 +51,30 @@ describe("the trusted reconciler", () => {
     expect(publisher).toContain("reconciling the rotating slice only");
   });
 
+  it("does not let one prompt event evict another", async () => {
+    // A shared concurrency group makes GitHub replace a pending run when another enters it, even
+    // with cancel-in-progress: false. The evicted event's pull request can then be in neither the
+    // running nor the replacement slice, which is exactly the staleness these triggers remove.
+    const workflow = await readFile(path.join(workflowsDir, "review-gate-reconcile.yml"), "utf8");
+
+    expect(workflow).toContain("format('pr-{0}', github.event.issue.number)");
+    expect(workflow).toContain("format('run-{0}', github.event.workflow_run.head_sha)");
+    expect(workflow).toContain("cancel-in-progress: false");
+  });
+
+  it("refuses to guess a pull request when the lookup fails", async () => {
+    // `|| true` turned a rate-limited lookup into pull request 0: the run then reconciled the
+    // rotating slice and reported success, leaving the triggering pull request stale with nothing
+    // said about why.
+    const workflow = await readFile(path.join(workflowsDir, "review-gate-reconcile.yml"), "utf8");
+    const resolveStep = workflow.slice(workflow.indexOf("Resolve the pull request a prompt event"));
+
+    // Assert on the command, not the word: the comment above it explains why `|| true` is absent.
+    expect(resolveStep).not.toMatch(/--jq[^\n]*\|\| true/);
+    expect(resolveStep).not.toMatch(/^\s*number="\$\([^)]*\|\| true\)"/m);
+    expect(resolveStep).toContain("refusing to guess a pull request");
+  });
+
   it("still runs trusted default-branch code, never a pull request head", async () => {
     // The property that makes this verdict worth requiring. `review-gate.yml` checks out the pull
     // request's own head and runs the gate from it, so an author can edit the job that judges them;
