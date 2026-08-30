@@ -171,7 +171,7 @@ export function OptionsPage() {
           {busy === "manifest" ? "Loading..." : "Last synthetic demo manifest"}
         </button>
         <button type="button" disabled={busy !== null} onClick={() => void clearLocalData()}>
-          {busy === "clear" ? "Clearing..." : "Clear local Pack data"}
+          {busy === "clear" ? "Clearing..." : "Clear local data and discard saved plans"}
         </button>
         <button
           type="button"

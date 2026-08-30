@@ -65,15 +65,16 @@ artifact, and recovery combinations. It is not a claim that every GST Portal
 period or format has authorised live evidence; those broader claims remain
 gated by the recorded publication evidence.
 
-Full fiscal year download ships in the published package -- there is one binary --
-as a local per-period ledger. It expands the selected financial year into eligible
-GSTR-3B, GSTR-1, or GSTR-2B periods and runs them one at a time through the
-single-period path. GSTR-2B full-year support uses the signed-in tab's
+Full fiscal year download will not be available in the next production build. A
+maintainer-only qualified source build, defined in
+[the publication readiness record](docs/PUBLICATION_READINESS.md), can expose
+the local per-period ledger, which expands a selected financial year into
+eligible GSTR-3B, GSTR-1, or GSTR-2B periods and runs them one at a time through
+the single-period path. GSTR-2B full-year work uses the signed-in tab's
 portal-loaded source data when available and exports the selected summary
-PDF/details Excel files through Pack's local ZIP path. It is not Store-advertised,
-and remains outside store-facing claims until exact-ZIP clean-profile evidence,
-restart/resume evidence, and privacy-review evidence are recorded for the
-release.
+PDF/details Excel files through Pack's local ZIP path. It remains outside
+Store-facing claims until exact-ZIP clean-profile evidence, restart/resume
+evidence, and privacy-review evidence are recorded for the release.
 
 During each GSTR-3B full-year ZIP assembly with eligible files, Pack attempts to add two
 files derived from the staged portal JSON already in that run:
@@ -363,6 +364,18 @@ Pack uses Chrome extension storage only inside the current browser profile.
   plan scope to its opaque ledger ID. Each indexed plan is stored under the
   generated `pack:filed-returns-plan:<opaque-ledger-id>` key with the same
   bounded ledger fields; the index and plan records are cleared together;
+- `pack:all-supported-full-fiscal-year-ledger-index`: local-only index that
+  maps the selected financial year for the separate all-supported-returns plan
+  to its opaque ledger ID. Each indexed plan is stored under the generated
+  `pack:filed-returns-all-supported-plan:<opaque-ledger-id>` key with the same
+  bounded ledger fields: plan and version identifiers; selected financial year,
+  periods, return types and artifact types; target status, Pack-authored safe
+  messages/signals, attempts, revisions and timestamps; bounded diagnostics
+  such as opaque action IDs, numeric browser download IDs, endpoint and
+  download-path classes, MIME and byte-count classes, and status and error
+  classes. The index and plan records are cleared together; they store no
+  taxpayer identifiers, filenames, portal HTML, raw URLs, raw portal paths, or
+  local paths;
 - `pack:single-period-staging`: a short-lived local recovery ledger for a
   selected-file ZIP. It stores an opaque ledger identifier, canonical scope
   (financial year, period, return type and selected artifacts), per-artifact

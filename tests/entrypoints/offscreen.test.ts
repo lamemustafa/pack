@@ -266,6 +266,25 @@ describe("offscreen Blob URL entrypoint", () => {
         payload: {
           ...summaryMessage.payload,
           summaryPlan: [
+            ...summaryMessage.payload.summaryPlan,
+            {
+              artifactType: "JSON",
+              entryNames: [],
+              financialYear: "2026-27",
+              outcomeCategory: "not-filed",
+              period: "May",
+              returnType: "GSTR-1",
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackOffscreenBlobUrlMessage({
+        ...summaryMessage,
+        payload: {
+          ...summaryMessage.payload,
+          summaryPlan: [
             { ...summaryMessage.payload.summaryPlan[0], entryNames: ["june.pdf"] },
             { ...summaryMessage.payload.summaryPlan[1], entryNames: ["may.pdf"] },
           ],

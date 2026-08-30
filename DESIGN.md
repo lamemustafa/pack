@@ -37,6 +37,12 @@ colors:
   danger-fg: "#7b241c"
   danger-bg: "#fff0ee"
   danger-border: "#e5b3ac"
+  surface-transparent: "transparent"
+  overlay-border: "rgba(174, 189, 203, 0.72)"
+  overlay-surface: "rgba(255, 255, 255, 0.96)"
+  success-overlay-border: "rgba(112, 179, 144, 0.72)"
+  warning-overlay-border: "rgba(218, 188, 109, 0.72)"
+  danger-overlay-border: "rgba(218, 131, 121, 0.72)"
 typography:
   title:
     fontSize: "20px"
@@ -113,8 +119,8 @@ rendered and would fail badly if they were — 27 of 63, including `--pack-ink-p
 `--pack-surface-inverse` at 1.09:1. Pairing a token with a surface it was not made for is a bug the
 palette cannot prevent.
 
-Nothing enforces either statement yet: there is no test that recomputes contrast or rejects a colour
-literal outside `:root`. Tracked in #171. `PRODUCT.md` sets WCAG 2.1 AA as the target.
+`tests/styles/design-token-literals.test.ts` rejects a colour literal outside `:root`. Contrast is
+still measured rather than recomputed by CI. `PRODUCT.md` sets WCAG 2.1 AA as the target.
 
 ## Typography
 

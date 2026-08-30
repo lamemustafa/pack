@@ -21,7 +21,10 @@ import { acquireFiledReturnJsonInMainWorld } from "./filed-returns-json-acquisit
 import { toPortalReturnPeriod } from "../connectors/gst/filed-returns-return-period";
 import { downloadAcquiredArtifact } from "./artifact-download";
 import { stageOffscreenFiledReturn } from "./offscreen-blob-url";
-import { safeFiledReturnZipEntryPath } from "./filed-returns-download-filename";
+import {
+  safeAllSupportedFullFiscalYearZipEntryPath,
+  safeFiledReturnZipEntryPath,
+} from "./filed-returns-download-filename";
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import {
   clearArtifactAcquisitionCheckpoint,
@@ -747,7 +750,10 @@ async function deliverValidatedArtifact({
         dataUrl: `data:${mimeType};base64,${base64}`,
         ledgerId: staging.ledgerId,
         returnType,
-        zipPath: safeFiledReturnZipEntryPath(scope, artifactType),
+        zipPath:
+          staging.bundleKind === "all-supported-full-fiscal-year"
+            ? safeAllSupportedFullFiscalYearZipEntryPath(scope, artifactType)
+            : safeFiledReturnZipEntryPath(scope, artifactType),
       });
     } catch {
       return {

@@ -196,6 +196,20 @@ describe("extension package verifier", () => {
     }
   });
 
+  it("rejects an alpha-only panel marker in a packaged artifact", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "assets/alpha-panel.js",
+      'const marker = "data-pack-alpha-surface";',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Alpha surface marker data-pack-alpha-surface");
+  });
+
   it("rejects sensitive policy markers from the vendored harness snapshot", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(

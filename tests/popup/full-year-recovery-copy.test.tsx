@@ -10,6 +10,7 @@ import {
 import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import { getInlinePrimaryAction, InlineStatus } from "../../src/entrypoints/popup/inline-status";
 import { getPopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 import {
   makeCompletedRecoveryLedger,
   RECOVERY_NOW,
@@ -83,6 +84,35 @@ describe("full-year warning without a usable period", () => {
       expect(callbacks.onOpenPortal).not.toHaveBeenCalled();
     },
   );
+
+  it("replaces saved full-year retry guidance when the enclosing build cannot run it", () => {
+    const summary = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("blocked"),
+      RECOVERY_NOW,
+    );
+    const presentation = getPopupPresentationState(null, summary, null);
+    const callbacks = actions();
+
+    expect(
+      getInlinePrimaryAction(presentation, summary, {
+        ...callbacks,
+        fullYearFlowAvailable: false,
+      }),
+    ).toBeNull();
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        {...callbacks}
+        busy={null}
+        fullYearFlowAvailable={false}
+        portalReady
+        presentation={presentation}
+        summary={summary}
+      />,
+    );
+    expect(markup).toContain(getRecoveryFlowAvailability(summary, false).message!);
+    expect(markup).not.toContain("retry this period to continue the remaining periods");
+  });
 });
 
 describe.each(["direct", "parsed"] as const)("%s final-ZIP status precedence", (source) => {

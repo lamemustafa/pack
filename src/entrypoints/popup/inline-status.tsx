@@ -12,9 +12,11 @@ import {
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
 import { getSavedFullFiscalYearActionDecision } from "./recovery-actions";
+import { getRecoveryFlowAvailability } from "./recovery-flow-availability";
 
 export interface InlineStatusProps {
   busy: string | null;
+  fullYearFlowAvailable?: boolean;
   portalReady: boolean;
   onOpenPortal: () => void;
   onRestartTarget: () => void;
@@ -26,6 +28,7 @@ export interface InlineStatusProps {
 
 export function InlineStatus({
   busy,
+  fullYearFlowAvailable = true,
   portalReady,
   onOpenPortal,
   onRestartTarget,
@@ -43,10 +46,19 @@ export function InlineStatus({
     if (checkingCleanup && !wasCheckingCleanup.current) statusRef.current?.focus();
     wasCheckingCleanup.current = checkingCleanup;
   }, [checkingCleanup]);
-  const copy = getInlineStatusCopy(presentation, summary);
+  const copy = getInlineStatusCopy(presentation, summary, fullYearFlowAvailable);
   if (!copy) return null;
+  // Computed apart from the recovery model, so it needs the same gate: it ends with "Start this
+  // year again to include them", and a packaged build has removed the full-year period option and
+  // blocks that scope. A settled completion has no recovery controls at all, so nothing else
+  // suppresses it.
   const planCoverageMessage = summary
-    ? filedReturnsPlanCoverageMessage(summary.scope, summary.status, summary.flowStep.safeSignals)
+    ? filedReturnsPlanCoverageMessage(
+        summary.scope,
+        summary.status,
+        summary.flowStep.safeSignals,
+        fullYearFlowAvailable,
+      )
     : "";
 
   const actionBusy = busy !== null;
@@ -55,6 +67,7 @@ export function InlineStatus({
     onRestartTarget,
     onRetryFullFiscalYearTarget,
     onRetryTarget,
+    fullYearFlowAvailable,
   });
   const portalDisabledReason = portalReady ? null : (primaryAction?.portalDisabledReason ?? null);
 
@@ -142,7 +155,17 @@ export function hasInlinePrimaryAction(
 function getInlineStatusCopy(
   presentation: PopupPresentationState,
   summary: FiledReturnsFlowSummary | null,
+  fullYearFlowAvailable = true,
 ): { body: string; icon: string; title: string; tone: "warning" | "success" | "neutral" } | null {
+  const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
+  if (presentation.kind !== "error" && recoveryAvailability.isWithheldFullYearRecovery) {
+    return {
+      body: recoveryAvailability.guidance!,
+      icon: "!",
+      title: "Saved full-year run needs attention",
+      tone: "warning",
+    };
+  }
   if (presentation.kind === "downloading") {
     const cleanupCopy = getFullFiscalYearCleanupCopy(summary);
     return {
@@ -361,7 +384,11 @@ export function getInlinePrimaryAction(
   summary: FiledReturnsFlowSummary | null,
   actions: Pick<
     InlineStatusProps,
-    "onOpenPortal" | "onRestartTarget" | "onRetryFullFiscalYearTarget" | "onRetryTarget"
+    | "fullYearFlowAvailable"
+    | "onOpenPortal"
+    | "onRestartTarget"
+    | "onRetryFullFiscalYearTarget"
+    | "onRetryTarget"
   >,
 ): InlinePrimaryAction | null {
   if (presentation.kind === "error") {
@@ -372,6 +399,12 @@ export function getInlinePrimaryAction(
 
   const signals = new Set(summary.flowStep.safeSignals);
   if (presentation.kind === "blocked" && summary.currentPeriod && summary.fullFiscalYearRecovery) {
+    if (
+      !getRecoveryFlowAvailability(summary, actions.fullYearFlowAvailable ?? true)
+        .canContinueFullYear
+    ) {
+      return null;
+    }
     const { gerund, label } = getSavedFullFiscalYearActionDecision(summary);
     return {
       label,

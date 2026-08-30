@@ -58,7 +58,7 @@ export interface FiledReturnsFlowMessagingDeps {
   portalTabIncognito?: boolean;
   persistTargetReview?: boolean;
   stageCapturedDownloads?: {
-    bundleKind?: "full-fiscal-year" | "single-period";
+    bundleKind?: "all-supported-full-fiscal-year" | "full-fiscal-year" | "single-period";
     ledgerId: string;
   };
   timings?: {

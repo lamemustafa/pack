@@ -15,7 +15,11 @@ vi.mock("wxt/browser", () => ({
 
 import { PanelSurface, type PackPanelController } from "../../src/entrypoints/panel/panel-surface";
 import { PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
-import { panelFullFiscalYearPresets } from "../../src/entrypoints/panel/panel-guided-scope-model";
+import {
+  panelAllReturnsFullYearPreset,
+  panelFullFiscalYearPresets,
+} from "../../src/entrypoints/panel/panel-guided-scope-model";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 import {
   PANEL_TEST_SCOPE,
   completedPanelSummary,
@@ -57,10 +61,12 @@ function GuidedScopeHarness({
   onStart = () => undefined,
   portalSignedIn,
   savedRun,
+  scopeLockedForReview = false,
 }: {
   onStart?: (scope: FiledReturnsDownloadScope) => void;
   portalSignedIn: boolean;
   savedRun: FiledReturnsFlowSummary | null;
+  scopeLockedForReview?: boolean;
 }) {
   const [scope, setScope] = React.useState<FiledReturnsDownloadScope>(PANEL_TEST_SCOPE);
   return (
@@ -72,7 +78,7 @@ function GuidedScopeHarness({
       portalSignedIn={portalSignedIn}
       savedRun={savedRun}
       scope={scope}
-      scopeLockedForReview={false}
+      scopeLockedForReview={scopeLockedForReview}
       onScopeChange={setScope}
       onStart={onStart}
     />
@@ -196,6 +202,7 @@ function guideControlCount(): number {
 
 describe("panel guided scope interaction", () => {
   beforeEach(() => {
+    vi.stubEnv("MODE", "alpha");
     dom = new JSDOM("<div id='root'></div>", {
       pretendToBeVisual: true,
       url: "https://extension.test",
@@ -209,6 +216,46 @@ describe("panel guided scope interaction", () => {
     if (root) await act(async () => root?.unmount());
     root = null;
     vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("does not offer an unavailable full-year resume in a packaged build", async () => {
+    vi.stubEnv("MODE", "production");
+    await mountGuidedScope({
+      portalSignedIn: true,
+      savedRun: completedPanelSummary({
+        status: "blocked",
+        currentPeriod: "April",
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "blocked",
+          safeSignals: [],
+          safeMessage: "Synthetic saved full-year run.",
+        },
+      }),
+      scopeLockedForReview: true,
+    });
+    await clickButtonContaining("Choose return, year and period");
+
+    expect(container.textContent).toContain(
+      getRecoveryFlowAvailability(
+        completedPanelSummary({
+          status: "blocked",
+          currentPeriod: "April",
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "blocked",
+            safeSignals: [],
+            safeMessage: "Synthetic saved full-year run.",
+          },
+        }),
+        false,
+        true,
+      ).guidance!,
+    );
+    expect(container.textContent).not.toContain("Resume or discard it");
   });
 
   it.each([false, true])("preserves existing focus on mount (StrictMode: %s)", async (strict) => {
@@ -251,6 +298,134 @@ describe("panel guided scope interaction", () => {
     expect(container.textContent).toContain("Choose return, year and period");
     expect(container.textContent).not.toContain("Catalogue & limits");
     expect(container.textContent).not.toContain("Step 1 of 4");
+
+    await clickButtonContaining("Choose return, year and period");
+    expect(container.innerHTML).toContain("data-pack-alpha-surface");
+  });
+
+  it("places everything-this-year first without moving focus on initial mount", async () => {
+    const previousControl = dom.window.document.createElement("button");
+    previousControl.textContent = "Existing focus";
+    dom.window.document.body.append(previousControl);
+    previousControl.focus();
+    const onStartAllReturnsFullYear = vi.fn();
+    const expectedPlan = panelAllReturnsFullYearPreset(
+      getFiledReturnsFullFiscalYearPeriods("2026-27").length > 0 ? "2026-27" : "2025-26",
+    );
+
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <PanelGuidedScope
+          busy={null}
+          context={{ connectorId: "gst", pageKind: "gst-filed-returns", supported: true }}
+          externalBlock={null}
+          flowSummary={null}
+          portalSignedIn
+          savedRun={null}
+          scope={PANEL_TEST_SCOPE}
+          scopeLockedForReview={false}
+          onScopeChange={vi.fn()}
+          onStart={vi.fn()}
+          onStartAllReturnsFullYear={onStartAllReturnsFullYear}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const presets = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
+    );
+    expect(dom.window.document.activeElement).toBe(previousControl);
+    expect(presets[0]?.classList.contains("panel-everything-preset")).toBe(true);
+    expect(presets[0]?.textContent).toContain("Everything this year · all supported returns");
+    expect(presets[0]?.textContent).toMatch(
+      /\d+ returns? · \d+ return periods? · \d+ formats? · \d+ files? · one ZIP/,
+    );
+    expect(presets[0]?.getAttribute("aria-label")).toContain("all supported returns");
+
+    await act(async () => {
+      presets[0]?.dispatchEvent(realmEvent("click"));
+      await Promise.resolve();
+    });
+
+    expect(expectedPlan).not.toBeNull();
+    expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith({
+      kind: expectedPlan!.kind,
+      financialYear: expectedPlan!.financialYear,
+    });
+  });
+
+  it("wires the alpha all-returns recipe from the composed panel", async () => {
+    const onStartAllReturnsFullYear = vi.fn();
+    await mount(
+      { overrides: { startAllSupportedFullFiscalYearFlow: onStartAllReturnsFullYear } },
+      false,
+      false,
+    );
+
+    await clickButtonContaining("Everything this year");
+
+    expect(onStartAllReturnsFullYear).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "all-supported-returns-full-fiscal-year" }),
+    );
+  });
+
+  it("locks every new preset while an all-supported plan needs review", async () => {
+    await mount(
+      {
+        overrides: {
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2025-26",
+            },
+            status: "blocked",
+            updatedAt: "2026-08-27T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: [
+              {
+                targetId: "synthetic-target",
+                financialYear: "2025-26",
+                period: "April",
+                returnType: "GSTR-3B",
+                artifactType: "PDF",
+                outcome: "needs-review",
+              },
+            ],
+            totalTargets: 1,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "blocked",
+              safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+              safeMessage: "Synthetic all-supported review.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>(".panel-preset")).map((button) => ({
+        disabled: button.disabled,
+        label: button.textContent,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          disabled: true,
+          label: expect.stringContaining("Everything this year"),
+        }),
+      ]),
+    );
+    expect(container.textContent).toContain(
+      "Clear local data and discard the saved all-supported plan before starting another return.",
+    );
   });
 
   it("gives every disabled preset a resolvable reason", async () => {
@@ -533,7 +708,10 @@ describe("panel guided scope interaction", () => {
     const expectedSteps = [
       ["Return", "Choose one supported return for this run."],
       ["Financial year", "Pack keeps each run within one financial year."],
-      ["Filed period", "Choose one month or the full fiscal year."],
+      [
+        "Filed period",
+        "Choose one of: Full fiscal year, April, May, June, July, August, September, October, November, December, January, February, March.",
+      ],
       ["File", "Choose one artifact selection offered for this return."],
     ] as const;
     await mount();

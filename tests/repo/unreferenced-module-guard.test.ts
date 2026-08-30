@@ -26,13 +26,6 @@ type ProjectCompilerOptions = {
   pathsBasePath: string;
 };
 
-const UNREFERENCED_SOURCE_MODULE_ALLOWLIST: readonly UnreferencedSourceModuleAllowlistEntry[] = [
-  {
-    path: "src/styles/popup-target-summary.css",
-    reason: "Unreached stylesheet; tracked for dedicated cleanup review in #219.",
-  },
-];
-
 const temporaryProjects: string[] = [];
 
 function canonicalPath(path: string): string {
@@ -374,9 +367,7 @@ async function rootPathsFor(
 
 async function assertNoUnreferencedSourceModules(
   projectRoot = process.cwd(),
-  allowlist: readonly UnreferencedSourceModuleAllowlistEntry[] = projectRoot === process.cwd()
-    ? UNREFERENCED_SOURCE_MODULE_ALLOWLIST
-    : [],
+  allowlist: readonly UnreferencedSourceModuleAllowlistEntry[] = [],
 ): Promise<void> {
   const wxtConfigText = await optionalWxtConfigText(join(projectRoot, "wxt.config.ts"));
   const sourceDirectory = wxtSourceDirectory(projectRoot, wxtConfigText);

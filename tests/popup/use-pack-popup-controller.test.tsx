@@ -2,7 +2,10 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import {
+  FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+  type FiledReturnsFlowSummary,
+} from "../../src/connectors/gst/filed-returns-contracts";
 import type { PackMessage } from "../../src/connectors/gst/messages";
 
 const mocks = vi.hoisted(() => ({
@@ -86,6 +89,70 @@ describe("popup background failure presentation", () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith({
       type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
     });
+  });
+
+  it("routes the all-supported alpha recipe through its distinct root-plan message", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW") {
+        return Promise.resolve({
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "started",
+            safeSignals: ["all-supported-full-fiscal-year-run-started"],
+            safeMessage: "Pack started the selected fiscal-year returns.",
+          },
+          allSupportedFullFiscalYearFlowSummary: {
+            summaryIdentity: {
+              kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+              financialYear: "2025-26",
+            },
+            status: "running",
+            completedTargetIds: [],
+            targetEvidence: [],
+            totalTargets: 0,
+            flowStepScope: {
+              financialYear: "2025-26",
+              period: "April",
+              returnType: "GSTR-3B",
+              artifactType: "PDF",
+            },
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "started",
+              safeSignals: ["all-supported-full-fiscal-year-run-started"],
+              safeMessage: "Pack started the selected fiscal-year returns.",
+            },
+          },
+        });
+      }
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+
+    await act(async () => {
+      await controller?.startAllSupportedFullFiscalYearFlow({
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      });
+    });
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+      payload: {
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      },
+    });
+    expect(controller?.allSupportedFullFiscalYearFlowSummary?.status).toBe("running");
+    expect(controller?.actionError).toBeNull();
   });
 
   it("keeps a malformed saved-summary response visible", async () => {
@@ -563,7 +630,7 @@ describe("popup background failure presentation", () => {
     currentSummary = advancedSummary;
     await act(async () => {
       mocks.changeListeners.forEach((listener) =>
-        listener({ "pack:filed-returns-plan:synthetic": { newValue: {} } }, "local"),
+        listener({ "pack:filed-returns-all-supported-plan:synthetic": { newValue: {} } }, "local"),
       );
       await Promise.resolve();
       await Promise.resolve();

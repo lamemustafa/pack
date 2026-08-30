@@ -1,8 +1,11 @@
 import type {
+  FiledReturnsAllSupportedFullFiscalYearRequest,
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { expandAllSupportedFullFiscalYearTargetPlan } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import { FULL_FISCAL_YEAR_PERIOD } from "../connectors/gst/filed-returns-scope";
 import type {
   FullFiscalYearTargetRecoveryPayload,
   FiledReturnsFreshStartPayload,
@@ -22,6 +25,7 @@ import {
 import type { ActiveGstTab } from "./filed-returns-active-tab";
 import type { MainWorldFiledReturnsFilterSelectionOutcome } from "../connectors/gst/main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
+import { startAllSupportedFullFiscalYearDownloadFlow } from "./filed-returns-all-supported-full-fiscal-year";
 import {
   discardMalformedFullFiscalYearRunForFreshStart,
   prepareFullFiscalYearTargetRetry,
@@ -39,6 +43,7 @@ import {
   readRetainedPlanLedgers,
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
+import { readAllSupportedPlanLedgersStorageState } from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
   malformedTargetReviewResponse,
@@ -81,6 +86,7 @@ export interface FiledReturnsFlowRunnerDeps {
   ) => Promise<PackMessageResponse>;
   storageKeys: {
     activeRun?: string;
+    allSupportedFullFiscalYearLedgerIndex?: string;
     completion: string;
     fullFiscalYearLedger: string;
     fullFiscalYearLedgerIndex?: string;
@@ -101,7 +107,7 @@ export interface FiledReturnsFlowRunnerDeps {
     scope: FiledReturnsDownloadScope,
   ) => Promise<MainWorldFiledReturnsFilterSelectionOutcome>;
   stageCapturedDownloads?: {
-    bundleKind?: "full-fiscal-year" | "single-period";
+    bundleKind?: "all-supported-full-fiscal-year" | "full-fiscal-year" | "single-period";
     ledgerId: string;
   };
   timings?: {
@@ -140,6 +146,8 @@ export async function startFiledReturnsDownloadFlow(
   if (targetReviewState.state === "valid") {
     return responseForFiledReturnsTargetReview(targetReviewState.review);
   }
+  const allSupportedLock = await allSupportedPlanStartLockResponse(scope, deps);
+  if (allSupportedLock) return allSupportedLock;
 
   const activeRun = await acquireFiledReturnsRun(scope, deps);
   if ("response" in activeRun) return activeRun.response;
@@ -237,6 +245,168 @@ export async function startFiledReturnsDownloadFlow(
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
   }
+}
+
+async function allSupportedPlanStartLockResponse(
+  scope: FiledReturnsDownloadScope,
+  deps: FiledReturnsFlowRunnerDeps,
+  resumableRoot?: FiledReturnsAllSupportedFullFiscalYearRequest,
+): Promise<PackMessageResponse | null> {
+  if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
+  const state = await readAllSupportedPlanLedgersStorageState(deps);
+  if (state.state === "malformed") {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+        safeMessage:
+          "Pack could not verify the saved all-supported fiscal-year plan index before starting another return.",
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Clear local Pack data before starting another return.",
+          canResume: false,
+        },
+      },
+    };
+  }
+  if (
+    !state.ledgers.some(
+      (ledger) =>
+        ledger.status !== "complete" &&
+        ledger.status !== "cancelled" &&
+        (!resumableRoot ||
+          ledger.planRoot.kind !== resumableRoot.kind ||
+          ledger.planRoot.financialYear !== resumableRoot.financialYear),
+    )
+  ) {
+    return null;
+  }
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+      safeMessage:
+        "Pack retained an all-supported fiscal-year plan and will not start overlapping return work.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Clear local data and discard the saved plan before starting another return.",
+        canResume: false,
+      },
+    },
+  };
+}
+
+/**
+ * Starts the separate all-supported-returns root under the same durable
+ * operation lease as every other filed-return action. The lease is anchored to
+ * one derived atomic full-year scope only because the existing lease record is
+ * a concurrency guard; the all-returns ledger remains the authoritative root
+ * plan and target state.
+ */
+export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+  request: FiledReturnsAllSupportedFullFiscalYearRequest,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse> {
+  const leaseScope = allSupportedLeaseScope(request);
+  if (!leaseScope) {
+    return startAllSupportedFullFiscalYearDownloadFlow(
+      request,
+      deps as never,
+      startSinglePeriodFiledReturnsDownloadFlow,
+    );
+  }
+  let targetReviewState;
+  try {
+    targetReviewState = await readCurrentFiledReturnsTargetReviewStorageState(deps);
+  } catch {
+    return targetReviewStorageUnavailableResponse(leaseScope, deps);
+  }
+  if (targetReviewState.state === "malformed") {
+    return malformedTargetReviewResponse(leaseScope, blockedScopeTotalPeriods(leaseScope, deps));
+  }
+  if (targetReviewState.state === "valid") {
+    return responseForFiledReturnsTargetReview(targetReviewState.review);
+  }
+  const retainedPlans = await readPlanLedgersStorageState(deps);
+  if (retainedPlans.state === "malformed") {
+    return retainedFullFiscalYearPlanLockResponse(leaseScope);
+  }
+  for (const ledger of await readRetainedPlanLedgers(deps)) {
+    const replaceable =
+      ledger.status === "complete" &&
+      canCompleteFullFiscalYearLedger(ledger) &&
+      !ledger.zipDownloadAttempt &&
+      !hasRetainedFullFiscalYearStaging(ledger);
+    if (!replaceable) {
+      const response = responseForExistingLedger(ledger, deps.now?.() ?? new Date(), {
+        blockRetainedStaging: true,
+      });
+      if (response) return response;
+    }
+  }
+  const allSupportedLock = await allSupportedPlanStartLockResponse(leaseScope, deps, request);
+  if (allSupportedLock) return allSupportedLock;
+
+  const activeRun = await acquireFiledReturnsRun(leaseScope, deps);
+  if ("response" in activeRun) return activeRun.response;
+
+  const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
+  try {
+    const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(
+      leaseScope,
+      deps,
+    );
+    if (retainedArtifactRecovery) return retainedArtifactRecovery;
+    return startAllSupportedFullFiscalYearDownloadFlow(
+      request,
+      deps as never,
+      startSinglePeriodFiledReturnsDownloadFlow,
+    );
+  } finally {
+    stopLeaseRenewal();
+    await releaseFiledReturnsRun(activeRun.run, deps);
+  }
+}
+
+function retainedFullFiscalYearPlanLockResponse(
+  scope: FiledReturnsDownloadScope,
+): PackMessageResponse {
+  return {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["full-fiscal-year-ledger-malformed", "full-fiscal-year-opfs-retained"],
+      safeMessage:
+        "Pack could not verify retained fiscal-year recovery before starting the all-supported plan.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Clear local Pack data before starting another return.",
+        canResume: false,
+      },
+    },
+  };
+}
+
+function allSupportedLeaseScope(
+  request: FiledReturnsAllSupportedFullFiscalYearRequest,
+): FiledReturnsDownloadScope | null {
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  const first = expansion.ok ? expansion.targets[0] : undefined;
+  if (!first) return null;
+  return {
+    financialYear: request.financialYear,
+    period: FULL_FISCAL_YEAR_PERIOD,
+    returnType: first.returnType,
+    artifactType: first.artifactType,
+  };
 }
 
 function targetReviewStorageUnavailableResponse(
@@ -518,6 +688,8 @@ export async function startFreshFiledReturnsDownloadFlow(
   payload: FiledReturnsFreshStartPayload,
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
+  const allSupportedLock = await allSupportedPlanStartLockResponse(payload.scope, deps);
+  if (allSupportedLock) return allSupportedLock;
   let fullFiscalYearRecoveryFailure: PackMessageResponse | null = null;
   if (payload.recovery.kind === "target-review") {
     const targetReview = await readFiledReturnsTargetReview(payload.recovery.scope, deps);

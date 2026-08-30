@@ -759,6 +759,7 @@ function shouldWaitForDetailReadyAfterResultNavigation(
 ): boolean {
   return (
     deps.stageCapturedDownloads?.bundleKind === "full-fiscal-year" ||
+    deps.stageCapturedDownloads?.bundleKind === "all-supported-full-fiscal-year" ||
     scope.returnType === "GSTR-1" ||
     scope.returnType === "GSTR-2B" ||
     scope.artifactType === "PDF_AND_EXCEL" ||

@@ -49,10 +49,10 @@ export function isPackOffscreenBlobUrlMessage(
 function isSummaryPlan(
   plan: readonly FiledReturnsSummaryPlanEntry[],
   expectedEntries: readonly PackOffscreenFiledReturnZipExpectedEntry[],
-  expectedReturnType: FiledReturnsReturnType,
+  expectedReturnType: FiledReturnsReturnType | undefined,
 ): boolean {
   const expectedSlots = new Set(
-    expectedEntries.map((entry) => `${entry.artifactType}:${entry.entryNames.join("|")}`),
+    expectedEntries.map((entry) => expectedZipEntrySlot(entry, expectedReturnType)),
   );
   const plannedStagedSlots = new Set<string>();
   const identities = new Set<string>();
@@ -60,23 +60,29 @@ function isSummaryPlan(
   for (const entry of plan) {
     const identity = `${entry.period}:${entry.returnType}:${entry.artifactType}`;
     const staged = entry.outcomeCategory === "staged";
-    const slot = `${entry.artifactType}:${entry.entryNames.join("|")}`;
+    const matchingSlot = expectedEntries.find(
+      (expected) =>
+        expected.artifactType === entry.artifactType &&
+        expected.entryNames.join("|") === entry.entryNames.join("|") &&
+        expectedReturnTypeForEntry(expected, expectedReturnType) === entry.returnType,
+    );
+    const slot = matchingSlot ? expectedZipEntrySlot(matchingSlot, expectedReturnType) : undefined;
+    const hasExpectedSlot = slot !== undefined && expectedSlots.has(slot);
     if (
       identities.has(identity) ||
-      entry.returnType !== expectedReturnType ||
       !isFiledReturnsFinancialYear(entry.financialYear) ||
       !FILED_RETURNS_MONTHS.includes(entry.period) ||
-      (staged && (entry.entryNames.length < 1 || !expectedSlots.has(slot))) ||
+      (staged && (entry.entryNames.length < 1 || !hasExpectedSlot)) ||
       (staged &&
         entry.entryNames.some((entryName) => !entryNameMatchesPeriod(entryName, entry.period))) ||
       (!staged && entry.entryNames.length !== 0) ||
-      (staged && plannedStagedSlots.has(slot))
+      (staged && slot !== undefined && plannedStagedSlots.has(slot))
     ) {
       return false;
     }
     identities.add(identity);
     financialYears.add(entry.financialYear);
-    if (staged) plannedStagedSlots.add(slot);
+    if (staged && slot) plannedStagedSlots.add(slot);
   }
   return (
     financialYears.size === 1 &&
@@ -87,7 +93,9 @@ function isSummaryPlan(
 
 function entryNameMatchesPeriod(entryName: string, period: string): boolean {
   const prefix = period.toLowerCase();
-  return entryName.startsWith(`${prefix}.`) || entryName.startsWith(`${prefix}-`);
+  const basename = entryName.split("/").at(-1);
+  if (!basename) return false;
+  return basename.startsWith(`${prefix}.`) || basename.startsWith(`${prefix}-`);
 }
 
 export function isCanonicalFiledReturnZipEntryName(
@@ -95,25 +103,31 @@ export function isCanonicalFiledReturnZipEntryName(
   returnType?: FiledReturnsReturnType,
 ): value is string {
   if (typeof value !== "string") return false;
-  const match = /^([a-z]+)(?:-(summary|details|data|return))?\.(pdf|xls|xlsx|json)$/.exec(value);
+  const match =
+    /^(?:(gstr-(?:1|2b|3b))\/)?([a-z]+)(?:-(summary|details|data|return))?\.(pdf|xls|xlsx|json)$/.exec(
+      value,
+    );
   return Boolean(
     match &&
-    FILED_RETURNS_MONTHS.some((period) => period.toLowerCase() === match[1]) &&
-    (match[2] !== "return" || (match[3] === "pdf" && returnType === "GSTR-3B")),
+    FILED_RETURNS_MONTHS.some((period) => period.toLowerCase() === match[2]) &&
+    (match[1] === undefined || returnType?.toLowerCase() === match[1]) &&
+    (match[3] !== "return" || (match[4] === "pdf" && returnType === "GSTR-3B")),
   );
 }
 
 function isExpectedZipEntryPlan(
   input: readonly PackOffscreenFiledReturnZipExpectedEntry[],
-  expectedReturnType: FiledReturnsReturnType,
+  expectedReturnType: FiledReturnsReturnType | undefined,
 ): boolean {
   const entryNames = new Set<string>();
   for (const candidate of input) {
+    const returnType = expectedReturnTypeForEntry(candidate, expectedReturnType);
     if (
       !isFiledReturnsConcreteArtifactType(candidate.artifactType) ||
+      !returnType ||
       candidate.entryNames.some(
         (entryName) =>
-          !isCanonicalFiledReturnZipEntryName(entryName, expectedReturnType) ||
+          !isCanonicalFiledReturnZipEntryName(entryName, returnType) ||
           artifactTypeFromZipEntryName(entryName) !== candidate.artifactType ||
           entryNames.has(entryName),
       )
@@ -123,6 +137,20 @@ function isExpectedZipEntryPlan(
     for (const entryName of candidate.entryNames) entryNames.add(entryName);
   }
   return true;
+}
+
+function expectedReturnTypeForEntry(
+  entry: PackOffscreenFiledReturnZipExpectedEntry,
+  expectedReturnType: FiledReturnsReturnType | undefined,
+): FiledReturnsReturnType | undefined {
+  return entry.returnType ?? expectedReturnType;
+}
+
+function expectedZipEntrySlot(
+  entry: PackOffscreenFiledReturnZipExpectedEntry,
+  expectedReturnType: FiledReturnsReturnType | undefined,
+): string {
+  return `${expectedReturnTypeForEntry(entry, expectedReturnType)}:${entry.artifactType}:${entry.entryNames.join("|")}`;
 }
 
 function artifactTypeFromZipEntryName(zipPath: string): FiledReturnsConcreteArtifactType | null {

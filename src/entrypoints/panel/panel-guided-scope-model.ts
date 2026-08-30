@@ -1,4 +1,9 @@
-import type { FiledReturnsDownloadScope } from "../../connectors/gst/filed-returns-contracts";
+import {
+  FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+  type FiledReturnsAllSupportedFullFiscalYearRequest,
+  type FiledReturnsDownloadScope,
+} from "../../connectors/gst/filed-returns-contracts";
+import { expandAllSupportedFullFiscalYearTargetPlan } from "../../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import type { FiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifact-types";
 import { filedReturnsArtifactLabel } from "../../connectors/gst/filed-returns-artifacts";
 import {
@@ -21,6 +26,7 @@ import { createScopeFormModel, returnTypeOptions } from "../popup/scope-form-mod
 export type GuidedStepKey = "returnType" | "financialYear" | "period" | "artifactType";
 
 export interface GuidedOption {
+  readonly disabled?: boolean;
   readonly value: string;
   readonly label: string;
 }
@@ -49,6 +55,25 @@ export interface PanelFullFiscalYearPreset {
   readonly artifactLabel: string;
   readonly periodCount: number;
   readonly scope: FiledReturnsDownloadScope;
+}
+
+/**
+ * This is deliberately not a `FiledReturnsDownloadScope`: that type remains an
+ * atomic portal target. The root action needs its own callback and eventual
+ * message contract so it cannot be mistaken for one selected return.
+ */
+export type PanelAllReturnsFullYearPlan = FiledReturnsAllSupportedFullFiscalYearRequest;
+
+export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPlan {
+  readonly label: string;
+  /** Number of catalogue rows represented by this one root plan. */
+  readonly returnCount: number;
+  /** One return-period target for each eligible catalogue row and period. */
+  readonly targetPeriodCount: number;
+  /** Concrete portal formats selected across every eligible return. */
+  readonly artifactCount: number;
+  /** The maximum concrete portal-file requests before not-filed outcomes. */
+  readonly fileCount: number;
 }
 
 /**
@@ -89,6 +114,45 @@ export function panelFullFiscalYearPresets(
       },
     ];
   });
+}
+
+/**
+ * Build the panel's root-plan affordance from the same canonical catalogue as
+ * individual presets. A missing period, return, or offered artifact leaves no
+ * safe expansion, so the control is absent rather than pretending an empty
+ * plan is actionable.
+ */
+export function panelAllReturnsFullYearPreset(
+  financialYear: string,
+  asOf = new Date(),
+  catalogue: readonly PresetCatalogueEntry[] = supportedFiledReturnsCatalogueEntries(),
+): PanelAllReturnsFullYearPreset | null {
+  const periodCount = getFiledReturnsFullFiscalYearPeriods(financialYear, asOf).length;
+  if (periodCount === 0) return null;
+
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan({
+    catalogueEntries: catalogue.map(({ returnType, capability }) => ({
+      returnType,
+      fullFiscalYear: capability.fullFiscalYear,
+    })),
+    offeredArtifacts: filedReturnsOfferedArtifacts,
+  });
+  if (!expansion.ok) return null;
+
+  const artifactCount = expansion.targets.reduce(
+    (count, target) => count + target.concreteArtifactTypes.length,
+    0,
+  );
+
+  return {
+    kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+    financialYear,
+    label: "Everything this year",
+    returnCount: expansion.targets.length,
+    targetPeriodCount: periodCount * expansion.targets.length,
+    artifactCount,
+    fileCount: periodCount * artifactCount,
+  };
 }
 
 const PERIOD_STEP_COPY = {
@@ -194,6 +258,35 @@ export function panelGuidedSteps(
       options: formModel.artifactOptions,
     },
   ];
+}
+
+export function panelGuidedStepForDisplay(
+  step: PanelGuidedStep,
+  fullYearFlowAvailable: boolean,
+): PanelGuidedStep {
+  const selectableOptions =
+    step.key === "period" && !fullYearFlowAvailable
+      ? step.options.filter((option) => option.value !== FULL_FISCAL_YEAR_PERIOD)
+      : step.options;
+  const options =
+    step.key === "period" && !fullYearFlowAvailable && step.value === FULL_FISCAL_YEAR_PERIOD
+      ? [
+          {
+            value: FULL_FISCAL_YEAR_PERIOD,
+            label: "Full fiscal year (saved run)",
+            disabled: true,
+          },
+          ...selectableOptions,
+        ]
+      : selectableOptions;
+  return {
+    ...step,
+    options,
+    hint:
+      step.key === "period"
+        ? `Choose one of: ${options.map((option) => option.label).join(", ")}.`
+        : step.hint,
+  };
 }
 
 export function updatePanelGuidedScope(

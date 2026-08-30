@@ -311,8 +311,16 @@ describe("filed-return durable signal contract", () => {
     expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-row-count:100001")).toBe(false);
     expect(isDurableFiledReturnsSignal("full-fiscal-year-summary-error:portal-value")).toBe(false);
     expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:37")).toBe(true);
-    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:38")).toBe(true);
-    expect(isDurableFiledReturnsSignal("full-fiscal-year-zip-entry-count:39")).toBe(false);
+    // 84 artifacts across the three supported return types in one year -- GSTR-3B and GSTR-1
+    // offer two formats each, only GSTR-2B offers three -- plus one mixed-plan summary entry.
+    // Not 108: that figure assumed three formats for all three returns. The ceilings are
+    // re-derived from the catalogue in filed-returns-zip-entry-ceilings.test.ts.
+    expect(isDurableFiledReturnsSignal("all-supported-full-fiscal-year-zip-entry-count:85")).toBe(
+      true,
+    );
+    expect(isDurableFiledReturnsSignal("all-supported-full-fiscal-year-zip-entry-count:86")).toBe(
+      false,
+    );
   });
 
   it("retains categorical page-generated artifact readiness evidence", () => {

@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { summariseFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
@@ -12,8 +12,17 @@ import { panelController } from "./panel-controller.test-helpers";
 
 vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 
 describe("whole-panel unresolved completion recovery", () => {
+  beforeEach(() => {
+    vi.stubEnv("MODE", "alpha");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it.each(RECOVERY_TARGET_STATUSES)(
     "renders %s as recovery, without a completion announcement",
     (status) => {
@@ -124,5 +133,49 @@ describe("whole-panel unresolved completion recovery", () => {
     expect(markup).toContain("Retry April");
     expect(markup).not.toContain("Resume saved period");
     expect(markup).toContain(summary.flowStep.safeMessage);
+  });
+
+  it("replaces the packaged panel recovery reason when a full-year retry is withheld", () => {
+    vi.stubEnv("MODE", "production");
+    const summary = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("download-unconfirmed"),
+      RECOVERY_NOW,
+    );
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={panelController({
+          scope: summary.scope,
+          scopedFlowSummary: summary,
+          recoverySummary: summary,
+          lastRunSummary: summary,
+          scopeLockedForReview: true,
+        })}
+      />,
+    );
+
+    expect(markup).toContain(getRecoveryFlowAvailability(summary, false).message!);
+    expect(markup).not.toContain(summary.flowStep.safeMessage);
+  });
+
+  it("uses the recovery availability source for the session-expired row", () => {
+    const summary = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("download-unconfirmed"),
+      RECOVERY_NOW,
+    );
+    delete summary.fullFiscalYearRecovery;
+    summary.status = "cancelled";
+    const markup = renderToStaticMarkup(
+      <PanelSurface
+        pack={panelController({
+          context: { connectorId: "gst", pageKind: "gst-auth-landing", supported: true },
+          scope: summary.scope,
+          scopedFlowSummary: summary,
+          recoverySummary: summary,
+          lastRunSummary: summary,
+        })}
+      />,
+    );
+
+    expect(markup).toContain(getRecoveryFlowAvailability(summary, true).message!);
   });
 });

@@ -528,7 +528,14 @@ async function getLedgerFileHandle(
   if (!isCanonicalFiledReturnZipEntryName(zipPath, returnType)) {
     throw new Error("Invalid ZIP entry name.");
   }
-  return directory.getFileHandle(zipPath, { create });
+  const path = zipPath.split("/");
+  if (path.length === 1) return directory.getFileHandle(path[0]!, { create });
+  const [returnTypeDirectory, fileName] = path;
+  if (path.length !== 2 || !returnTypeDirectory || !fileName) {
+    throw new Error("Invalid ZIP entry path.");
+  }
+  const nestedDirectory = await directory.getDirectoryHandle(returnTypeDirectory, { create });
+  return nestedDirectory.getFileHandle(fileName, { create });
 }
 
 function matchesExpectedZipEntryPlan(
@@ -536,8 +543,9 @@ function matchesExpectedZipEntryPlan(
   expectedEntries: readonly {
     artifactType: FiledReturnsConcreteArtifactType;
     entryNames: readonly string[];
+    returnType?: FiledReturnsReturnType;
   }[],
-  expectedReturnType: FiledReturnsReturnType,
+  expectedReturnType: FiledReturnsReturnType | undefined,
 ): boolean {
   if (entries.length !== expectedEntries.length) return false;
   // Staged entries are read back in canonical ZIP order, which is independent of the caller's
@@ -552,10 +560,11 @@ function matchesExpectedZipEntryPlan(
         expectedSlot !== undefined &&
         expectedSlot.entryNames.includes(entry.path) &&
         artifactTypeFromZipPath(entry.path) === expectedSlot.artifactType &&
+        expectedReturnTypeForEntry(expectedSlot, expectedReturnType) !== undefined &&
         isExpectedFiledReturnBytesForReturnType(
           entry.bytes,
           expectedSlot.artifactType,
-          expectedReturnType,
+          expectedReturnTypeForEntry(expectedSlot, expectedReturnType)!,
         )
       );
     });
@@ -563,6 +572,13 @@ function matchesExpectedZipEntryPlan(
     unmatchedSlots.delete(slotIndex);
   }
   return unmatchedSlots.size === 0;
+}
+
+function expectedReturnTypeForEntry(
+  entry: { returnType?: FiledReturnsReturnType },
+  expectedReturnType: FiledReturnsReturnType | undefined,
+): FiledReturnsReturnType | undefined {
+  return entry.returnType ?? expectedReturnType;
 }
 
 function artifactTypeFromZipPath(zipPath: string): FiledReturnsConcreteArtifactType | null {

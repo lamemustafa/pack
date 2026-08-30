@@ -60,6 +60,14 @@
   --pack-danger-fg: #7b241c;
   --pack-danger-bg: #fff0ee;
   --pack-danger-border: #e5b3ac;
+
+  /* Transparent surfaces and status-card overlays. */
+  --pack-surface-transparent: transparent;
+  --pack-overlay-border: rgba(174, 189, 203, 0.72);
+  --pack-overlay-surface: rgba(255, 255, 255, 0.96);
+  --pack-success-overlay-border: rgba(112, 179, 144, 0.72);
+  --pack-warning-overlay-border: rgba(218, 188, 109, 0.72);
+  --pack-danger-overlay-border: rgba(218, 131, 121, 0.72);
   color: var(--pack-ink-primary);
   background: var(--pack-surface-muted);
   color-scheme: light;
@@ -217,4 +225,12 @@ button:disabled {
   color: var(--pack-ink-inverse-muted);
   padding: 10px;
   white-space: pre-wrap;
+}
+
+/* The all-returns plan has four independently derived counts. Let this one
+   dense cost line wrap at the panel's 320px minimum without changing the
+   compact single-return preset rows. */
+.panel-everything-preset .panel-preset-count {
+  text-align: right;
+  white-space: normal;
 }
