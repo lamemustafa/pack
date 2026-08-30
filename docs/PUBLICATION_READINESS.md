@@ -81,8 +81,12 @@ summary` sheet stating the portal's own availability totals and the GSTR-3B
   That command is for local qualification work only: its output must not be
   zipped, submitted, or described as live evidence. It is compiled out of the
   next packaged Store build. The package verifier rejects the source-only surface
-  marker if it reaches the built artifact, so a release cannot silently carry
-  the unqualified offer. Running the command records none of the four gates;
+  marker if it reaches the built artifact, which covers the chooser surface that
+  carries that marker -- `PanelGuidedScope`. It is not a guarantee about every
+  entry point: the recovery and inline-status surfaces gate the same flow in code
+  and carry no marker the verifier can check, so re-exposing one of those would
+  still pass package and ZIP verification. Their gating is covered by tests, not by
+  a built-artifact invariant. Running the command records none of the four gates;
   only their separately recorded evidence can do that.
   Of the four gates, privacy-review evidence is **partially** recorded. An
   independent privacy review of the summary identity scoping ran against PR #184.
