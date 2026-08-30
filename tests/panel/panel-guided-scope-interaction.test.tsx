@@ -304,6 +304,8 @@ describe("panel guided scope interaction", () => {
   });
 
   it("places everything-this-year first without moving focus on initial mount", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
     const previousControl = dom.window.document.createElement("button");
     previousControl.textContent = "Existing focus";
     dom.window.document.body.append(previousControl);
