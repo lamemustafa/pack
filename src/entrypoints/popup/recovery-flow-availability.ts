@@ -25,6 +25,38 @@ const AVAILABLE_FULL_YEAR_ACTIONS: readonly RecoveryFlowAction[] = [
   "cancel-saved-full-year-run",
 ];
 
+/**
+ * Which actions a message actually tells the reader to take.
+ *
+ * `mentionedActions` used to be asserted by hand at each return, which made the invariant it
+ * exists for -- no explanation naming an action the build will not perform -- self-certified and
+ * therefore vacuous: the withheld branch returned `["cancel-saved-full-year-run"]` regardless of
+ * what the message beside it said, so a durable message telling the reader to retry passed the
+ * check that was meant to catch exactly that.
+ *
+ * Reading the message is coarser than a structured field, and it is the only thing that cannot
+ * disagree with what the reader sees.
+ */
+function actionsNamedIn(message: string | null): readonly RecoveryFlowAction[] {
+  if (!message) return [];
+  // "cannot continue" tells the reader an action is unavailable; counting it as naming that action
+  // would make every withheld message fail its own check. Negated forms are dropped before the
+  // scan rather than special-cased after it.
+  const text = message
+    .toLowerCase()
+    .replace(
+      /\b(?:cannot|can't|will not|won't|does not|doesn't|is not|isn't|no longer)\s+\w+/g,
+      " ",
+    );
+  const named: RecoveryFlowAction[] = [];
+  if (/\bretry\b|\bretrying\b|\bresume\b|\bcontinue\b|\btry again\b/.test(text)) {
+    named.push("continue-saved-full-year-run");
+  }
+  if (/\bcancel\b|\bdiscard\b|\bremove\b/.test(text)) named.push("cancel-saved-full-year-run");
+  if (/\bstart\b/.test(text)) named.push("start-another-download");
+  return named;
+}
+
 const WITHHELD_FULL_YEAR_MESSAGE =
   "Pack cannot continue this saved full-year run in this build. Cancel the saved run below.";
 
@@ -54,15 +86,29 @@ export function getRecoveryFlowAvailability(
       summary?.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required") ===
         true ||
       summary?.flowStep.safeSignals.includes("artifact-acquisition-session-proof-expired") === true;
+    // Fail closed on the message as well as the controls. The status list above cannot be
+    // exhaustive -- `manually-observed` was missing from it, and its durable message tells the
+    // reader to retry or cancel while retry is hidden -- so any durable message that names an
+    // action this build withholds is replaced rather than shown.
+    const durableMessage = summary!.flowStep.safeMessage;
+    const withheldActions: readonly RecoveryFlowAction[] = [
+      "continue-saved-full-year-run",
+      "start-another-download",
+    ];
+    const durableMessageNamesWithheldAction = actionsNamedIn(durableMessage).some((action) =>
+      withheldActions.includes(action),
+    );
+    const message =
+      actionGuidanceIsWithheld || durableMessageNamesWithheldAction
+        ? WITHHELD_FULL_YEAR_MESSAGE
+        : durableMessage;
     return {
       availableActions: ["cancel-saved-full-year-run"],
       canContinueFullYear: false,
       guidance: WITHHELD_FULL_YEAR_MESSAGE,
       isWithheldFullYearRecovery: true,
-      message: actionGuidanceIsWithheld
-        ? WITHHELD_FULL_YEAR_MESSAGE
-        : summary!.flowStep.safeMessage,
-      mentionedActions: ["cancel-saved-full-year-run"],
+      message,
+      mentionedActions: actionsNamedIn(message),
     };
   }
 
