@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
@@ -16,6 +18,21 @@ import { PANEL_TEST_SCOPE } from "./panel-controller.test-helpers";
  * `--pack-warning-fg`; two of the three recipes therefore looked like they were carrying
  * warnings before anyone had chosen anything. The note stays, the warning colour does not.
  */
+
+const PANEL_STYLESHEET = readFileSync(join(process.cwd(), "src/styles/panel.css"), "utf8");
+
+/**
+ * The colour a class resolves to, read out of the stylesheet the panel actually ships. Asserting
+ * the class name alone would keep passing if the rule were deleted or repointed at the warning
+ * token, which is the regression this file exists to catch; JSDOM never loads the sheet, so the
+ * declaration has to be looked up rather than computed.
+ */
+function declaredColor(className: string): string | undefined {
+  const rule = new RegExp(`(?:^|\\})[^{}]*\\.${className}\\b[^{}]*\\{([^}]*)\\}`, "m").exec(
+    PANEL_STYLESHEET,
+  );
+  return /(?:^|;)\s*color\s*:\s*([^;]+)/.exec(rule?.[1] ?? "")?.[1]?.trim();
+}
 
 let dom: JSDOM;
 let root: Root | null = null;
@@ -73,12 +90,20 @@ describe("preset cards", () => {
     // Guard the precondition: if no card rendered, everything below would be vacuous.
     expect(container.querySelectorAll(".panel-preset-note").length).toBe(notes.length);
 
-    const warningText = [...container.querySelectorAll(".panel-preset-reason")]
-      .map((node) => node.textContent ?? "")
-      .join("\n");
+    const warningColor = declaredColor("panel-preset-reason");
+    expect(warningColor).toBe("var(--pack-warning-fg)");
+
     for (const note of notes) {
-      expect(container.textContent).toContain(note);
-      expect(warningText).not.toContain(note);
+      const node = [...container.querySelectorAll("p")].find(
+        (candidate) => candidate.textContent === note,
+      );
+      expect(node, `no element renders ${note}`).toBeDefined();
+
+      // Derive the colour from the class the note actually carries, so repointing that class at
+      // the warning token -- or deleting its rule -- fails here.
+      const color = declaredColor(node?.className ?? "");
+      expect(color).toBeDefined();
+      expect(color).not.toBe(warningColor);
     }
   });
 });
