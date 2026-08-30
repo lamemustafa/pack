@@ -26,6 +26,25 @@ const AVAILABLE_FULL_YEAR_ACTIONS: readonly RecoveryFlowAction[] = [
 ];
 
 /**
+ * Drops the sentences that name an unavailable action and keeps the rest, appending the withheld
+ * guidance. Whole-message replacement lost diagnostic clauses that were still true and still
+ * needed -- the download check before a retry being the one that matters.
+ */
+function withheldRemedyReplaced(message: string | null): string {
+  if (!message) return WITHHELD_FULL_YEAR_MESSAGE;
+  // Only continuing the saved full-year run is withheld. Starting a download is not: a packaged
+  // build still offers single-period downloads, and "check Downloads before starting again" is a
+  // safety instruction rather than an offer of an unavailable control.
+  const withheld: readonly RecoveryFlowAction[] = ["continue-saved-full-year-run"];
+  const kept = message
+    .split(/(?<=\.)\s+/)
+    .filter((sentence) => !actionsNamedIn(sentence).some((action) => withheld.includes(action)))
+    .join(" ")
+    .trim();
+  return kept ? `${kept} ${WITHHELD_FULL_YEAR_MESSAGE}` : WITHHELD_FULL_YEAR_MESSAGE;
+}
+
+/**
  * Which actions a message actually tells the reader to take.
  *
  * `mentionedActions` used to be asserted by hand at each return, which made the invariant it
@@ -110,16 +129,18 @@ export function getRecoveryFlowAvailability(
     // reader to retry or cancel while retry is hidden -- so any durable message that names an
     // action this build withholds is replaced rather than shown.
     const durableMessage = summary!.flowStep.safeMessage;
-    const withheldActions: readonly RecoveryFlowAction[] = [
-      "continue-saved-full-year-run",
-      "start-another-download",
-    ];
+    const withheldActions: readonly RecoveryFlowAction[] = ["continue-saved-full-year-run"];
     const durableMessageNamesWithheldAction = actionsNamedIn(durableMessage).some((action) =>
       withheldActions.includes(action),
     );
-    const message =
-      actionGuidanceIsWithheld || durableMessageNamesWithheldAction
-        ? WITHHELD_FULL_YEAR_MESSAGE
+    // Replace only the clause that names an unavailable remedy, never the whole message. An
+    // interrupted run's durable message says to check browser Downloads before starting again, and
+    // discarding that sentence with the remedy let the reader dismiss the evidence and start a
+    // second run without the check -- trading a false remedy for a missing safety instruction.
+    const message = actionGuidanceIsWithheld
+      ? WITHHELD_FULL_YEAR_MESSAGE
+      : durableMessageNamesWithheldAction
+        ? withheldRemedyReplaced(durableMessage)
         : durableMessage;
     return {
       availableActions: ["cancel-saved-full-year-run"],

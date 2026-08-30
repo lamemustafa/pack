@@ -43,6 +43,51 @@ describe("full-year recovery flow availability", () => {
   });
 });
 
+describe("an interrupted run in a build that withholds the flow", () => {
+  it("keeps the download check and drops only the unavailable remedy", () => {
+    // Whole-message replacement discarded "Check Downloads before starting again", which let the
+    // reader dismiss the evidence and begin a second run without the check. The remedy is
+    // unavailable; the safety instruction is not.
+    const recovery = getRecoveryFlowAvailability(
+      {
+        scope: {
+          financialYear: "2025-26",
+          period: "FULL_FISCAL_YEAR",
+          returnType: "GSTR-3B",
+          artifactType: "PDF",
+        },
+        status: "blocked",
+        completedPeriods: [],
+        updatedAt: "2026-08-30T00:00:00.000Z",
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst:filed-returns:GSTR-3B",
+          state: "user-action-required",
+          safeSignals: ["full-fiscal-year-run-interrupted"],
+          safeMessage:
+            "Pack stopped before it could confirm the FY 2025-26 run. Check Downloads before starting again.",
+        },
+        fullFiscalYearRecovery: {
+          ledgerId: "interrupted",
+          targetId: "GSTR-3B:2025-26:May",
+          expectedRevision: 2,
+          targetStatus: "running",
+        },
+      } as never,
+      false,
+    );
+
+    // The download check survives whole. "Starting again" is a safety instruction, not an offer of
+    // a withheld control: a packaged build still allows single-period downloads, and only
+    // continuing this saved full-year run is withheld.
+    expect(recovery.message).toContain("Check Downloads before starting again");
+    expect(recovery.message).not.toMatch(/\bretry\b|\bresume\b/i);
+    expect(
+      recovery.mentionedActions.every((action) => recovery.availableActions.includes(action)),
+    ).toBe(true);
+  });
+});
+
 describe("an active run in a build that withholds the flow", () => {
   it("promises no action, because the surface offers none", () => {
     // RecoveryActions takes its runActive path here: a disabled "Run in progress" and no

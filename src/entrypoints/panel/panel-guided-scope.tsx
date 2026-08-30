@@ -55,6 +55,11 @@ export function PanelGuidedScope({
 }) {
   // Keep this expression in the panel module: Vite replaces it during a WXT
   // production build, so the alpha JSX below is removed from packaged output.
+  // Deliberately the literal comparison rather than `isPackAlphaBuildMode`, despite the duplication.
+  // A direct `import.meta.env.MODE === "alpha"` constant-folds at build time, so the alpha JSX below
+  // is dead-code eliminated from a packaged build. Routing it through a function call defeats that:
+  // the branch survives, the `data-pack-alpha-surface` marker reaches the bundle, and
+  // `verify-extension-package` fails -- which is how this was caught.
   const alphaSurfacesEnabled = import.meta.env.MODE === "alpha";
   const [view, setView] = React.useState<"presets" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
