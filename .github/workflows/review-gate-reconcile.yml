@@ -1,9 +1,24 @@
 name: Reconcile review findings gate
 
 on:
+  # The schedule is a backstop, not the mechanism. GitHub runs cron best-effort and throttles it on
+  # quiet repositories: this one fired roughly every seven hours against the declared fifteen
+  # minutes, so a required context published only from here could not be satisfied on demand. #245
+  # sat green, blocked by no finding, and unmergeable.
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
+  # Publishes promptly after the pull-request-side gate finishes, and after the comment events that
+  # gate cannot see. This job keeps running trusted default-branch code -- `workflow_run` and
+  # `issue_comment` both check out the default branch, never a pull request head -- so the verdict
+  # stays one a pull request's own author cannot rewrite.
+  workflow_run:
+    workflows: ["Review findings gate"]
+    types: [completed]
+  # PR-level findings and their dispositions raise `issue_comment`, which the pull-request-side gate
+  # does not subscribe to even though the evaluator reads PR-level comments.
+  issue_comment:
+    types: [created, edited, deleted]
 
 permissions:
   contents: read
@@ -17,6 +32,11 @@ concurrency:
 jobs:
   scheduled-review-gate:
     name: Reconcile Review gate checks
+    # `issue_comment` fires for issues as well as pull requests, and there is nothing to reconcile
+    # for an issue. Every other trigger here always concerns open pull requests.
+    if: >-
+      github.event_name != 'issue_comment' ||
+      github.event.issue.pull_request != null
     runs-on: ubuntu-latest
     timeout-minutes: 14
     permissions:
