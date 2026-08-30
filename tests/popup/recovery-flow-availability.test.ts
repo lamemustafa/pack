@@ -43,6 +43,45 @@ describe("full-year recovery flow availability", () => {
   });
 });
 
+describe("an active run in a build that withholds the flow", () => {
+  it("promises no action, because the surface offers none", () => {
+    // RecoveryActions takes its runActive path here: a disabled "Run in progress" and no
+    // cancellation. Saying "Cancel the saved run below" would name a control that is not rendered.
+    const recovery = getRecoveryFlowAvailability(
+      {
+        scope: {
+          financialYear: "2025-26",
+          period: "FULL_FISCAL_YEAR",
+          returnType: "GSTR-3B",
+          artifactType: "PDF",
+        },
+        status: "running",
+        completedPeriods: [],
+        updatedAt: "2026-08-30T00:00:00.000Z",
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst:filed-returns:GSTR-3B",
+          state: "user-action-required",
+          safeSignals: ["full-fiscal-year-run-active"],
+          safeMessage: "A full fiscal year run for FY 2025-26 is already active.",
+        },
+        fullFiscalYearRecovery: {
+          ledgerId: "active",
+          targetId: "GSTR-3B:2025-26:May",
+          expectedRevision: 2,
+          targetStatus: "running",
+        },
+      } as never,
+      false,
+    );
+
+    expect(recovery.availableActions).toEqual([]);
+    expect(recovery.mentionedActions).toEqual([]);
+    expect(recovery.message).not.toMatch(/cancel/i);
+    expect(recovery.message).not.toMatch(/retry/i);
+  });
+});
+
 describe("withheld full-year copy", () => {
   it.each([
     ["manually-observed"],

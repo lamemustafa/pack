@@ -57,6 +57,9 @@ function actionsNamedIn(message: string | null): readonly RecoveryFlowAction[] {
   return named;
 }
 
+const ACTIVE_WITHHELD_FULL_YEAR_MESSAGE =
+  "A saved full-year run is still in progress in this browser profile.";
+
 const WITHHELD_FULL_YEAR_MESSAGE =
   "Pack cannot continue this saved full-year run in this build. Cancel the saved run below.";
 
@@ -77,6 +80,22 @@ export function getRecoveryFlowAvailability(
     (hasUnresolvedFiledReturnsRecovery(summary) || hasSavedFullYearRun),
   );
   if (isWithheldFullYearRecovery) {
+    // An active run offers nothing to cancel: `RecoveryActions` takes its `runActive` path, which
+    // renders a disabled "Run in progress" and no cancellation at all. Promising a cancel control
+    // there is the same defect as promising a retry -- copy naming an action the surface withholds.
+    const runIsActive =
+      summary?.flowStep.safeSignals.includes("full-fiscal-year-run-active") === true ||
+      summary?.flowStep.safeSignals.includes("filed-returns-run-active") === true;
+    if (runIsActive) {
+      return {
+        availableActions: [],
+        canContinueFullYear: false,
+        guidance: ACTIVE_WITHHELD_FULL_YEAR_MESSAGE,
+        isWithheldFullYearRecovery: true,
+        message: ACTIVE_WITHHELD_FULL_YEAR_MESSAGE,
+        mentionedActions: actionsNamedIn(ACTIVE_WITHHELD_FULL_YEAR_MESSAGE),
+      };
+    }
     const targetStatus = summary?.fullFiscalYearRecovery?.targetStatus;
     const actionGuidanceIsWithheld =
       targetStatus === "blocked" ||

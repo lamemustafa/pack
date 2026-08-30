@@ -48,8 +48,17 @@ export function InlineStatus({
   }, [checkingCleanup]);
   const copy = getInlineStatusCopy(presentation, summary, fullYearFlowAvailable);
   if (!copy) return null;
+  // Computed apart from the recovery model, so it needs the same gate: it ends with "Start this
+  // year again to include them", and a packaged build has removed the full-year period option and
+  // blocks that scope. A settled completion has no recovery controls at all, so nothing else
+  // suppresses it.
   const planCoverageMessage = summary
-    ? filedReturnsPlanCoverageMessage(summary.scope, summary.status, summary.flowStep.safeSignals)
+    ? filedReturnsPlanCoverageMessage(
+        summary.scope,
+        summary.status,
+        summary.flowStep.safeSignals,
+        fullYearFlowAvailable,
+      )
     : "";
 
   const actionBusy = busy !== null;
