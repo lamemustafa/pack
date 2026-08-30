@@ -65,7 +65,7 @@ artifact, and recovery combinations. It is not a claim that every GST Portal
 period or format has authorised live evidence; those broader claims remain
 gated by the recorded publication evidence.
 
-Full fiscal year download is not available in the packaged Store build. A
+Full fiscal year download will not be available in the next production build. A
 maintainer-only qualified source build, defined in
 [the publication readiness record](docs/PUBLICATION_READINESS.md), can expose
 the local per-period ledger, which expands a selected financial year into

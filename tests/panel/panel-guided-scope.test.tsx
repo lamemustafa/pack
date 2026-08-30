@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import {
   cataloguePeriodOptions,
+  panelGuidedStepForDisplay,
   panelGuidedSteps,
 } from "../../src/entrypoints/panel/panel-guided-scope-model";
 import { CatalogueLimits, PanelGuidedScope } from "../../src/entrypoints/panel/panel-guided-scope";
@@ -127,6 +128,34 @@ describe("panel guided scope", () => {
     });
     expect(steps[3]?.options.map((option) => option.value)).toContain("PDF");
     expect(steps[3]?.options.map((option) => option.value)).toContain("JSON");
+  });
+
+  it("keeps a saved full-year value visible but disabled in the production period step", () => {
+    const periodStep = panelGuidedSteps(PANEL_TEST_SCOPE).find((step) => step.key === "period");
+    if (!periodStep) throw new Error("Expected a period step.");
+
+    const displayed = panelGuidedStepForDisplay(periodStep, false);
+    const labels = displayed.options.map((option) => option.label);
+
+    expect(displayed.options[0]).toEqual({
+      value: FULL_FISCAL_YEAR_PERIOD,
+      label: "Full fiscal year (saved run)",
+      disabled: true,
+    });
+    expect(displayed.hint).toBe(`Choose one of: ${labels.join(", ")}.`);
+  });
+
+  it("derives a new production period hint from exactly its selectable options", () => {
+    const periodStep = panelGuidedSteps({ ...PANEL_TEST_SCOPE, period: "April" }).find(
+      (step) => step.key === "period",
+    );
+    if (!periodStep) throw new Error("Expected a period step.");
+
+    const displayed = panelGuidedStepForDisplay(periodStep, false);
+    const labels = displayed.options.map((option) => option.label);
+
+    expect(labels).not.toContain("Full fiscal year");
+    expect(displayed.hint).toBe(`Choose one of: ${labels.join(", ")}.`);
   });
 
   it("withholds a new financial year until it has a selectable filed period", () => {
