@@ -13,9 +13,10 @@ import { LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS } from "./lib/live-run-evidence-
 ensureHeadedChromiumDisplay();
 
 const args = process.argv.slice(2);
+const flags = args.filter((arg) => arg.startsWith("--"));
 const alphaMode = args.includes("--alpha");
 const outputDirectories = args.filter((arg) => !arg.startsWith("--"));
-if (outputDirectories.length > 1) {
+if (flags.some((flag) => flag !== "--alpha") || outputDirectories.length > 1) {
   throw new Error(
     "usage: node scripts/verify-extension-browser.mjs [--alpha] [extension-output-dir]",
   );

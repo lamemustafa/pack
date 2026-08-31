@@ -97,5 +97,23 @@ describe("the emitted alpha artifact", () => {
     ]);
     expect(verified.output).toContain("alpha extension package verification passed");
     expect(verified.ok).toBe(true);
+
+    const browserVerified = await run("node", [
+      "scripts/verify-extension-browser.mjs",
+      "--alpha",
+      ALPHA_OUTPUT,
+    ]);
+    expect(browserVerified.output).toContain('"status": "pass"');
+    expect(browserVerified.ok).toBe(true);
+
+    const mistypedBrowserFlag = await run("node", [
+      "scripts/verify-extension-browser.mjs",
+      "--aplha",
+      ALPHA_OUTPUT,
+    ]);
+    expect(mistypedBrowserFlag.ok).toBe(false);
+    expect(mistypedBrowserFlag.output).toContain(
+      "usage: node scripts/verify-extension-browser.mjs",
+    );
   }, 600_000);
 });
