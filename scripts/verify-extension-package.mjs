@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import ts from "typescript";
 
 const args = process.argv.slice(2);
 // An alpha build is a real distributable that live testing runs against, so it
@@ -42,12 +43,31 @@ async function reachableFromPanelHtml(dir) {
     reachable.add(next);
     if (!/\.js$/.test(next)) continue;
     const contents = await readFile(next, "utf8");
-    for (const match of contents.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*(?:"([^"]*)"|'([^']*)')/g)) {
-      const specifier = match[1] ?? match[2];
-      if (specifier) queue.push(resolveOutputSpecifier(dir, next, specifier));
+    for (const specifier of staticModuleSpecifiers(next, contents)) {
+      queue.push(resolveOutputSpecifier(dir, next, specifier));
     }
   }
   return reachable;
+}
+
+function staticModuleSpecifiers(fileName, contents) {
+  const source = ts.createSourceFile(
+    fileName,
+    contents,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.JS,
+  );
+  return source.statements.flatMap((statement) => {
+    if (
+      (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
+      statement.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      return [statement.moduleSpecifier.text];
+    }
+    return [];
+  });
 }
 
 function resolveOutputSpecifier(dir, fromFile, specifier) {

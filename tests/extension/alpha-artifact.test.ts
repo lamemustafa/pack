@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -38,6 +38,15 @@ async function listFiles(dir: string): Promise<string[]> {
 
 describe("the emitted alpha artifact", () => {
   it("is a production build that still carries the gated surface", async () => {
+    // A successful process exit is not evidence that WXT refreshed this
+    // directory. Clear a deliberately stale artifact first, then assert the
+    // build is the source of every inspected file below.
+    await mkdir(ALPHA_OUTPUT, { recursive: true });
+    const staleProof = path.join(ALPHA_OUTPUT, "stale-alpha-artifact-proof");
+    await writeFile(staleProof, "stale");
+    await rm(ALPHA_OUTPUT, { force: true, recursive: true });
+    await expect(readFile(staleProof, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
     const built = await run("pnpm", ["exec", "wxt", "build", "--mode", "alpha"]);
     expect(built.ok, built.output.slice(-2000)).toBe(true);
 
