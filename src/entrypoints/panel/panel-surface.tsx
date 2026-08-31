@@ -294,7 +294,7 @@ function AllSupportedRunStatus({
         </strong>
       </p>
       <p>
-        {returnCount} return types · {periodCount} periods · {summary.totalTargets} planned files
+        {returnCount} return types · {periodCount} periods
       </p>
       <p aria-live="polite">{summary.flowStep.safeMessage}</p>
       {canRestart ? (
