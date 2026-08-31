@@ -4,6 +4,7 @@ import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors
 import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import {
+  allSupportedExplicitRetryTarget,
   createAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearTargetPlan,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
@@ -128,6 +129,28 @@ describe("all-supported full-fiscal-year ledger", () => {
         "all-supported-full-fiscal-year-no-zip-artifacts",
       ]),
     });
+  });
+
+  it("withholds an explicit retry for a target whose pinned GST tab is unavailable", () => {
+    const ledger = createLedger();
+    const blocked = {
+      ...ledger,
+      status: "blocked" as const,
+      targets: ledger.targets.map((target, index) =>
+        index === 0
+          ? {
+              ...target,
+              status: "blocked" as const,
+              safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
+            }
+          : target,
+      ),
+    };
+
+    expect(allSupportedExplicitRetryTarget(blocked)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(blocked).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
   });
 
   it("rejects a plan whose immutable concrete-artifact snapshot changes", () => {

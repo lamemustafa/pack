@@ -411,6 +411,58 @@ describe("filed returns retained target scoping", () => {
     expect(response).toMatchObject({ flowSummary: { scope: checkpointTarget, status: "blocked" } });
   });
 
+  it("surfaces a retained checkpoint before replaying an all-supported target", async () => {
+    const checkpointTarget = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "May",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    mocks.readArtifactAcquisitionCheckpoints.mockResolvedValue([
+      { state: "target", target: checkpointTarget },
+    ]);
+    mocks.reconcileArtifactAcquisitionCheckpoint.mockResolvedValue({
+      state: "needs-review",
+      safeSignals: ["artifact-acquisition-download-completed-unpersisted"],
+    });
+    mocks.persistFiledReturnsTargetReview.mockResolvedValue({
+      completedPeriods: [],
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "user-action-required",
+        safeSignals: ["filed-returns-target-review-required"],
+        safeMessage: "Synthetic retained checkpoint.",
+      },
+      scope: checkpointTarget,
+      status: "blocked",
+      totalPeriods: 1,
+    });
+
+    const response = await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+      {
+        financialYear: "2026-27",
+        ledgerId: "full-fiscal-year-abc123de",
+        targetId: "GSTR-3B:2026-27:June",
+        expectedRevision: 4,
+      },
+      { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+    );
+
+    expect(mocks.persistFiledReturnsTargetReview).toHaveBeenCalledWith(
+      checkpointTarget,
+      expect.objectContaining({
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-download-completed-unpersisted",
+        ]),
+      }),
+      expect.anything(),
+    );
+    expect(allSupportedFlowMocks.retryAllSupportedFullFiscalYearTarget).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ flowSummary: { scope: checkpointTarget, status: "blocked" } });
+  });
+
   it("blocks a malformed retained checkpoint instead of starting another target", async () => {
     const requestedScope = {
       artifactType: "PDF",
