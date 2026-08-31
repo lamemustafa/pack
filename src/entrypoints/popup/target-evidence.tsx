@@ -69,11 +69,22 @@ export function TargetEvidence({
   const needsReview = evidence.filter((entry) => entry.outcome === "needs-review").length;
 
   return (
-    <section className="evidence" aria-label="Per-period result">
+    <section
+      className="evidence"
+      aria-label={groupByReturn ? "Per return and period result" : "Per-period result"}
+    >
       <p className="evidence-status">
-        {/* Counts saved files, not finished periods. A run of twelve periods
-            where nine were never filed has three saved files, and saying
-            "12 of 12" there would be true of the plan and false of the ZIP. */}
+        {/* Counts rows that reached a saved outcome, not periods the plan
+            covers: a run of twelve periods where nine were never filed shows
+            three, and "12 of 12" would be true of the plan and false of the
+            ZIP.
+
+            One row is one planned target, which is not the same as one file --
+            a bundle artifact such as `PDF_AND_EXCEL` saves several files from
+            a single row, and an all-supported row is one return-period rather
+            than one period. The line therefore carries no noun: naming these
+            "files" would overstate a single-return run and understate an
+            all-supported one, and the ZIP is where a file count is answerable. */}
         <strong>
           {saved} of {evidence.length} saved
         </strong>
