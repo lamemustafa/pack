@@ -57,6 +57,12 @@ describe("panel guided scope", () => {
     expect(markup).toContain("This year&#x27;s GSTR-3B");
     expect(markup).toContain("This year&#x27;s GSTR-1");
     expect(markup).toContain("This year&#x27;s GSTR-2B");
+    expect(markup).toContain(
+      'aria-label="This year&#x27;s GSTR-3B. Downloads PDF and portal data."',
+    );
+    expect(markup).toContain(
+      'aria-label="This year&#x27;s GSTR-2B. Downloads PDF, Excel, and portal data."',
+    );
     expect(markup).toContain("Choose return, year and period");
     expect(markup).toContain("panel-everything-preset-group");
     expect(markup).not.toContain("all supported returns");
