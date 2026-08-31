@@ -173,10 +173,12 @@ export function PanelGuidedScope({
             </div>
           ) : null}
           {presets.map((preset) => {
-            const artifactDescription = filedReturnsCapabilityArtifactDescription(
-              preset.scope.returnType,
-              preset.scope.artifactType,
-            );
+            const artifactDescription = preset.scope.artifactType
+              ? filedReturnsCapabilityArtifactDescription(
+                  preset.scope.returnType,
+                  preset.scope.artifactType,
+                )
+              : "selected portal files";
             const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
             const summaryForPreset = savedRunForPreset ?? flowSummary;
             const blockForPreset = savedRunForPreset ? null : externalBlock;
