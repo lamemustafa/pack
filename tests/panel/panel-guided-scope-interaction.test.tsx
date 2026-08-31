@@ -242,6 +242,14 @@ describe("panel guided scope interaction", () => {
     vi.unstubAllEnvs();
   });
 
+  it("renders the alpha surface marker on the guided panel element", async () => {
+    await mount();
+
+    const alphaSurface = container.querySelector('[data-pack-alpha-surface="full-fiscal-year"]');
+    expect(alphaSurface?.tagName).toBe("SECTION");
+    expect(alphaSurface?.classList.contains("panel-guide")).toBe(true);
+  });
+
   it("does not offer an unavailable full-year resume in a packaged build", async () => {
     vi.stubEnv("MODE", "production");
     await mountGuidedScope({
