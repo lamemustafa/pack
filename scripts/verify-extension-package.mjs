@@ -11,13 +11,15 @@ const args = process.argv.slice(2);
 // alpha surface marker must be present rather than absent. Without this flag
 // the marker check refuses the alpha output before anything else is inspected,
 // which left that build unverified entirely.
-const alphaMode = args.includes("--alpha");
-const outputDirArgument = args.find((arg) => !arg.startsWith("--"));
-if (!outputDirArgument)
+const flags = args.filter((arg) => arg.startsWith("--"));
+const outputDirectories = args.filter((arg) => !arg.startsWith("--"));
+if (flags.some((flag) => flag !== "--alpha") || outputDirectories.length !== 1) {
   throw new Error(
     "usage: node scripts/verify-extension-package.mjs [--alpha] <extension-output-dir>",
   );
-const outputDir = path.resolve(outputDirArgument);
+}
+const alphaMode = flags.includes("--alpha");
+const outputDir = path.resolve(outputDirectories[0]);
 let sawAlphaSurfaceMarker = false;
 
 /**
@@ -85,7 +87,13 @@ function staticModuleSpecifiers(fileName, contents) {
 }
 
 function resolveOutputSpecifier(dir, fromFile, specifier) {
-  if (/^[a-z]+:/i.test(specifier)) return null;
+  if (
+    /^[a-z]+:/i.test(specifier) ||
+    specifier.startsWith("//") ||
+    (!specifier.startsWith("/") && !specifier.startsWith("./") && !specifier.startsWith("../"))
+  ) {
+    return null;
+  }
   return specifier.startsWith("/")
     ? path.join(dir, specifier.slice(1))
     : path.resolve(path.dirname(fromFile), specifier);

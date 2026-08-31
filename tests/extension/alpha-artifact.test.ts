@@ -14,6 +14,10 @@ import { describe, expect, it } from "vitest";
 const rootDir = process.cwd();
 const ALPHA_OUTPUT = path.join(rootDir, ".output", "chrome-mv3-alpha");
 
+function pnpmCommandFor(platform: NodeJS.Platform): string {
+  return platform === "win32" ? "pnpm.cmd" : "pnpm";
+}
+
 function run(command: string, args: readonly string[]): Promise<{ output: string; ok: boolean }> {
   return new Promise((resolve) => {
     execFile(
@@ -37,6 +41,11 @@ async function listFiles(dir: string): Promise<string[]> {
 }
 
 describe("the emitted alpha artifact", () => {
+  it("uses the Windows pnpm executable when that platform runs the artifact test", () => {
+    expect(pnpmCommandFor("win32")).toBe("pnpm.cmd");
+    expect(pnpmCommandFor("darwin")).toBe("pnpm");
+  });
+
   it("is a production build that still carries the gated surface", async () => {
     // A successful process exit is not evidence that WXT refreshed this
     // directory. Clear a deliberately stale artifact first, then assert the
@@ -47,7 +56,13 @@ describe("the emitted alpha artifact", () => {
     await rm(ALPHA_OUTPUT, { force: true, recursive: true });
     await expect(readFile(staleProof, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
-    const built = await run("pnpm", ["exec", "wxt", "build", "--mode", "alpha"]);
+    const built = await run(pnpmCommandFor(process.platform), [
+      "exec",
+      "wxt",
+      "build",
+      "--mode",
+      "alpha",
+    ]);
     expect(built.ok, built.output.slice(-2000)).toBe(true);
 
     const files = await listFiles(ALPHA_OUTPUT);

@@ -571,6 +571,15 @@ describe("alpha builds", () => {
     expect(result.output).toContain("this is not an alpha build");
   });
 
+  it("rejects a mistyped alpha option instead of falling back to package verification", async () => {
+    const outputDir = await createValidPackage();
+
+    const result = await runVerifier(outputDir, {}, ["--aplha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("usage: node scripts/verify-extension-package.mjs");
+  });
+
   it("accepts an alpha build whose panel actually loads the gated surface", async () => {
     const outputDir = await createValidPackage();
     await writeFile(
@@ -669,6 +678,25 @@ describe("alpha builds", () => {
       outputDir,
       "panel.html",
       '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="application/json" src="/chunks/alpha-surface.js"></script></body></html>',
+    );
+    await writePackageFile(
+      outputDir,
+      "chunks/alpha-surface.js",
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("reachable from the panel");
+  });
+
+  it("does not treat protocol-relative imports as packaged module dependencies", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "chunks/panel.js",
+      'import "//chunks/alpha-surface.js";\nexport default 1;\n',
     );
     await writePackageFile(
       outputDir,
