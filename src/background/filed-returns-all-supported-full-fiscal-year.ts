@@ -162,6 +162,90 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
   return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
 }
 
+/**
+ * Replaces only a verified, cleanly completed root after an explicit restart.
+ * The replacement is durably indexed before the completed history is removed:
+ * an MV3 suspension cannot turn this action into an unrecorded fresh run.
+ */
+export async function restartCompletedAllSupportedFullFiscalYearPlan(
+  request: FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId?: string },
+  deps: AllSupportedRunnerDeps,
+  runSinglePeriod: SinglePeriodRunner,
+): Promise<PackMessageResponse> {
+  const storageState = await readAllSupportedPlanLedgersStorageState(deps);
+  if (storageState.state !== "valid") {
+    return { ok: true, flowStep: malformedSavedPlanIndexStep(request.financialYear) };
+  }
+  const ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
+  if (!ledger) {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-restart-plan-not-found"],
+        safeMessage:
+          "Pack could not find the saved fiscal-year plan to restart. Refresh this panel and try again.",
+      },
+    };
+  }
+  // The request names the ledger the reader reviewed. If another surface
+  // replaced or completed this root in between, the indexed ledger is no
+  // longer the plan they authorised discarding -- and this path removes it.
+  if (request.ledgerId !== ledger.ledgerId) {
+    return allSupportedResponse(deps, ledger, {
+      ...unresolvedRunStep(ledger),
+      safeSignals: [
+        ...unresolvedRunStep(ledger).safeSignals,
+        "all-supported-full-fiscal-year-restart-plan-superseded",
+      ],
+      safeMessage:
+        "This fiscal-year plan changed since Pack showed it. Refresh this panel and check it before discarding.",
+    });
+  }
+  if (ledger.status !== "complete" || !ledger.zipPhase || !isCleanedZipPhase(ledger.zipPhase)) {
+    return allSupportedResponse(deps, ledger, {
+      ...unresolvedRunStep(ledger),
+      safeSignals: [
+        ...unresolvedRunStep(ledger).safeSignals,
+        "all-supported-full-fiscal-year-restart-plan-not-terminal",
+      ],
+      safeMessage:
+        "Pack will not discard this fiscal-year plan until its saved recovery work is complete.",
+    });
+  }
+  const clearSignals = await discardAllSupportedFullFiscalYearFiledReturnsZip(ledger.ledgerId);
+  if (!clearSignals.includes("all-supported-full-fiscal-year-opfs-cleared")) {
+    return allSupportedResponse(deps, ledger, {
+      ...unresolvedRunStep(ledger),
+      safeSignals: [
+        ...unresolvedRunStep(ledger).safeSignals,
+        "all-supported-full-fiscal-year-restart-local-cleanup-failed",
+      ],
+      safeMessage:
+        "Pack could not clear the retained local staging for this fiscal-year plan. The saved plan remains unchanged.",
+    });
+  }
+  const now = deps.now?.() ?? new Date();
+  const periodPlan = getFiledReturnsFullFiscalYearPeriods(request.financialYear, now);
+  if (periodPlan.length === 0) {
+    return { ok: true, flowStep: noEligiblePeriodsStep(request.financialYear) };
+  }
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  if (!expansion.ok) {
+    return { ok: true, flowStep: expansionFailureStep(request.financialYear, expansion.reason) };
+  }
+  const replacement = createAllSupportedFullFiscalYearLedger(
+    { kind: request.kind, financialYear: request.financialYear },
+    expansion.targets,
+    periodPlan,
+    now,
+  );
+  await persistAllSupportedFullFiscalYearLedger(deps, replacement);
+  return runAllSupportedFullFiscalYearTargets(deps, replacement, runSinglePeriod);
+}
+
 async function continueSavedAllSupportedFullFiscalYearRun(
   deps: AllSupportedRunnerDeps,
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
@@ -510,6 +594,7 @@ function toAllSupportedSummary(
       outcome: targetOutcome(target, zipDelivered),
     })),
     totalTargets: ledger.targets.length,
+    ledgerId: ledger.ledgerId,
     ...(ledger.currentTargetId ? { currentTargetId: ledger.currentTargetId } : {}),
     flowStepScope,
     flowStep,

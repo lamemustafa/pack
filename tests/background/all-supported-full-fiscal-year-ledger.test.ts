@@ -13,6 +13,7 @@ import {
   persistAllSupportedFullFiscalYearLedger,
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
+  removeAllSupportedFullFiscalYearLedger,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
 import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
 import { toAllSupportedFullFiscalYearSummary } from "../../src/background/filed-returns-all-supported-full-fiscal-year-summary";
@@ -215,6 +216,23 @@ describe("all-supported full-fiscal-year ledger", () => {
         expect.objectContaining({ ledgerId: second.ledgerId }),
       ]),
     });
+  });
+
+  it("removes the root index mapping before removing its ledger record", async () => {
+    const ledger = createLedger();
+    await persistAllSupportedFullFiscalYearLedger(deps, ledger);
+    vi.clearAllMocks();
+
+    await removeAllSupportedFullFiscalYearLedger(deps, ledger);
+
+    const lastIndexWrite = browserMocks.storage.local.set.mock.invocationCallOrder.at(-1);
+    const ledgerRemoval = browserMocks.storage.local.remove.mock.invocationCallOrder.at(-1);
+    expect(lastIndexWrite).toBeDefined();
+    expect(ledgerRemoval).toBeDefined();
+    expect(lastIndexWrite!).toBeLessThan(ledgerRemoval!);
+    expect(
+      stored.current[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)],
+    ).toBeUndefined();
   });
 
   it("fails closed when an all-supported index is malformed, even without plan records", async () => {

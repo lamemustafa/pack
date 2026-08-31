@@ -407,6 +407,13 @@ export interface FiledReturnsAllSupportedFullFiscalYearTargetEvidence {
  */
 export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   summaryIdentity: FiledReturnsAllSupportedFullFiscalYearIdentity;
+  /**
+   * The ledger this summary was projected from. A destructive action names it
+   * so the background can refuse when the indexed ledger for the root has been
+   * replaced since the reader saw it: the fiscal year alone identifies the
+   * root, not the plan the reader actually authorised discarding.
+   */
+  ledgerId?: string;
   status: "complete" | "running" | "partial" | "blocked" | "cancelled";
   completedAt?: string;
   updatedAt?: string;
@@ -432,6 +439,13 @@ export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
     financialYear: string;
     status: "complete" | "cancelled";
     periodCount: number;
+    /**
+     * The ledger this root projects. Every retained root can render its own
+     * restart control, and each must name the plan the reader reviewed --
+     * binding only the currently projected summary leaves the others able to
+     * discard whichever ledger is indexed for that year at click time.
+     */
+    ledgerId?: string;
   }[];
 }
 

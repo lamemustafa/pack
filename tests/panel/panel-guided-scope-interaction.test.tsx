@@ -607,6 +607,291 @@ describe("panel guided scope interaction", () => {
     });
   });
 
+  it("refreshes rather than restarting a completed recipe that has gone stale", async () => {
+    // Restart discards the completed plan and starts a fresh one. Rendered
+    // before a fiscal-year rollover and clicked after it, the captured plan no
+    // longer describes what would run -- and unlike the ordinary start, the
+    // completed history is destroyed first. The destructive branch needs the
+    // same revalidation, not less.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const onRestart = vi.fn();
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: onRestart,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2025-26",
+            },
+            ledgerId: "full-fiscal-year-abc123de",
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            // A completed root is only offered a restart when it covers the
+            // whole year; a shorter one is dropped as no longer blocking.
+            targetEvidence: savedAllReturnsEvidence("2025-26", [
+              "April",
+              "May",
+              "June",
+              "July",
+              "August",
+              "September",
+              "October",
+              "November",
+              "December",
+              "January",
+              "February",
+              "March",
+            ]),
+            totalTargets: 84,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    // Positive control: without a clock shift the same click must reach the
+    // restart branch, or the negative assertion below proves nothing.
+    await clickButtonContaining("run everything last year");
+    expect(onRestart, "the click never reached the restart branch").toHaveBeenCalledOnce();
+    onRestart.mockClear();
+
+    // The rendered card still reads "Everything last year"; by the current
+    // clock 2025-26 is two years back and its plan no longer matches.
+    vi.setSystemTime(new Date("2027-04-01T00:00:00.000Z"));
+    expect(panelAllReturnsFullYearPreset("2025-26")?.label).toBe("Everything in 2025-26");
+    await clickButtonContaining("run everything last year");
+
+    expect(onRestart).not.toHaveBeenCalled();
+  });
+
+  it("binds the summary-card restart to the reviewed ledger, and refreshes when stale", async () => {
+    // Two restart controls exist -- the preset card and the run-summary card --
+    // and they are separate callbacks. Guarding only the preset left this one
+    // dispatching a captured identity, which deletes the completed ledger and
+    // then rebuilds the plan from the current date. A current-year root is
+    // where that bites: crossing a month boundary makes another period
+    // eligible, so the restart would run periods the displayed evidence never
+    // contained.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const restart = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => undefined);
+    const eligibleNow = ["April", "May", "June", "July"] as const;
+    expect(panelAllReturnsFullYearPreset("2026-27")?.periodCount).toBe(eligibleNow.length);
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: restart,
+          refreshFlowSummary: refresh,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            ledgerId: "ledger-under-review",
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", [...eligibleNow]),
+            totalTargets: 28,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    // Fresh: the displayed periods still match the live plan, and the request
+    // names the ledger the reader reviewed rather than only its fiscal year.
+    await clickButtonContaining("Discard this year's saved plan and run again");
+    expect(restart).toHaveBeenCalledExactlyOnceWith({
+      kind: "all-supported-returns-full-fiscal-year",
+      financialYear: "2026-27",
+      ledgerId: "ledger-under-review",
+    });
+
+    // Stale: another period became eligible while this panel stayed open.
+    restart.mockClear();
+    refresh.mockClear();
+    vi.setSystemTime(new Date("2026-09-20T00:00:00.000Z"));
+    expect(panelAllReturnsFullYearPreset("2026-27")?.periodCount).toBeGreaterThan(
+      eligibleNow.length,
+    );
+    await clickButtonContaining("Discard this year's saved plan and run again");
+    expect(restart).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("refreshes instead of restarting a summary card without its reviewed ledger", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const restart = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => undefined);
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: restart,
+          refreshFlowSummary: refresh,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            totalTargets: 28,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    await clickButtonContaining("Discard this year's saved plan and run again");
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(restart).not.toHaveBeenCalled();
+  });
+
+  it("restarts a retained root with that root's ledger, not the projected one", async () => {
+    // More than one completed root can be retained, and each renders its own
+    // restart control. Binding only `summaryIdentity` left every other root
+    // dispatching unbound, so the background's supersession guard could not
+    // fire for exactly the roots most likely to be stale.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const restart = vi.fn(async () => undefined);
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: restart,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            // The projected summary is one root; the retained list holds another.
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            ledgerId: "projected-ledger",
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            totalTargets: 28,
+            terminalPlanRoots: [
+              {
+                financialYear: "2025-26",
+                status: "complete",
+                periodCount: 12,
+                ledgerId: "retained-last-year-ledger",
+              },
+            ],
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    await clickButtonContaining("run everything last year");
+
+    expect(restart).toHaveBeenCalledExactlyOnceWith({
+      kind: "all-supported-returns-full-fiscal-year",
+      financialYear: "2025-26",
+      ledgerId: "retained-last-year-ledger",
+    });
+  });
+
+  it("refreshes instead of restarting a retained root without its reviewed ledger", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const restart = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => undefined);
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: restart,
+          refreshFlowSummary: refresh,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            ledgerId: "projected-ledger",
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            totalTargets: 28,
+            terminalPlanRoots: [{ financialYear: "2025-26", status: "complete", periodCount: 12 }],
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    await clickButtonContaining("run everything last year");
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(restart).not.toHaveBeenCalled();
+  });
+
   it("blocks only a completed all-returns root instead of valid new scopes", async () => {
     await mount(
       {
@@ -655,15 +940,16 @@ describe("panel guided scope interaction", () => {
       container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
     );
     expect(allReturns).toHaveLength(2);
-    expect(allReturns[0]?.disabled).toBe(true);
+    expect(allReturns[0]?.disabled).toBe(false);
     expect(allReturns[1]?.disabled).toBe(false);
     expect(
       Array.from(container.querySelectorAll<HTMLButtonElement>(".panel-preset"))
         .filter((preset) => !preset.classList.contains("panel-everything-preset"))
         .every((preset) => !preset.disabled),
     ).toBe(true);
+    expect(container.textContent).toContain("Discard this year's saved plan and run again");
     expect(container.textContent).toContain(
-      "Pack already completed this all-supported plan. Clear local data before starting it again.",
+      "Discard this year's saved plan and run everything last year",
     );
   });
 
@@ -798,7 +1084,7 @@ describe("panel guided scope interaction", () => {
       ]),
     );
     expect(container.textContent).toContain(
-      "Clear local data and discard the saved all-supported plan before starting another return.",
+      "Discard the saved all-supported fiscal-year plan from its run summary before starting another return.",
     );
   });
 

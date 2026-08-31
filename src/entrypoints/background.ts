@@ -177,6 +177,7 @@ function backgroundMessageSource(message: unknown): string {
   switch (message.type) {
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+    case "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
     case "PACK_RETRY_FILED_RETURNS_TARGET":
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
@@ -207,6 +208,11 @@ function backgroundMessageHandlerSite(message: unknown): `background-message-han
       return "background-message-handler:filed-returns-start";
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
       return "background-message-handler:filed-returns-all-supported-start";
+    // Its own site: a failure here clears local staging and removes a ledger,
+    // so folding it into the start site would lose exactly the distinction
+    // that says whether the discard or the fresh run failed.
+    case "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+      return "background-message-handler:filed-returns-all-supported-restart";
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return "background-message-handler:filed-returns-start-fresh";
     case "PACK_RETRY_FILED_RETURNS_TARGET":
@@ -384,6 +390,12 @@ async function handleMessage(
       return startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
         message.payload,
         filedReturnsFlowRunnerDeps(),
+      );
+    case "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+      return startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+        message.payload,
+        filedReturnsFlowRunnerDeps(),
+        { discardCompletedPlanRoot: true },
       );
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFreshFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
