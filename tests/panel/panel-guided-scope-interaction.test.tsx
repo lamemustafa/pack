@@ -618,6 +618,7 @@ describe("panel guided scope interaction", () => {
               kind: "all-supported-returns-full-fiscal-year",
               financialYear: "2025-26",
             },
+            ledgerId: "full-fiscal-year-abc123de",
             status: "complete",
             completedAt: "2026-08-26T00:00:00.000Z",
             updatedAt: "2026-08-26T00:00:00.000Z",
