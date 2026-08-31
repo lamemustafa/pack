@@ -1,6 +1,10 @@
 import React from "react";
 import { browser } from "wxt/browser";
-import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+  FiledReturnsFlowSummary,
+  FiledReturnsTargetOutcome,
+} from "../../connectors/gst/filed-returns-contracts";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
 import { ContextState } from "../popup/context-state";
 import {
@@ -62,6 +66,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
   const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
   const allReturnsTerminalBlocks = getAllSupportedTerminalBlocks(allSupportedSummary);
+  const allSupportedNeedsRecovery = Boolean(
+    allSupportedSummary && ["blocked", "partial", "cancelled"].includes(allSupportedSummary.status),
+  );
   // The saved plan blocks other scopes, but not its own resume: the runner retries the saved ZIP or
   // cleanup phase when this same start is invoked again, and blocking that leaves discarding the
   // plan as the only route out of a recoverable state.
@@ -120,7 +127,20 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
       <div className="panel-body">
         {showFlow ? (
           <>
-            {allSupportedSummary ? <AllSupportedRunStatus summary={allSupportedSummary} /> : null}
+            {allSupportedSummary ? (
+              <AllSupportedRunStatus
+                summary={allSupportedSummary}
+                busy={pack.effectiveBusy}
+                onRestart={() =>
+                  void pack.restartAllSupportedFullFiscalYearFlow(
+                    allSupportedSummary.summaryIdentity,
+                  )
+                }
+                onResume={() =>
+                  void pack.startAllSupportedFullFiscalYearFlow(allSupportedSummary.summaryIdentity)
+                }
+              />
+            ) : null}
             <InlineStatus
               busy={pack.effectiveBusy}
               fullYearFlowAvailable={fullYearFlowAvailable}
@@ -150,18 +170,32 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 by scrolling past the last one, and the custom door -- further
                 down still -- was harder to find than the presets. Only a clean
                 completion folds away; anything needing review stays open. */}
-            {runComplete ? (
+            {allSupportedSummary ? (
+              <>
+                <PanelRunProgress evidence={allSupportedSummary.targetEvidence} />
+                <TargetEvidence evidence={allSupportedSummary.targetEvidence} groupByReturn />
+              </>
+            ) : runComplete ? (
               <details className="panel-finished-run">
                 <summary>Show what this run saved</summary>
-                <PanelRunProgress summary={summary ?? null} />
+                <PanelRunProgress
+                  {...(summary?.targetEvidence ? { evidence: summary.targetEvidence } : {})}
+                />
                 <TargetEvidence summary={summary ?? null} />
               </details>
             ) : (
               <>
-                <PanelRunProgress summary={summary ?? null} />
+                <PanelRunProgress
+                  {...(summary?.targetEvidence ? { evidence: summary.targetEvidence } : {})}
+                />
                 <TargetEvidence summary={summary ?? null} />
               </>
             )}
+            {allSupportedNeedsRecovery ? (
+              <p className="panel-recovery-reason">
+                Why Pack paused: {allSupportedSummary?.flowStep.safeMessage}
+              </p>
+            ) : null}
             {hasRecoveryActions(summary ?? null) ? (
               <p className="panel-recovery-reason">Why Pack paused: {recoveryReason}</p>
             ) : null}
@@ -210,6 +244,9 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 onStartAllReturnsFullYear={(plan) =>
                   void pack.startAllSupportedFullFiscalYearFlow(plan)
                 }
+                onRestartAllReturnsFullYear={(plan) =>
+                  void pack.restartAllSupportedFullFiscalYearFlow(plan)
+                }
               />
             )}
           </>
@@ -237,45 +274,64 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 
 function AllSupportedRunStatus({
   summary,
+  busy,
+  onRestart,
+  onResume,
 }: {
-  summary: NonNullable<PackPanelController["allSupportedFullFiscalYearFlowSummary"]>;
+  summary: FiledReturnsAllSupportedFullFiscalYearFlowSummary;
+  busy: string | null;
+  onRestart: () => void;
+  onResume: () => void;
 }) {
-  const completed = summary.completedTargetIds.length;
-  const complete = summary.status === "complete";
+  const returnCount = new Set(summary.targetEvidence.map((entry) => entry.returnType)).size;
+  const periodCount = new Set(summary.targetEvidence.map((entry) => entry.period)).size;
+  const canRestart = summary.status === "complete";
   return (
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
-      <p aria-live="polite">
+      <p>
         <strong>
-          {complete ? "Run complete" : `${completed} of ${summary.totalTargets} targets checked`}
+          Your pack · All supported returns · FY {summary.summaryIdentity.financialYear}
         </strong>
       </p>
-      <div className="panel-run-progress-track" aria-hidden="true">
-        <span style={{ width: `${(completed / summary.totalTargets) * 100}%` }} />
-      </div>
-      {complete ? (
-        <p>
-          {completed} of {summary.totalTargets} targets checked
-        </p>
+      <p>
+        {returnCount} return types · {periodCount} periods · {summary.totalTargets} planned files
+      </p>
+      <p aria-live="polite">{summary.flowStep.safeMessage}</p>
+      {canRestart ? (
+        <button
+          className="panel-all-supported-action"
+          type="button"
+          disabled={busy !== null}
+          onClick={onRestart}
+        >
+          Discard this year's saved plan and run again
+        </button>
+      ) : summary.resumeAvailable ? (
+        <button
+          className="panel-all-supported-action"
+          type="button"
+          disabled={busy !== null}
+          onClick={onResume}
+        >
+          Resume this plan
+        </button>
       ) : null}
-      <p>{summary.flowStep.safeMessage}</p>
     </section>
   );
 }
 
-function PanelRunProgress({ summary }: { summary: FiledReturnsFlowSummary | null }) {
-  const plan = summary?.targetEvidence;
-  if (!plan || plan.length === 0) return null;
-  const saved = plan.filter((target) => target.outcome === "saved").length;
+function PanelRunProgress({
+  evidence,
+}: {
+  evidence?: readonly { outcome: FiledReturnsTargetOutcome }[];
+}) {
+  if (!evidence || evidence.length === 0) return null;
+  const saved = evidence.filter((target) => target.outcome === "saved").length;
   return (
     <section className="panel-run-progress" aria-label="Run progress">
       <div className="panel-run-progress-track" aria-hidden="true">
-        <span style={{ width: `${(saved / plan.length) * 100}%` }} />
+        <span style={{ width: `${(saved / evidence.length) * 100}%` }} />
       </div>
-      <p>
-        <strong>
-          {saved} of {plan.length} saved
-        </strong>
-      </p>
     </section>
   );
 }
@@ -376,13 +432,13 @@ function getAllSupportedRunBlock(
   return {
     disabled: true,
     label:
-      "Clear local data and discard the saved all-supported plan before starting another return.",
+      "Discard the saved all-supported fiscal-year plan from its run summary before starting another return.",
   };
 }
 
 function getAllSupportedTerminalBlocks(
   summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
-): readonly { financialYear: string; label: string }[] {
+): readonly { financialYear: string; label: string; restartPlan?: true }[] {
   const terminalRoots =
     summary?.terminalPlanRoots ??
     (summary && ["complete", "cancelled"].includes(summary.status)
@@ -403,8 +459,9 @@ function getAllSupportedTerminalBlocks(
         financialYear: root.financialYear,
         label:
           root.status === "complete"
-            ? "Pack already completed this all-supported plan. Clear local data before starting it again."
-            : "Pack retained this cancelled all-supported plan. Clear local data before starting another return.",
+            ? "Pack already completed this all-supported plan. Discard this fiscal year's saved plan and start again."
+            : "Pack retained this cancelled all-supported plan. It remains unavailable until Pack can safely resolve its saved recovery state.",
+        ...(root.status === "complete" ? { restartPlan: true as const } : {}),
       },
     ];
   });

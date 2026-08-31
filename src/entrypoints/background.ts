@@ -385,6 +385,12 @@ async function handleMessage(
         message.payload,
         filedReturnsFlowRunnerDeps(),
       );
+    case "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+      return startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+        message.payload,
+        filedReturnsFlowRunnerDeps(),
+        { discardCompletedPlanRoot: true },
+      );
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFreshFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_START_SYNTHETIC_DEMO":

@@ -25,7 +25,10 @@ import {
 import type { ActiveGstTab } from "./filed-returns-active-tab";
 import type { MainWorldFiledReturnsFilterSelectionOutcome } from "../connectors/gst/main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
-import { startAllSupportedFullFiscalYearDownloadFlow } from "./filed-returns-all-supported-full-fiscal-year";
+import {
+  discardCompletedAllSupportedFullFiscalYearPlan,
+  startAllSupportedFullFiscalYearDownloadFlow,
+} from "./filed-returns-all-supported-full-fiscal-year";
 import {
   discardMalformedFullFiscalYearRunForFreshStart,
   prepareFullFiscalYearTargetRetry,
@@ -295,7 +298,8 @@ async function allSupportedPlanStartLockResponse(
         "Pack retained an all-supported fiscal-year plan and will not start overlapping return work.",
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
-        message: "Clear local data and discard the saved plan before starting another return.",
+        message:
+          "Discard the saved all-supported fiscal-year plan from its run summary before starting another return.",
         canResume: false,
       },
     },
@@ -312,6 +316,7 @@ async function allSupportedPlanStartLockResponse(
 export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
   request: FiledReturnsAllSupportedFullFiscalYearRequest,
   deps: FiledReturnsFlowRunnerDeps,
+  options: { discardCompletedPlanRoot?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const leaseScope = allSupportedLeaseScope(request);
   if (!leaseScope) {
@@ -363,6 +368,13 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
       deps,
     );
     if (retainedArtifactRecovery) return retainedArtifactRecovery;
+    if (options.discardCompletedPlanRoot) {
+      const discardResponse = await discardCompletedAllSupportedFullFiscalYearPlan(
+        request,
+        deps as never,
+      );
+      if (discardResponse) return discardResponse;
+    }
     return startAllSupportedFullFiscalYearDownloadFlow(
       request,
       deps as never,

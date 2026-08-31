@@ -29,6 +29,7 @@ import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
   persistAllSupportedFullFiscalYearLedger,
+  removeAllSupportedFullFiscalYearLedger,
 } from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import type {
   AllSupportedFullFiscalYearZipPhase,
@@ -160,6 +161,60 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
   // cannot turn an unrecorded attempted target into an inferred completion.
   await persistAllSupportedFullFiscalYearLedger(deps, ledger);
   return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
+}
+
+/**
+ * Clears only a verified, cleanly completed root before a user explicitly
+ * starts that same fiscal year again. This intentionally does not share the
+ * broad local-data clear path: other fiscal years remain indexed and intact.
+ */
+export async function discardCompletedAllSupportedFullFiscalYearPlan(
+  request: FiledReturnsAllSupportedFullFiscalYearRequest,
+  deps: AllSupportedRunnerDeps,
+): Promise<PackMessageResponse | null> {
+  const storageState = await readAllSupportedPlanLedgersStorageState(deps);
+  if (storageState.state !== "valid") {
+    return { ok: true, flowStep: malformedSavedPlanIndexStep(request.financialYear) };
+  }
+  const ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
+  if (!ledger) {
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-restart-plan-not-found"],
+        safeMessage:
+          "Pack could not find the saved fiscal-year plan to restart. Refresh this panel and try again.",
+      },
+    };
+  }
+  if (ledger.status !== "complete" || !ledger.zipPhase || !isCleanedZipPhase(ledger.zipPhase)) {
+    return allSupportedResponse(deps, ledger, {
+      ...unresolvedRunStep(ledger),
+      safeSignals: [
+        ...unresolvedRunStep(ledger).safeSignals,
+        "all-supported-full-fiscal-year-restart-plan-not-terminal",
+      ],
+      safeMessage:
+        "Pack will not discard this fiscal-year plan until its saved recovery work is complete.",
+    });
+  }
+  const clearSignals = await discardAllSupportedFullFiscalYearFiledReturnsZip(ledger.ledgerId);
+  if (!clearSignals.includes("all-supported-full-fiscal-year-opfs-cleared")) {
+    return allSupportedResponse(deps, ledger, {
+      ...unresolvedRunStep(ledger),
+      safeSignals: [
+        ...unresolvedRunStep(ledger).safeSignals,
+        "all-supported-full-fiscal-year-restart-local-cleanup-failed",
+      ],
+      safeMessage:
+        "Pack could not clear the retained local staging for this fiscal-year plan. The saved plan remains unchanged.",
+    });
+  }
+  await removeAllSupportedFullFiscalYearLedger(deps, ledger);
+  return null;
 }
 
 async function continueSavedAllSupportedFullFiscalYearRun(

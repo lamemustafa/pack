@@ -1,7 +1,12 @@
 import type {
+  FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
   FiledReturnsFlowSummary,
   FiledReturnsTargetOutcome,
 } from "../../connectors/gst/filed-returns-contracts";
+
+type TargetEvidenceEntry =
+  | NonNullable<FiledReturnsFlowSummary["targetEvidence"]>[number]
+  | FiledReturnsAllSupportedFullFiscalYearTargetEvidence;
 
 /**
  * One row per planned period, saying what Pack can prove about each.
@@ -46,8 +51,16 @@ const OUTCOME_GLYPHS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   pending: "·",
 };
 
-export function TargetEvidence({ summary }: { summary: FiledReturnsFlowSummary | null }) {
-  const evidence = summary?.targetEvidence;
+export function TargetEvidence({
+  summary,
+  evidence: suppliedEvidence,
+  groupByReturn = false,
+}: {
+  summary?: FiledReturnsFlowSummary | null;
+  evidence?: readonly TargetEvidenceEntry[];
+  groupByReturn?: boolean;
+}) {
+  const evidence = suppliedEvidence ?? summary?.targetEvidence;
   if (!evidence || evidence.length === 0) return null;
 
   const saved = evidence.filter((entry) => entry.outcome === "saved").length;
@@ -78,17 +91,53 @@ export function TargetEvidence({ summary }: { summary: FiledReturnsFlowSummary |
           <span className="evidence-review"> · {needsReview} needs review</span>
         ) : null}
       </p>
-      <ul className="evidence-list">
-        {evidence.map((entry) => (
-          <li className={`evidence-row evidence-${entry.outcome}`} key={entry.period}>
-            <span className="evidence-glyph" aria-hidden="true">
-              {OUTCOME_GLYPHS[entry.outcome]}
-            </span>
-            <span className="evidence-period">{entry.period}</span>
-            <span className="evidence-outcome">{OUTCOME_LABELS[entry.outcome]}</span>
-          </li>
-        ))}
-      </ul>
+      {groupByReturn ? (
+        <div className="evidence-groups">
+          {groupAllSupportedEvidenceByReturn(evidence).map(([returnType, returnEvidence]) => (
+            <section
+              className="evidence-group"
+              key={returnType}
+              aria-label={`${returnType} results`}
+            >
+              <h3>{returnType}</h3>
+              <EvidenceList evidence={returnEvidence} />
+            </section>
+          ))}
+        </div>
+      ) : (
+        <EvidenceList evidence={evidence} />
+      )}
     </section>
   );
+}
+
+function EvidenceList({ evidence }: { evidence: readonly TargetEvidenceEntry[] }) {
+  return (
+    <ul className="evidence-list">
+      {evidence.map((entry) => (
+        <li className={`evidence-row evidence-${entry.outcome}`} key={evidenceKey(entry)}>
+          <span className="evidence-glyph" aria-hidden="true">
+            {OUTCOME_GLYPHS[entry.outcome]}
+          </span>
+          <span className="evidence-period">{entry.period}</span>
+          <span className="evidence-outcome">{OUTCOME_LABELS[entry.outcome]}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function groupAllSupportedEvidenceByReturn(
+  evidence: readonly TargetEvidenceEntry[],
+): readonly [string, readonly TargetEvidenceEntry[]][] {
+  const groups = new Map<string, TargetEvidenceEntry[]>();
+  for (const entry of evidence) {
+    const returnType = "returnType" in entry ? entry.returnType : "Selected return";
+    groups.set(returnType, [...(groups.get(returnType) ?? []), entry]);
+  }
+  return [...groups.entries()];
+}
+
+function evidenceKey(entry: TargetEvidenceEntry): string {
+  return "targetId" in entry ? entry.targetId : entry.period;
 }

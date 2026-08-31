@@ -90,6 +90,10 @@ export type PackMessage =
       payload: FiledReturnsAllSupportedFullFiscalYearRequest;
     }
   | {
+      type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW";
+      payload: FiledReturnsAllSupportedFullFiscalYearRequest;
+    }
+  | {
       type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
       payload: FiledReturnsFreshStartPayload;
     }
@@ -281,6 +285,7 @@ export function isPackMessage(
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+    case "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
       return isAllSupportedFullFiscalYearRequest(input.payload);
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsFreshStartPayload(input.payload);

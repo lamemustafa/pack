@@ -47,6 +47,7 @@ export function PanelGuidedScope({
   onScopeChange,
   onStart,
   onStartAllReturnsFullYear,
+  onRestartAllReturnsFullYear,
 }: {
   busy: string | null;
   context: PortalContext | null;
@@ -54,7 +55,11 @@ export function PanelGuidedScope({
   /** The saved all-supported plan blocks other scopes without blocking its own resume. */
   allReturnsExternalBlock?: { disabled: true; label: string } | null;
   /** A terminal saved plan blocks only the root it owns; other recipes stay available. */
-  allReturnsTerminalBlocks?: readonly { financialYear: string; label: string }[];
+  allReturnsTerminalBlocks?: readonly {
+    financialYear: string;
+    label: string;
+    restartPlan?: true;
+  }[];
   /** The one saved root plan allowed through its otherwise blocking recovery state. */
   allReturnsResumePlan?: PanelAllReturnsFullYearResumePlan;
   flowSummary: FiledReturnsFlowSummary | null;
@@ -70,6 +75,8 @@ export function PanelGuidedScope({
    * out of the panel rather than exposing a control that cannot complete.
    */
   onStartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan) => void;
+  /** Explicitly discards a completed root before starting that exact plan again. */
+  onRestartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan) => void;
 }) {
   // Keep this expression in the panel module: Vite replaces it during a WXT
   // production build, so the alpha JSX below is removed from packaged output.
@@ -142,34 +149,38 @@ export function PanelGuidedScope({
         <div className="panel-preset-list">
           {onStartAllReturnsFullYear && allReturnsPresets.length > 0 ? (
             <div className="panel-everything-preset-group">
-              {allReturnsPresets.map((preset) => (
-                <AllReturnsPreset
-                  key={preset.financialYear}
-                  busy={busy}
-                  externalBlock={
-                    allReturnsResumePlan?.financialYear === preset.financialYear
-                      ? null
-                      : allReturnsTerminalBlocks?.find(
-                            (block) => block.financialYear === preset.financialYear,
-                          )
-                        ? {
-                            disabled: true,
-                            label: allReturnsTerminalBlocks.find(
-                              (block) => block.financialYear === preset.financialYear,
-                            )!.label,
-                          }
-                        : (allReturnsExternalBlock ?? externalBlock)
-                  }
-                  primary={preset.financialYear === financialYears[1]}
-                  plan={preset}
-                  {...(allReturnsResumePlan?.financialYear === preset.financialYear
-                    ? { resumePlan: allReturnsResumePlan }
-                    : {})}
-                  portalReady={portalSignedIn}
-                  onStart={onStartAllReturnsFullYear}
-                  onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
-                />
-              ))}
+              {allReturnsPresets.map((preset) =>
+                (() => {
+                  const terminalBlock = allReturnsTerminalBlocks?.find(
+                    (block) => block.financialYear === preset.financialYear,
+                  );
+                  return (
+                    <AllReturnsPreset
+                      key={preset.financialYear}
+                      busy={busy}
+                      externalBlock={
+                        allReturnsResumePlan?.financialYear === preset.financialYear ||
+                        terminalBlock?.restartPlan
+                          ? null
+                          : terminalBlock
+                            ? { disabled: true, label: terminalBlock.label }
+                            : (allReturnsExternalBlock ?? externalBlock)
+                      }
+                      primary={preset.financialYear === financialYears[1]}
+                      plan={preset}
+                      {...(allReturnsResumePlan?.financialYear === preset.financialYear
+                        ? { resumePlan: allReturnsResumePlan }
+                        : {})}
+                      {...(terminalBlock?.restartPlan && onRestartAllReturnsFullYear
+                        ? { onRestart: onRestartAllReturnsFullYear }
+                        : {})}
+                      portalReady={portalSignedIn}
+                      onStart={onStartAllReturnsFullYear}
+                      onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
+                    />
+                  );
+                })(),
+              )}
             </div>
           ) : null}
           {presets.map((preset) => {
@@ -369,6 +380,7 @@ function AllReturnsPreset({
   plan,
   portalReady,
   resumePlan,
+  onRestart,
   onStart,
   onStalePlan,
 }: {
@@ -378,6 +390,7 @@ function AllReturnsPreset({
   plan: PanelAllReturnsFullYearPreset;
   portalReady: boolean;
   resumePlan?: PanelAllReturnsFullYearResumePlan;
+  onRestart?: (plan: PanelAllReturnsFullYearPlan) => void;
   onStart: (plan: PanelAllReturnsFullYearPlan) => void;
   onStalePlan: () => void;
 }) {
@@ -396,6 +409,7 @@ function AllReturnsPreset({
         note: `Saved plan · ${resumePlan.periodCount} eligible ${plural(resumePlan.periodCount, "period")} retained.`,
       }
     : plan;
+  const restartable = onRestart !== undefined;
   const coverageLabel = displayedPlan.returnTypes.map(shortReturnLabel).join(" · ");
   const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
 
@@ -406,8 +420,12 @@ function AllReturnsPreset({
         type="button"
         disabled={disabled}
         aria-describedby={disabledReason ? disabledReasonId : undefined}
-        aria-label={`${displayedPlan.label}. ${coverageLabel}.`}
+        aria-label={`${restartable ? `Discard this year's saved plan and run ${displayedPlan.label.toLowerCase()}` : displayedPlan.label}. ${coverageLabel}.`}
         onClick={() => {
+          if (onRestart) {
+            onRestart({ kind: plan.kind, financialYear: plan.financialYear });
+            return;
+          }
           if (resumePlan) {
             const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, new Date());
             if (!currentPlan || currentPlan.label !== plan.label) {
@@ -435,7 +453,11 @@ function AllReturnsPreset({
           onStart({ kind: plan.kind, financialYear: plan.financialYear });
         }}
       >
-        <span>{displayedPlan.label}</span>
+        <span>
+          {restartable
+            ? `Discard this year's saved plan and run ${displayedPlan.label.toLowerCase()}`
+            : displayedPlan.label}
+        </span>
         <span className="panel-everything-preset-coverage">{coverageLabel}</span>
       </button>
       {disabledReason ? (
