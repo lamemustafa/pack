@@ -5,7 +5,9 @@ import {
 } from "../../src/connectors/gst/messages";
 import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
 import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/connectors/gst/filed-returns-contracts";
+import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import {
   getFiledReturnsFinancialYearOptions,
   getFiledReturnsFullFiscalYearPeriods,
@@ -15,7 +17,10 @@ import {
   allSupportedFullFiscalYearPlanRootKey,
   allSupportedFullFiscalYearPlanStorageKey,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
-import { PACK_LOCAL_STORAGE_KEYS } from "../../src/background/storage-keys";
+import {
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+} from "../../src/background/storage-keys";
 
 const browserMocks = vi.hoisted(() => {
   let messageListener:
@@ -38,6 +43,9 @@ const browserMocks = vi.hoisted(() => {
     },
     resetSessionStorage: () => {
       sessionStorageState = {};
+    },
+    setSessionStorage: (values: Record<string, unknown>) => {
+      Object.assign(sessionStorageState, values);
     },
     downloads: {
       download: vi.fn(async () => 481),
@@ -418,6 +426,83 @@ describe("background filed returns download defaults", () => {
       flowSummary: {
         status: "blocked",
         flowStep: { safeSignals: ["filed-returns-run-needs-review"] },
+      },
+    });
+  });
+
+  it("returns a newer ordinary completion instead of retained completed all-supported history", async () => {
+    const allSupportedAt = new Date("2026-08-01T00:00:00.000Z");
+    const financialYear = getFiledReturnsFinancialYearOptions(allSupportedAt)[0]!;
+    const periods = getFiledReturnsFullFiscalYearPeriods(financialYear, allSupportedAt);
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported full-year plan");
+    const planRoot = {
+      kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+      financialYear,
+    } as const;
+    const initial = createAllSupportedFullFiscalYearLedger(
+      planRoot,
+      expansion.targets,
+      periods,
+      allSupportedAt,
+    );
+    const completedAllSupportedLedger = {
+      ...initial,
+      status: "complete" as const,
+      updatedAt: allSupportedAt.toISOString(),
+      zipPhase: "cleaned-without-export" as const,
+      targets: initial.targets.map((target) => ({
+        ...target,
+        status: "not-filed" as const,
+        ...canonicalDurableTargetStatus(target, "not-filed", [
+          "filed-return-positively-not-filed",
+        ]),
+      })),
+    };
+    const newerOrdinaryCompletion: FiledReturnsFlowSummary = {
+      scope: {
+        financialYear,
+        period: "May",
+        returnType: "GSTR-3B",
+      },
+      status: "complete",
+      completedAt: "2026-08-02T00:00:00.000Z",
+      completedPeriods: ["May"],
+      currentPeriod: "May",
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-positively-not-filed"],
+        safeMessage: "Pack found no filed GSTR-3B return for the selected period.",
+      },
+    };
+    browserMocks.setLocalStorage({
+      [PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex]: {
+        schemaVersion: "1.0",
+        ledgerIdsByPlanRoot: {
+          [allSupportedFullFiscalYearPlanRootKey(planRoot)]: completedAllSupportedLedger.ledgerId,
+        },
+      },
+      [allSupportedFullFiscalYearPlanStorageKey(completedAllSupportedLedger.ledgerId)]:
+        completedAllSupportedLedger,
+    });
+    browserMocks.setSessionStorage({
+      [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary]: newerOrdinaryCompletion,
+    });
+
+    await import("../../src/entrypoints/background");
+    expect(browserMocks.getMessageListener()).toEqual(expect.any(Function));
+
+    await expect(
+      sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
+    ).resolves.toMatchObject({
+      ok: true,
+      flowSummary: {
+        scope: { period: "May", returnType: "GSTR-3B" },
+        status: "complete",
+        completedAt: "2026-08-02T00:00:00.000Z",
       },
     });
   });
