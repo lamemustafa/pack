@@ -18,19 +18,20 @@ if (!outputDir)
 let sawAlphaSurfaceMarker = false;
 
 /**
- * Every file an HTML entry can actually load, followed through static imports.
- * Alpha evidence is restricted to this set: a marker sitting in a chunk nothing
- * imports proves only that a string exists on disk, so a build whose gated
- * surface had been compiled out of the panel would still look gated.
+ * Every file the panel entry can actually load, followed through static imports.
+ * Alpha evidence is restricted to this set: a marker sitting in another page's
+ * bundle proves nothing about the panel surface, and a marker in a chunk nothing
+ * imports proves only that a string exists on disk.
  */
-async function reachableFromHtmlEntries(dir) {
+async function reachableFromPanelHtml(dir) {
   const files = await listFiles(dir);
   const queue = [];
-  for (const file of files.filter((candidate) => /\.html$/.test(candidate))) {
-    const html = await readFile(file, "utf8");
+  const panelEntry = path.join(dir, "panel.html");
+  if (files.includes(panelEntry)) {
+    const html = await readFile(panelEntry, "utf8");
     for (const match of html.matchAll(/<script\b[^>]*\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
       const specifier = match[1] ?? match[2];
-      if (specifier) queue.push(resolveOutputSpecifier(dir, file, specifier));
+      if (specifier) queue.push(resolveOutputSpecifier(dir, panelEntry, specifier));
     }
   }
   const reachable = new Set();
@@ -55,7 +56,7 @@ function resolveOutputSpecifier(dir, fromFile, specifier) {
     : path.resolve(path.dirname(fromFile), specifier);
 }
 
-const reachableFiles = alphaMode ? await reachableFromHtmlEntries(outputDir) : new Set();
+const reachableFiles = alphaMode ? await reachableFromPanelHtml(outputDir) : new Set();
 
 const harnessPolicyPath =
   process.env.PACK_HARNESS_POLICY_PATH ??
@@ -412,7 +413,7 @@ if (alphaMode && !sawAlphaSurfaceMarker) {
   // catch: it would pass every other check while shipping none of the surface
   // the build was made to exercise.
   throw new Error(
-    `No alpha surface marker reachable from an HTML entry in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
+    `No alpha surface marker reachable from the panel in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
   );
 }
 console.log(
