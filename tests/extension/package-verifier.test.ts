@@ -615,6 +615,20 @@ describe("alpha builds", () => {
     expect(result.output).toContain("reachable from the panel");
   });
 
+  it("rejects TypeScript-only syntax in a marker-bearing emitted module", async () => {
+    const outputDir = await createValidPackage();
+    await writeFile(
+      path.join(outputDir, "chunks", "panel.js"),
+      'const surface: string = runtime.jsx("section", { "data-pack-alpha-surface": "full-fiscal-year" });\nexport default surface;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Malformed reachable module: chunks/panel.js");
+  });
+
   it("traces a panel import graph when the alpha output argument is relative", async () => {
     const outputDir = await createValidPackage();
     await writeFile(
@@ -752,6 +766,36 @@ describe("alpha builds", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain('Unresolved static import "//chunks/alpha-surface.js"');
+  });
+
+  it("does not resolve a module fragment as a packaged filename", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "chunks/panel.js",
+      'import "./alpha-surface#proof.js";\nexport default 1;\n',
+    );
+    await writePackageFile(outputDir, "chunks/alpha-surface#proof.js", renderedAlphaSurface);
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('Unresolved static import "./alpha-surface#proof.js"');
+  });
+
+  it("rejects a non-JavaScript module entry before its marker can count", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/alpha.json"></script></body></html>',
+    );
+    await writePackageFile(outputDir, "chunks/alpha.json", renderedAlphaSurface);
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Non-JavaScript module resource: chunks/alpha.json");
   });
 
   it("does not follow a static import recovered from malformed JavaScript", async () => {

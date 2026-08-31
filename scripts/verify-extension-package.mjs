@@ -46,7 +46,9 @@ async function reachableFromPanelHtml(dir) {
     const next = queue.pop();
     if (next === null || reachable.has(next) || !files.includes(next)) continue;
     reachable.add(next);
-    if (!/\.js$/.test(next)) continue;
+    if (!/\.js$/.test(next)) {
+      throw new Error(`Non-JavaScript module resource: ${path.relative(dir, next)}`);
+    }
     const contents = await readFile(next, "utf8");
     const specifiers = staticModuleSpecifiers(next, contents);
     if (specifiers === null) {
@@ -54,7 +56,7 @@ async function reachableFromPanelHtml(dir) {
     }
     for (const specifier of specifiers) {
       const dependency = resolveOutputSpecifier(dir, next, specifier);
-      if (dependency === null || !files.includes(dependency)) {
+      if (!/\.js$/.test(dependency ?? "") || dependency === null || !files.includes(dependency)) {
         throw new Error(
           `Unresolved static import ${JSON.stringify(specifier)} from ${path.relative(dir, next)}`,
         );
@@ -97,7 +99,18 @@ function staticModuleSpecifiers(fileName, contents) {
     false,
     ts.ScriptKind.JS,
   );
-  if (source.parseDiagnostics.length > 0) return null;
+  const transpiled = ts.transpileModule(contents, {
+    fileName,
+    reportDiagnostics: true,
+  });
+  if (
+    source.parseDiagnostics.length > 0 ||
+    transpiled.diagnostics?.some(
+      (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
+    )
+  ) {
+    return null;
+  }
   return source.statements.flatMap((statement) => {
     if (
       (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
@@ -153,6 +166,8 @@ function resolveOutputSpecifier(dir, fromFile, specifier) {
   if (
     /^[a-z]+:/i.test(specifier) ||
     specifier.startsWith("//") ||
+    specifier.includes("#") ||
+    specifier.includes("?") ||
     (!specifier.startsWith("/") && !specifier.startsWith("./") && !specifier.startsWith("../"))
   ) {
     return null;
