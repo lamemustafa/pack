@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const rootDir = process.cwd();
 const createdDirs: string[] = [];
+const renderedAlphaSurface =
+  'const surface = runtime.jsx("section", { "data-pack-alpha-surface": "full-fiscal-year" });\nexport default surface;\n';
 
 describe("extension package verifier", () => {
   afterEach(async () => {
@@ -589,7 +591,7 @@ describe("alpha builds", () => {
     );
     await writeFile(
       path.join(outputDir, "chunks", "alpha-surface.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      renderedAlphaSurface,
       "utf8",
     );
 
@@ -597,6 +599,20 @@ describe("alpha builds", () => {
 
     expect(result.output).toContain("alpha extension package verification passed");
     expect(result.status).toBe(0);
+  });
+
+  it("does not accept a marker constant that no JSX element renders", async () => {
+    const outputDir = await createValidPackage();
+    await writeFile(
+      path.join(outputDir, "chunks", "panel.js"),
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("reachable from the panel");
   });
 
   it("traces a panel import graph when the alpha output argument is relative", async () => {
@@ -608,7 +624,7 @@ describe("alpha builds", () => {
     );
     await writeFile(
       path.join(outputDir, "chunks", "alpha-surface.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      renderedAlphaSurface,
       "utf8",
     );
 
@@ -622,11 +638,7 @@ describe("alpha builds", () => {
     // A gated surface compiled out of the panel while a stale chunk still holds
     // the string would otherwise read as a correctly gated build.
     const outputDir = await createValidPackage();
-    await writeFile(
-      path.join(outputDir, "orphan-surface.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
-      "utf8",
-    );
+    await writeFile(path.join(outputDir, "orphan-surface.js"), renderedAlphaSurface, "utf8");
 
     const result = await runVerifier(outputDir, {}, ["--alpha"]);
 
@@ -643,7 +655,7 @@ describe("alpha builds", () => {
     );
     await writeFile(
       path.join(outputDir, "chunks", "alpha-surface.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      renderedAlphaSurface,
       "utf8",
     );
 
@@ -763,11 +775,7 @@ describe("alpha builds", () => {
 
   it("rejects a malformed reachable module even when it contains the alpha marker", async () => {
     const outputDir = await createValidPackage();
-    await writePackageFile(
-      outputDir,
-      "chunks/panel.js",
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
-    );
+    await writePackageFile(outputDir, "chunks/panel.js", renderedAlphaSurface);
 
     const validResult = await runVerifier(outputDir, {}, ["--alpha"]);
     expect(validResult.status).toBe(0);
@@ -785,11 +793,7 @@ describe("alpha builds", () => {
 
   it("rejects a marker-bearing module whose static dependency is unresolved", async () => {
     const outputDir = await createValidPackage();
-    await writePackageFile(
-      outputDir,
-      "chunks/panel.js",
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
-    );
+    await writePackageFile(outputDir, "chunks/panel.js", renderedAlphaSurface);
 
     const validResult = await runVerifier(outputDir, {}, ["--alpha"]);
     expect(validResult.status).toBe(0);

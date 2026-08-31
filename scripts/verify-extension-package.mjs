@@ -110,6 +110,45 @@ function staticModuleSpecifiers(fileName, contents) {
   });
 }
 
+function hasRenderedAlphaSurfaceMarker(fileName, contents, marker) {
+  const source = ts.createSourceFile(
+    fileName,
+    contents,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.JS,
+  );
+  if (source.parseDiagnostics.length > 0) return false;
+  let rendered = false;
+  const jsxFactoryName = (expression) => {
+    if (ts.isParenthesizedExpression(expression)) return jsxFactoryName(expression.expression);
+    if (
+      ts.isBinaryExpression(expression) &&
+      expression.operatorToken.kind === ts.SyntaxKind.CommaToken
+    ) {
+      return jsxFactoryName(expression.right);
+    }
+    return ts.isPropertyAccessExpression(expression) ? expression.name.text : null;
+  };
+  const visit = (node) => {
+    if (rendered) return;
+    if (ts.isCallExpression(node) && ["jsx", "jsxs"].includes(jsxFactoryName(node.expression))) {
+      const properties = node.arguments[1];
+      if (properties !== undefined && ts.isObjectLiteralExpression(properties)) {
+        rendered = properties.properties.some(
+          (property) =>
+            ts.isPropertyAssignment(property) &&
+            ((ts.isStringLiteral(property.name) && property.name.text === marker) ||
+              (ts.isIdentifier(property.name) && property.name.text === marker)),
+        );
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return rendered;
+}
+
 function resolveOutputSpecifier(dir, fromFile, specifier) {
   if (
     /^[a-z]+:/i.test(specifier) ||
@@ -439,7 +478,9 @@ for (const file of await listFiles(outputDir)) {
           `Alpha surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
         );
       }
-      if (reachableFiles.has(file)) sawAlphaSurfaceMarker = true;
+      if (reachableFiles.has(file) && hasRenderedAlphaSurfaceMarker(file, contents, marker)) {
+        sawAlphaSurfaceMarker = true;
+      }
     }
   }
   if (/\.svg$/.test(file)) {
