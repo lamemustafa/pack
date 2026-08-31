@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { JSDOM } from "jsdom";
 import ts from "typescript";
 
 const args = process.argv.slice(2);
@@ -19,6 +18,10 @@ if (flags.some((flag) => flag !== "--alpha") || outputDirectories.length !== 1) 
   );
 }
 const alphaMode = flags.includes("--alpha");
+// JSDOM is only evidence machinery for the alpha-only panel reachability
+// graph. Loading it for ordinary packaged-build verification makes every
+// short-lived verifier invocation pay its initialization cost.
+const JSDOM = alphaMode ? (await import("jsdom")).JSDOM : null;
 const outputDir = path.resolve(outputDirectories[0]);
 let sawAlphaSurfaceMarker = false;
 
@@ -53,6 +56,7 @@ async function reachableFromPanelHtml(dir) {
 }
 
 function panelModuleScriptSpecifiers(markup) {
+  if (JSDOM === null) return [];
   const dom = new JSDOM(markup, { runScripts: "outside-only" });
   try {
     // Package pages never need a document base. Its presence makes the raw
