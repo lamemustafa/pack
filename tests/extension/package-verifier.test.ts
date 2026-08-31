@@ -590,6 +590,25 @@ describe("alpha builds", () => {
     expect(result.status).toBe(0);
   });
 
+  it("traces a panel import graph when the alpha output argument is relative", async () => {
+    const outputDir = await createValidPackage();
+    await writeFile(
+      path.join(outputDir, "chunks", "panel.js"),
+      'import "./alpha-surface.js";\nexport default 1;\n',
+      "utf8",
+    );
+    await writeFile(
+      path.join(outputDir, "chunks", "alpha-surface.js"),
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(path.relative(rootDir, outputDir), {}, ["--alpha"]);
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("alpha extension package verification passed");
+  });
+
   it("refuses a marker no entry can reach", async () => {
     // A gated surface compiled out of the panel while a stale chunk still holds
     // the string would otherwise read as a correctly gated build.

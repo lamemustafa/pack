@@ -10,11 +10,12 @@ const args = process.argv.slice(2);
 // the marker check refuses the alpha output before anything else is inspected,
 // which left that build unverified entirely.
 const alphaMode = args.includes("--alpha");
-const outputDir = args.find((arg) => !arg.startsWith("--"));
-if (!outputDir)
+const outputDirArgument = args.find((arg) => !arg.startsWith("--"));
+if (!outputDirArgument)
   throw new Error(
     "usage: node scripts/verify-extension-package.mjs [--alpha] <extension-output-dir>",
   );
+const outputDir = path.resolve(outputDirArgument);
 let sawAlphaSurfaceMarker = false;
 
 /**
