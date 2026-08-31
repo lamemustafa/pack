@@ -142,5 +142,24 @@ describe("all-supported full-fiscal-year plan", () => {
         },
       }),
     ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+        payload: {
+          kind: "all-supported-returns-full-fiscal-year",
+          financialYear: "2025-26",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+        payload: {
+          kind: "all-supported-returns-full-fiscal-year",
+          financialYear: "2025-26",
+          ledgerId: "must-not-come-from-the-panel",
+        },
+      }),
+    ).toBe(false);
   });
 });

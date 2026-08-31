@@ -647,15 +647,16 @@ describe("panel guided scope interaction", () => {
       container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
     );
     expect(allReturns).toHaveLength(2);
-    expect(allReturns[0]?.disabled).toBe(true);
+    expect(allReturns[0]?.disabled).toBe(false);
     expect(allReturns[1]?.disabled).toBe(false);
     expect(
       Array.from(container.querySelectorAll<HTMLButtonElement>(".panel-preset"))
         .filter((preset) => !preset.classList.contains("panel-everything-preset"))
         .every((preset) => !preset.disabled),
     ).toBe(true);
+    expect(container.textContent).toContain("Discard this year's saved plan and run again");
     expect(container.textContent).toContain(
-      "Pack already completed this all-supported plan. Clear local data before starting it again.",
+      "Discard this year's saved plan and run everything last year",
     );
   });
 
@@ -790,7 +791,7 @@ describe("panel guided scope interaction", () => {
       ]),
     );
     expect(container.textContent).toContain(
-      "Clear local data and discard the saved all-supported plan before starting another return.",
+      "Discard the saved all-supported fiscal-year plan from its run summary before starting another return.",
     );
   });
 

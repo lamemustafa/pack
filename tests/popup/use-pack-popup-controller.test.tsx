@@ -156,6 +156,63 @@ describe("popup background failure presentation", () => {
     expect(controller?.actionError).toBeNull();
   });
 
+  it("restarts one all-supported root without dispatching the broad local-data clear", async () => {
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW") {
+        return Promise.resolve({
+          ok: true,
+          allSupportedFullFiscalYearFlowSummary: {
+            summaryIdentity: {
+              kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+              financialYear: "2025-26",
+            },
+            status: "running",
+            completedTargetIds: [],
+            targetEvidence: [],
+            totalTargets: 0,
+            flowStepScope: {
+              financialYear: "2025-26",
+              period: "April",
+              returnType: "GSTR-3B",
+              artifactType: "PDF",
+            },
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "started",
+              safeSignals: ["synthetic-restart"],
+              safeMessage: "Pack started the selected fiscal-year returns.",
+            },
+            resumeAvailable: false,
+          },
+        });
+      }
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+
+    await act(async () => {
+      await controller?.restartAllSupportedFullFiscalYearFlow({
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      });
+    });
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+      payload: {
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      },
+    });
+    expect(mocks.sendMessage).not.toHaveBeenCalledWith({ type: "PACK_CLEAR_LOCAL_DATA" });
+  });
+
   it("keeps a malformed saved-summary response visible", async () => {
     await act(async () => root?.unmount());
     controller = null;

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
   type FiledReturnsAllSupportedFullFiscalYearFlowSummary,
@@ -65,11 +65,16 @@ function render(summaryValue: FiledReturnsAllSupportedFullFiscalYearFlowSummary)
 }
 
 describe("all-supported panel progress", () => {
-  it("draws the existing progress track at the live completed-target percentage", () => {
-    const markup = render(summary(["captured", "pending"], "running", [0]));
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("draws the existing progress track with the one saved-file count", () => {
+    const markup = render(summary(["saved", "pending"], "running", [0]));
 
     expect(markup).toContain('aria-label="All supported returns progress"');
-    expect(markup).toContain("1 of 2 targets checked");
+    expect(markup).toContain("1 of 2 saved");
+    expect(markup).not.toContain("targets checked");
     expect(markup).toContain('class="panel-run-progress-track"');
     expect(markup).toContain('style="width:50%"');
     expect(declaredProperty(".panel-run-progress-track span", "background")).toBe(
@@ -77,15 +82,68 @@ describe("all-supported panel progress", () => {
     );
   });
 
-  it("puts a completed outcome before the retained browser-name caveat", () => {
+  it("puts an explicit same-year restart beside the completed summary", () => {
     const markup = render(summary(["saved", "not-filed"], "complete", [0, 1]));
 
-    expect(markup).toContain("Run complete");
-    expect(markup).toContain("2 of 2 targets checked");
+    expect(markup).toContain("Your pack · All supported returns · FY 2025-26");
+    expect(markup).toContain("Discard this year&#x27;s saved plan and run again");
+    expect(markup).toContain("1 of 2 saved");
     expect(markup).toContain("browser may have saved the ZIP under a different name");
-    expect(markup.indexOf("Run complete")).toBeLessThan(
+    expect(markup.indexOf("Your pack · All supported returns")).toBeLessThan(
       markup.indexOf("browser may have saved the ZIP under a different name"),
     );
-    expect(markup).toContain('style="width:100%"');
+    expect(markup).toContain('style="width:50%"');
+  });
+
+  it("renders all return groups at alpha mode with no duplicate summary or hidden identifiers", () => {
+    vi.stubEnv("MODE", "alpha");
+    const returnTypes = ["GSTR-1", "GSTR-2B", "GSTR-3B"] as const;
+    const periods = [
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "January",
+      "February",
+      "March",
+    ] as const;
+    const targetEvidence = returnTypes.flatMap((returnType) =>
+      periods.map((period, index) => ({
+        targetId: `synthetic-${returnType}-${period}`,
+        financialYear: "2025-26",
+        period,
+        returnType,
+        artifactType: "PDF" as const,
+        outcome: index === 0 ? ("saved" as const) : ("pending" as const),
+      })),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const markup = render({
+      ...summary(["saved"], "complete", [0]),
+      targetEvidence,
+      totalTargets: targetEvidence.length,
+      completedTargetIds: targetEvidence
+        .filter((entry) => entry.outcome === "saved")
+        .map((entry) => entry.targetId),
+    });
+
+    // This all-returns preset is alpha-only. Its rendered restart control is
+    // the precondition that keeps the grouped-evidence assertions non-vacuous.
+    expect(markup).toContain("Discard this year&#x27;s saved plan and run everything last year");
+    expect(markup.match(/class="evidence-row /g)).toHaveLength(36);
+    expect(markup).toContain('aria-label="GSTR-1 results"');
+    expect(markup).toContain('aria-label="GSTR-2B results"');
+    expect(markup).toContain('aria-label="GSTR-3B results"');
+    expect(markup.match(/3 of 36 saved/g)).toHaveLength(1);
+    expect(markup).not.toContain("targets checked");
+    expect(markup).not.toContain("synthetic-GSTR-1-April");
+    expect(markup).not.toContain("all-supported-full-fiscal-year-run-active");
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

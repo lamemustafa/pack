@@ -4,6 +4,7 @@ import {
   type PortalFlowStepResult,
 } from "../../src/connectors/gst/filed-returns-contracts";
 import {
+  discardCompletedAllSupportedFullFiscalYearPlan,
   reconcilePendingAllSupportedFullFiscalYearZipDownload,
   reconcilePersistedAllSupportedFullFiscalYearZipDownload,
   startAllSupportedFullFiscalYearDownloadFlow,
@@ -94,6 +95,52 @@ beforeEach(() => {
 });
 
 describe("all-supported full-fiscal-year worker", () => {
+  it("discards only the requested completed root before a fresh start", async () => {
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const earlierRequest = { ...request, financialYear: "2025-26" } as const;
+    await startAllSupportedFullFiscalYearDownloadFlow(earlierRequest, deps, runner);
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const earlierLedger = allSavedLedgers().find(
+      (ledger) => ledger.planRoot.financialYear === earlierRequest.financialYear,
+    );
+    if (!earlierLedger) throw new Error("expected the earlier all-supported root");
+    vi.clearAllMocks();
+    zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
+
+    await expect(
+      discardCompletedAllSupportedFullFiscalYearPlan(earlierRequest, deps),
+    ).resolves.toBeNull();
+
+    expect(zip.discard).toHaveBeenCalledWith(earlierLedger.ledgerId);
+    expect(allSavedLedgers()).toHaveLength(1);
+    expect(allSavedLedgers()[0]?.planRoot.financialYear).toBe("2026-27");
+    expect(stored.values["all-supported-index"]).toEqual({
+      schemaVersion: "1.0",
+      ledgerIdsByPlanRoot: {
+        "all-supported-returns-full-fiscal-year:2026-27": expect.any(String),
+      },
+    });
+  });
+
+  it("retains the completed root when its scoped local cleanup fails", async () => {
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    vi.clearAllMocks();
+    zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-clear-failed"]);
+
+    const response = await discardCompletedAllSupportedFullFiscalYearPlan(request, deps);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeMessage:
+          "Pack could not clear the retained local staging for this fiscal-year plan. The saved plan remains unchanged.",
+      },
+    });
+    expect(allSavedLedgers()).toHaveLength(1);
+    expect(stored.values["all-supported-index"]).toBeDefined();
+  });
+
   it("persists every atomic target, pins one tab, and completes only after the exact ZIP handoff", async () => {
     const requiredTabIds: Array<number | undefined> = [];
     const runner = vi.fn<SinglePeriodRunner>(async (_scope, runDeps, options) => {
