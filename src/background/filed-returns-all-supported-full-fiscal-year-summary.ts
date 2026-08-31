@@ -7,6 +7,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
+  allSupportedExplicitRetryTarget,
   allSupportedResumeMode,
   isAllSupportedFullFiscalYearLedgerStale,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
@@ -75,6 +76,7 @@ export function toAllSupportedFullFiscalYearSummary(
       ledger.targets[0]!,
   );
   const resumeMode = allSupportedResumeMode(ledger);
+  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger);
   return {
     resumeAvailable: resumeMode !== null,
     ...(resumeMode ? { resumeMode } : {}),
@@ -101,6 +103,15 @@ export function toAllSupportedFullFiscalYearSummary(
     })),
     totalTargets: ledger.targets.length,
     ledgerId: ledger.ledgerId,
+    ...(explicitRetryTarget
+      ? {
+          allSupportedFullFiscalYearRecovery: {
+            targetId: explicitRetryTarget.targetId,
+            expectedRevision: ledger.revision,
+            targetStatus: explicitRetryTarget.status,
+          },
+        }
+      : {}),
     ...(ledger.currentTargetId ? { currentTargetId: ledger.currentTargetId } : {}),
     flowStepScope,
     flowStep,

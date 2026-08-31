@@ -167,6 +167,16 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 onResume={() =>
                   void pack.startAllSupportedFullFiscalYearFlow(allSupportedSummary.summaryIdentity)
                 }
+                onRetryTarget={() => {
+                  const recovery = allSupportedSummary.allSupportedFullFiscalYearRecovery;
+                  if (!recovery || allSupportedSummary.ledgerId === undefined) return;
+                  void pack.retryAllSupportedFullFiscalYearTarget({
+                    financialYear: allSupportedSummary.summaryIdentity.financialYear,
+                    ledgerId: allSupportedSummary.ledgerId,
+                    targetId: recovery.targetId,
+                    expectedRevision: recovery.expectedRevision,
+                  });
+                }}
               />
             ) : null}
             <InlineStatus
@@ -319,6 +329,7 @@ function AllSupportedRunStatus({
   portalReady,
   onRestart,
   onResume,
+  onRetryTarget,
 }: {
   summary: FiledReturnsAllSupportedFullFiscalYearFlowSummary;
   busy: string | null;
@@ -326,6 +337,7 @@ function AllSupportedRunStatus({
   portalReady: boolean;
   onRestart: () => void;
   onResume: () => void;
+  onRetryTarget: () => void;
 }) {
   const returnCount = new Set(summary.targetEvidence.map((entry) => entry.returnType)).size;
   const periodCount = new Set(summary.targetEvidence.map((entry) => entry.period)).size;
@@ -343,6 +355,12 @@ function AllSupportedRunStatus({
   const localOnlyResume = summary.resumeAvailable && summary.resumeMode === "local-only";
   const canRestart = fullYearFlowAvailable && summary.status === "complete";
   const canResume = fullYearFlowAvailable && summary.resumeAvailable === true;
+  const recovery = summary.allSupportedFullFiscalYearRecovery;
+  const recoveryEvidence = recovery
+    ? summary.targetEvidence.find((target) => target.targetId === recovery.targetId)
+    : undefined;
+  const canRetryTarget =
+    fullYearFlowAvailable && recovery !== undefined && recoveryEvidence !== undefined;
   return (
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>
@@ -371,6 +389,15 @@ function AllSupportedRunStatus({
           onClick={onResume}
         >
           Resume this plan
+        </button>
+      ) : canRetryTarget ? (
+        <button
+          className="panel-all-supported-action"
+          type="button"
+          disabled={busy !== null || !portalReady}
+          onClick={onRetryTarget}
+        >
+          Review Downloads, then retry {recoveryEvidence.returnType} for {recoveryEvidence.period}
         </button>
       ) : null}
     </section>

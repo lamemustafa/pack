@@ -24,6 +24,36 @@ const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>
   "downloaded",
   "not-filed",
 ]);
+const EXPLICIT_RETRY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
+  "download-unconfirmed",
+  "blocked",
+  "failed",
+  "cancelled",
+  "manually-observed",
+]);
+
+/**
+ * The first unresolved target is the only child an explicit retry may replay.
+ * Later targets are still pending because the runner stops at its first
+ * terminal review state; accepting a later ID would execute an unreviewed
+ * earlier target instead of the target the reader authorised.
+ */
+export function allSupportedExplicitRetryTarget(
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+): FiledReturnsAllSupportedFullFiscalYearTarget | null {
+  if (ledger.zipPhase) return null;
+  const targetIndex = ledger.targets.findIndex((target) =>
+    EXPLICIT_RETRY_TARGET_STATUSES.has(target.status),
+  );
+  if (targetIndex < 0) return null;
+  const target = ledger.targets[targetIndex]!;
+  return ledger.targets
+    .slice(0, targetIndex)
+    .every((candidate) => POSITIVE_TARGET_STATUSES.has(candidate.status)) &&
+    ledger.targets.slice(targetIndex + 1).every((candidate) => candidate.status === "pending")
+    ? target
+    : null;
+}
 
 /**
  * Whether invoking the same all-supported start again would actually advance this ledger.

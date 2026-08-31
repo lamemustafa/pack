@@ -15,6 +15,7 @@ import type {
   PortalFlowStepResult,
 } from "./filed-returns-contracts";
 import {
+  createAllSupportedFullFiscalYearRequest,
   isAllSupportedFullFiscalYearRequest,
   isAllSupportedFullFiscalYearRestartRequest,
 } from "./filed-returns-all-supported-full-fiscal-year";
@@ -24,6 +25,7 @@ import {
   isSupportedFiledReturnsScope,
   isSupportedFiledReturnsStartScope,
 } from "./filed-returns-scope";
+import { isCanonicalFullFiscalYearLedgerId } from "./filed-returns-ledger-id";
 import {
   isFiledReturnsArtifactType,
   isFiledReturnsConcreteArtifactType,
@@ -96,6 +98,10 @@ export type PackMessage =
       type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW";
       /** Names the reviewed ledger so a superseded root is refused, not removed. */
       payload: FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId: string };
+    }
+  | {
+      type: "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET";
+      payload: AllSupportedFullFiscalYearTargetRecoveryPayload;
     }
   | {
       type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
@@ -217,6 +223,17 @@ export interface FullFiscalYearTargetRecoveryPayload {
   expectedRevision: number;
 }
 
+/**
+ * Bound to one immutable all-supported plan target. A retry is an explicit
+ * reader action, never an inference from a prior ambiguous download.
+ */
+export interface AllSupportedFullFiscalYearTargetRecoveryPayload {
+  financialYear: string;
+  ledgerId: string;
+  targetId: string;
+  expectedRevision: number;
+}
+
 export interface FiledReturnsFreshStartPayload {
   scope: FiledReturnsDownloadScope;
   recovery:
@@ -271,6 +288,8 @@ export function isPackMessage(
       return isFiledReturnsStartScope(input.payload);
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return isFullFiscalYearTargetRecoveryPayload(input.payload);
+    case "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET":
+      return isAllSupportedFullFiscalYearTargetRecoveryPayload(input.payload);
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
       return isUnconfirmedDownloadResolution(input.payload);
     case "PACK_RESOLVE_FULL_FISCAL_YEAR_TARGET":
@@ -341,6 +360,26 @@ function isFullFiscalYearTargetRecoveryPayload(
     return false;
   }
   return hasFullFiscalYearTargetRecoveryFields(input);
+}
+
+function isAllSupportedFullFiscalYearTargetRecoveryPayload(
+  input: unknown,
+): input is AllSupportedFullFiscalYearTargetRecoveryPayload {
+  if (
+    !isRecord(input) ||
+    !hasOnlyKeys(input, ["financialYear", "ledgerId", "targetId", "expectedRevision"])
+  ) {
+    return false;
+  }
+  return (
+    typeof input.financialYear === "string" &&
+    createAllSupportedFullFiscalYearRequest(input.financialYear) !== null &&
+    isCanonicalFullFiscalYearLedgerId(input.ledgerId) &&
+    isBoundedString(input.targetId, 1, 120) &&
+    typeof input.expectedRevision === "number" &&
+    Number.isInteger(input.expectedRevision) &&
+    input.expectedRevision >= 1
+  );
 }
 
 function hasFullFiscalYearTargetRecoveryFields(input: Record<string, unknown>): boolean {

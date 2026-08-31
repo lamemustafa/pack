@@ -8,6 +8,7 @@ import type {
   FiledReturnsFlowSummary,
 } from "../../connectors/gst/filed-returns-contracts";
 import type {
+  AllSupportedFullFiscalYearTargetRecoveryPayload,
   FullFiscalYearTargetRecoveryPayload,
   PackMessage,
   PackMessageResponse,
@@ -330,6 +331,19 @@ export function usePackPopupController() {
     [applyFlowResponse, withBusy],
   );
 
+  const retryAllSupportedFullFiscalYearTarget = React.useCallback(
+    async (payload: AllSupportedFullFiscalYearTargetRecoveryPayload) => {
+      await withBusy("retry-all-supported-filed-returns-full-fiscal-year-target", async () => {
+        const response = await sendPackMessage({
+          type: "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET",
+          payload,
+        });
+        applyFlowResponse(response);
+      });
+    },
+    [applyFlowResponse, withBusy],
+  );
+
   const acknowledgeInterruptedRun = React.useCallback(async () => {
     await withBusy("acknowledge-interrupted-run", async () => {
       const response = await sendPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" });
@@ -480,6 +494,7 @@ export function usePackPopupController() {
     retryFiledReturnsTarget,
     retryFullFiscalYearTarget,
     restartAllSupportedFullFiscalYearFlow,
+    retryAllSupportedFullFiscalYearTarget,
     scope,
     scopeLockedForReview,
     scopedFlowSummary,
