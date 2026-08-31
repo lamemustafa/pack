@@ -51,6 +51,10 @@ const fullFiscalYearRunStateMocks = vi.hoisted(() => ({
 const allSupportedRunStateMocks = vi.hoisted(() => ({
   readAllSupportedPlanLedgersStorageState: vi.fn(),
 }));
+const allSupportedFlowMocks = vi.hoisted(() => ({
+  discardCompletedAllSupportedFullFiscalYearPlan: vi.fn(),
+  startAllSupportedFullFiscalYearDownloadFlow: vi.fn(),
+}));
 
 vi.mock("../../src/background/filed-returns-target-review", async (importOriginal) => ({
   ...(await importOriginal<typeof FiledReturnsTargetReviewModule>()),
@@ -75,6 +79,16 @@ vi.mock(
   "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state",
   () => allSupportedRunStateMocks,
 );
+vi.mock(
+  "../../src/background/filed-returns-all-supported-full-fiscal-year",
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    discardCompletedAllSupportedFullFiscalYearPlan:
+      allSupportedFlowMocks.discardCompletedAllSupportedFullFiscalYearPlan,
+    startAllSupportedFullFiscalYearDownloadFlow:
+      allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow,
+  }),
+);
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
   createMalformedArtifactAcquisitionCheckpointReference:
     mocks.createMalformedArtifactAcquisitionCheckpointReference,
@@ -86,6 +100,7 @@ vi.mock("../../src/background/filed-returns-single-period-flow", () => ({
 }));
 
 import {
+  startAllSupportedFiledReturnsFullFiscalYearDownloadFlow,
   startFiledReturnsDownloadFlow,
   startFreshFiledReturnsDownloadFlow,
 } from "../../src/background/filed-returns-flow-runner";
@@ -131,6 +146,17 @@ describe("filed returns retained target scoping", () => {
     allSupportedRunStateMocks.readAllSupportedPlanLedgersStorageState.mockResolvedValue({
       state: "valid",
       ledgers: [],
+    });
+    allSupportedFlowMocks.discardCompletedAllSupportedFullFiscalYearPlan.mockResolvedValue(null);
+    allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow.mockResolvedValue({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "clicked",
+        safeSignals: ["all-supported-plan-started"],
+        safeMessage: "Synthetic all-supported plan start.",
+      },
     });
   });
 
@@ -179,6 +205,36 @@ describe("filed returns retained target scoping", () => {
     });
     expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds a fresh all-supported plan after discarding its bound completed ledger", async () => {
+    // The discard request is bound to the displayed ledger, but the newly
+    // built plan must not inherit that vanished binding. Retaining it makes
+    // the fresh plan fail its own strict request validator.
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    const request = {
+      kind: "all-supported-returns-full-fiscal-year",
+      financialYear: "2026-27",
+      ledgerId: "full-fiscal-year-abc123de",
+    } as const;
+
+    const response = await startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+      request,
+      { storageKeys: {} } as never,
+      { discardCompletedPlanRoot: true },
+    );
+
+    expect(
+      allSupportedFlowMocks.discardCompletedAllSupportedFullFiscalYearPlan,
+    ).toHaveBeenCalledExactlyOnceWith(request, expect.anything());
+    expect(
+      allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow,
+    ).toHaveBeenCalledExactlyOnceWith(
+      { kind: request.kind, financialYear: request.financialYear },
+      expect.anything(),
+      expect.any(Function),
+    );
+    expect(response).toMatchObject({ flowStep: { safeSignals: ["all-supported-plan-started"] } });
   });
 
   it("does not let Start fresh discard another recovery while an all-supported plan needs review", async () => {

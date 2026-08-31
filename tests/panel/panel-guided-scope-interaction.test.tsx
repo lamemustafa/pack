@@ -839,6 +839,51 @@ describe("panel guided scope interaction", () => {
     });
   });
 
+  it("refreshes instead of restarting a retained root without its reviewed ledger", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const restart = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => undefined);
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: restart,
+          refreshFlowSummary: refresh,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            ledgerId: "projected-ledger",
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            totalTargets: 28,
+            terminalPlanRoots: [{ financialYear: "2025-26", status: "complete", periodCount: 12 }],
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    await clickButtonContaining("run everything last year");
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(restart).not.toHaveBeenCalled();
+  });
+
   it("blocks only a completed all-returns root instead of valid new scopes", async () => {
     await mount(
       {
