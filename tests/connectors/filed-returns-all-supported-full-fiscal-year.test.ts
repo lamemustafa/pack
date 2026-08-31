@@ -142,7 +142,11 @@ describe("all-supported full-fiscal-year plan", () => {
     ).toBe(false);
     for (const payload of [
       { kind: "all-supported-returns-full-fiscal-year", financialYear: "2025-26", ledgerId: 7 },
-      { kind: "all-supported-returns-full-fiscal-year", financialYear: "2025-26", ledgerId: "ledger-1" },
+      {
+        kind: "all-supported-returns-full-fiscal-year",
+        financialYear: "2025-26",
+        ledgerId: "ledger-1",
+      },
       {
         kind: "all-supported-returns-full-fiscal-year",
         financialYear: "2025-26",
