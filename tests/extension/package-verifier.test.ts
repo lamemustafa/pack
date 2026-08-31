@@ -691,12 +691,63 @@ describe("alpha builds", () => {
     expect(result.output).toContain("reachable from the panel");
   });
 
+  it.each([
+    [
+      "a noscript panel tag",
+      '<noscript><script type="module" src="/chunks/alpha-surface.js"></script></noscript>',
+    ],
+    [
+      "an SVG script element",
+      '<svg><script type="module" src="/chunks/alpha-surface.js"></script></svg>',
+    ],
+    [
+      "a document base",
+      '<base href="https://example.invalid/"><script type="module" src="/chunks/alpha-surface.js"></script>',
+    ],
+  ])("does not use %s as a panel module entry", async (_label, inertMarkup) => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script>${inertMarkup}</body></html>`,
+    );
+    await writePackageFile(
+      outputDir,
+      "chunks/alpha-surface.js",
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("reachable from the panel");
+  });
+
   it("does not treat protocol-relative imports as packaged module dependencies", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
       outputDir,
       "chunks/panel.js",
       'import "//chunks/alpha-surface.js";\nexport default 1;\n',
+    );
+    await writePackageFile(
+      outputDir,
+      "chunks/alpha-surface.js",
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("reachable from the panel");
+  });
+
+  it("does not follow a static import recovered from malformed JavaScript", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "chunks/panel.js",
+      'import "./alpha-surface.js";\nconst broken = ;\n',
     );
     await writePackageFile(
       outputDir,

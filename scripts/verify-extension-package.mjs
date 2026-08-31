@@ -53,10 +53,19 @@ async function reachableFromPanelHtml(dir) {
 }
 
 function panelModuleScriptSpecifiers(markup) {
-  const dom = new JSDOM(markup);
+  const dom = new JSDOM(markup, { runScripts: "outside-only" });
   try {
+    // Package pages never need a document base. Its presence makes the raw
+    // source attributes insufficient reachability evidence, so fail closed.
+    if (dom.window.document.querySelector("base")) return [];
     return [...dom.window.document.querySelectorAll('script[type="module"][src]')].flatMap(
       (script) => {
+        if (
+          script.namespaceURI !== "http://www.w3.org/1999/xhtml" ||
+          script.closest("noscript") !== null
+        ) {
+          return [];
+        }
         const specifier = script.getAttribute("src");
         return specifier ? [specifier] : [];
       },
@@ -74,6 +83,7 @@ function staticModuleSpecifiers(fileName, contents) {
     false,
     ts.ScriptKind.JS,
   );
+  if (source.parseDiagnostics.length > 0) return [];
   return source.statements.flatMap((statement) => {
     if (
       (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
