@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+  type FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   type FiledReturnsFlowSummary,
 } from "../../src/connectors/gst/filed-returns-contracts";
 import type { PackMessage } from "../../src/connectors/gst/messages";
@@ -637,6 +638,94 @@ describe("popup background failure presentation", () => {
     });
 
     await vi.waitFor(() => expect(controller?.lastRunSummary).toEqual(advancedSummary));
+    await act(async () => root?.unmount());
+  });
+
+  it("refreshes the visible all-supported target count when its persisted ledger advances", async () => {
+    const baseSummary = {
+      summaryIdentity: {
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      },
+      status: "running",
+      completedTargetIds: [],
+      targetEvidence: [
+        {
+          targetId: "synthetic-april",
+          financialYear: "2025-26",
+          period: "April",
+          returnType: "GSTR-3B",
+          artifactType: "PDF",
+          outcome: "pending",
+        },
+        {
+          targetId: "synthetic-may",
+          financialYear: "2025-26",
+          period: "May",
+          returnType: "GSTR-3B",
+          artifactType: "PDF",
+          outcome: "pending",
+        },
+      ],
+      totalTargets: 2,
+      flowStepScope: {
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+      },
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "ready",
+        safeSignals: ["all-supported-full-fiscal-year-run-active"],
+        safeMessage: "Synthetic all-supported run.",
+      },
+      resumeAvailable: false,
+    } as const satisfies FiledReturnsAllSupportedFullFiscalYearFlowSummary;
+    let currentSummary: FiledReturnsAllSupportedFullFiscalYearFlowSummary = baseSummary;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({ ok: true, allSupportedFullFiscalYearFlowSummary: currentSummary });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.allSupportedFullFiscalYearFlowSummary?.completedTargetIds).toHaveLength(0);
+
+    currentSummary = {
+      ...baseSummary,
+      completedTargetIds: ["synthetic-april"],
+      targetEvidence: [
+        { ...baseSummary.targetEvidence[0], outcome: "captured" },
+        baseSummary.targetEvidence[1],
+      ],
+    };
+    await act(async () => {
+      mocks.changeListeners.forEach((listener) =>
+        listener({ "pack:filed-returns-all-supported-plan:synthetic": { newValue: {} } }, "local"),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() =>
+      expect(controller?.allSupportedFullFiscalYearFlowSummary?.completedTargetIds).toHaveLength(1),
+    );
+    expect(
+      controller?.allSupportedFullFiscalYearFlowSummary?.targetEvidence.filter(
+        ({ outcome }) => outcome === "saved",
+      ),
+    ).toHaveLength(0);
     await act(async () => root?.unmount());
   });
 

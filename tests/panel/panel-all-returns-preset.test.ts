@@ -8,7 +8,7 @@ import { panelAllReturnsFullYearPreset } from "../../src/entrypoints/panel/panel
 const AS_OF = new Date("2026-08-30T00:00:00.000Z");
 
 describe("all-returns panel presets", () => {
-  it("derives the current-year label, partial-year note, and every displayed count from the eligible catalogue", () => {
+  it("derives the current-year label, return coverage, and plan counts from the eligible catalogue", () => {
     const financialYear = "2026-27";
     const preset = panelAllReturnsFullYearPreset(financialYear, AS_OF);
     const eligible = supportedFiledReturnsCatalogueEntries().filter(
@@ -24,6 +24,7 @@ describe("all-returns panel presets", () => {
       kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
       financialYear,
       label: "Everything this year",
+      returnTypes: eligible.map((entry) => entry.returnType),
       note: `Partial year · ${periodCount} eligible periods so far.`,
       returnCount: eligible.length,
       periodCount,
@@ -39,6 +40,7 @@ describe("all-returns panel presets", () => {
     expect(preset).toMatchObject({
       financialYear: "2025-26",
       label: "Everything last year",
+      returnTypes: ["GSTR-3B", "GSTR-1", "GSTR-2B"],
       note: "Complete financial year.",
       periodCount: 12,
       fileCount: 84,

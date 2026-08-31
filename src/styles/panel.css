@@ -100,6 +100,10 @@ html[data-pack-surface="panel"] body {
   font-variant-numeric: tabular-nums;
 }
 
+.panel-all-supported-run .panel-run-progress-track {
+  margin: 4px 0;
+}
+
 .panel-body h2 {
   margin: 0 0 14px;
   color: var(--pack-ink-primary);
@@ -122,6 +126,13 @@ html[data-pack-surface="panel"] body {
 .panel-preset-list {
   display: grid;
   gap: 8px;
+}
+
+.panel-everything-preset-group {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--pack-border-subtle);
+  padding-bottom: 12px;
 }
 
 .panel-preset {
@@ -151,20 +162,8 @@ html[data-pack-surface="panel"] body {
   outline-offset: 2px;
 }
 
-.panel-preset-count {
-  color: var(--pack-ink-muted);
-  font-family: var(--pack-font-mono);
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .panel-everything-preset {
-  min-height: 48px;
-}
-
-.panel-everything-preset .panel-preset-count {
-  white-space: normal;
+  min-height: 52px;
 }
 
 .panel-everything-preset-primary {
@@ -173,22 +172,19 @@ html[data-pack-surface="panel"] body {
 }
 
 .panel-everything-preset-primary > span:first-child {
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
 }
 
-.panel-everything-preset-primary .panel-preset-count {
+.panel-everything-preset-coverage {
+  color: var(--pack-ink-muted);
+  font-family: var(--pack-font-mono);
   font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .panel-preset-reason {
   margin: -2px 0 2px;
   color: var(--pack-warning-fg);
-  font-size: 0.75rem;
-}
-
-.panel-preset-note {
-  margin: -2px 0 2px;
-  color: var(--pack-ink-muted);
   font-size: 0.75rem;
 }
 

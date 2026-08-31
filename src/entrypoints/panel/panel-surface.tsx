@@ -240,14 +240,23 @@ function AllSupportedRunStatus({
 }: {
   summary: NonNullable<PackPanelController["allSupportedFullFiscalYearFlowSummary"]>;
 }) {
-  const saved = summary.targetEvidence.filter((target) => target.outcome === "saved").length;
+  const completed = summary.completedTargetIds.length;
+  const complete = summary.status === "complete";
   return (
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p aria-live="polite">
         <strong>
-          {saved} of {summary.totalTargets} saved
+          {complete ? "Run complete" : `${completed} of ${summary.totalTargets} targets checked`}
         </strong>
       </p>
+      <div className="panel-run-progress-track" aria-hidden="true">
+        <span style={{ width: `${(completed / summary.totalTargets) * 100}%` }} />
+      </div>
+      {complete ? (
+        <p>
+          {completed} of {summary.totalTargets} targets checked
+        </p>
+      ) : null}
       <p>{summary.flowStep.safeMessage}</p>
     </section>
   );
