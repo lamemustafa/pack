@@ -114,6 +114,27 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(container.textContent).not.toContain("Open a signed-in GST Portal tab before");
   });
 
+  it("keeps the active-run status without promising withheld retry controls", async () => {
+    const activeSummary = {
+      ...SAVED_FULL_YEAR,
+      status: "running" as const,
+      flowStep: {
+        ...SAVED_FULL_YEAR.flowStep,
+        safeSignals: ["full-fiscal-year-run-active"],
+      },
+    };
+    await mount(false, true, activeSummary);
+
+    // Positive control: this is the active-run branch, not a generic withheld recovery state.
+    expect(buttonLabels()).toContain("Run in progress");
+    expect(container.textContent).toContain(
+      getRecoveryFlowAvailability(activeSummary, false).guidance,
+    );
+    expect(container.textContent).not.toContain(
+      "Retry controls appear automatically if the run stops making progress.",
+    );
+  });
+
   it.each(["blocked", "failed"] as const)(
     "replaces hidden %s retry guidance in the packaged recovery block",
     async (targetStatus) => {

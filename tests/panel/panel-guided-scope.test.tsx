@@ -109,7 +109,10 @@ describe("panel guided scope", () => {
       label: "Full fiscal year (saved run)",
       disabled: true,
     });
-    expect(displayed.hint).toBe(`Choose one of: ${labels.join(", ")}.`);
+    // Positive control: the saved value stays visible, but it is not selectable in this build.
+    expect(labels).toContain("Full fiscal year (saved run)");
+    expect(displayed.hint).not.toContain("Full fiscal year (saved run)");
+    expect(displayed.hint).toBe(`Choose one of: ${labels.slice(1).join(", ")}.`);
   });
 
   it("derives a new production period hint from exactly its selectable options", () => {

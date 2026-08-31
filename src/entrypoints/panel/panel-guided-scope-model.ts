@@ -355,7 +355,7 @@ export function panelGuidedStepForDisplay(
     options,
     hint:
       step.key === "period"
-        ? `Choose one of: ${options.map((option) => option.label).join(", ")}.`
+        ? `Choose one of: ${selectableOptions.map((option) => option.label).join(", ")}.`
         : step.hint,
   };
 }
