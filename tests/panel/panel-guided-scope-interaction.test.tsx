@@ -738,6 +738,49 @@ describe("panel guided scope interaction", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it("refreshes instead of restarting a summary card without its reviewed ledger", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const restart = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => undefined);
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: restart,
+          refreshFlowSummary: refresh,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            totalTargets: 28,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    await clickButtonContaining("Discard this year's saved plan and run again");
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(restart).not.toHaveBeenCalled();
+  });
+
   it("restarts a retained root with that root's ledger, not the projected one", async () => {
     // More than one completed root can be retained, and each renders its own
     // restart control. Binding only `summaryIdentity` left every other root
