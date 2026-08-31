@@ -20,7 +20,24 @@ const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, "package.json")
 export default defineConfig({
   srcDir: "src",
   modules: ["@wxt-dev/module-react"],
-  vite: () => ({ build: { modulePreload: false } }),
+  vite: (env) => {
+    // `--mode alpha` selects which surfaces compile in; it does not mean "a
+    // development build". Vite derives `isProduction` from NODE_ENV, which it
+    // only defaults to production when the mode is literally "production", so
+    // an alpha build shipped the React development JSX transform and inlined
+    // absolute source paths -- including the builder's home directory -- into
+    // the bundle. Alpha builds are what live testing runs against, so they
+    // have to be production builds that merely expose more surface.
+    //
+    // The mode itself must stay "alpha": `import.meta.env.MODE === "alpha"`
+    // is the constant the alpha gate folds on, and rewriting it here would
+    // silently remove every gated surface.
+    // Gated on the command, not the mode. `wxt dev --mode alpha` serves the
+    // alpha-gated UI and needs the development transform and refresh; only a
+    // build produces the artifact that must not carry them.
+    if (env.command === "build") process.env.NODE_ENV = "production";
+    return { build: { modulePreload: false } };
+  },
   manifest: {
     name: PACK_EXTENSION_NAME,
     short_name: PACK_EXTENSION_SHORT_NAME,
