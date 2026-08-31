@@ -131,7 +131,10 @@ describe("all-supported full-fiscal-year ledger", () => {
     });
   });
 
-  it("withholds an explicit retry for a target whose pinned GST tab is unavailable", () => {
+  it.each([
+    "all-supported-full-fiscal-year-artifact-snapshot-mismatch",
+    "full-fiscal-year-pinned-gst-tab-unavailable",
+  ])("withholds an explicit retry for a non-resumable target: %s", (signal) => {
     const ledger = createLedger();
     const blocked = {
       ...ledger,
@@ -141,7 +144,7 @@ describe("all-supported full-fiscal-year ledger", () => {
           ? {
               ...target,
               status: "blocked" as const,
-              safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
+              safeSignals: [signal],
             }
           : target,
       ),

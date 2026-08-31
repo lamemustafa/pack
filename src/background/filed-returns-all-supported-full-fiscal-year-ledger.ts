@@ -31,6 +31,10 @@ const EXPLICIT_RETRY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetS
   "cancelled",
   "manually-observed",
 ]);
+const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
+  "all-supported-full-fiscal-year-artifact-snapshot-mismatch",
+  "full-fiscal-year-pinned-gst-tab-unavailable",
+]);
 
 /**
  * The first unresolved target is the only child an explicit retry may replay.
@@ -58,7 +62,7 @@ function isExplicitlyRetryableTarget(
 ): boolean {
   return (
     EXPLICIT_RETRY_TARGET_STATUSES.has(target.status) &&
-    !target.safeSignals.includes("full-fiscal-year-pinned-gst-tab-unavailable")
+    !target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal))
   );
 }
 
