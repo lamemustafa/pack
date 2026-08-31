@@ -1,10 +1,183 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import ts from "typescript";
 
-const outputDir = process.argv[2];
-if (!outputDir)
-  throw new Error("usage: node scripts/verify-extension-package.mjs <extension-output-dir>");
+const args = process.argv.slice(2);
+// An alpha build is a real distributable that live testing runs against, so it
+// needs every check here -- the home-path and telemetry checks caught a genuine
+// leak in one. It differs from a packaged build in exactly one respect: the
+// alpha surface marker must be present rather than absent. Without this flag
+// the marker check refuses the alpha output before anything else is inspected,
+// which left that build unverified entirely.
+const flags = args.filter((arg) => arg.startsWith("--"));
+const outputDirectories = args.filter((arg) => !arg.startsWith("--"));
+if (flags.some((flag) => flag !== "--alpha") || outputDirectories.length !== 1) {
+  throw new Error(
+    "usage: node scripts/verify-extension-package.mjs [--alpha] <extension-output-dir>",
+  );
+}
+const alphaMode = flags.includes("--alpha");
+// JSDOM is only evidence machinery for the alpha-only panel reachability
+// graph. Loading it for ordinary packaged-build verification makes every
+// short-lived verifier invocation pay its initialization cost.
+const JSDOM = alphaMode ? (await import("jsdom")).JSDOM : null;
+const outputDir = path.resolve(outputDirectories[0]);
+let sawAlphaSurfaceMarker = false;
+
+/**
+ * Every file the panel entry can actually load, followed through static imports.
+ * Alpha evidence is restricted to this set: a marker sitting in another page's
+ * bundle proves nothing about the panel surface, and a marker in a chunk nothing
+ * imports proves only that a string exists on disk.
+ */
+async function reachableFromPanelHtml(dir) {
+  const files = await listFiles(dir);
+  const queue = [];
+  const panelEntry = path.join(dir, "panel.html");
+  if (files.includes(panelEntry)) {
+    const html = await readFile(panelEntry, "utf8");
+    for (const specifier of panelModuleScriptSpecifiers(html)) {
+      queue.push(resolveOutputSpecifier(dir, panelEntry, specifier));
+    }
+  }
+  const reachable = new Set();
+  while (queue.length > 0) {
+    const next = queue.pop();
+    if (next === null || reachable.has(next) || !files.includes(next)) continue;
+    reachable.add(next);
+    if (!/\.js$/.test(next)) {
+      throw new Error(`Non-JavaScript module resource: ${path.relative(dir, next)}`);
+    }
+    const contents = await readFile(next, "utf8");
+    const specifiers = staticModuleSpecifiers(next, contents);
+    if (specifiers === null) {
+      throw new Error(`Malformed reachable module: ${path.relative(dir, next)}`);
+    }
+    for (const specifier of specifiers) {
+      const dependency = resolveOutputSpecifier(dir, next, specifier);
+      if (!/\.js$/.test(dependency ?? "") || dependency === null || !files.includes(dependency)) {
+        throw new Error(
+          `Unresolved static import ${JSON.stringify(specifier)} from ${path.relative(dir, next)}`,
+        );
+      }
+      queue.push(dependency);
+    }
+  }
+  return reachable;
+}
+
+function panelModuleScriptSpecifiers(markup) {
+  if (JSDOM === null) return [];
+  const dom = new JSDOM(markup, { runScripts: "outside-only" });
+  try {
+    // Package pages never need a document base. Its presence makes the raw
+    // source attributes insufficient reachability evidence, so fail closed.
+    if (dom.window.document.querySelector("base")) return [];
+    return [...dom.window.document.querySelectorAll('script[type="module"][src]')].flatMap(
+      (script) => {
+        if (
+          script.namespaceURI !== "http://www.w3.org/1999/xhtml" ||
+          script.closest("noscript") !== null
+        ) {
+          return [];
+        }
+        const specifier = script.getAttribute("src");
+        return specifier ? [specifier] : [];
+      },
+    );
+  } finally {
+    dom.window.close();
+  }
+}
+
+function staticModuleSpecifiers(fileName, contents) {
+  const source = ts.createSourceFile(
+    fileName,
+    contents,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.JS,
+  );
+  const transpiled = ts.transpileModule(contents, {
+    fileName,
+    reportDiagnostics: true,
+  });
+  if (
+    source.parseDiagnostics.length > 0 ||
+    transpiled.diagnostics?.some(
+      (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
+    )
+  ) {
+    return null;
+  }
+  return source.statements.flatMap((statement) => {
+    if (
+      (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
+      statement.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      return [statement.moduleSpecifier.text];
+    }
+    return [];
+  });
+}
+
+function hasRenderedAlphaSurfaceMarker(fileName, contents, marker) {
+  const source = ts.createSourceFile(
+    fileName,
+    contents,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.JS,
+  );
+  if (source.parseDiagnostics.length > 0) return false;
+  let rendered = false;
+  const jsxFactoryName = (expression) => {
+    if (ts.isParenthesizedExpression(expression)) return jsxFactoryName(expression.expression);
+    if (
+      ts.isBinaryExpression(expression) &&
+      expression.operatorToken.kind === ts.SyntaxKind.CommaToken
+    ) {
+      return jsxFactoryName(expression.right);
+    }
+    return ts.isPropertyAccessExpression(expression) ? expression.name.text : null;
+  };
+  const visit = (node) => {
+    if (rendered) return;
+    if (ts.isCallExpression(node) && ["jsx", "jsxs"].includes(jsxFactoryName(node.expression))) {
+      const properties = node.arguments[1];
+      if (properties !== undefined && ts.isObjectLiteralExpression(properties)) {
+        rendered = properties.properties.some(
+          (property) =>
+            ts.isPropertyAssignment(property) &&
+            ((ts.isStringLiteral(property.name) && property.name.text === marker) ||
+              (ts.isIdentifier(property.name) && property.name.text === marker)),
+        );
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return rendered;
+}
+
+function resolveOutputSpecifier(dir, fromFile, specifier) {
+  if (
+    /^[a-z]+:/i.test(specifier) ||
+    specifier.startsWith("//") ||
+    specifier.includes("#") ||
+    specifier.includes("?") ||
+    (!specifier.startsWith("/") && !specifier.startsWith("./") && !specifier.startsWith("../"))
+  ) {
+    return null;
+  }
+  return specifier.startsWith("/")
+    ? path.join(dir, specifier.slice(1))
+    : path.resolve(path.dirname(fromFile), specifier);
+}
+
+const reachableFiles = alphaMode ? await reachableFromPanelHtml(outputDir) : new Set();
 
 const harnessPolicyPath =
   process.env.PACK_HARNESS_POLICY_PATH ??
@@ -263,6 +436,17 @@ const forbiddenPackSourcePatterns = [
 // marker is removed from a production bundle by Vite's compile-time mode
 // replacement; finding it in a release package means the exclusion failed.
 const forbiddenAlphaSurfaceMarkers = ["data-pack-alpha-surface"];
+// A distributable is never a development build, whatever mode produced it. The
+// home-path check catches one symptom of the React development transform, but
+// only when the builder's path matches a known home pattern -- a build made
+// under `/workspace` or a CI checkout leaks nothing recognisable and would pass
+// while still shipping the development runtime. These name the transform
+// itself.
+const forbiddenDevelopmentRuntimeMarkers = [
+  "jsxDEV",
+  "react/jsx-dev-runtime",
+  "react-jsx-dev-runtime",
+];
 const forbiddenRawArtifactHandoffPatterns = [
   {
     label: "raw artifact dataUrl postMessage",
@@ -295,11 +479,22 @@ for (const file of await listFiles(outputDir)) {
     assertNoForbiddenTelemetry(contents, file);
     assertNoHarnessPolicyLeaks(contents, file);
     assertNoPathfulGstPortalUrl(contents, file);
-    for (const marker of forbiddenAlphaSurfaceMarkers) {
+    for (const marker of forbiddenDevelopmentRuntimeMarkers) {
       if (contents.includes(marker)) {
+        throw new Error(
+          `React development marker ${marker} in ${path.relative(process.cwd(), file)}; this is a development build.`,
+        );
+      }
+    }
+    for (const marker of forbiddenAlphaSurfaceMarkers) {
+      if (!contents.includes(marker)) continue;
+      if (!alphaMode) {
         throw new Error(
           `Alpha surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
         );
+      }
+      if (reachableFiles.has(file) && hasRenderedAlphaSurfaceMarker(file, contents, marker)) {
+        sawAlphaSurfaceMarker = true;
       }
     }
   }
@@ -336,7 +531,19 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
   assertNoForbiddenTelemetry(contents, file);
 }
 
-console.log("Pack WXT extension package verification passed.");
+if (alphaMode && !sawAlphaSurfaceMarker) {
+  // A silently gate-less "alpha" build is the failure this mode exists to
+  // catch: it would pass every other check while shipping none of the surface
+  // the build was made to exercise.
+  throw new Error(
+    `No alpha surface marker reachable from the panel in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
+  );
+}
+console.log(
+  alphaMode
+    ? "Pack WXT alpha extension package verification passed."
+    : "Pack WXT extension package verification passed.",
+);
 
 /** Reads a packaged file, or fails naming the file rather than crashing with a raw ENOENT. */
 
