@@ -40,7 +40,7 @@ describe("panel guided scope", () => {
     vi.unstubAllEnvs();
   });
 
-  it("orders a complete-year recipe, a partial-year recipe, return recipes, and the advanced door", () => {
+  it("renders quiet, grouped recipes without format, period, or file-count promises", () => {
     const markup = renderGuide();
     const controlCount =
       (markup.match(/<select/g) ?? []).length +
@@ -48,14 +48,22 @@ describe("panel guided scope", () => {
       (markup.match(/<summary/g) ?? []).length;
 
     expect(controlCount).toBe(6);
-    expect(markup).toContain("Everything last year · all supported returns");
-    expect(markup).toContain("Complete financial year.");
-    expect(markup).toContain("Everything this year · all supported returns");
-    expect(markup).toContain("Partial year · 4 eligible periods so far.");
+    // Precondition: these assertions exercise both distinct all-return choices and the return cards.
+    expect((markup.match(/panel-everything-preset/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect((markup.match(/class="panel-preset/g) ?? []).length).toBeGreaterThanOrEqual(5);
+    expect(markup).toContain("Everything last year");
+    expect(markup).toContain("Everything this year");
+    expect(markup).toContain("3B · R1 · 2B");
     expect(markup).toContain("This year&#x27;s GSTR-3B");
     expect(markup).toContain("This year&#x27;s GSTR-1");
     expect(markup).toContain("This year&#x27;s GSTR-2B");
     expect(markup).toContain("Choose return, year and period");
+    expect(markup).toContain("panel-everything-preset-group");
+    expect(markup).not.toContain("all supported returns");
+    expect(markup).not.toContain("Complete financial year.");
+    expect(markup).not.toContain("eligible periods so far");
+    expect(markup).not.toContain("up to ");
+    expect(markup).not.toContain("all formats");
     expect(markup).not.toContain("Catalogue &amp; limits");
     expect(markup).not.toContain("Step 1 of 4");
   });

@@ -361,14 +361,11 @@ describe("panel guided scope interaction", () => {
     );
     expect(presets.length).toBeGreaterThan(0);
     expect(dom.window.document.activeElement).toBe(previousControl);
-    expect(presets[0]?.textContent).toContain("Everything last year · all supported returns");
-    expect(presets[0]?.textContent).toContain(
-      "3 returns · 12 periods each · up to 84 files · one ZIP",
-    );
-    expect(container.textContent).toContain("Complete financial year.");
-    expect(presets[1]?.textContent).toContain("Everything this year · all supported returns");
-    expect(container.textContent).toContain("Partial year · 4 eligible periods so far.");
-    expect(presets[0]?.getAttribute("aria-label")).toContain("all supported returns");
+    expect(presets[0]?.textContent).toBe("Everything last year3B · R1 · 2B");
+    expect(presets[1]?.textContent).toBe("Everything this year3B · R1 · 2B");
+    expect(presets[0]?.getAttribute("aria-label")).toBe("Everything last year. 3B · R1 · 2B.");
+    expect(container.textContent).not.toContain("up to ");
+    expect(container.textContent).not.toContain("periods each");
 
     await act(async () => {
       presets[0]?.dispatchEvent(realmEvent("click"));
@@ -545,8 +542,8 @@ describe("panel guided scope interaction", () => {
     const current = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
     ).find((button) => button.textContent?.includes("Everything this year"));
-    expect(current?.textContent).toContain("3 returns · 4 periods each · up to 28 files");
-    expect(container.textContent).toContain("Saved plan · 4 eligible periods retained.");
+    expect(current?.textContent).toBe("Everything this year3B · R1 · 2B");
+    expect(container.textContent).not.toContain("up to 28 files");
     await act(async () => {
       current?.dispatchEvent(realmEvent("click"));
       await Promise.resolve();
@@ -698,7 +695,7 @@ describe("panel guided scope interaction", () => {
     const current = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
     ).find((button) => button.textContent?.includes("Everything this year"));
-    expect(current?.textContent).toContain("5 periods each");
+    expect(current?.textContent).toBe("Everything this year3B · R1 · 2B");
     expect(current?.disabled).toBe(false);
   });
 
@@ -894,22 +891,24 @@ describe("panel guided scope interaction", () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
-  it("advertises the same planned period count that a preset starts", async () => {
+  it("starts its planned scope without exposing a second card count", async () => {
     const started: FiledReturnsDownloadScope[] = [];
     await mount({ onStart: (scope) => started.push(scope) }, false, false);
     const preset = Array.from(container.querySelectorAll(".panel-preset")).find((candidate) =>
       candidate.textContent?.includes("This year's GSTR-3B"),
     );
-    const advertised = Number(
-      /\d+/.exec(preset?.querySelector(".panel-preset-count")?.textContent ?? "")?.[0],
-    );
+    expect(preset?.querySelector(".panel-preset-count")).toBeNull();
+    expect(preset?.textContent).not.toMatch(/\b\d+\s+period/);
     await act(async () => {
       preset?.dispatchEvent(realmEvent("click"));
       await Promise.resolve();
     });
 
     expect(started).toHaveLength(1);
-    expect(getFiledReturnsFullFiscalYearPeriods(started[0]!.financialYear).length).toBe(advertised);
+    expect(started[0]!.period).toBe("FULL_FISCAL_YEAR");
+    expect(getFiledReturnsFullFiscalYearPeriods(started[0]!.financialYear).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("refreshes a preset instead of starting a plan whose eligibility changed", async () => {

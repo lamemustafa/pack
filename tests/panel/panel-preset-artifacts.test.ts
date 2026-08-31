@@ -23,11 +23,11 @@ describe("preset artifact selection", () => {
     }
   });
 
-  it("states the format on the card", () => {
+  it("keeps format selection in the action scope rather than a card promise", () => {
     const presets = panelFullFiscalYearPresets("2026-27", AS_OF);
     expect(presets.length).toBeGreaterThan(0);
     for (const preset of presets) {
-      expect(preset.artifactLabel, `${preset.scope.returnType} label`).toBeTruthy();
+      expect(preset.scope.artifactType, `${preset.scope.returnType} scope`).toBeTruthy();
     }
   });
 
