@@ -375,8 +375,9 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
       );
       if (discardResponse) return discardResponse;
     }
+    const planRoot = { kind: request.kind, financialYear: request.financialYear };
     return startAllSupportedFullFiscalYearDownloadFlow(
-      request,
+      planRoot,
       deps as never,
       startSinglePeriodFiledReturnsDownloadFlow,
     );

@@ -87,11 +87,13 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
       await pack.refreshFlowSummary();
       return;
     }
+    if (allSupportedSummary.ledgerId === undefined) {
+      await pack.refreshFlowSummary();
+      return;
+    }
     await pack.restartAllSupportedFullFiscalYearFlow({
       ...allSupportedSummary.summaryIdentity,
-      ...(allSupportedSummary.ledgerId === undefined
-        ? {}
-        : { ledgerId: allSupportedSummary.ledgerId }),
+      ledgerId: allSupportedSummary.ledgerId,
     });
   };
   const allSupportedNeedsRecovery = Boolean(
@@ -273,9 +275,18 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 // The plan already carries the ledger id of the root whose
                 // control was clicked, which is not always the projected
                 // summary's: several completed roots can each render one.
-                onRestartAllReturnsFullYear={(plan) =>
-                  void pack.restartAllSupportedFullFiscalYearFlow(plan)
-                }
+                onRestartAllReturnsFullYear={(plan) => {
+                  const ledgerId = plan.ledgerId;
+                  if (ledgerId === undefined) {
+                    void pack.refreshFlowSummary();
+                    return;
+                  }
+                  void pack.restartAllSupportedFullFiscalYearFlow({
+                    kind: plan.kind,
+                    financialYear: plan.financialYear,
+                    ledgerId,
+                  });
+                }}
               />
             )}
           </>

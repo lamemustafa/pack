@@ -95,7 +95,7 @@ export type PackMessage =
   | {
       type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW";
       /** Names the reviewed ledger so a superseded root is refused, not removed. */
-      payload: FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId?: string };
+      payload: FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId: string };
     }
   | {
       type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";

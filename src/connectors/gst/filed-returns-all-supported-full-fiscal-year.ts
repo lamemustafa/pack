@@ -15,6 +15,7 @@ import {
   isFiledReturnsFinancialYear as hasConsecutiveFinancialYear,
 } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import { isCanonicalFullFiscalYearLedgerId } from "./filed-returns-ledger-id";
 
 export interface FiledReturnsAllSupportedFullFiscalYearPlanTarget {
   returnType: FiledReturnsReturnType;
@@ -81,16 +82,15 @@ export function isAllSupportedFullFiscalYearRequest(
  * message is keyed on, and letting an extra field through there would weaken
  * the boundary for all of them.
  *
- * The bound id stays optional. A summary persisted before the field existed
- * must remain discardable rather than become permanently stuck.
+ * A restart without the ledger it reviewed cannot prove which completed plan it
+ * is authorised to discard, so it is rejected at the message boundary.
  */
 export function isAllSupportedFullFiscalYearRestartRequest(
   input: unknown,
-): input is FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId?: string } {
+): input is FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId: string } {
   if (!isRecord(input)) return false;
   if (!hasOnlyKeys(input, ["kind", "financialYear", "ledgerId"])) return false;
-  if (input.ledgerId !== undefined && typeof input.ledgerId !== "string") return false;
-  if (input.ledgerId !== undefined && input.ledgerId.length === 0) return false;
+  if (!isCanonicalFullFiscalYearLedgerId(input.ledgerId)) return false;
   return (
     input.kind === FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND &&
     isFiledReturnsFinancialYear(input.financialYear)
