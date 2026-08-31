@@ -162,6 +162,36 @@ describe("all-supported full-fiscal-year plan", () => {
     }
   });
 
+  it("accepts only an exactly revision-bound all-supported target retry message", () => {
+    const payload = {
+      financialYear: "2025-26",
+      ledgerId: "full-fiscal-year-abc123de",
+      targetId: "GSTR-3B:2025-26:April",
+      expectedRevision: 7,
+    };
+    expect(
+      isPackMessage({
+        type: "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET",
+        payload,
+      }),
+    ).toBe(true);
+    for (const [name, invalidPayload] of [
+      ["missing revision", { ...payload, expectedRevision: undefined }],
+      ["zero revision", { ...payload, expectedRevision: 0 }],
+      ["bad ledger", { ...payload, ledgerId: "not-a-ledger" }],
+      ["unsupported year", { ...payload, financialYear: "2099-00" }],
+      ["extra field", { ...payload, returnType: "GSTR-3B" }],
+    ] as const) {
+      expect(
+        isPackMessage({
+          type: "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET",
+          payload: invalidPayload,
+        }),
+        name,
+      ).toBe(false);
+    }
+  });
+
   it("accepts the root protocol message and rejects widened or malformed payloads", () => {
     expect(
       isPackMessage({

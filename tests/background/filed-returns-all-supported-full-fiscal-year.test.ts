@@ -5,6 +5,7 @@ import {
 } from "../../src/connectors/gst/filed-returns-contracts";
 import {
   restartCompletedAllSupportedFullFiscalYearPlan,
+  retryAllSupportedFullFiscalYearTarget,
   reconcilePendingAllSupportedFullFiscalYearZipDownload,
   reconcilePersistedAllSupportedFullFiscalYearZipDownload,
   startAllSupportedFullFiscalYearDownloadFlow,
@@ -510,6 +511,58 @@ describe("all-supported full-fiscal-year worker", () => {
     });
     expect(runner).toHaveBeenCalledTimes(partialCheckpoint.targets.length);
     expect(savedLedger().targetPlan).toEqual(partialCheckpoint.targetPlan);
+  });
+
+  it("retries only the current reviewed all-supported target after persisting its reset", async () => {
+    const blockedRunner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, blockedRunner);
+    const blocked = savedLedger();
+    const blockedTarget = blocked.targets[0];
+    if (!blockedTarget) throw new Error("expected the first target to be blocked");
+    expect(blockedTarget.status).toBe("blocked");
+    expect(blocked.targets.slice(1).every((target) => target.status === "pending")).toBe(true);
+
+    const staleRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const staleResponse = await retryAllSupportedFullFiscalYearTarget(
+      {
+        financialYear: request.financialYear,
+        ledgerId: blocked.ledgerId,
+        targetId: blockedTarget.targetId,
+        expectedRevision: blocked.revision + 1,
+      },
+      deps,
+      staleRunner,
+    );
+    expect(staleResponse).toMatchObject({
+      flowStep: { safeSignals: ["all-supported-full-fiscal-year-recovery-stale"] },
+    });
+    expect(staleRunner).not.toHaveBeenCalled();
+
+    const retriedScopes: string[] = [];
+    const retryRunner = vi.fn<SinglePeriodRunner>(async (scope) => {
+      retriedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
+      return notFiledStep();
+    });
+    const response = await retryAllSupportedFullFiscalYearTarget(
+      {
+        financialYear: request.financialYear,
+        ledgerId: blocked.ledgerId,
+        targetId: blockedTarget.targetId,
+        expectedRevision: blocked.revision,
+      },
+      deps,
+      retryRunner,
+    );
+
+    expect(response).toMatchObject({
+      allSupportedFullFiscalYearFlowSummary: { status: "complete" },
+    });
+    expect(retriedScopes[0]).toBe(
+      `${blockedTarget.returnType}:${blockedTarget.period}:${blockedTarget.artifactType}`,
+    );
+    expect(retriedScopes).toHaveLength(blocked.targets.length);
+    expect(savedLedger().targets[0]).toMatchObject({ status: "not-filed", attempts: 2 });
+    expect(savedLedger().revision).toBeGreaterThan(blocked.revision);
   });
 
   it("creates a new completed plan when the current eligible period has advanced", async () => {

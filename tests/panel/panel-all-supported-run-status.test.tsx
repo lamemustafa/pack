@@ -92,6 +92,8 @@ function actionButton(markup: string, label: string): string {
 const restartButton = (markup: string) =>
   actionButton(markup, "Discard this year&#x27;s saved plan and run again");
 const resumeButton = (markup: string) => actionButton(markup, "Resume this plan");
+const retryTargetButton = (markup: string) =>
+  actionButton(markup, "Review Downloads, then retry GSTR-3B for April");
 
 describe("all-supported panel progress", () => {
   afterEach(() => {
@@ -155,6 +157,23 @@ describe("all-supported panel progress", () => {
     // them would disable the only productive control the reader has.
     const localOnly = { ...portalBound, resumeMode: "local-only" } as const;
     expect(resumeButton(render(localOnly, SIGNED_OUT))).not.toContain("disabled");
+  });
+
+  it("renders an explicit, portal-bound retry for the exact review target", () => {
+    vi.stubEnv("MODE", "alpha");
+    const reviewable = {
+      ...summary(["pending"], "running", []),
+      allSupportedFullFiscalYearRecovery: {
+        targetId: "synthetic-0",
+        expectedRevision: 7,
+        targetStatus: "download-unconfirmed" as const,
+      },
+    };
+
+    const signedOut = render(reviewable, SIGNED_OUT);
+    expect(signedOut).toContain("Review Downloads, then retry GSTR-3B for April");
+    expect(retryTargetButton(signedOut)).toContain("disabled");
+    expect(retryTargetButton(render(reviewable))).not.toContain("disabled");
   });
 
   it("puts an explicit same-year restart beside the completed summary", () => {

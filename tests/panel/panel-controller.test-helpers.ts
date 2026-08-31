@@ -29,6 +29,7 @@ export function panelController(overrides: Partial<PackPanelController> = {}): P
     resolveUnconfirmedDownload: async () => undefined,
     retryFiledReturnsTarget: async () => undefined,
     retryFullFiscalYearTarget: async () => undefined,
+    retryAllSupportedFullFiscalYearTarget: async () => undefined,
     restartAllSupportedFullFiscalYearFlow: async () => undefined,
     scope: PANEL_TEST_SCOPE,
     scopeLockedForReview: false,

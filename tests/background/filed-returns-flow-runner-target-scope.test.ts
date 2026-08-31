@@ -53,6 +53,7 @@ const allSupportedRunStateMocks = vi.hoisted(() => ({
 }));
 const allSupportedFlowMocks = vi.hoisted(() => ({
   restartCompletedAllSupportedFullFiscalYearPlan: vi.fn(),
+  retryAllSupportedFullFiscalYearTarget: vi.fn(),
   startAllSupportedFullFiscalYearDownloadFlow: vi.fn(),
 }));
 
@@ -85,6 +86,8 @@ vi.mock(
     ...(await importOriginal()),
     restartCompletedAllSupportedFullFiscalYearPlan:
       allSupportedFlowMocks.restartCompletedAllSupportedFullFiscalYearPlan,
+    retryAllSupportedFullFiscalYearTarget:
+      allSupportedFlowMocks.retryAllSupportedFullFiscalYearTarget,
     startAllSupportedFullFiscalYearDownloadFlow:
       allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow,
   }),
@@ -100,6 +103,7 @@ vi.mock("../../src/background/filed-returns-single-period-flow", () => ({
 }));
 
 import {
+  retryAllSupportedFiledReturnsFullFiscalYearTarget,
   startAllSupportedFiledReturnsFullFiscalYearDownloadFlow,
   startFiledReturnsDownloadFlow,
   startFreshFiledReturnsDownloadFlow,
@@ -165,6 +169,16 @@ describe("filed returns retained target scoping", () => {
         state: "clicked",
         safeSignals: ["all-supported-plan-started"],
         safeMessage: "Synthetic all-supported plan start.",
+      },
+    });
+    allSupportedFlowMocks.retryAllSupportedFullFiscalYearTarget.mockResolvedValue({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "clicked",
+        safeSignals: ["all-supported-target-retried"],
+        safeMessage: "Synthetic all-supported target retry.",
       },
     });
   });
@@ -239,6 +253,38 @@ describe("filed returns retained target scoping", () => {
       allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow,
     ).not.toHaveBeenCalled();
     expect(response).toMatchObject({ flowStep: { safeSignals: ["all-supported-plan-restarted"] } });
+  });
+
+  it("will not retry one all-supported target while a different saved root needs review", async () => {
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    allSupportedRunStateMocks.readAllSupportedPlanLedgersStorageState.mockResolvedValue({
+      state: "valid",
+      ledgers: [
+        {
+          status: "blocked",
+          planRoot: {
+            kind: "all-supported-returns-full-fiscal-year",
+            financialYear: "2025-26",
+          },
+        },
+      ],
+    });
+
+    const response = await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+      {
+        financialYear: "2026-27",
+        ledgerId: "full-fiscal-year-abc123de",
+        targetId: "GSTR-3B:2026-27:June",
+        expectedRevision: 4,
+      },
+      { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: { safeSignals: ["all-supported-full-fiscal-year-run-needs-action"] },
+    });
+    expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+    expect(allSupportedFlowMocks.retryAllSupportedFullFiscalYearTarget).not.toHaveBeenCalled();
   });
 
   it("does not let Start fresh discard another recovery while an all-supported plan needs review", async () => {
