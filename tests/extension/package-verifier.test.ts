@@ -571,10 +571,15 @@ describe("alpha builds", () => {
     expect(result.output).toContain("this is not an alpha build");
   });
 
-  it("accepts an alpha build that carries the marker and nothing else new", async () => {
+  it("accepts an alpha build whose panel actually loads the gated surface", async () => {
     const outputDir = await createValidPackage();
     await writeFile(
-      path.join(outputDir, "alpha-surface.js"),
+      path.join(outputDir, "chunks", "panel.js"),
+      'import "./alpha-surface.js";\nexport default 1;\n',
+      "utf8",
+    );
+    await writeFile(
+      path.join(outputDir, "chunks", "alpha-surface.js"),
       'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
       "utf8",
     );
@@ -583,6 +588,44 @@ describe("alpha builds", () => {
 
     expect(result.output).toContain("alpha extension package verification passed");
     expect(result.status).toBe(0);
+  });
+
+  it("refuses a marker no entry can reach", async () => {
+    // A gated surface compiled out of the panel while a stale chunk still holds
+    // the string would otherwise read as a correctly gated build.
+    const outputDir = await createValidPackage();
+    await writeFile(
+      path.join(outputDir, "orphan-surface.js"),
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("reachable from an HTML entry");
+  });
+
+  it("refuses the React development transform in an alpha build", async () => {
+    // Names the transform rather than inferring it from a leaked home path: a
+    // build made under a directory the redaction policy does not recognise
+    // leaks nothing recognisable and would otherwise pass.
+    const outputDir = await createValidPackage();
+    await writeFile(
+      path.join(outputDir, "chunks", "panel.js"),
+      'import "./alpha-surface.js";\nimport { jsxDEV } from "react/jsx-dev-runtime";\nexport default jsxDEV;\n',
+      "utf8",
+    );
+    await writeFile(
+      path.join(outputDir, "chunks", "alpha-surface.js"),
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("this is a development build");
   });
 
   it("still rejects a builder path in an alpha build", async () => {

@@ -17,6 +17,46 @@ if (!outputDir)
   );
 let sawAlphaSurfaceMarker = false;
 
+/**
+ * Every file an HTML entry can actually load, followed through static imports.
+ * Alpha evidence is restricted to this set: a marker sitting in a chunk nothing
+ * imports proves only that a string exists on disk, so a build whose gated
+ * surface had been compiled out of the panel would still look gated.
+ */
+async function reachableFromHtmlEntries(dir) {
+  const files = await listFiles(dir);
+  const queue = [];
+  for (const file of files.filter((candidate) => /\.html$/.test(candidate))) {
+    const html = await readFile(file, "utf8");
+    for (const match of html.matchAll(/<script\b[^>]*\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+      const specifier = match[1] ?? match[2];
+      if (specifier) queue.push(resolveOutputSpecifier(dir, file, specifier));
+    }
+  }
+  const reachable = new Set();
+  while (queue.length > 0) {
+    const next = queue.pop();
+    if (next === null || reachable.has(next) || !files.includes(next)) continue;
+    reachable.add(next);
+    if (!/\.js$/.test(next)) continue;
+    const contents = await readFile(next, "utf8");
+    for (const match of contents.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*(?:"([^"]*)"|'([^']*)')/g)) {
+      const specifier = match[1] ?? match[2];
+      if (specifier) queue.push(resolveOutputSpecifier(dir, next, specifier));
+    }
+  }
+  return reachable;
+}
+
+function resolveOutputSpecifier(dir, fromFile, specifier) {
+  if (/^[a-z]+:/i.test(specifier)) return null;
+  return specifier.startsWith("/")
+    ? path.join(dir, specifier.slice(1))
+    : path.resolve(path.dirname(fromFile), specifier);
+}
+
+const reachableFiles = alphaMode ? await reachableFromHtmlEntries(outputDir) : new Set();
+
 const harnessPolicyPath =
   process.env.PACK_HARNESS_POLICY_PATH ??
   path.join(process.cwd(), "policies", "agent-harness-policy.snapshot.json");
@@ -274,6 +314,17 @@ const forbiddenPackSourcePatterns = [
 // marker is removed from a production bundle by Vite's compile-time mode
 // replacement; finding it in a release package means the exclusion failed.
 const forbiddenAlphaSurfaceMarkers = ["data-pack-alpha-surface"];
+// A distributable is never a development build, whatever mode produced it. The
+// home-path check catches one symptom of the React development transform, but
+// only when the builder's path matches a known home pattern -- a build made
+// under `/workspace` or a CI checkout leaks nothing recognisable and would pass
+// while still shipping the development runtime. These name the transform
+// itself.
+const forbiddenDevelopmentRuntimeMarkers = [
+  "jsxDEV",
+  "react/jsx-dev-runtime",
+  "react-jsx-dev-runtime",
+];
 const forbiddenRawArtifactHandoffPatterns = [
   {
     label: "raw artifact dataUrl postMessage",
@@ -306,6 +357,13 @@ for (const file of await listFiles(outputDir)) {
     assertNoForbiddenTelemetry(contents, file);
     assertNoHarnessPolicyLeaks(contents, file);
     assertNoPathfulGstPortalUrl(contents, file);
+    for (const marker of forbiddenDevelopmentRuntimeMarkers) {
+      if (contents.includes(marker)) {
+        throw new Error(
+          `React development marker ${marker} in ${path.relative(process.cwd(), file)}; this is a development build.`,
+        );
+      }
+    }
     for (const marker of forbiddenAlphaSurfaceMarkers) {
       if (!contents.includes(marker)) continue;
       if (!alphaMode) {
@@ -313,7 +371,7 @@ for (const file of await listFiles(outputDir)) {
           `Alpha surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
         );
       }
-      sawAlphaSurfaceMarker = true;
+      if (reachableFiles.has(file)) sawAlphaSurfaceMarker = true;
     }
   }
   if (/\.svg$/.test(file)) {
@@ -354,7 +412,7 @@ if (alphaMode && !sawAlphaSurfaceMarker) {
   // catch: it would pass every other check while shipping none of the surface
   // the build was made to exercise.
   throw new Error(
-    `No alpha surface marker found in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
+    `No alpha surface marker reachable from an HTML entry in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
   );
 }
 console.log(
