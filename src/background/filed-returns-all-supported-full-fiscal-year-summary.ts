@@ -100,6 +100,7 @@ export function toAllSupportedFullFiscalYearSummary(
       outcome: targetOutcome(target, zipDelivered),
     })),
     totalTargets: ledger.targets.length,
+    ledgerId: ledger.ledgerId,
     ...(ledger.currentTargetId ? { currentTargetId: ledger.currentTargetId } : {}),
     flowStepScope,
     flowStep,
@@ -116,6 +117,7 @@ export function allSupportedTerminalPlanRoots(
         financialYear: ledger.planRoot.financialYear,
         status: ledger.status,
         periodCount: new Set(ledger.targets.map((target) => target.period)).size,
+        ledgerId: ledger.ledgerId,
       },
     ];
   });

@@ -15,6 +15,7 @@ import {
   isFiledReturnsFinancialYear as hasConsecutiveFinancialYear,
 } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import { isCanonicalFullFiscalYearLedgerId } from "./filed-returns-ledger-id";
 
 export interface FiledReturnsAllSupportedFullFiscalYearPlanTarget {
   returnType: FiledReturnsReturnType;
@@ -69,6 +70,28 @@ export function isAllSupportedFullFiscalYearRequest(
   return (
     isRecord(input) &&
     hasOnlyKeys(input, ["kind", "financialYear"]) &&
+    input.kind === FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND &&
+    isFiledReturnsFinancialYear(input.financialYear)
+  );
+}
+
+/**
+ * A restart names the ledger the reader reviewed, so its payload carries one
+ * key the plain root predicate refuses. Validated separately rather than by
+ * widening that predicate: the root identity is what every other all-supported
+ * message is keyed on, and letting an extra field through there would weaken
+ * the boundary for all of them.
+ *
+ * A restart without the ledger it reviewed cannot prove which completed plan it
+ * is authorised to discard, so it is rejected at the message boundary.
+ */
+export function isAllSupportedFullFiscalYearRestartRequest(
+  input: unknown,
+): input is FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId: string } {
+  if (!isRecord(input)) return false;
+  if (!hasOnlyKeys(input, ["kind", "financialYear", "ledgerId"])) return false;
+  if (!isCanonicalFullFiscalYearLedgerId(input.ledgerId)) return false;
+  return (
     input.kind === FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND &&
     isFiledReturnsFinancialYear(input.financialYear)
   );

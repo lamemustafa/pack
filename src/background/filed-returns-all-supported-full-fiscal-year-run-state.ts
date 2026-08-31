@@ -171,8 +171,11 @@ async function removeAllSupportedFullFiscalYearLedgerWithinOperation(
     throw new Error("Pack could not match the all-supported saved plan before removing it.");
   }
   delete index.ledgerIdsByPlanRoot[planRootKey];
-  await browser.storage.local.remove(allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId));
   await browser.storage.local.set({ [indexKey]: index });
+  // An MV3 worker can stop between awaits. Leaving a replaceable terminal ledger
+  // without an index entry is readable and recoverable; leaving an index entry
+  // that points at a removed ledger makes the entire root store malformed.
+  await browser.storage.local.remove(allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId));
 }
 
 export async function clearAllSupportedFullFiscalYearLedgerPlans(

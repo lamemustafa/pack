@@ -311,6 +311,25 @@ export function usePackPopupController() {
     [applyFlowResponse, withBusy],
   );
 
+  const restartAllSupportedFullFiscalYearFlow = React.useCallback(
+    async (plan: FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId: string }) => {
+      await withBusy("restart-all-supported-filed-returns-full-fiscal-year-flow", async () => {
+        const response = await sendPackMessage({
+          type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+          payload: {
+            kind: plan.kind,
+            financialYear: plan.financialYear,
+            // Names the ledger the reader reviewed. The background refuses when
+            // the indexed ledger for this root has been replaced since.
+            ledgerId: plan.ledgerId,
+          },
+        });
+        applyFlowResponse(response);
+      });
+    },
+    [applyFlowResponse, withBusy],
+  );
+
   const acknowledgeInterruptedRun = React.useCallback(async () => {
     await withBusy("acknowledge-interrupted-run", async () => {
       const response = await sendPackMessage({ type: "PACK_ACKNOWLEDGE_INTERRUPTED_RUN" });
@@ -460,6 +479,7 @@ export function usePackPopupController() {
     resolveUnconfirmedDownload,
     retryFiledReturnsTarget,
     retryFullFiscalYearTarget,
+    restartAllSupportedFullFiscalYearFlow,
     scope,
     scopeLockedForReview,
     scopedFlowSummary,
