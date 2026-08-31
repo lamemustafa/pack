@@ -603,7 +603,28 @@ describe("alpha builds", () => {
     const result = await runVerifier(outputDir, {}, ["--alpha"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("reachable from an HTML entry");
+    expect(result.output).toContain("reachable from the panel");
+  });
+
+  it("refuses an alpha marker only another extension page can reach", async () => {
+    const outputDir = await createValidPackage();
+    // Positive control: this marker is genuinely reachable from offscreen.html,
+    // so a traversal rooted in every packaged page accepts the invalid alpha.
+    await writeFile(
+      path.join(outputDir, "chunks", "offscreen.js"),
+      'import "./alpha-surface.js";\nexport default 1;\n',
+      "utf8",
+    );
+    await writeFile(
+      path.join(outputDir, "chunks", "alpha-surface.js"),
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("reachable from the panel");
   });
 
   it("refuses the React development transform in an alpha build", async () => {
