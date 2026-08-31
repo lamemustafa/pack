@@ -255,6 +255,7 @@ export function usePackPopupController() {
           actionErrorSource.current = null;
           setActionError(null);
           setFiledReturnsFlowSummary(response.flowSummary);
+          setAllSupportedFullFiscalYearFlowSummary(null);
           setScopeState(response.flowSummary.scope);
         } else {
           showActionError(response.flowStep.safeMessage);

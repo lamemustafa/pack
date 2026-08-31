@@ -34,6 +34,8 @@ const EXPLICIT_RETRY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetS
 const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
   "all-supported-full-fiscal-year-artifact-snapshot-mismatch",
   "full-fiscal-year-pinned-gst-tab-unavailable",
+  "single-period-bundle-ledger-malformed",
+  "single-period-bundle-scope-conflict",
 ]);
 
 /**
