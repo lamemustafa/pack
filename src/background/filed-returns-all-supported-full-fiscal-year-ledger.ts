@@ -36,6 +36,8 @@ const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
   "full-fiscal-year-pinned-gst-tab-unavailable",
   "single-period-bundle-ledger-malformed",
   "single-period-bundle-scope-conflict",
+  "single-period-bundle-state-persist-failed",
+  "single-period-bundle-state-read-failed",
 ]);
 
 /**

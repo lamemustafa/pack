@@ -136,6 +136,8 @@ describe("all-supported full-fiscal-year ledger", () => {
     "full-fiscal-year-pinned-gst-tab-unavailable",
     "single-period-bundle-ledger-malformed",
     "single-period-bundle-scope-conflict",
+    "single-period-bundle-state-persist-failed",
+    "single-period-bundle-state-read-failed",
   ])("withholds an explicit retry for a non-resumable target: %s", (signal) => {
     const ledger = createLedger();
     const blocked = {
