@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { JSDOM } from "jsdom";
 import ts from "typescript";
 
 const args = process.argv.slice(2);
@@ -31,12 +32,8 @@ async function reachableFromPanelHtml(dir) {
   const panelEntry = path.join(dir, "panel.html");
   if (files.includes(panelEntry)) {
     const html = await readFile(panelEntry, "utf8");
-    const executableMarkup = withoutHtmlComments(html);
-    for (const match of executableMarkup.matchAll(
-      /<script\b[^>]*\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/gi,
-    )) {
-      const specifier = match[1] ?? match[2];
-      if (specifier) queue.push(resolveOutputSpecifier(dir, panelEntry, specifier));
+    for (const specifier of panelModuleScriptSpecifiers(html)) {
+      queue.push(resolveOutputSpecifier(dir, panelEntry, specifier));
     }
   }
   const reachable = new Set();
@@ -53,18 +50,18 @@ async function reachableFromPanelHtml(dir) {
   return reachable;
 }
 
-function withoutHtmlComments(markup) {
-  let cursor = 0;
-  let executableMarkup = "";
-  while (cursor < markup.length) {
-    const commentStart = markup.indexOf("<!--", cursor);
-    if (commentStart === -1) return executableMarkup + markup.slice(cursor);
-    executableMarkup += markup.slice(cursor, commentStart);
-    const commentEnd = markup.indexOf("-->", commentStart + 4);
-    if (commentEnd === -1) return executableMarkup;
-    cursor = commentEnd + 3;
+function panelModuleScriptSpecifiers(markup) {
+  const dom = new JSDOM(markup);
+  try {
+    return [...dom.window.document.querySelectorAll('script[type="module"][src]')].flatMap(
+      (script) => {
+        const specifier = script.getAttribute("src");
+        return specifier ? [specifier] : [];
+      },
+    );
+  } finally {
+    dom.window.close();
   }
-  return executableMarkup;
 }
 
 function staticModuleSpecifiers(fileName, contents) {
