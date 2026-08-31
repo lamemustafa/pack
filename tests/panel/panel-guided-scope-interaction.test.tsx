@@ -599,6 +599,76 @@ describe("panel guided scope interaction", () => {
     });
   });
 
+  it("refreshes rather than restarting a completed recipe that has gone stale", async () => {
+    // Restart discards the completed plan and starts a fresh one. Rendered
+    // before a fiscal-year rollover and clicked after it, the captured plan no
+    // longer describes what would run -- and unlike the ordinary start, the
+    // completed history is destroyed first. The destructive branch needs the
+    // same revalidation, not less.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
+    const onRestart = vi.fn();
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: onRestart,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2025-26",
+            },
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            // A completed root is only offered a restart when it covers the
+            // whole year; a shorter one is dropped as no longer blocking.
+            targetEvidence: savedAllReturnsEvidence("2025-26", [
+              "April",
+              "May",
+              "June",
+              "July",
+              "August",
+              "September",
+              "October",
+              "November",
+              "December",
+              "January",
+              "February",
+              "March",
+            ]),
+            totalTargets: 84,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    // Positive control: without a clock shift the same click must reach the
+    // restart branch, or the negative assertion below proves nothing.
+    await clickButtonContaining("run everything last year");
+    expect(onRestart, "the click never reached the restart branch").toHaveBeenCalledOnce();
+    onRestart.mockClear();
+
+    // The rendered card still reads "Everything last year"; by the current
+    // clock 2025-26 is two years back and its plan no longer matches.
+    vi.setSystemTime(new Date("2027-04-01T00:00:00.000Z"));
+    expect(panelAllReturnsFullYearPreset("2025-26")?.label).toBe("Everything in 2025-26");
+    await clickButtonContaining("run everything last year");
+
+    expect(onRestart).not.toHaveBeenCalled();
+  });
+
   it("blocks only a completed all-returns root instead of valid new scopes", async () => {
     await mount(
       {

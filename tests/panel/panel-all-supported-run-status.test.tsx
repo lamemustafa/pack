@@ -10,6 +10,7 @@ import {
 vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
+import type { PackPanelController } from "../../src/entrypoints/panel/panel-surface";
 import { PANEL_TEST_SCOPE, panelController } from "./panel-controller.test-helpers";
 
 const PANEL_STYLESHEET = readFileSync(join(process.cwd(), "src/styles/panel.css"), "utf8");
@@ -56,13 +57,40 @@ function summary(
   };
 }
 
-function render(summaryValue: FiledReturnsAllSupportedFullFiscalYearFlowSummary): string {
+function render(
+  summaryValue: FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+  context: PackPanelController["context"] = {
+    connectorId: "gst",
+    pageKind: "gst-filed-returns",
+    supported: true,
+  },
+): string {
   return renderToStaticMarkup(
     <PanelSurface
-      pack={panelController({ allSupportedFullFiscalYearFlowSummary: summaryValue })}
+      pack={panelController({
+        allSupportedFullFiscalYearFlowSummary: summaryValue,
+        context,
+      })}
     />,
   );
 }
+
+/** No signed-in GST tab: the page is supported, but it is asking the user to sign in. */
+const SIGNED_OUT = {
+  connectorId: "gst",
+  pageKind: "gst-auth-landing",
+  supported: true,
+} as const;
+
+/** The one button's own tag, so a `disabled` elsewhere in the panel cannot satisfy the assertion. */
+function actionButton(markup: string, label: string): string {
+  const index = markup.indexOf(label);
+  expect(index, `expected the ${label} control to render`).toBeGreaterThan(-1);
+  return markup.slice(markup.lastIndexOf("<button", index), index);
+}
+const restartButton = (markup: string) =>
+  actionButton(markup, "Discard this year&#x27;s saved plan and run again");
+const resumeButton = (markup: string) => actionButton(markup, "Resume this plan");
 
 describe("all-supported panel progress", () => {
   afterEach(() => {
@@ -82,7 +110,54 @@ describe("all-supported panel progress", () => {
     );
   });
 
+  it("compiles both all-supported actions out of a packaged build", () => {
+    // The full-year flow is source-only until the gates in
+    // docs/PUBLICATION_READINESS.md are recorded. `PanelGuidedScope` hides its
+    // presets, but retained state rendered these controls here, so a packaged
+    // build with a saved plan could still reach the source-only runner.
+    const completed = summary(["saved", "not-filed"], "complete", [0, 1]);
+
+    const packaged = render(completed);
+    expect(packaged).not.toContain("Discard this year&#x27;s saved plan and run again");
+    expect(packaged).not.toContain("Resume this plan");
+    // The summary itself still renders; only the actions are withheld.
+    expect(packaged).toContain("Your pack · All supported returns · FY 2025-26");
+
+    vi.stubEnv("MODE", "alpha");
+    expect(render(completed)).toContain("Discard this year&#x27;s saved plan and run again");
+  });
+
+  it("will not restart without a signed-in portal tab", () => {
+    // Restart clears local staging and removes the ledger before the runner
+    // reaches its tab preflight, so an ungated click destroys the completed
+    // history and then blocks on the first target.
+    vi.stubEnv("MODE", "alpha");
+    const completed = summary(["saved", "not-filed"], "complete", [0, 1]);
+
+    const signedOut = render(completed, SIGNED_OUT);
+    expect(signedOut).toContain("Discard this year&#x27;s saved plan and run again");
+    expect(restartButton(signedOut)).toContain("disabled");
+
+    expect(restartButton(render(completed))).not.toContain("disabled");
+  });
+
+  it("gates a portal-bound resume on the portal but never a local-only one", () => {
+    vi.stubEnv("MODE", "alpha");
+    const portalBound = {
+      ...summary(["saved", "pending"], "running", [0]),
+      resumeAvailable: true,
+      resumeMode: "portal",
+    } as const;
+    expect(resumeButton(render(portalBound, SIGNED_OUT))).toContain("disabled");
+
+    // Export, cleanup and download-observation retries touch no portal. Gating
+    // them would disable the only productive control the reader has.
+    const localOnly = { ...portalBound, resumeMode: "local-only" } as const;
+    expect(resumeButton(render(localOnly, SIGNED_OUT))).not.toContain("disabled");
+  });
+
   it("puts an explicit same-year restart beside the completed summary", () => {
+    vi.stubEnv("MODE", "alpha");
     const markup = render(summary(["saved", "not-filed"], "complete", [0, 1]));
 
     expect(markup).toContain("Your pack · All supported returns · FY 2025-26");

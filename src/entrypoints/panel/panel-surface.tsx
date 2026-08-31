@@ -131,6 +131,8 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               <AllSupportedRunStatus
                 summary={allSupportedSummary}
                 busy={pack.effectiveBusy}
+                fullYearFlowAvailable={fullYearFlowAvailable}
+                portalReady={portalSignedIn}
                 onRestart={() =>
                   void pack.restartAllSupportedFullFiscalYearFlow(
                     allSupportedSummary.summaryIdentity,
@@ -275,17 +277,34 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
 function AllSupportedRunStatus({
   summary,
   busy,
+  fullYearFlowAvailable,
+  portalReady,
   onRestart,
   onResume,
 }: {
   summary: FiledReturnsAllSupportedFullFiscalYearFlowSummary;
   busy: string | null;
+  fullYearFlowAvailable: boolean;
+  portalReady: boolean;
   onRestart: () => void;
   onResume: () => void;
 }) {
   const returnCount = new Set(summary.targetEvidence.map((entry) => entry.returnType)).size;
   const periodCount = new Set(summary.targetEvidence.map((entry) => entry.period)).size;
-  const canRestart = summary.status === "complete";
+  // Withheld everywhere else in a packaged build, the full-year flow was still
+  // reachable here: retained all-supported state renders controls that restart
+  // or resume a source-only runner, while `PanelGuidedScope` correctly hides
+  // its presets.
+  //
+  // Both actions reach the portal, so both need a signed-in tab -- restarting
+  // clears the completed plan *before* the runner's tab preflight, so without
+  // this the history is already gone by the time the first target blocks. The
+  // one exception is a resume whose remaining work is local ZIP or cleanup:
+  // that needs no portal, and requiring one would disable the only productive
+  // control the reader has.
+  const localOnlyResume = summary.resumeAvailable && summary.resumeMode === "local-only";
+  const canRestart = fullYearFlowAvailable && summary.status === "complete";
+  const canResume = fullYearFlowAvailable && summary.resumeAvailable === true;
   return (
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>
@@ -301,16 +320,16 @@ function AllSupportedRunStatus({
         <button
           className="panel-all-supported-action"
           type="button"
-          disabled={busy !== null}
+          disabled={busy !== null || !portalReady}
           onClick={onRestart}
         >
           Discard this year's saved plan and run again
         </button>
-      ) : summary.resumeAvailable ? (
+      ) : canResume ? (
         <button
           className="panel-all-supported-action"
           type="button"
-          disabled={busy !== null}
+          disabled={busy !== null || (!portalReady && !localOnlyResume)}
           onClick={onResume}
         >
           Resume this plan

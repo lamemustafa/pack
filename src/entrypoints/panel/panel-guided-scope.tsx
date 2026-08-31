@@ -423,7 +423,18 @@ function AllReturnsPreset({
         aria-label={`${restartable ? `Discard this year's saved plan and run ${displayedPlan.label.toLowerCase()}` : displayedPlan.label}. ${coverageLabel}.`}
         onClick={() => {
           if (onRestart) {
-            onRestart({ kind: plan.kind, financialYear: plan.financialYear });
+            // Restart discards a completed plan and starts a new one. A panel
+            // left open across a month or fiscal-year boundary renders from an
+            // older snapshot, so dispatching the captured plan would silently
+            // start a run over periods the reader never saw -- after the
+            // completed history has already been removed. Same comparison the
+            // ordinary start uses; the destructive branch needs it more, not
+            // less.
+            if (planMatchesToday(plan)) {
+              onRestart({ kind: plan.kind, financialYear: plan.financialYear });
+            } else {
+              onStalePlan();
+            }
             return;
           }
           if (resumePlan) {
@@ -435,18 +446,7 @@ function AllReturnsPreset({
             onStart({ kind: plan.kind, financialYear: plan.financialYear });
             return;
           }
-          const currentAsOf = new Date();
-          const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, currentAsOf);
-          if (
-            !currentPlan ||
-            currentPlan.financialYear !== plan.financialYear ||
-            currentPlan.label !== plan.label ||
-            currentPlan.note !== plan.note ||
-            currentPlan.returnCount !== plan.returnCount ||
-            currentPlan.periodCount !== plan.periodCount ||
-            currentPlan.artifactCount !== plan.artifactCount ||
-            currentPlan.fileCount !== plan.fileCount
-          ) {
+          if (!planMatchesToday(plan)) {
             onStalePlan();
             return;
           }
@@ -466,6 +466,25 @@ function AllReturnsPreset({
         </p>
       ) : null}
     </React.Fragment>
+  );
+}
+
+/**
+ * Whether a rendered plan still describes what a run started now would fetch.
+ * Derived from the same builder the action dispatches against, so a panel left
+ * open across a period boundary cannot start work the reader never saw.
+ */
+function planMatchesToday(plan: PanelAllReturnsFullYearPreset): boolean {
+  const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, new Date());
+  return (
+    currentPlan !== null &&
+    currentPlan.financialYear === plan.financialYear &&
+    currentPlan.label === plan.label &&
+    currentPlan.note === plan.note &&
+    currentPlan.returnCount === plan.returnCount &&
+    currentPlan.periodCount === plan.periodCount &&
+    currentPlan.artifactCount === plan.artifactCount &&
+    currentPlan.fileCount === plan.fileCount
   );
 }
 
