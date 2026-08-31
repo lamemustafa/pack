@@ -200,6 +200,7 @@ describe("popup background failure presentation", () => {
       await controller?.restartAllSupportedFullFiscalYearFlow({
         kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
         financialYear: "2025-26",
+        ledgerId: "full-fiscal-year-abc123de",
       });
     });
 
@@ -208,6 +209,7 @@ describe("popup background failure presentation", () => {
       payload: {
         kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
         financialYear: "2025-26",
+        ledgerId: "full-fiscal-year-abc123de",
       },
     });
     expect(mocks.sendMessage).not.toHaveBeenCalledWith({ type: "PACK_CLEAR_LOCAL_DATA" });

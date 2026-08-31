@@ -126,12 +126,11 @@ describe("all-supported full-fiscal-year plan", () => {
         payload: {
           kind: "all-supported-returns-full-fiscal-year",
           financialYear: "2025-26",
-          ledgerId: "ledger-1",
+          ledgerId: "full-fiscal-year-abc123de",
         },
       }),
     ).toBe(true);
-    // Unbound is still accepted: a summary persisted before the field existed
-    // must stay discardable rather than become permanently stuck.
+    // A root alone is not authority to destroy the currently indexed ledger.
     expect(
       isPackMessage({
         type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
@@ -140,9 +139,10 @@ describe("all-supported full-fiscal-year plan", () => {
           financialYear: "2025-26",
         },
       }),
-    ).toBe(true);
+    ).toBe(false);
     for (const payload of [
       { kind: "all-supported-returns-full-fiscal-year", financialYear: "2025-26", ledgerId: 7 },
+      { kind: "all-supported-returns-full-fiscal-year", financialYear: "2025-26", ledgerId: "ledger-1" },
       {
         kind: "all-supported-returns-full-fiscal-year",
         financialYear: "2025-26",
@@ -195,7 +195,7 @@ describe("all-supported full-fiscal-year plan", () => {
           financialYear: "2025-26",
         },
       }),
-    ).toBe(true);
+    ).toBe(false);
     // A restart now carries the reviewed ledger id so the background can refuse
     // a superseded root instead of deleting it; the bound form is covered by
     // its own case above. The boundary stays narrow for everything else.
