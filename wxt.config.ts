@@ -32,7 +32,10 @@ export default defineConfig({
     // The mode itself must stay "alpha": `import.meta.env.MODE === "alpha"`
     // is the constant the alpha gate folds on, and rewriting it here would
     // silently remove every gated surface.
-    if (env.mode !== "development") process.env.NODE_ENV = "production";
+    // Gated on the command, not the mode. `wxt dev --mode alpha` serves the
+    // alpha-gated UI and needs the development transform and refresh; only a
+    // build produces the artifact that must not carry them.
+    if (env.command === "build") process.env.NODE_ENV = "production";
     return { build: { modulePreload: false } };
   },
   manifest: {

@@ -18,37 +18,41 @@ afterEach(() => {
   else process.env.NODE_ENV = original;
 });
 
-function resolveVite(mode: string) {
+function resolveVite(mode: string, command: "build" | "serve") {
   const hook = config.vite;
   expect(typeof hook, "wxt.config must keep a vite hook to carry this").toBe("function");
   delete process.env.NODE_ENV;
   const returned = (hook as (env: { mode: string; command: string }) => unknown)({
     mode,
-    command: "build",
+    command,
   });
   return { nodeEnv: process.env.NODE_ENV, returned };
 }
 
 describe("alpha builds are production builds", () => {
   it("puts the alpha build in production so it carries no development transform", () => {
-    expect(resolveVite("alpha").nodeEnv).toBe("production");
+    expect(resolveVite("alpha", "build").nodeEnv).toBe("production");
   });
 
   it("leaves the packaged production build in production too", () => {
-    expect(resolveVite("production").nodeEnv).toBe("production");
+    expect(resolveVite("production", "build").nodeEnv).toBe("production");
   });
 
-  it("does not force production onto a development server", () => {
-    // `wxt dev` needs the development transform; forcing production here would
-    // trade one broken build for another.
-    expect(resolveVite("development").nodeEnv).toBeUndefined();
+  it("does not force production onto a dev server, whichever mode it serves", () => {
+    // `wxt dev --mode alpha` serves the gated UI and needs the development
+    // transform and refresh. Keying this off the mode rather than the command
+    // broke exactly that combination, and an earlier version of this test hid
+    // it by passing command "build" for the case it labelled "development".
+    expect(resolveVite("development", "serve").nodeEnv).toBeUndefined();
+    expect(resolveVite("alpha", "serve").nodeEnv).toBeUndefined();
+    expect(resolveVite("production", "serve").nodeEnv).toBeUndefined();
   });
 
   it("never rewrites the mode itself", () => {
     // The alpha gate folds on `import.meta.env.MODE === "alpha"`. Returning a
     // different mode from this hook would silently delete every gated surface
     // while leaving the build green.
-    const { returned } = resolveVite("alpha");
+    const { returned } = resolveVite("alpha", "build");
     expect(returned).not.toHaveProperty("mode");
   });
 });
