@@ -48,8 +48,18 @@ async function reachableFromPanelHtml(dir) {
     reachable.add(next);
     if (!/\.js$/.test(next)) continue;
     const contents = await readFile(next, "utf8");
-    for (const specifier of staticModuleSpecifiers(next, contents)) {
-      queue.push(resolveOutputSpecifier(dir, next, specifier));
+    const specifiers = staticModuleSpecifiers(next, contents);
+    if (specifiers === null) {
+      throw new Error(`Malformed reachable module: ${path.relative(dir, next)}`);
+    }
+    for (const specifier of specifiers) {
+      const dependency = resolveOutputSpecifier(dir, next, specifier);
+      if (dependency === null || !files.includes(dependency)) {
+        throw new Error(
+          `Unresolved static import ${JSON.stringify(specifier)} from ${path.relative(dir, next)}`,
+        );
+      }
+      queue.push(dependency);
     }
   }
   return reachable;
@@ -87,7 +97,7 @@ function staticModuleSpecifiers(fileName, contents) {
     false,
     ts.ScriptKind.JS,
   );
-  if (source.parseDiagnostics.length > 0) return [];
+  if (source.parseDiagnostics.length > 0) return null;
   return source.statements.flatMap((statement) => {
     if (
       (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&

@@ -739,7 +739,7 @@ describe("alpha builds", () => {
     const result = await runVerifier(outputDir, {}, ["--alpha"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("reachable from the panel");
+    expect(result.output).toContain('Unresolved static import "//chunks/alpha-surface.js"');
   });
 
   it("does not follow a static import recovered from malformed JavaScript", async () => {
@@ -758,7 +758,51 @@ describe("alpha builds", () => {
     const result = await runVerifier(outputDir, {}, ["--alpha"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("reachable from the panel");
+    expect(result.output).toContain("Malformed reachable module: chunks/panel.js");
+  });
+
+  it("rejects a malformed reachable module even when it contains the alpha marker", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "chunks/panel.js",
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+    );
+
+    const validResult = await runVerifier(outputDir, {}, ["--alpha"]);
+    expect(validResult.status).toBe(0);
+
+    await writePackageFile(
+      outputDir,
+      "chunks/panel.js",
+      'const surface = "data-pack-alpha-surface";\nconst broken = ;\n',
+    );
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Malformed reachable module: chunks/panel.js");
+  });
+
+  it("rejects a marker-bearing module whose static dependency is unresolved", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "chunks/panel.js",
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+    );
+
+    const validResult = await runVerifier(outputDir, {}, ["--alpha"]);
+    expect(validResult.status).toBe(0);
+
+    await writePackageFile(
+      outputDir,
+      "chunks/panel.js",
+      'import "./missing.js";\nconst surface = "data-pack-alpha-surface";\nexport default surface;\n',
+    );
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain('Unresolved static import "./missing.js" from chunks/panel.js');
   });
 
   it("refuses an alpha marker only another extension page can reach", async () => {
@@ -789,7 +833,7 @@ describe("alpha builds", () => {
     const outputDir = await createValidPackage();
     await writeFile(
       path.join(outputDir, "chunks", "panel.js"),
-      'import "./alpha-surface.js";\nimport { jsxDEV } from "react/jsx-dev-runtime";\nexport default jsxDEV;\n',
+      'import "./alpha-surface.js";\nconst jsxDEV = "react/jsx-dev-runtime";\nexport default jsxDEV;\n',
       "utf8",
     );
     await writeFile(
