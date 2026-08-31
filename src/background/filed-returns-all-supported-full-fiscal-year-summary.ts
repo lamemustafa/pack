@@ -117,6 +117,7 @@ export function allSupportedTerminalPlanRoots(
         financialYear: ledger.planRoot.financialYear,
         status: ledger.status,
         periodCount: new Set(ledger.targets.map((target) => target.period)).size,
+        ledgerId: ledger.ledgerId,
       },
     ];
   });

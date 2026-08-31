@@ -439,6 +439,13 @@ export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
     financialYear: string;
     status: "complete" | "cancelled";
     periodCount: number;
+    /**
+     * The ledger this root projects. Every retained root can render its own
+     * restart control, and each must name the plan the reader reviewed --
+     * binding only the currently projected summary leaves the others able to
+     * discard whichever ledger is indexed for that year at click time.
+     */
+    ledgerId?: string;
   }[];
 }
 

@@ -280,6 +280,25 @@ describe("all-supported full-fiscal-year worker", () => {
         ],
       },
     });
+
+    // Each retained root names its own ledger. A restart control is rendered
+    // per root, and a request that cannot name the plan the reader reviewed
+    // cannot be refused when that root has been replaced since.
+    const roots = (
+      response as {
+        allSupportedFullFiscalYearFlowSummary: {
+          terminalPlanRoots: readonly { financialYear: string; ledgerId?: string }[];
+        };
+      }
+    ).allSupportedFullFiscalYearFlowSummary.terminalPlanRoots;
+    for (const root of roots) {
+      const saved = allSavedLedgers().find(
+        (ledger) => ledger.planRoot.financialYear === root.financialYear,
+      );
+      expect(root.ledgerId, `no ledger id on the ${root.financialYear} root`).toBe(saved?.ledgerId);
+      expect(root.ledgerId).toBeTruthy();
+    }
+    expect(new Set(roots.map((root) => root.ledgerId)).size).toBe(roots.length);
   });
 
   it("stops at the first unresolved target and never starts a final ZIP", async () => {

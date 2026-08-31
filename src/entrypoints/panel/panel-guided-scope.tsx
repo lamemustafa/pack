@@ -56,6 +56,8 @@ export function PanelGuidedScope({
   allReturnsExternalBlock?: { disabled: true; label: string } | null;
   /** A terminal saved plan blocks only the root it owns; other recipes stay available. */
   allReturnsTerminalBlocks?: readonly {
+    /** The ledger this root projects; every destructive restart must name it. */
+    ledgerId?: string;
     financialYear: string;
     label: string;
     restartPlan?: true;
@@ -76,7 +78,7 @@ export function PanelGuidedScope({
    */
   onStartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan) => void;
   /** Explicitly discards a completed root before starting that exact plan again. */
-  onRestartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan) => void;
+  onRestartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan & { ledgerId?: string }) => void;
 }) {
   // Keep this expression in the panel module: Vite replaces it during a WXT
   // production build, so the alpha JSX below is removed from packaged output.
@@ -172,7 +174,14 @@ export function PanelGuidedScope({
                         ? { resumePlan: allReturnsResumePlan }
                         : {})}
                       {...(terminalBlock?.restartPlan && onRestartAllReturnsFullYear
-                        ? { onRestart: onRestartAllReturnsFullYear }
+                        ? {
+                            onRestart: (plan: PanelAllReturnsFullYearPlan) =>
+                              onRestartAllReturnsFullYear(
+                                terminalBlock.ledgerId === undefined
+                                  ? plan
+                                  : { ...plan, ledgerId: terminalBlock.ledgerId },
+                              ),
+                          }
                         : {})}
                       portalReady={portalSignedIn}
                       onStart={onStartAllReturnsFullYear}

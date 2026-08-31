@@ -42,6 +42,7 @@ function summary(
       outcome,
     })),
     totalTargets: outcomes.length,
+    ledgerId: "ledger-under-review",
     flowStepScope: PANEL_TEST_SCOPE,
     flowStep: {
       connectorId: "gst",

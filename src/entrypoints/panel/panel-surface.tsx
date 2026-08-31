@@ -66,6 +66,34 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
   const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
   const allReturnsTerminalBlocks = getAllSupportedTerminalBlocks(allSupportedSummary);
+
+  /**
+   * The summary card's restart, revalidated the way the preset's is. A panel
+   * left open across a period boundary still shows the completed evidence, but
+   * a restart rebuilds the plan from the current date -- so dispatching the
+   * captured identity would delete the completed ledger and then start periods
+   * the displayed evidence never contained. Refresh instead and let the reader
+   * act on what they can see.
+   */
+  const restartFromSummaryCard = async () => {
+    if (!allSupportedSummary) return;
+    const financialYear = allSupportedSummary.summaryIdentity.financialYear;
+    const displayedPeriods = new Set(
+      allSupportedSummary.targetEvidence.map((entry) => entry.period),
+    ).size;
+    if (
+      panelAllReturnsFullYearPreset(financialYear, new Date())?.periodCount !== displayedPeriods
+    ) {
+      await pack.refreshFlowSummary();
+      return;
+    }
+    await pack.restartAllSupportedFullFiscalYearFlow({
+      ...allSupportedSummary.summaryIdentity,
+      ...(allSupportedSummary.ledgerId === undefined
+        ? {}
+        : { ledgerId: allSupportedSummary.ledgerId }),
+    });
+  };
   const allSupportedNeedsRecovery = Boolean(
     allSupportedSummary && ["blocked", "partial", "cancelled"].includes(allSupportedSummary.status),
   );
@@ -133,14 +161,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 busy={pack.effectiveBusy}
                 fullYearFlowAvailable={fullYearFlowAvailable}
                 portalReady={portalSignedIn}
-                onRestart={() =>
-                  void pack.restartAllSupportedFullFiscalYearFlow({
-                    ...allSupportedSummary.summaryIdentity,
-                    ...(allSupportedSummary.ledgerId === undefined
-                      ? {}
-                      : { ledgerId: allSupportedSummary.ledgerId }),
-                  })
-                }
+                onRestart={() => void restartFromSummaryCard()}
                 onResume={() =>
                   void pack.startAllSupportedFullFiscalYearFlow(allSupportedSummary.summaryIdentity)
                 }
@@ -249,14 +270,11 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 onStartAllReturnsFullYear={(plan) =>
                   void pack.startAllSupportedFullFiscalYearFlow(plan)
                 }
+                // The plan already carries the ledger id of the root whose
+                // control was clicked, which is not always the projected
+                // summary's: several completed roots can each render one.
                 onRestartAllReturnsFullYear={(plan) =>
-                  void pack.restartAllSupportedFullFiscalYearFlow({
-                    ...plan,
-                    ...(allSupportedSummary?.ledgerId === undefined ||
-                    allSupportedSummary.summaryIdentity.financialYear !== plan.financialYear
-                      ? {}
-                      : { ledgerId: allSupportedSummary.ledgerId }),
-                  })
+                  void pack.restartAllSupportedFullFiscalYearFlow(plan)
                 }
               />
             )}
@@ -466,7 +484,12 @@ function getAllSupportedRunBlock(
 
 function getAllSupportedTerminalBlocks(
   summary: PackPanelController["allSupportedFullFiscalYearFlowSummary"],
-): readonly { financialYear: string; label: string; restartPlan?: true }[] {
+): readonly {
+  financialYear: string;
+  label: string;
+  restartPlan?: true;
+  ledgerId?: string;
+}[] {
   const terminalRoots =
     summary?.terminalPlanRoots ??
     (summary && ["complete", "cancelled"].includes(summary.status)
@@ -475,6 +498,7 @@ function getAllSupportedTerminalBlocks(
             financialYear: summary.summaryIdentity.financialYear,
             status: summary.status,
             periodCount: panelAllReturnsFullYearResumePlan(summary)?.periodCount ?? 0,
+            ledgerId: summary.ledgerId,
           },
         ]
       : []);
@@ -490,6 +514,9 @@ function getAllSupportedTerminalBlocks(
             ? "Pack already completed this all-supported plan. Discard this fiscal year's saved plan and start again."
             : "Pack retained this cancelled all-supported plan. It remains unavailable until Pack can safely resolve its saved recovery state.",
         ...(root.status === "complete" ? { restartPlan: true as const } : {}),
+        // Carried per root: a restart must name the plan the reader reviewed,
+        // and there can be more retained roots than the one projected here.
+        ...(root.ledgerId === undefined ? {} : { ledgerId: root.ledgerId }),
       },
     ];
   });
