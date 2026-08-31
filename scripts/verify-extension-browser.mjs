@@ -12,8 +12,16 @@ import { LIVE_RUN_SENSITIVE_PATTERN_DEFINITIONS } from "./lib/live-run-evidence-
 
 ensureHeadedChromiumDisplay();
 
-const extensionDir = process.argv[2]
-  ? path.resolve(process.argv[2])
+const args = process.argv.slice(2);
+const alphaMode = args.includes("--alpha");
+const outputDirectories = args.filter((arg) => !arg.startsWith("--"));
+if (outputDirectories.length > 1) {
+  throw new Error(
+    "usage: node scripts/verify-extension-browser.mjs [--alpha] [extension-output-dir]",
+  );
+}
+const extensionDir = outputDirectories[0]
+  ? path.resolve(outputDirectories[0])
   : path.join(process.cwd(), ".output", "chrome-mv3");
 const chromiumExecutablePath = process.env.PACK_CHROMIUM_EXECUTABLE
   ? path.resolve(process.env.PACK_CHROMIUM_EXECUTABLE)
@@ -93,6 +101,7 @@ try {
   await assertOptionsPageLoads(context, extensionId);
   await assertPanelPageLoads(context, extensionId);
   await assertPanelSignInContext(context, extensionId);
+  if (alphaMode) await assertAlphaPanelSurface(context, extensionId);
   await assertHostilePageCannotMessageExtension(context);
   assertDeniedUnexpectedNetwork();
   assertSanitizedBrowserLogs();
@@ -452,6 +461,33 @@ async function assertPanelSignInContext(browserContext, extensionId) {
     await panelPage.getByRole("heading", { name: "Sign in on GST Portal" }).waitFor();
     await panelPage.getByRole("button", { name: "Open GST Portal sign-in" }).waitFor();
     await assertPanelControlsFitViewport(panelPage, "sign-in context");
+  } finally {
+    await panelPage.close();
+    await gstPage.close();
+  }
+}
+
+async function assertAlphaPanelSurface(browserContext, extensionId) {
+  const gstPage = await browserContext.newPage();
+  attachPageLogging(gstPage);
+  const panelPage = await browserContext.newPage();
+  attachPageLogging(panelPage);
+  try {
+    await gstPage.goto("https://return.gst.gov.in/returns/auth/efiledreturns", {
+      waitUntil: "domcontentloaded",
+    });
+    const serviceWorker = await waitForServiceWorker(browserContext, extensionId);
+    await waitForStoredContext(serviceWorker, {
+      supported: true,
+      pageKind: "gst-filed-returns",
+      origin: "https://return.gst.gov.in",
+    });
+
+    await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
+    await panelPage.getByRole("button", { name: /Choose return, year and period/ }).click();
+    await panelPage
+      .locator('[data-pack-alpha-surface="full-fiscal-year"]')
+      .waitFor({ state: "visible", timeout: 5_000 });
   } finally {
     await panelPage.close();
     await gstPage.close();
