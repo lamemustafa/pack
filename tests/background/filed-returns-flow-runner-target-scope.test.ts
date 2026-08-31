@@ -52,7 +52,7 @@ const allSupportedRunStateMocks = vi.hoisted(() => ({
   readAllSupportedPlanLedgersStorageState: vi.fn(),
 }));
 const allSupportedFlowMocks = vi.hoisted(() => ({
-  discardCompletedAllSupportedFullFiscalYearPlan: vi.fn(),
+  restartCompletedAllSupportedFullFiscalYearPlan: vi.fn(),
   startAllSupportedFullFiscalYearDownloadFlow: vi.fn(),
 }));
 
@@ -83,8 +83,8 @@ vi.mock(
   "../../src/background/filed-returns-all-supported-full-fiscal-year",
   async (importOriginal) => ({
     ...(await importOriginal()),
-    discardCompletedAllSupportedFullFiscalYearPlan:
-      allSupportedFlowMocks.discardCompletedAllSupportedFullFiscalYearPlan,
+    restartCompletedAllSupportedFullFiscalYearPlan:
+      allSupportedFlowMocks.restartCompletedAllSupportedFullFiscalYearPlan,
     startAllSupportedFullFiscalYearDownloadFlow:
       allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow,
   }),
@@ -147,7 +147,16 @@ describe("filed returns retained target scoping", () => {
       state: "valid",
       ledgers: [],
     });
-    allSupportedFlowMocks.discardCompletedAllSupportedFullFiscalYearPlan.mockResolvedValue(null);
+    allSupportedFlowMocks.restartCompletedAllSupportedFullFiscalYearPlan.mockResolvedValue({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-private-v0",
+        state: "clicked",
+        safeSignals: ["all-supported-plan-restarted"],
+        safeMessage: "Synthetic all-supported plan restart.",
+      },
+    });
     allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow.mockResolvedValue({
       ok: true,
       flowStep: {
@@ -207,10 +216,9 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
 
-  it("rebuilds a fresh all-supported plan after discarding its bound completed ledger", async () => {
-    // The discard request is bound to the displayed ledger, but the newly
-    // built plan must not inherit that vanished binding. Retaining it makes
-    // the fresh plan fail its own strict request validator.
+  it("passes the bound completed ledger to the durable all-supported restart", async () => {
+    // The restart request is bound to the displayed ledger. The worker owns
+    // replacement persistence so the old root is never deleted in isolation.
     mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
     const request = {
       kind: "all-supported-returns-full-fiscal-year",
@@ -225,16 +233,12 @@ describe("filed returns retained target scoping", () => {
     );
 
     expect(
-      allSupportedFlowMocks.discardCompletedAllSupportedFullFiscalYearPlan,
-    ).toHaveBeenCalledExactlyOnceWith(request, expect.anything());
+      allSupportedFlowMocks.restartCompletedAllSupportedFullFiscalYearPlan,
+    ).toHaveBeenCalledExactlyOnceWith(request, expect.anything(), expect.any(Function));
     expect(
       allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow,
-    ).toHaveBeenCalledExactlyOnceWith(
-      { kind: request.kind, financialYear: request.financialYear },
-      expect.anything(),
-      expect.any(Function),
-    );
-    expect(response).toMatchObject({ flowStep: { safeSignals: ["all-supported-plan-started"] } });
+    ).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ flowStep: { safeSignals: ["all-supported-plan-restarted"] } });
   });
 
   it("does not let Start fresh discard another recovery while an all-supported plan needs review", async () => {

@@ -4,7 +4,7 @@ import {
   type PortalFlowStepResult,
 } from "../../src/connectors/gst/filed-returns-contracts";
 import {
-  discardCompletedAllSupportedFullFiscalYearPlan,
+  restartCompletedAllSupportedFullFiscalYearPlan,
   reconcilePendingAllSupportedFullFiscalYearZipDownload,
   reconcilePersistedAllSupportedFullFiscalYearZipDownload,
   startAllSupportedFullFiscalYearDownloadFlow,
@@ -25,7 +25,10 @@ import {
   getFiledReturnsFullFiscalYearPeriods,
 } from "../../src/connectors/gst/filed-returns-scope";
 
-const stored = vi.hoisted(() => ({ values: {} as Record<string, unknown> }));
+const stored = vi.hoisted(() => ({
+  failReplacementSet: false,
+  values: {} as Record<string, unknown>,
+}));
 const zip = vi.hoisted(() => ({
   discard: vi.fn(async () => ["all-supported-full-fiscal-year-opfs-cleared"]),
   export: vi.fn(),
@@ -44,6 +47,19 @@ vi.mock("wxt/browser", () => ({
           for (const key of Array.isArray(keys) ? keys : [keys]) delete stored.values[key];
         }),
         set: vi.fn(async (values: Record<string, unknown>) => {
+          if (
+            stored.failReplacementSet &&
+            Object.values(values).some(
+              (value) =>
+                typeof value === "object" &&
+                value !== null &&
+                "ledgerId" in value &&
+                typeof value.ledgerId === "string",
+            )
+          ) {
+            stored.failReplacementSet = false;
+            throw new Error("synthetic replacement persistence failure");
+          }
           Object.assign(stored.values, structuredClone(values));
         }),
       },
@@ -79,6 +95,7 @@ const deps: FiledReturnsFlowRunnerDeps & {
 };
 
 beforeEach(() => {
+  stored.failReplacementSet = false;
   stored.values = {};
   deps.now = () => NOW;
   vi.clearAllMocks();
@@ -95,7 +112,7 @@ beforeEach(() => {
 });
 
 describe("all-supported full-fiscal-year worker", () => {
-  it("discards only the requested completed root before a fresh start", async () => {
+  it("replaces only the requested completed root with a durable fresh plan", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
     const earlierRequest = { ...request, financialYear: "2025-26" } as const;
     await startAllSupportedFullFiscalYearDownloadFlow(earlierRequest, deps, runner);
@@ -108,18 +125,49 @@ describe("all-supported full-fiscal-year worker", () => {
     zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
 
     await expect(
-      discardCompletedAllSupportedFullFiscalYearPlan(earlierRequest, deps),
-    ).resolves.toBeNull();
+      restartCompletedAllSupportedFullFiscalYearPlan(
+        { ...earlierRequest, ledgerId: earlierLedger.ledgerId },
+        deps,
+        runner,
+      ),
+    ).resolves.toMatchObject({ ok: true });
 
     expect(zip.discard).toHaveBeenCalledWith(earlierLedger.ledgerId);
-    expect(allSavedLedgers()).toHaveLength(1);
-    expect(allSavedLedgers()[0]?.planRoot.financialYear).toBe("2026-27");
+    expect(allSavedLedgers()).toHaveLength(2);
+    expect(
+      allSavedLedgers().find((ledger) => ledger.planRoot.financialYear === "2025-26")?.ledgerId,
+    ).not.toBe(earlierLedger.ledgerId);
     expect(stored.values["all-supported-index"]).toEqual({
       schemaVersion: "1.0",
       ledgerIdsByPlanRoot: {
+        "all-supported-returns-full-fiscal-year:2025-26": expect.any(String),
         "all-supported-returns-full-fiscal-year:2026-27": expect.any(String),
       },
     });
+  });
+
+  it("keeps the completed root when durable replacement persistence fails", async () => {
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const completed = allSavedLedgers()[0];
+    if (!completed) throw new Error("expected completed all-supported root");
+    vi.clearAllMocks();
+    zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
+    stored.failReplacementSet = true;
+
+    await expect(
+      restartCompletedAllSupportedFullFiscalYearPlan(
+        { ...request, ledgerId: completed.ledgerId },
+        deps,
+        runner,
+      ),
+    ).rejects.toThrow("synthetic replacement persistence failure");
+
+    // Persistence is the point of no return: if it fails, the history shown
+    // to the reader stays indexed and the fresh portal runner never starts.
+    expect(allSavedLedgers()).toHaveLength(1);
+    expect(allSavedLedgers()[0]?.ledgerId).toBe(completed.ledgerId);
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("refuses to discard a root that has not finished, and leaves it saved", async () => {
@@ -143,7 +191,11 @@ describe("all-supported full-fiscal-year worker", () => {
     await persistAllSupportedFullFiscalYearLedger(deps, running);
     vi.clearAllMocks();
 
-    const response = await discardCompletedAllSupportedFullFiscalYearPlan(request, deps);
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: running.ledgerId },
+      deps,
+      vi.fn<SinglePeriodRunner>(),
+    );
 
     // The outcome that matters is that nothing was destroyed: the staging is
     // untouched, the ledger is still saved, and the reader is told why.
@@ -172,9 +224,10 @@ describe("all-supported full-fiscal-year worker", () => {
     vi.clearAllMocks();
     zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
 
-    const response = await discardCompletedAllSupportedFullFiscalYearPlan(
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
       { ...request, ledgerId: `${current.ledgerId}-superseded` },
       deps,
+      runner,
     );
 
     expect(zip.discard).not.toHaveBeenCalled();
@@ -187,12 +240,14 @@ describe("all-supported full-fiscal-year worker", () => {
     // The same request naming the ledger actually held still succeeds, so the
     // guard rejects a mismatch rather than every restart.
     await expect(
-      discardCompletedAllSupportedFullFiscalYearPlan(
+      restartCompletedAllSupportedFullFiscalYearPlan(
         { ...request, ledgerId: current.ledgerId },
         deps,
+        runner,
       ),
-    ).resolves.toBeNull();
-    expect(allSavedLedgers()).toHaveLength(0);
+    ).resolves.toMatchObject({ ok: true });
+    expect(allSavedLedgers()).toHaveLength(1);
+    expect(allSavedLedgers()[0]?.ledgerId).not.toBe(current.ledgerId);
   });
 
   it("retains the completed root when its scoped local cleanup fails", async () => {
@@ -201,7 +256,13 @@ describe("all-supported full-fiscal-year worker", () => {
     vi.clearAllMocks();
     zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-clear-failed"]);
 
-    const response = await discardCompletedAllSupportedFullFiscalYearPlan(request, deps);
+    const current = allSavedLedgers()[0];
+    if (!current) throw new Error("expected the completed all-supported root");
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: current.ledgerId },
+      deps,
+      runner,
+    );
 
     expect(response).toMatchObject({
       flowStep: {

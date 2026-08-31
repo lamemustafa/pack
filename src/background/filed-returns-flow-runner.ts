@@ -26,7 +26,7 @@ import type { ActiveGstTab } from "./filed-returns-active-tab";
 import type { MainWorldFiledReturnsFilterSelectionOutcome } from "../connectors/gst/main-world-filed-returns-filter-selection";
 import { startFullFiscalYearDownloadFlow } from "./filed-returns-full-fiscal-year";
 import {
-  discardCompletedAllSupportedFullFiscalYearPlan,
+  restartCompletedAllSupportedFullFiscalYearPlan,
   startAllSupportedFullFiscalYearDownloadFlow,
 } from "./filed-returns-all-supported-full-fiscal-year";
 import {
@@ -369,11 +369,11 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
     );
     if (retainedArtifactRecovery) return retainedArtifactRecovery;
     if (options.discardCompletedPlanRoot) {
-      const discardResponse = await discardCompletedAllSupportedFullFiscalYearPlan(
+      return restartCompletedAllSupportedFullFiscalYearPlan(
         request,
         deps as never,
+        startSinglePeriodFiledReturnsDownloadFlow,
       );
-      if (discardResponse) return discardResponse;
     }
     const planRoot = { kind: request.kind, financialYear: request.financialYear };
     return startAllSupportedFullFiscalYearDownloadFlow(
