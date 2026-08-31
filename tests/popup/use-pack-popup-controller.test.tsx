@@ -167,6 +167,7 @@ describe("popup background failure presentation", () => {
       targetEvidence: [],
       totalTargets: 1,
       ledgerId: "full-fiscal-year-abc123de",
+      resumeAvailable: false,
       flowStepScope: {
         financialYear: "2025-26",
         period: "April",
