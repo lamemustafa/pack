@@ -454,9 +454,7 @@ describe("background filed returns download defaults", () => {
       targets: initial.targets.map((target) => ({
         ...target,
         status: "not-filed" as const,
-        ...canonicalDurableTargetStatus(target, "not-filed", [
-          "filed-return-positively-not-filed",
-        ]),
+        ...canonicalDurableTargetStatus(target, "not-filed", ["filed-return-positively-not-filed"]),
       })),
     };
     const newerOrdinaryCompletion: FiledReturnsFlowSummary = {

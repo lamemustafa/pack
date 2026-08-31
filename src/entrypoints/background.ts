@@ -352,10 +352,7 @@ async function handleMessage(
       if (
         allSupportedFullFiscalYearFlowSummary &&
         flowSummary &&
-        isNewerTerminalFiledReturnsFlowSummary(
-          flowSummary,
-          allSupportedFullFiscalYearFlowSummary,
-        )
+        isNewerTerminalFiledReturnsFlowSummary(flowSummary, allSupportedFullFiscalYearFlowSummary)
       ) {
         return { ok: true, flowSummary };
       }
