@@ -6,10 +6,7 @@ import {
 } from "../../connectors/gst/filed-returns-contracts";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import type { FiledReturnsArtifactType } from "../../connectors/gst/filed-returns-artifact-types";
-import {
-  concreteFiledReturnsArtifactTypesForSelection,
-  filedReturnsArtifactLabel,
-} from "../../connectors/gst/filed-returns-artifacts";
+import { concreteFiledReturnsArtifactTypesForSelection } from "../../connectors/gst/filed-returns-artifacts";
 import {
   filedReturnsCapability,
   filedReturnsOfferedArtifacts,
@@ -54,9 +51,6 @@ type PresetCatalogueEntry = {
 
 export interface PanelFullFiscalYearPreset {
   readonly label: string;
-  /** What the preset will actually fetch. The card stated period count and one
-   *  ZIP but never the format, which is the most consequential fact about it. */
-  readonly artifactLabel: string;
   readonly periodCount: number;
   readonly scope: FiledReturnsDownloadScope;
 }
@@ -70,6 +64,8 @@ export type PanelAllReturnsFullYearPlan = FiledReturnsAllSupportedFullFiscalYear
 
 export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPlan {
   readonly label: string;
+  /** Return coverage is derived from the same expanded target plan the action runs. */
+  readonly returnTypes: readonly FiledReturnsReturnType[];
   /** A factual note about whether the selected financial year is complete. */
   readonly note: string;
   /** Number of catalogue rows represented by this one root plan. */
@@ -89,6 +85,7 @@ export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPl
  */
 export interface PanelAllReturnsFullYearResumePlan {
   readonly financialYear: string;
+  readonly returnTypes: readonly FiledReturnsReturnType[];
   readonly returnCount: number;
   readonly periodCount: number;
   readonly artifactCount: number;
@@ -128,6 +125,7 @@ export function panelAllReturnsFullYearResumePlan(
 
   return {
     financialYear: summary.summaryIdentity.financialYear,
+    returnTypes: Array.from(returnTypes),
     returnCount: returnTypes.size,
     periodCount: periods.size,
     artifactCount,
@@ -162,7 +160,6 @@ export function panelFullFiscalYearPresets(
     return [
       {
         label: `This year's ${capability.label}`,
-        artifactLabel: filedReturnsArtifactLabel(presetArtifactType, returnType),
         periodCount,
         scope: {
           financialYear,
@@ -220,6 +217,7 @@ export function panelAllReturnsFullYearPreset(
     kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
     financialYear,
     label,
+    returnTypes: expansion.targets.map((target) => target.returnType),
     note,
     returnCount: expansion.targets.length,
     periodCount,

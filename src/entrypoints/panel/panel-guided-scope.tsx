@@ -4,10 +4,7 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
 } from "../../connectors/gst/filed-returns-contracts";
-import {
-  filedReturnsCapability,
-  filedReturnsCapabilityRunNotes,
-} from "../../connectors/gst/filed-returns-capabilities";
+import { filedReturnsCapability } from "../../connectors/gst/filed-returns-capabilities";
 import { getFiledReturnsFinancialYearOptions } from "../../connectors/gst/filed-returns-scope";
 import { ScopeFormAction } from "../popup/components";
 import {
@@ -140,8 +137,9 @@ export function PanelGuidedScope({
       <section className="panel-presets" aria-labelledby="panel-presets-title">
         <h2 id="panel-presets-title">What do you need?</h2>
         <div className="panel-preset-list">
-          {onStartAllReturnsFullYear
-            ? allReturnsPresets.map((preset) => (
+          {onStartAllReturnsFullYear && allReturnsPresets.length > 0 ? (
+            <div className="panel-everything-preset-group">
+              {allReturnsPresets.map((preset) => (
                 <AllReturnsPreset
                   key={preset.financialYear}
                   busy={busy}
@@ -168,8 +166,9 @@ export function PanelGuidedScope({
                   onStart={onStartAllReturnsFullYear}
                   onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
                 />
-              ))
-            : null}
+              ))}
+            </div>
+          ) : null}
           {presets.map((preset) => {
             const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
             const summaryForPreset = savedRunForPreset ?? flowSummary;
@@ -216,10 +215,6 @@ export function PanelGuidedScope({
                   }}
                 >
                   <span>{preset.label}</span>
-                  <span className="panel-preset-count">
-                    {preset.periodCount} {preset.periodCount === 1 ? "period" : "periods"} ·{" "}
-                    {preset.artifactLabel.toLowerCase()} · one ZIP
-                  </span>
                 </button>
                 {disabledReason ? (
                   <p
@@ -229,14 +224,6 @@ export function PanelGuidedScope({
                     {disabledReason}
                   </p>
                 ) : null}
-                {filedReturnsCapabilityRunNotes(
-                  preset.scope.returnType,
-                  preset.scope.artifactType ?? "PDF",
-                ).map((note) => (
-                  <p className="panel-preset-note" key={note}>
-                    {note}
-                  </p>
-                ))}
               </React.Fragment>
             );
           })}
@@ -399,7 +386,7 @@ function AllReturnsPreset({
         note: `Saved plan · ${resumePlan.periodCount} eligible ${plural(resumePlan.periodCount, "period")} retained.`,
       }
     : plan;
-  const countLabel = `${displayedPlan.returnCount} ${plural(displayedPlan.returnCount, "return")} · ${displayedPlan.periodCount} ${plural(displayedPlan.periodCount, "period")} each · up to ${displayedPlan.fileCount} ${plural(displayedPlan.fileCount, "file")} · one ZIP`;
+  const coverageLabel = displayedPlan.returnTypes.map(shortReturnLabel).join(" · ");
   const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
 
   return (
@@ -409,7 +396,7 @@ function AllReturnsPreset({
         type="button"
         disabled={disabled}
         aria-describedby={disabledReason ? disabledReasonId : undefined}
-        aria-label={`${displayedPlan.label} for all supported returns. ${countLabel}. ${displayedPlan.note}`}
+        aria-label={`${displayedPlan.label}. ${coverageLabel}.`}
         onClick={() => {
           if (resumePlan) {
             const currentPlan = panelAllReturnsFullYearPreset(plan.financialYear, new Date());
@@ -438,17 +425,20 @@ function AllReturnsPreset({
           onStart({ kind: plan.kind, financialYear: plan.financialYear });
         }}
       >
-        <span>{displayedPlan.label} · all supported returns</span>
-        <span className="panel-preset-count">{countLabel}</span>
+        <span>{displayedPlan.label}</span>
+        <span className="panel-everything-preset-coverage">{coverageLabel}</span>
       </button>
       {disabledReason ? (
         <p className="panel-preset-reason" id={disabledReasonId}>
           {disabledReason}
         </p>
       ) : null}
-      <p className="panel-preset-note">{displayedPlan.note}</p>
     </React.Fragment>
   );
+}
+
+function shortReturnLabel(returnType: string): string {
+  return returnType === "GSTR-1" ? "R1" : returnType.replace("GSTR-", "");
 }
 
 function plural(count: number, singular: string): string {
