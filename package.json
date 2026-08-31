@@ -23,6 +23,7 @@
     "workflow:preflight": "node scripts/check-pack-workflow-preflight.mjs",
     "dev:firefox": "wxt --browser firefox",
     "build": "wxt build",
+    "build:alpha": "wxt build --mode alpha",
     "build:firefox": "wxt build --browser firefox",
     "zip": "wxt zip",
     "wxt:prepare": "wxt prepare",
