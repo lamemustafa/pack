@@ -349,6 +349,16 @@ async function handleMessage(
       if (flowSummary && !["complete", "cancelled"].includes(flowSummary.status)) {
         return { ok: true, flowSummary };
       }
+      if (
+        allSupportedFullFiscalYearFlowSummary &&
+        flowSummary &&
+        isNewerTerminalFiledReturnsFlowSummary(
+          flowSummary,
+          allSupportedFullFiscalYearFlowSummary,
+        )
+      ) {
+        return { ok: true, flowSummary };
+      }
       if (allSupportedFullFiscalYearFlowSummary) {
         return { ok: true, allSupportedFullFiscalYearFlowSummary };
       }
@@ -435,6 +445,25 @@ function isStaleAllSupportedCompatibilityLease(
     flowSummary.scope.period === "FULL_FISCAL_YEAR" &&
     flowSummary.scope.financialYear === allSupportedSummary.summaryIdentity.financialYear &&
     flowSummary.flowStep.safeSignals.includes("filed-returns-run-needs-review"),
+  );
+}
+
+function isNewerTerminalFiledReturnsFlowSummary(
+  candidate: NonNullable<Awaited<ReturnType<typeof readCurrentFiledReturnsFlowSummary>>>,
+  allSupportedSummary: NonNullable<
+    Awaited<ReturnType<typeof readCurrentAllSupportedFullFiscalYearFlowSummary>>
+  >,
+): boolean {
+  if (!["complete", "cancelled"].includes(candidate.status)) return false;
+  const candidateUpdatedAt = candidate.completedAt ?? candidate.updatedAt;
+  const allSupportedUpdatedAt = allSupportedSummary.completedAt ?? allSupportedSummary.updatedAt;
+  if (!candidateUpdatedAt || !allSupportedUpdatedAt) return false;
+  const candidateTimestamp = Date.parse(candidateUpdatedAt);
+  const allSupportedTimestamp = Date.parse(allSupportedUpdatedAt);
+  return (
+    Number.isFinite(candidateTimestamp) &&
+    Number.isFinite(allSupportedTimestamp) &&
+    candidateTimestamp > allSupportedTimestamp
   );
 }
 
