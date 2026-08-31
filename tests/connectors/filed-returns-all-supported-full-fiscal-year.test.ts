@@ -113,6 +113,51 @@ describe("all-supported full-fiscal-year plan", () => {
     ).toBe(false);
   });
 
+  it("accepts a restart bound to its reviewed ledger, and still refuses other widening", () => {
+    // The restart payload names the ledger the reader reviewed. Validating it
+    // with the plain root predicate rejected the whole message, because that
+    // one refuses any key beyond `kind` and `financialYear` -- so every bound
+    // restart came back "Unsupported Pack message" and never reached the
+    // handler. Tests that call the background function directly cannot see
+    // this; it only exists at the message boundary.
+    expect(
+      isPackMessage({
+        type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+        payload: {
+          kind: "all-supported-returns-full-fiscal-year",
+          financialYear: "2025-26",
+          ledgerId: "ledger-1",
+        },
+      }),
+    ).toBe(true);
+    // Unbound is still accepted: a summary persisted before the field existed
+    // must stay discardable rather than become permanently stuck.
+    expect(
+      isPackMessage({
+        type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+        payload: {
+          kind: "all-supported-returns-full-fiscal-year",
+          financialYear: "2025-26",
+        },
+      }),
+    ).toBe(true);
+    for (const payload of [
+      { kind: "all-supported-returns-full-fiscal-year", financialYear: "2025-26", ledgerId: 7 },
+      {
+        kind: "all-supported-returns-full-fiscal-year",
+        financialYear: "2025-26",
+        returnType: "GSTR-3B",
+      },
+    ]) {
+      expect(
+        isPackMessage({
+          type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+          payload,
+        }),
+      ).toBe(false);
+    }
+  });
+
   it("accepts the root protocol message and rejects widened or malformed payloads", () => {
     expect(
       isPackMessage({
@@ -151,13 +196,27 @@ describe("all-supported full-fiscal-year plan", () => {
         },
       }),
     ).toBe(true);
+    // A restart now carries the reviewed ledger id so the background can refuse
+    // a superseded root instead of deleting it; the bound form is covered by
+    // its own case above. The boundary stays narrow for everything else.
     expect(
       isPackMessage({
         type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
         payload: {
           kind: "all-supported-returns-full-fiscal-year",
           financialYear: "2025-26",
-          ledgerId: "must-not-come-from-the-panel",
+          period: "April",
+        },
+      }),
+    ).toBe(false);
+    // A start has no use for a bound ledger and must not accept one.
+    expect(
+      isPackMessage({
+        type: "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+        payload: {
+          kind: "all-supported-returns-full-fiscal-year",
+          financialYear: "2025-26",
+          ledgerId: "ledger-1",
         },
       }),
     ).toBe(false);

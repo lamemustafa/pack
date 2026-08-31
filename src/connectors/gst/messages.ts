@@ -14,7 +14,10 @@ import type {
   FiledReturnsDownloadTarget,
   PortalFlowStepResult,
 } from "./filed-returns-contracts";
-import { isAllSupportedFullFiscalYearRequest } from "./filed-returns-all-supported-full-fiscal-year";
+import {
+  isAllSupportedFullFiscalYearRequest,
+  isAllSupportedFullFiscalYearRestartRequest,
+} from "./filed-returns-all-supported-full-fiscal-year";
 import type { ArtifactRequest, ArtifactFailureReason } from "./artifact-source";
 import {
   FULL_FISCAL_YEAR_PERIOD,
@@ -286,12 +289,12 @@ export function isPackMessage(
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
+      // Deliberately not sharing the restart predicate: a start carries the
+      // root identity and nothing else, and folding the two together would let
+      // a bound ledger id through a message that has no use for one.
+      return isAllSupportedFullFiscalYearRequest(input.payload);
     case "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
-      return (
-        isAllSupportedFullFiscalYearRequest(input.payload) &&
-        ((input.payload as { ledgerId?: unknown }).ledgerId === undefined ||
-          typeof (input.payload as { ledgerId?: unknown }).ledgerId === "string")
-      );
+      return isAllSupportedFullFiscalYearRestartRequest(input.payload);
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsFreshStartPayload(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":
