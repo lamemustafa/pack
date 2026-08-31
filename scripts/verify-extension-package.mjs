@@ -2,9 +2,20 @@ import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-const outputDir = process.argv[2];
+const args = process.argv.slice(2);
+// An alpha build is a real distributable that live testing runs against, so it
+// needs every check here -- the home-path and telemetry checks caught a genuine
+// leak in one. It differs from a packaged build in exactly one respect: the
+// alpha surface marker must be present rather than absent. Without this flag
+// the marker check refuses the alpha output before anything else is inspected,
+// which left that build unverified entirely.
+const alphaMode = args.includes("--alpha");
+const outputDir = args.find((arg) => !arg.startsWith("--"));
 if (!outputDir)
-  throw new Error("usage: node scripts/verify-extension-package.mjs <extension-output-dir>");
+  throw new Error(
+    "usage: node scripts/verify-extension-package.mjs [--alpha] <extension-output-dir>",
+  );
+let sawAlphaSurfaceMarker = false;
 
 const harnessPolicyPath =
   process.env.PACK_HARNESS_POLICY_PATH ??
@@ -296,11 +307,13 @@ for (const file of await listFiles(outputDir)) {
     assertNoHarnessPolicyLeaks(contents, file);
     assertNoPathfulGstPortalUrl(contents, file);
     for (const marker of forbiddenAlphaSurfaceMarkers) {
-      if (contents.includes(marker)) {
+      if (!contents.includes(marker)) continue;
+      if (!alphaMode) {
         throw new Error(
           `Alpha surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
         );
       }
+      sawAlphaSurfaceMarker = true;
     }
   }
   if (/\.svg$/.test(file)) {
@@ -336,7 +349,19 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
   assertNoForbiddenTelemetry(contents, file);
 }
 
-console.log("Pack WXT extension package verification passed.");
+if (alphaMode && !sawAlphaSurfaceMarker) {
+  // A silently gate-less "alpha" build is the failure this mode exists to
+  // catch: it would pass every other check while shipping none of the surface
+  // the build was made to exercise.
+  throw new Error(
+    `No alpha surface marker found in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
+  );
+}
+console.log(
+  alphaMode
+    ? "Pack WXT alpha extension package verification passed."
+    : "Pack WXT extension package verification passed.",
+);
 
 /** Reads a packaged file, or fails naming the file rather than crashing with a raw ENOENT. */
 

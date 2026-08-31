@@ -557,6 +557,71 @@ describe("action-to-panel binding", () => {
   });
 });
 
+describe("alpha builds", () => {
+  // An alpha build is what live testing runs against, and it went unverified
+  // entirely: pointed at that output the marker check refused it before any
+  // other check ran, so a real leak -- the React development transform and an
+  // absolute builder path -- sat in it undetected.
+  it("requires the alpha surface the build exists to carry", async () => {
+    const outputDir = await createValidPackage();
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("this is not an alpha build");
+  });
+
+  it("accepts an alpha build that carries the marker and nothing else new", async () => {
+    const outputDir = await createValidPackage();
+    await writeFile(
+      path.join(outputDir, "alpha-surface.js"),
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.output).toContain("alpha extension package verification passed");
+    expect(result.status).toBe(0);
+  });
+
+  it("still rejects a builder path in an alpha build", async () => {
+    // The regression this mode exists for: a development-mode alpha build
+    // inlines an absolute source path containing the builder's home
+    // directory. Every other check applies to an alpha build unchanged.
+    const outputDir = await createValidPackage();
+    await writeFile(
+      path.join(outputDir, "alpha-surface.js"),
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "utf8",
+    );
+    await writeFile(
+      path.join(outputDir, "leaky.js"),
+      'const jsxFile = "/Users/someone/dev/pack/src/entrypoints/options/main.tsx";\nexport default jsxFile;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("home-path");
+  });
+
+  it("keeps refusing the marker in a packaged build", async () => {
+    const outputDir = await createValidPackage();
+    await writeFile(
+      path.join(outputDir, "alpha-surface.js"),
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "utf8",
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Alpha surface marker");
+  });
+});
+
 async function createValidPackage(): Promise<string> {
   const outputDir = await mkdtemp(path.join(tmpdir(), "pack-extension-"));
   createdDirs.push(outputDir);
@@ -645,11 +710,12 @@ async function writePackageFile(outputDir: string, relativePath: string, content
 async function runVerifier(
   outputDir: string,
   env: NodeJS.ProcessEnv = {},
+  flags: readonly string[] = [],
 ): Promise<{ output: string; status: number }> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
-      ["scripts/verify-extension-package.mjs", outputDir],
+      ["scripts/verify-extension-package.mjs", ...flags, outputDir],
       { cwd: rootDir, env: { ...process.env, ...env } },
       (error, stdout, stderr) => {
         resolve({
