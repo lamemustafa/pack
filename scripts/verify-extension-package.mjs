@@ -31,7 +31,7 @@ async function reachableFromPanelHtml(dir) {
   const panelEntry = path.join(dir, "panel.html");
   if (files.includes(panelEntry)) {
     const html = await readFile(panelEntry, "utf8");
-    const executableMarkup = html.replace(/<!--[\s\S]*?-->/g, "");
+    const executableMarkup = withoutHtmlComments(html);
     for (const match of executableMarkup.matchAll(
       /<script\b[^>]*\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/gi,
     )) {
@@ -51,6 +51,20 @@ async function reachableFromPanelHtml(dir) {
     }
   }
   return reachable;
+}
+
+function withoutHtmlComments(markup) {
+  let cursor = 0;
+  let executableMarkup = "";
+  while (cursor < markup.length) {
+    const commentStart = markup.indexOf("<!--", cursor);
+    if (commentStart === -1) return executableMarkup + markup.slice(cursor);
+    executableMarkup += markup.slice(cursor, commentStart);
+    const commentEnd = markup.indexOf("-->", commentStart + 4);
+    if (commentEnd === -1) return executableMarkup;
+    cursor = commentEnd + 3;
+  }
+  return executableMarkup;
 }
 
 function staticModuleSpecifiers(fileName, contents) {
