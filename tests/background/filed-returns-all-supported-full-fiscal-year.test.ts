@@ -122,6 +122,44 @@ describe("all-supported full-fiscal-year worker", () => {
     });
   });
 
+  it("refuses to discard a root that has not finished, and leaves it saved", async () => {
+    // The panel only offers this control on a completed card, so this guard is
+    // the one that holds when the message arrives from a stale panel or an
+    // MV3 worker that restarted mid-run. Removing it passed the whole suite.
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected an expandable plan");
+    const started = createAllSupportedFullFiscalYearLedger(
+      request,
+      expansion.targets,
+      FILED_RETURNS_MONTHS.slice(0, 3),
+      NOW,
+    );
+    const running = markAllSupportedFullFiscalYearTargetRunning(
+      started,
+      started.targets[0]!.targetId,
+      NOW,
+    );
+    expect(running.status).not.toBe("complete");
+    await persistAllSupportedFullFiscalYearLedger(deps, running);
+    vi.clearAllMocks();
+
+    const response = await discardCompletedAllSupportedFullFiscalYearPlan(request, deps);
+
+    // The outcome that matters is that nothing was destroyed: the staging is
+    // untouched, the ledger is still saved, and the reader is told why.
+    expect(zip.discard).not.toHaveBeenCalled();
+    expect(allSavedLedgers()).toHaveLength(1);
+    expect(response).toMatchObject({
+      flowStep: {
+        safeMessage:
+          "Pack will not discard this fiscal-year plan until its saved recovery work is complete.",
+      },
+    });
+    expect(
+      (response as { flowStep: { safeSignals: readonly string[] } }).flowStep.safeSignals,
+    ).toContain("all-supported-full-fiscal-year-restart-plan-not-terminal");
+  });
+
   it("retains the completed root when its scoped local cleanup fails", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
