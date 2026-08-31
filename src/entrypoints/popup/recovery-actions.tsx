@@ -100,7 +100,9 @@ export function RecoveryActions({
                 Run in progress
               </button>
               <p className="muted" id="recovery-run-active-reason">
-                Retry controls appear automatically if the run stops making progress.
+                {recoveryAvailability.isWithheldFullYearRecovery
+                  ? recoveryAvailability.guidance
+                  : "Retry controls appear automatically if the run stops making progress."}
               </p>
             </>
           ) : null}
