@@ -700,17 +700,13 @@ describe("popup background failure presentation", () => {
     await act(async () => {
       await controller?.refreshFlowSummary();
     });
-    expect(
-      controller?.allSupportedFullFiscalYearFlowSummary?.targetEvidence.filter(
-        ({ outcome }) => outcome === "saved",
-      ),
-    ).toHaveLength(0);
+    expect(controller?.allSupportedFullFiscalYearFlowSummary?.completedTargetIds).toHaveLength(0);
 
     currentSummary = {
       ...baseSummary,
       completedTargetIds: ["synthetic-april"],
       targetEvidence: [
-        { ...baseSummary.targetEvidence[0], outcome: "saved" },
+        { ...baseSummary.targetEvidence[0], outcome: "captured" },
         baseSummary.targetEvidence[1],
       ],
     };
@@ -723,12 +719,13 @@ describe("popup background failure presentation", () => {
     });
 
     await vi.waitFor(() =>
-      expect(
-        controller?.allSupportedFullFiscalYearFlowSummary?.targetEvidence.filter(
-          ({ outcome }) => outcome === "saved",
-        ),
-      ).toHaveLength(1),
+      expect(controller?.allSupportedFullFiscalYearFlowSummary?.completedTargetIds).toHaveLength(1),
     );
+    expect(
+      controller?.allSupportedFullFiscalYearFlowSummary?.targetEvidence.filter(
+        ({ outcome }) => outcome === "saved",
+      ),
+    ).toHaveLength(0);
     await act(async () => root?.unmount());
   });
 

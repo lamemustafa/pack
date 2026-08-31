@@ -21,8 +21,9 @@ function declaredProperty(selector: string, property: string): string | undefine
 }
 
 function summary(
-  outcomes: readonly ("saved" | "pending")[],
+  outcomes: readonly ("saved" | "captured" | "not-filed" | "pending")[],
   status: "running" | "complete" = "running",
+  completedIndexes = outcomes.flatMap((outcome, index) => (outcome === "saved" ? [index] : [])),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   return {
     summaryIdentity: {
@@ -30,9 +31,7 @@ function summary(
       financialYear: "2025-26",
     },
     status,
-    completedTargetIds: outcomes.flatMap((outcome, index) =>
-      outcome === "saved" ? [`synthetic-${index}`] : [],
-    ),
+    completedTargetIds: completedIndexes.map((index) => `synthetic-${index}`),
     targetEvidence: outcomes.map((outcome, index) => ({
       targetId: `synthetic-${index}`,
       financialYear: "2025-26",
@@ -66,11 +65,11 @@ function render(summaryValue: FiledReturnsAllSupportedFullFiscalYearFlowSummary)
 }
 
 describe("all-supported panel progress", () => {
-  it("draws the existing progress track at the live saved-target percentage", () => {
-    const markup = render(summary(["saved", "pending"]));
+  it("draws the existing progress track at the live completed-target percentage", () => {
+    const markup = render(summary(["captured", "pending"], "running", [0]));
 
     expect(markup).toContain('aria-label="All supported returns progress"');
-    expect(markup).toContain("1 of 2 saved");
+    expect(markup).toContain("1 of 2 targets checked");
     expect(markup).toContain('class="panel-run-progress-track"');
     expect(markup).toContain('style="width:50%"');
     expect(declaredProperty(".panel-run-progress-track span", "background")).toBe(
@@ -79,10 +78,10 @@ describe("all-supported panel progress", () => {
   });
 
   it("puts a completed outcome before the retained browser-name caveat", () => {
-    const markup = render(summary(["saved", "saved"], "complete"));
+    const markup = render(summary(["saved", "not-filed"], "complete", [0, 1]));
 
     expect(markup).toContain("Run complete");
-    expect(markup).toContain("2 of 2 saved");
+    expect(markup).toContain("2 of 2 targets checked");
     expect(markup).toContain("browser may have saved the ZIP under a different name");
     expect(markup.indexOf("Run complete")).toBeLessThan(
       markup.indexOf("browser may have saved the ZIP under a different name"),
