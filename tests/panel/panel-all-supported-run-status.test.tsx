@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
   type FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+  type FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
 } from "../../src/connectors/gst/filed-returns-contracts";
 
 vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
@@ -169,6 +170,71 @@ describe("all-supported panel progress", () => {
       markup.indexOf("browser may have saved the ZIP under a different name"),
     );
     expect(markup).toContain('style="width:50%"');
+  });
+
+  it("keeps every mixed all-supported outcome grouped beside a blocked run", () => {
+    const targetEvidence: FiledReturnsAllSupportedFullFiscalYearTargetEvidence[] = [
+      {
+        targetId: "gstr1-april",
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-1" as const,
+        artifactType: "PDF" as const,
+        outcome: "saved" as const,
+      },
+      {
+        targetId: "gstr1-may",
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-1" as const,
+        artifactType: "PDF" as const,
+        outcome: "not-filed" as const,
+      },
+      {
+        targetId: "gstr2b-april",
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-2B" as const,
+        artifactType: "JSON" as const,
+        outcome: "needs-review" as const,
+      },
+      {
+        targetId: "gstr3b-april",
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-3B" as const,
+        artifactType: "PDF" as const,
+        outcome: "pending" as const,
+      },
+    ];
+    const markup = render({
+      ...summary(["saved"], "running", [0]),
+      status: "blocked",
+      targetEvidence,
+      totalTargets: targetEvidence.length,
+      completedTargetIds: ["gstr1-april"],
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["synthetic-target-needs-review"],
+        safeMessage: "Synthetic mixed all-supported review.",
+      },
+    });
+
+    // The saved all-supported summary is the positive control: the rendered
+    // run heading proves these rows belong to its blocked plan, not another
+    // terminal surface.
+    expect(markup).toContain("Your pack · All supported returns · FY 2025-26");
+    expect(markup).toContain('aria-label="GSTR-1 results"');
+    expect(markup).toContain('aria-label="GSTR-2B results"');
+    expect(markup).toContain('aria-label="GSTR-3B results"');
+    expect(markup.match(/class="evidence-row /g)).toHaveLength(4);
+    expect(markup).toContain("Saved");
+    expect(markup).toContain("Not filed");
+    expect(markup).toContain("Needs review");
+    expect(markup).toContain("Waiting");
+    expect(markup).toContain("1 needs review");
   });
 
   it("renders all return groups at alpha mode with no duplicate summary or hidden identifiers", () => {
