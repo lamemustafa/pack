@@ -4,7 +4,10 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
 } from "../../connectors/gst/filed-returns-contracts";
-import { filedReturnsCapability } from "../../connectors/gst/filed-returns-capabilities";
+import {
+  filedReturnsCapability,
+  filedReturnsCapabilityArtifactDescription,
+} from "../../connectors/gst/filed-returns-capabilities";
 import { getFiledReturnsFinancialYearOptions } from "../../connectors/gst/filed-returns-scope";
 import { ScopeFormAction } from "../popup/components";
 import {
@@ -170,6 +173,10 @@ export function PanelGuidedScope({
             </div>
           ) : null}
           {presets.map((preset) => {
+            const artifactDescription = filedReturnsCapabilityArtifactDescription(
+              preset.scope.returnType,
+              preset.scope.artifactType,
+            );
             const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
             const summaryForPreset = savedRunForPreset ?? flowSummary;
             const blockForPreset = savedRunForPreset ? null : externalBlock;
@@ -189,6 +196,7 @@ export function PanelGuidedScope({
                   className="panel-preset"
                   type="button"
                   disabled={disabled}
+                  aria-label={`${preset.label}. Downloads ${artifactDescription}.`}
                   aria-describedby={
                     disabledReason ? `preset-${preset.scope.returnType}-reason` : undefined
                   }
