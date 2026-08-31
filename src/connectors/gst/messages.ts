@@ -91,7 +91,8 @@ export type PackMessage =
     }
   | {
       type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW";
-      payload: FiledReturnsAllSupportedFullFiscalYearRequest;
+      /** Names the reviewed ledger so a superseded root is refused, not removed. */
+      payload: FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId?: string };
     }
   | {
       type: "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW";
@@ -286,7 +287,11 @@ export function isPackMessage(
       return isFiledReturnsStartScope(input.payload);
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
     case "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
-      return isAllSupportedFullFiscalYearRequest(input.payload);
+      return (
+        isAllSupportedFullFiscalYearRequest(input.payload) &&
+        ((input.payload as { ledgerId?: unknown }).ledgerId === undefined ||
+          typeof (input.payload as { ledgerId?: unknown }).ledgerId === "string")
+      );
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsFreshStartPayload(input.payload);
     case "PACK_START_SYNTHETIC_DEMO":

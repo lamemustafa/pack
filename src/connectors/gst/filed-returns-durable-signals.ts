@@ -251,6 +251,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "all-supported-full-fiscal-year-restart-local-cleanup-failed",
   "all-supported-full-fiscal-year-restart-plan-not-found",
   "all-supported-full-fiscal-year-restart-plan-not-terminal",
+  "all-supported-full-fiscal-year-restart-plan-superseded",
   "all-supported-full-fiscal-year-run-active",
   "all-supported-full-fiscal-year-run-interrupted",
   "all-supported-full-fiscal-year-run-needs-action",

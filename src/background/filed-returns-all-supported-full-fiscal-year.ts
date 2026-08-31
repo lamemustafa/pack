@@ -169,7 +169,7 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
  * broad local-data clear path: other fiscal years remain indexed and intact.
  */
 export async function discardCompletedAllSupportedFullFiscalYearPlan(
-  request: FiledReturnsAllSupportedFullFiscalYearRequest,
+  request: FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId?: string },
   deps: AllSupportedRunnerDeps,
 ): Promise<PackMessageResponse | null> {
   const storageState = await readAllSupportedPlanLedgersStorageState(deps);
@@ -189,6 +189,20 @@ export async function discardCompletedAllSupportedFullFiscalYearPlan(
           "Pack could not find the saved fiscal-year plan to restart. Refresh this panel and try again.",
       },
     };
+  }
+  // The request names the ledger the reader reviewed. If another surface
+  // replaced or completed this root in between, the indexed ledger is no
+  // longer the plan they authorised discarding -- and this path removes it.
+  if (request.ledgerId !== undefined && request.ledgerId !== ledger.ledgerId) {
+    return allSupportedResponse(deps, ledger, {
+      ...unresolvedRunStep(ledger),
+      safeSignals: [
+        ...unresolvedRunStep(ledger).safeSignals,
+        "all-supported-full-fiscal-year-restart-plan-superseded",
+      ],
+      safeMessage:
+        "This fiscal-year plan changed since Pack showed it. Refresh this panel and check it before discarding.",
+    });
   }
   if (ledger.status !== "complete" || !ledger.zipPhase || !isCleanedZipPhase(ledger.zipPhase)) {
     return allSupportedResponse(deps, ledger, {
@@ -565,6 +579,7 @@ function toAllSupportedSummary(
       outcome: targetOutcome(target, zipDelivered),
     })),
     totalTargets: ledger.targets.length,
+    ledgerId: ledger.ledgerId,
     ...(ledger.currentTargetId ? { currentTargetId: ledger.currentTargetId } : {}),
     flowStepScope,
     flowStep,

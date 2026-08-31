@@ -312,13 +312,16 @@ export function usePackPopupController() {
   );
 
   const restartAllSupportedFullFiscalYearFlow = React.useCallback(
-    async (plan: FiledReturnsAllSupportedFullFiscalYearRequest) => {
+    async (plan: FiledReturnsAllSupportedFullFiscalYearRequest & { ledgerId?: string }) => {
       await withBusy("restart-all-supported-filed-returns-full-fiscal-year-flow", async () => {
         const response = await sendPackMessage({
           type: "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
           payload: {
             kind: plan.kind,
             financialYear: plan.financialYear,
+            // Names the ledger the reader reviewed. The background refuses when
+            // the indexed ledger for this root has been replaced since.
+            ...(plan.ledgerId === undefined ? {} : { ledgerId: plan.ledgerId }),
           },
         });
         applyFlowResponse(response);

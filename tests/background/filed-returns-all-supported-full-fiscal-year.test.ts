@@ -160,6 +160,41 @@ describe("all-supported full-fiscal-year worker", () => {
     ).toContain("all-supported-full-fiscal-year-restart-plan-not-terminal");
   });
 
+  it("refuses a restart naming a ledger the root no longer holds", async () => {
+    // The reader authorises discarding the plan they were shown. If another
+    // surface replaces or completes this root in between, the indexed ledger
+    // is a different plan -- and this path removes it. The fiscal year alone
+    // cannot tell those apart.
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const current = allSavedLedgers()[0];
+    if (!current) throw new Error("expected a saved root");
+    vi.clearAllMocks();
+    zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
+
+    const response = await discardCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: `${current.ledgerId}-superseded` },
+      deps,
+    );
+
+    expect(zip.discard).not.toHaveBeenCalled();
+    expect(allSavedLedgers()).toHaveLength(1);
+    expect(allSavedLedgers()[0]?.ledgerId).toBe(current.ledgerId);
+    expect(
+      (response as { flowStep: { safeSignals: readonly string[] } }).flowStep.safeSignals,
+    ).toContain("all-supported-full-fiscal-year-restart-plan-superseded");
+
+    // The same request naming the ledger actually held still succeeds, so the
+    // guard rejects a mismatch rather than every restart.
+    await expect(
+      discardCompletedAllSupportedFullFiscalYearPlan(
+        { ...request, ledgerId: current.ledgerId },
+        deps,
+      ),
+    ).resolves.toBeNull();
+    expect(allSavedLedgers()).toHaveLength(0);
+  });
+
   it("retains the completed root when its scoped local cleanup fails", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);

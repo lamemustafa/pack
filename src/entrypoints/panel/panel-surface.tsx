@@ -134,9 +134,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 fullYearFlowAvailable={fullYearFlowAvailable}
                 portalReady={portalSignedIn}
                 onRestart={() =>
-                  void pack.restartAllSupportedFullFiscalYearFlow(
-                    allSupportedSummary.summaryIdentity,
-                  )
+                  void pack.restartAllSupportedFullFiscalYearFlow({
+                    ...allSupportedSummary.summaryIdentity,
+                    ...(allSupportedSummary.ledgerId === undefined
+                      ? {}
+                      : { ledgerId: allSupportedSummary.ledgerId }),
+                  })
                 }
                 onResume={() =>
                   void pack.startAllSupportedFullFiscalYearFlow(allSupportedSummary.summaryIdentity)
@@ -247,7 +250,13 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                   void pack.startAllSupportedFullFiscalYearFlow(plan)
                 }
                 onRestartAllReturnsFullYear={(plan) =>
-                  void pack.restartAllSupportedFullFiscalYearFlow(plan)
+                  void pack.restartAllSupportedFullFiscalYearFlow({
+                    ...plan,
+                    ...(allSupportedSummary?.ledgerId === undefined ||
+                    allSupportedSummary.summaryIdentity.financialYear !== plan.financialYear
+                      ? {}
+                      : { ledgerId: allSupportedSummary.ledgerId }),
+                  })
                 }
               />
             )}
