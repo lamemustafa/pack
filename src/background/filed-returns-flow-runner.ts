@@ -388,6 +388,11 @@ export async function retryAllSupportedFiledReturnsFullFiscalYearTarget(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
+    const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(
+      leaseScope,
+      deps,
+    );
+    if (retainedArtifactRecovery) return retainedArtifactRecovery;
     return retryAllSupportedFullFiscalYearTarget(
       payload,
       deps as never,

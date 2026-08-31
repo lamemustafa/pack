@@ -42,9 +42,7 @@ export function allSupportedExplicitRetryTarget(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
 ): FiledReturnsAllSupportedFullFiscalYearTarget | null {
   if (ledger.zipPhase) return null;
-  const targetIndex = ledger.targets.findIndex((target) =>
-    EXPLICIT_RETRY_TARGET_STATUSES.has(target.status),
-  );
+  const targetIndex = ledger.targets.findIndex(isExplicitlyRetryableTarget);
   if (targetIndex < 0) return null;
   const target = ledger.targets[targetIndex]!;
   return ledger.targets
@@ -53,6 +51,15 @@ export function allSupportedExplicitRetryTarget(
     ledger.targets.slice(targetIndex + 1).every((candidate) => candidate.status === "pending")
     ? target
     : null;
+}
+
+function isExplicitlyRetryableTarget(
+  target: FiledReturnsAllSupportedFullFiscalYearTarget,
+): boolean {
+  return (
+    EXPLICIT_RETRY_TARGET_STATUSES.has(target.status) &&
+    !target.safeSignals.includes("full-fiscal-year-pinned-gst-tab-unavailable")
+  );
 }
 
 /**
