@@ -31,7 +31,10 @@ async function reachableFromPanelHtml(dir) {
   const panelEntry = path.join(dir, "panel.html");
   if (files.includes(panelEntry)) {
     const html = await readFile(panelEntry, "utf8");
-    for (const match of html.matchAll(/<script\b[^>]*\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+    const executableMarkup = html.replace(/<!--[\s\S]*?-->/g, "");
+    for (const match of executableMarkup.matchAll(
+      /<script\b[^>]*\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/gi,
+    )) {
       const specifier = match[1] ?? match[2];
       if (specifier) queue.push(resolveOutputSpecifier(dir, panelEntry, specifier));
     }

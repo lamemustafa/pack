@@ -644,6 +644,25 @@ describe("alpha builds", () => {
     expect(result.output).toContain("reachable from the panel");
   });
 
+  it("does not mistake a commented panel script for a loaded entry", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><!-- <script type="module" src="/chunks/alpha-surface.js"></script> --></body></html>',
+    );
+    await writePackageFile(
+      outputDir,
+      "chunks/alpha-surface.js",
+      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+    );
+
+    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("reachable from the panel");
+  });
+
   it("refuses an alpha marker only another extension page can reach", async () => {
     const outputDir = await createValidPackage();
     // Positive control: this marker is genuinely reachable from offscreen.html,
