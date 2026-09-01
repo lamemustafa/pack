@@ -19,6 +19,7 @@
 | Retry ordering | `src/background/filed-returns-all-supported-full-fiscal-year-ledger.ts` (previous positive / later pending ordering) | unpinned | Replaced the ordering predicate with `return target`; full Vitest passed at `509df19` before and after (172 files / 3,143 tests). Guard restored. | pending |
 | Retry non-resumable signals | `src/background/filed-returns-all-supported-full-fiscal-year-ledger.ts` | pinned | Removed the signal exclusion; full Vitest failed at `61d052a` before and after: 7 cases in `all-supported-full-fiscal-year-ledger.test.ts` (`withholds an explicit retry for a non-resumable target`). Guard restored. | pending |
 | Restart malformed saved-plan index | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the restart storage-state guard with `false`; full Vitest passed at `4ee0022` before and after (172 files / 3,143 tests). Guard restored. | pending |
+| Restart missing saved-plan root | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the missing-root guard with `false`; full Vitest passed at `8c5cecb` before and after (172 files / 3,143 tests). Guard restored. | pending |
 
 ## Alpha package-marker reachability
 
