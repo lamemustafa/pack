@@ -6,6 +6,7 @@ import {
   interruptedFullFiscalYearStep,
   summariseFullFiscalYearLedger,
 } from "../../src/background/filed-returns-full-fiscal-year-summary";
+import { searchStepLimitReachedMessage } from "../../src/background/filed-returns-step-limit";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
 import { makeCompletedRecoveryLedger } from "../background/full-year-completion-fixtures.test-helpers";
@@ -38,10 +39,16 @@ const PINNED_TAB_SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
   ...SAVED_FULL_YEAR,
   flowStep: {
     ...SAVED_FULL_YEAR.flowStep,
+    state: "blocked",
     safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
     safeMessage: canonicalDurableSummaryMessage(SAVED_FULL_YEAR.scope, "blocked", [
       "full-fiscal-year-pinned-gst-tab-unavailable",
     ]),
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Discard this saved plan before using a different GST Portal tab.",
+      canResume: false,
+    },
   },
   fullFiscalYearRecovery: {
     ...SAVED_FULL_YEAR.fullFiscalYearRecovery!,
@@ -147,7 +154,9 @@ function buttonLabels(): string[] {
 function hasWithheldRecoveryWording(text: string): boolean {
   return (
     /\b(?:retry|retrying|resume|resuming|restart|restarting|try again)\b/i.test(text) ||
-    /\bstart (?:another|fresh|selected) download\b|\bstart this year again\b/i.test(text) ||
+    /\bstart (?:another|fresh|selected) download\b|\bstart (?:this year|pack) again\b/i.test(
+      text,
+    ) ||
     /(?<!cannot )\bcontinue\b/i.test(text)
   );
 }
@@ -334,6 +343,9 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     // Positive control for the independent matcher: this exact durable wording would restart the
     // unavailable full-year plan if it reached a packaged surface.
     expect(hasWithheldRecoveryWording(PINNED_TAB_SAVED_FULL_YEAR.flowStep.safeMessage)).toBe(true);
+    const stepLimitMessage = searchStepLimitReachedMessage(SAVED_FULL_YEAR.scope);
+    expect(stepLimitMessage).toContain("start Pack again");
+    expect(hasWithheldRecoveryWording("Start Pack again.")).toBe(true);
     await mount(false, true, PINNED_TAB_SAVED_FULL_YEAR);
 
     const recovery = getRecoveryFlowAvailability(PINNED_TAB_SAVED_FULL_YEAR, false);
