@@ -50,7 +50,6 @@ const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
 export function allSupportedExplicitRetryTarget(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
 ): FiledReturnsAllSupportedFullFiscalYearTarget | null {
-  if (ledger.zipPhase) return null;
   const targetIndex = ledger.targets.findIndex(isExplicitlyRetryableTarget);
   const target = ledger.targets[targetIndex]!;
   return ledger.targets
