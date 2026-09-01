@@ -349,7 +349,11 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(panel.beforeExpansionWarning).toContain("Check Downloads before starting again.");
     surfaces.push(["panel recovery disclosure", panel.afterExpansion, "Cancel and reset"]);
     const activePanel = await panelRecoveryText(activeSummary);
-    surfaces.push(["panel active recovery disclosure", activePanel.afterExpansion, "Run in progress"]);
+    surfaces.push([
+      "panel active recovery disclosure",
+      activePanel.afterExpansion,
+      "Run in progress",
+    ]);
 
     for (const [surface, markup, positiveControl] of surfaces) {
       const text = recoveryReaderText(new JSDOM(markup).window.document.body);
