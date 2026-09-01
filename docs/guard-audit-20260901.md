@@ -17,6 +17,7 @@
 | Retry ZIP-phase suppression | `src/background/filed-returns-all-supported-full-fiscal-year-ledger.ts` (`if (ledger.zipPhase)`) | unpinned | Deleted the return; full Vitest passed at `c52d67d` before and after (172 files / 3,143 tests). Guard restored. | pending |
 | Retry target existence | `src/background/filed-returns-all-supported-full-fiscal-year-ledger.ts` (`if (targetIndex < 0)`) | pinned | Deletion left the suite unable to complete after 280 seconds (normal mutation runs: 220–225 seconds); no progress advanced after the full test output's final pre-existing review-gate fixture diagnostics. Guard restored. | pending |
 | Retry ordering | `src/background/filed-returns-all-supported-full-fiscal-year-ledger.ts` (previous positive / later pending ordering) | unpinned | Replaced the ordering predicate with `return target`; full Vitest passed at `509df19` before and after (172 files / 3,143 tests). Guard restored. | pending |
+| Retry non-resumable signals | `src/background/filed-returns-all-supported-full-fiscal-year-ledger.ts` | pinned | Removed the signal exclusion; full Vitest failed at `61d052a` before and after: 7 cases in `all-supported-full-fiscal-year-ledger.test.ts` (`withholds an explicit retry for a non-resumable target`). Guard restored. | pending |
 
 ## Alpha package-marker reachability
 
