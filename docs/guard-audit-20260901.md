@@ -21,6 +21,7 @@
 | Restart malformed saved-plan index | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the restart storage-state guard with `false`; full Vitest passed at `4ee0022` before and after (172 files / 3,143 tests). Guard restored. | pending |
 | Restart missing saved-plan root | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the missing-root guard with `false`; full Vitest passed at `8c5cecb` before and after (172 files / 3,143 tests). Guard restored. | pending |
 | Restart stale ledger binding | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | pinned | Replaced the binding guard with `false`; full Vitest failed at `1753ba2`: `filed-returns-all-supported-full-fiscal-year.test.ts` — `refuses a restart naming a ledger the root no longer holds`. Guard restored. | pending |
+| Restart terminal-cleanup precondition | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | pinned | Replaced the terminal-state guard with `false`; full Vitest failed at `2b6512a`: `filed-returns-all-supported-full-fiscal-year.test.ts` — `refuses to discard a root that has not finished, and leaves it saved`. Guard restored. | pending |
 
 ## Alpha package-marker reachability
 
