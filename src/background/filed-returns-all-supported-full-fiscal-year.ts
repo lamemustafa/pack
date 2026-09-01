@@ -279,15 +279,6 @@ export async function retryAllSupportedFullFiscalYearTarget(
       deps,
     );
   }
-  if (ledger.zipPhase) {
-    return allSupportedRecoveryUnavailableResponse(
-      payload.financialYear,
-      "all-supported-full-fiscal-year-target-retry-final-zip",
-      "Pack cannot retry an individual target after it started final ZIP recovery.",
-      ledger,
-      deps,
-    );
-  }
   const target = allSupportedExplicitRetryTarget(ledger);
   if (
     !target ||

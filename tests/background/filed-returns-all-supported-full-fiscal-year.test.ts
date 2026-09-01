@@ -606,6 +606,34 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(savedLedger().revision).toBeGreaterThan(blocked.revision);
   });
 
+  it("refuses a retry that names a different reviewed target", async () => {
+    const blockedRunner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, blockedRunner);
+    const blocked = savedLedger();
+    const blockedTarget = blocked.targets[0];
+    if (!blockedTarget) throw new Error("expected the first target to be blocked");
+    const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    const response = await retryAllSupportedFullFiscalYearTarget(
+      {
+        financialYear: request.financialYear,
+        ledgerId: blocked.ledgerId,
+        targetId: `${blockedTarget.targetId}-different`,
+        expectedRevision: blocked.revision,
+      },
+      deps,
+      retryRunner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: ["all-supported-full-fiscal-year-target-retry-unavailable"],
+      },
+    });
+    expect(retryRunner).not.toHaveBeenCalled();
+    expect(savedLedger().targets[0]).toMatchObject({ status: "blocked", attempts: 1 });
+  });
+
   it("creates a new completed plan when the current eligible period has advanced", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
 
