@@ -190,7 +190,8 @@ export function RecoveryActions({
           {needsFullFiscalYearReview ? (
             <>
               <p className="muted">Why Pack paused: {recoveryAvailability.message}</p>
-              {recoveryAvailability.canContinueFullYear &&
+              {fullYearFlowAvailable &&
+              recoveryAvailability.canContinueFullYear &&
               signals.has("full-fiscal-year-resume-confirmation-required") ? (
                 <p className="muted">
                   This saved run is not bound to a GST account. Continue only if the same GST

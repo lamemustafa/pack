@@ -138,7 +138,7 @@ async function panelRecoveryText(
     );
     await Promise.resolve();
   });
-  return { afterExpansion: recoveryReaderText(container), beforeExpansionWarning };
+  return { afterExpansion: recoveryReaderText(recovery), beforeExpansionWarning };
 }
 
 function buttonLabels(): string[] {
@@ -280,9 +280,9 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
   it("keeps every rendered withheld-recovery action within the packaged availability", async () => {
     vi.stubEnv("MODE", "production");
     const recovery = getRecoveryFlowAvailability(SAVED_FULL_YEAR, false);
-    expect(SAVED_FULL_YEAR.targetEvidence.some((target) => target.outcome === "needs-review")).toBe(
-      true,
-    );
+    expect(
+      SAVED_FULL_YEAR.targetEvidence?.some((target) => target.outcome === "needs-review"),
+    ).toBe(true);
     const activeSummary: FiledReturnsFlowSummary = {
       ...SAVED_FULL_YEAR,
       status: "running",
@@ -292,6 +292,14 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       },
     };
     const activeRecovery = getRecoveryFlowAvailability(activeSummary, false);
+    const resumeConfirmation = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("pending"),
+      new Date("2026-08-29T00:00:00Z"),
+    );
+    const downloadUnconfirmed = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("download-unconfirmed"),
+      new Date("2026-08-29T00:00:00Z"),
+    );
     const targetReview: FiledReturnsFlowSummary = {
       ...SAVED_FULL_YEAR,
       flowStep: {
@@ -305,6 +313,10 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(recovery.availableActions).toEqual(["cancel-saved-full-year-run"]);
     // Positive control: this goes through RecoveryActions' distinct active-run branch.
     expect(activeRecovery.isWithheldFullYearRecovery).toBe(true);
+    expect(resumeConfirmation.flowStep.safeSignals).toContain(
+      "full-fiscal-year-resume-confirmation-required",
+    );
+    expect(downloadUnconfirmed.fullFiscalYearRecovery?.targetStatus).toBe("download-unconfirmed");
     // This reaches its own target-review branch, not either full-year recovery branch above.
     expect(targetReviewRecovery.message).toBeTruthy();
 
@@ -372,6 +384,32 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
         ),
         "Why Pack paused",
       ],
+      [
+        "popup resume-confirmation recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={resumeConfirmation}
+          />,
+        ),
+        "Discard saved run",
+      ],
+      [
+        "popup download-unconfirmed recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={downloadUnconfirmed}
+          />,
+        ),
+        "Cancel and reset",
+      ],
     ];
 
     const panel = await panelRecoveryText(SAVED_FULL_YEAR);
@@ -388,6 +426,18 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       "panel target-review recovery disclosure",
       targetReviewPanel.afterExpansion,
       "Why Pack paused",
+    ]);
+    const resumeConfirmationPanel = await panelRecoveryText(resumeConfirmation);
+    surfaces.push([
+      "panel resume-confirmation recovery disclosure",
+      resumeConfirmationPanel.afterExpansion,
+      "Discard saved run",
+    ]);
+    const downloadUnconfirmedPanel = await panelRecoveryText(downloadUnconfirmed);
+    surfaces.push([
+      "panel download-unconfirmed recovery disclosure",
+      downloadUnconfirmedPanel.afterExpansion,
+      "Cancel and reset",
     ]);
 
     for (const [surface, markup, positiveControl] of surfaces) {
@@ -445,5 +495,28 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(cancel).toHaveBeenCalledWith("cancelled");
     expect(retry).not.toHaveBeenCalled();
     expect(startFresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps the packaged target-review cancellation action wired", async () => {
+    const targetReview: FiledReturnsFlowSummary = {
+      ...SAVED_FULL_YEAR,
+      flowStep: {
+        ...SAVED_FULL_YEAR.flowStep,
+        safeSignals: ["filed-returns-target-review-required"],
+      },
+    };
+    delete targetReview.fullFiscalYearRecovery;
+    const cancel = vi.fn(async () => undefined);
+    await panelRecoveryText(targetReview, { resolveUnconfirmedDownload: cancel });
+
+    const cancelButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel and reset",
+    );
+    expect(cancelButton).toBeDefined();
+    await act(async () => {
+      cancelButton?.click();
+      await Promise.resolve();
+    });
+    expect(cancel).toHaveBeenCalledWith("cancelled");
   });
 });
