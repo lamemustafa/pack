@@ -113,6 +113,47 @@ beforeEach(() => {
 });
 
 describe("all-supported full-fiscal-year worker", () => {
+  it("blocks a restart when the saved-plan index is malformed", async () => {
+    stored.values[deps.storageKeys.allSupportedFullFiscalYearLedgerIndex] = {
+      schemaVersion: "invalid",
+    };
+    const runner = vi.fn<SinglePeriodRunner>();
+
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: "full-fiscal-year-abc123de" },
+      deps,
+      runner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+      },
+    });
+    expect(zip.discard).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("blocks a restart whose reviewed saved plan no longer exists", async () => {
+    const runner = vi.fn<SinglePeriodRunner>();
+
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: "full-fiscal-year-abc123de" },
+      deps,
+      runner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-restart-plan-not-found"],
+      },
+    });
+    expect(zip.discard).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
   it("replaces only the requested completed root with a durable fresh plan", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
     const earlierRequest = { ...request, financialYear: "2025-26" } as const;
