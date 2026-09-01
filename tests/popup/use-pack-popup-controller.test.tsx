@@ -358,12 +358,15 @@ describe("popup background failure presentation", () => {
         targetStatus: "blocked",
       },
     } as const satisfies FiledReturnsAllSupportedFullFiscalYearFlowSummary;
-    const { allSupportedFullFiscalYearRecovery: _reviewedRecovery, ...summaryWithoutRecovery } =
-      allSupportedSummary;
     const retriedSummary = {
-      ...summaryWithoutRecovery,
+      summaryIdentity: allSupportedSummary.summaryIdentity,
       status: "running" as const,
       completedTargetIds: ["synthetic-april"],
+      targetEvidence: allSupportedSummary.targetEvidence,
+      totalTargets: allSupportedSummary.totalTargets,
+      ledgerId: allSupportedSummary.ledgerId,
+      resumeAvailable: allSupportedSummary.resumeAvailable,
+      flowStepScope: allSupportedSummary.flowStepScope,
       flowStep: {
         ...allSupportedSummary.flowStep,
         state: "clicked" as const,
