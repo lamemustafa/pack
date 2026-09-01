@@ -30,6 +30,7 @@
 | Restart target-plan expansion | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the expansion-failure guard with `false`; full Vitest passed at `b521af0` before and after (172 files / 3,143 tests). Guard restored. | pending |
 | Retry current ledger identity and revision | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | pinned | Replaced the freshness guard with `false`; full Vitest failed at `aaee039`: `filed-returns-all-supported-full-fiscal-year.test.ts` — `retries only the current reviewed all-supported target after persisting its reset`. Guard restored. | pending |
 | Retry after final ZIP | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the final-ZIP guard with `false`; full Vitest passed at `9069399` before and after (172 files / 3,143 tests). Guard restored. | pending |
+| Retry reviewed target identity | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | inconclusive | Initial full-suite runner ended without an exit status or named diagnostic. Guard restored; persistent re-run queued. | pending |
 
 ## Alpha package-marker reachability
 
