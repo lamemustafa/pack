@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
 
 vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 
@@ -53,8 +54,9 @@ const PINNED_TAB_SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
   flowStep: {
     ...SAVED_FULL_YEAR.flowStep,
     safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
-    safeMessage:
-      "Pack stopped because the GST Portal tab selected for this saved plan is no longer available. Use Cancel and reset for this saved run, then start this year again.",
+    safeMessage: canonicalDurableSummaryMessage(SAVED_FULL_YEAR.scope, "blocked", [
+      "full-fiscal-year-pinned-gst-tab-unavailable",
+    ]),
   },
   fullFiscalYearRecovery: {
     ...SAVED_FULL_YEAR.fullFiscalYearRecovery!,
