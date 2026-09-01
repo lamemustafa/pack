@@ -31,7 +31,11 @@
 | Retry current ledger identity and revision | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | pinned | Replaced the freshness guard with `false`; full Vitest failed at `aaee039`: `filed-returns-all-supported-full-fiscal-year.test.ts` — `retries only the current reviewed all-supported target after persisting its reset`. Guard restored. | pending |
 | Retry after final ZIP | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the final-ZIP guard with `false`; full Vitest passed at `9069399` before and after (172 files / 3,143 tests). Guard restored. | pending |
 | Retry reviewed target identity | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Persistent full-suite re-run replaced the identity guard with `false`; all 172 files / 3,143 tests passed at `ba8235c` before and after (211.59s). Guard restored. | pending |
+| Alpha marker panel-only reachability traversal | `scripts/verify-extension-package.mjs` | deletion candidate — removed | Widening the traversal to every HTML root passed full Vitest at `34159f2` (172 files / 3,143 tests, 246.92s). Its offscreen fixture is rejected only because the marker is an unrendered string, so `hasRenderedAlphaSurfaceMarker` subsumes the observable package property; alpha browser verification remains panel-specific. | pending |
 
 ## Alpha package-marker reachability
 
-Pending inventory and mutation at the audited head.
+The package verifier now checks for a rendered alpha marker anywhere in the
+package. Panel-specific alpha evidence belongs to the browser verifier, which
+loads the side-panel page and asserts its visible alpha surface. Keeping a
+second package-side module graph would add an unobservable duplicate guard.

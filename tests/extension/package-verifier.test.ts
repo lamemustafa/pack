@@ -853,10 +853,10 @@ describe("alpha builds", () => {
     expect(result.output).toContain('Unresolved static import "./missing.js" from chunks/panel.js');
   });
 
-  it("refuses an alpha marker only another extension page can reach", async () => {
+  it("refuses an unrendered alpha marker only another extension page can reach", async () => {
     const outputDir = await createValidPackage();
-    // Positive control: this marker is genuinely reachable from offscreen.html,
-    // so a traversal rooted in every packaged page accepts the invalid alpha.
+    // The marker is reachable from offscreen.html, but it is a string constant,
+    // not a rendered alpha surface. The verifier must not accept it.
     await writeFile(
       path.join(outputDir, "chunks", "offscreen.js"),
       'import "./alpha-surface.js";\nexport default 1;\n',
@@ -871,7 +871,7 @@ describe("alpha builds", () => {
     const result = await runVerifier(outputDir, {}, ["--alpha"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("reachable from the panel");
+    expect(result.output).toContain("No rendered alpha surface marker");
   });
 
   it("refuses the React development transform in an alpha build", async () => {

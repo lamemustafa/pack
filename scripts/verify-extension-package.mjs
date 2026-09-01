@@ -18,110 +18,8 @@ if (flags.some((flag) => flag !== "--alpha") || outputDirectories.length !== 1) 
   );
 }
 const alphaMode = flags.includes("--alpha");
-// JSDOM is only evidence machinery for the alpha-only panel reachability
-// graph. Loading it for ordinary packaged-build verification makes every
-// short-lived verifier invocation pay its initialization cost.
-const JSDOM = alphaMode ? (await import("jsdom")).JSDOM : null;
 const outputDir = path.resolve(outputDirectories[0]);
 let sawAlphaSurfaceMarker = false;
-
-/**
- * Every file the panel entry can actually load, followed through static imports.
- * Alpha evidence is restricted to this set: a marker sitting in another page's
- * bundle proves nothing about the panel surface, and a marker in a chunk nothing
- * imports proves only that a string exists on disk.
- */
-async function reachableFromPanelHtml(dir) {
-  const files = await listFiles(dir);
-  const queue = [];
-  const panelEntry = path.join(dir, "panel.html");
-  if (files.includes(panelEntry)) {
-    const html = await readFile(panelEntry, "utf8");
-    for (const specifier of panelModuleScriptSpecifiers(html)) {
-      queue.push(resolveOutputSpecifier(dir, panelEntry, specifier));
-    }
-  }
-  const reachable = new Set();
-  while (queue.length > 0) {
-    const next = queue.pop();
-    if (next === null || reachable.has(next) || !files.includes(next)) continue;
-    reachable.add(next);
-    if (!/\.js$/.test(next)) {
-      throw new Error(`Non-JavaScript module resource: ${path.relative(dir, next)}`);
-    }
-    const contents = await readFile(next, "utf8");
-    const specifiers = staticModuleSpecifiers(next, contents);
-    if (specifiers === null) {
-      throw new Error(`Malformed reachable module: ${path.relative(dir, next)}`);
-    }
-    for (const specifier of specifiers) {
-      const dependency = resolveOutputSpecifier(dir, next, specifier);
-      if (!/\.js$/.test(dependency ?? "") || dependency === null || !files.includes(dependency)) {
-        throw new Error(
-          `Unresolved static import ${JSON.stringify(specifier)} from ${path.relative(dir, next)}`,
-        );
-      }
-      queue.push(dependency);
-    }
-  }
-  return reachable;
-}
-
-function panelModuleScriptSpecifiers(markup) {
-  if (JSDOM === null) return [];
-  const dom = new JSDOM(markup, { runScripts: "outside-only" });
-  try {
-    // Package pages never need a document base. Its presence makes the raw
-    // source attributes insufficient reachability evidence, so fail closed.
-    if (dom.window.document.querySelector("base")) return [];
-    return [...dom.window.document.querySelectorAll('script[type="module"][src]')].flatMap(
-      (script) => {
-        if (
-          script.namespaceURI !== "http://www.w3.org/1999/xhtml" ||
-          script.closest("noscript") !== null
-        ) {
-          return [];
-        }
-        const specifier = script.getAttribute("src");
-        return specifier ? [specifier] : [];
-      },
-    );
-  } finally {
-    dom.window.close();
-  }
-}
-
-function staticModuleSpecifiers(fileName, contents) {
-  const source = ts.createSourceFile(
-    fileName,
-    contents,
-    ts.ScriptTarget.Latest,
-    false,
-    ts.ScriptKind.JS,
-  );
-  const transpiled = ts.transpileModule(contents, {
-    fileName,
-    reportDiagnostics: true,
-  });
-  if (
-    source.parseDiagnostics.length > 0 ||
-    transpiled.diagnostics?.some(
-      (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
-    )
-  ) {
-    return null;
-  }
-  return source.statements.flatMap((statement) => {
-    if (
-      (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
-      statement.moduleSpecifier !== undefined &&
-      ts.isStringLiteral(statement.moduleSpecifier)
-    ) {
-      return [statement.moduleSpecifier.text];
-    }
-    return [];
-  });
-}
 
 function hasRenderedAlphaSurfaceMarker(fileName, contents, marker) {
   const source = ts.createSourceFile(
@@ -161,23 +59,6 @@ function hasRenderedAlphaSurfaceMarker(fileName, contents, marker) {
   visit(source);
   return rendered;
 }
-
-function resolveOutputSpecifier(dir, fromFile, specifier) {
-  if (
-    /^[a-z]+:/i.test(specifier) ||
-    specifier.startsWith("//") ||
-    specifier.includes("#") ||
-    specifier.includes("?") ||
-    (!specifier.startsWith("/") && !specifier.startsWith("./") && !specifier.startsWith("../"))
-  ) {
-    return null;
-  }
-  return specifier.startsWith("/")
-    ? path.join(dir, specifier.slice(1))
-    : path.resolve(path.dirname(fromFile), specifier);
-}
-
-const reachableFiles = alphaMode ? await reachableFromPanelHtml(outputDir) : new Set();
 
 const harnessPolicyPath =
   process.env.PACK_HARNESS_POLICY_PATH ??
@@ -493,7 +374,7 @@ for (const file of await listFiles(outputDir)) {
           `Alpha surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
         );
       }
-      if (reachableFiles.has(file) && hasRenderedAlphaSurfaceMarker(file, contents, marker)) {
+      if (hasRenderedAlphaSurfaceMarker(file, contents, marker)) {
         sawAlphaSurfaceMarker = true;
       }
     }
@@ -533,10 +414,10 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
 
 if (alphaMode && !sawAlphaSurfaceMarker) {
   // A silently gate-less "alpha" build is the failure this mode exists to
-  // catch: it would pass every other check while shipping none of the surface
-  // the build was made to exercise.
+  // catch: it would pass every other check while shipping none of the rendered
+  // surface the build was made to exercise.
   throw new Error(
-    `No alpha surface marker reachable from the panel in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
+    `No rendered alpha surface marker in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
   );
 }
 console.log(
