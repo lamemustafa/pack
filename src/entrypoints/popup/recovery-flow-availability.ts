@@ -120,8 +120,6 @@ export function getRecoveryFlowAvailability(
       targetStatus === "blocked" ||
       targetStatus === "download-unconfirmed" ||
       targetStatus === "failed" ||
-      summary?.flowStep.safeSignals.includes("full-fiscal-year-pinned-gst-tab-unavailable") ===
-        true ||
       summary?.flowStep.safeSignals.includes("filed-returns-target-review-required") === true ||
       summary?.flowStep.safeSignals.includes("full-fiscal-year-resume-confirmation-required") ===
         true ||
