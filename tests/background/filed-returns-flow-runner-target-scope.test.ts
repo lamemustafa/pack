@@ -287,6 +287,37 @@ describe("filed returns retained target scoping", () => {
     expect(allSupportedFlowMocks.retryAllSupportedFullFiscalYearTarget).not.toHaveBeenCalled();
   });
 
+  it("rechecks retained recovery after acquiring the all-supported retry lease", async () => {
+    const concurrentReview = {
+      scope: retainedScope,
+      safeSignals: ["retained-gstr2b-review"],
+    } as FiledReturnsTargetReview;
+    let recoveryReads = 0;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockImplementation(() => {
+      recoveryReads += 1;
+      return Promise.resolve(
+        recoveryReads === 1
+          ? { state: "missing" as const }
+          : { state: "valid" as const, review: concurrentReview },
+      );
+    });
+
+    const response = await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+      {
+        financialYear: "2026-27",
+        ledgerId: "full-fiscal-year-abc123de",
+        targetId: "GSTR-3B:2026-27:June",
+        expectedRevision: 4,
+      },
+      { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+    );
+
+    expect(activeRunMocks.acquireFiledReturnsRun).toHaveBeenCalledOnce();
+    expect(mocks.responseForFiledReturnsTargetReview).toHaveBeenCalledWith(concurrentReview);
+    expect(allSupportedFlowMocks.retryAllSupportedFullFiscalYearTarget).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ flowStep: { safeSignals: ["retained-gstr2b-review"] } });
+  });
+
   it("does not let Start fresh discard another recovery while an all-supported plan needs review", async () => {
     const requestedScope = {
       artifactType: "PDF",

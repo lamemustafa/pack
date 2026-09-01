@@ -138,6 +138,7 @@ describe("all-supported full-fiscal-year ledger", () => {
     "single-period-bundle-scope-conflict",
     "single-period-bundle-state-persist-failed",
     "single-period-bundle-state-read-failed",
+    "filed-return-durable-status-rejected",
   ])("withholds an explicit retry for a non-resumable target: %s", (signal) => {
     const ledger = createLedger();
     const blocked = {
