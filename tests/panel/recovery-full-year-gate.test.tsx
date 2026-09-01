@@ -2,10 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  interruptedFullFiscalYearStep,
-  summariseFullFiscalYearLedger,
-} from "../../src/background/filed-returns-full-fiscal-year-summary";
+import { summariseFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { searchStepLimitReachedMessage } from "../../src/background/filed-returns-step-limit";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
@@ -29,11 +26,14 @@ import { panelController } from "./panel-controller.test-helpers";
  * are withheld and the local ones stay.
  */
 
-const INTERRUPTED_RUNNING_LEDGER = makeCompletedRecoveryLedger("running");
-const SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
-  ...summariseFullFiscalYearLedger(INTERRUPTED_RUNNING_LEDGER, new Date("2026-08-29T00:00:00Z")),
-  flowStep: interruptedFullFiscalYearStep(INTERRUPTED_RUNNING_LEDGER),
+const INTERRUPTED_RUNNING_LEDGER = {
+  ...makeCompletedRecoveryLedger("running"),
+  status: "running" as const,
 };
+const SAVED_FULL_YEAR = summariseFullFiscalYearLedger(
+  INTERRUPTED_RUNNING_LEDGER,
+  new Date("2026-08-29T00:00:00Z"),
+);
 
 const PINNED_TAB_SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
   ...SAVED_FULL_YEAR,
@@ -280,6 +280,9 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
   it("keeps every rendered withheld-recovery action within the packaged availability", async () => {
     vi.stubEnv("MODE", "production");
     const recovery = getRecoveryFlowAvailability(SAVED_FULL_YEAR, false);
+    expect(SAVED_FULL_YEAR.targetEvidence.some((target) => target.outcome === "needs-review")).toBe(
+      true,
+    );
     const activeSummary: FiledReturnsFlowSummary = {
       ...SAVED_FULL_YEAR,
       status: "running",
