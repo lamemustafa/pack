@@ -80,9 +80,18 @@ async function mount(
 
 function recoveryReaderText(root: ParentNode): string {
   const accessibleNames = [
-    ...root.querySelectorAll("[aria-label], input, option, select, textarea"),
+    ...root.querySelectorAll(
+      "[aria-label], [aria-description], [title], [alt], [placeholder], input, option, select, textarea",
+    ),
   ]
-    .flatMap((element) => [element.getAttribute("aria-label"), (element as HTMLInputElement).value])
+    .flatMap((element) => [
+      element.getAttribute("aria-label"),
+      element.getAttribute("aria-description"),
+      element.getAttribute("title"),
+      element.getAttribute("alt"),
+      element.getAttribute("placeholder"),
+      (element as HTMLInputElement).value,
+    ])
     .filter((value): value is string => Boolean(value));
   return [root.textContent ?? "", ...accessibleNames].join(" ");
 }
