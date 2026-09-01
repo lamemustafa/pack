@@ -14,6 +14,7 @@
 | Guard | Location | Classification | Evidence | Recording commit |
 | --- | --- | --- | --- | --- |
 | Retry lease-scope bypass | `src/background/filed-returns-flow-runner.ts` (`if (!leaseScope)`) | unpinned | Replaced the condition with `false`; full Vitest passed at `6f15539` before and after (172 files / 3,143 tests). Guard restored. | `58278e8` |
+| Retry ZIP-phase suppression | `src/background/filed-returns-all-supported-full-fiscal-year-ledger.ts` (`if (ledger.zipPhase)`) | unpinned | Deleted the return; full Vitest passed at `c52d67d` before and after (172 files / 3,143 tests). Guard restored. | pending |
 
 ## Alpha package-marker reachability
 
