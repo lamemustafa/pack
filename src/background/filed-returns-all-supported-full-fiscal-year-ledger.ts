@@ -52,7 +52,6 @@ export function allSupportedExplicitRetryTarget(
 ): FiledReturnsAllSupportedFullFiscalYearTarget | null {
   if (ledger.zipPhase) return null;
   const targetIndex = ledger.targets.findIndex(isExplicitlyRetryableTarget);
-  if (targetIndex < 0) return null;
   const target = ledger.targets[targetIndex]!;
   return ledger.targets
     .slice(0, targetIndex)

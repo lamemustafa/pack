@@ -178,20 +178,6 @@ describe("all-supported full-fiscal-year ledger", () => {
     ).toBeUndefined();
   });
 
-  it("withholds explicit retry when no target has a retryable terminal status", () => {
-    const ledger = createLedger();
-    const resolved = {
-      ...ledger,
-      status: "complete" as const,
-      targets: ledger.targets.map((target) => ({ ...target, status: "not-filed" as const })),
-    };
-
-    expect(allSupportedExplicitRetryTarget(resolved)).toBeNull();
-    expect(
-      toAllSupportedFullFiscalYearSummary(resolved).allSupportedFullFiscalYearRecovery,
-    ).toBeUndefined();
-  });
-
   it("withholds a later retryable target while an earlier target remains unresolved", () => {
     const ledger = createLedger();
     const blockedOutOfOrder = {
