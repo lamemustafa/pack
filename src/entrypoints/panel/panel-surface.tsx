@@ -59,10 +59,6 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const fullYearFlowAvailable = isPackAlphaBuildMode(import.meta.env.MODE);
   const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
   const recoveryReason = recoveryAvailability.message;
-  const panelSummary =
-    summary && recoveryAvailability.isWithheldFullYearRecovery && recoveryReason
-      ? { ...summary, flowStep: { ...summary.flowStep, safeMessage: recoveryReason } }
-      : pack.scopedFlowSummary;
 
   useRefreshOnReturn(pack.refreshPortalContext, pack.refreshFlowSummary);
 
@@ -192,12 +188,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               onRetryTarget={() => void pack.retryFiledReturnsTarget()}
               portalReady={portalSignedIn}
               presentation={presentation}
-              summary={panelSummary}
+              summary={summary}
             />
             {terminalSummary && presentation.kind === "session-expired" ? (
               <p className="panel-recovery-reason">{recoveryReason}</p>
             ) : null}
-            {summary ? <PackSummary scope={pack.scope} summary={panelSummary} /> : null}
+            {summary ? <PackSummary scope={pack.scope} summary={pack.scopedFlowSummary} /> : null}
             {/* Below the pack card, above the recovery actions: a reader who
                 sees "needs review" here is one row away from the control that
                 resolves it.
