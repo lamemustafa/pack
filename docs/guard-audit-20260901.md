@@ -31,11 +31,13 @@
 | Retry current ledger identity and revision | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | pinned | Replaced the freshness guard with `false`; full Vitest failed at `aaee039`: `filed-returns-all-supported-full-fiscal-year.test.ts` — `retries only the current reviewed all-supported target after persisting its reset`. Guard restored. | pending |
 | Retry after final ZIP | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the final-ZIP guard with `false`; full Vitest passed at `9069399` before and after (172 files / 3,143 tests). Guard restored. | pending |
 | Retry reviewed target identity | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Persistent full-suite re-run replaced the identity guard with `false`; all 172 files / 3,143 tests passed at `ba8235c` before and after (211.59s). Guard restored. | pending |
-| Alpha marker panel-only reachability traversal | `scripts/verify-extension-package.mjs` | deletion candidate — removed | Widening the traversal to every HTML root passed full Vitest at `34159f2` (172 files / 3,143 tests, 246.92s). Its offscreen fixture is rejected only because the marker is an unrendered string, so `hasRenderedAlphaSurfaceMarker` subsumes the observable package property; alpha browser verification remains panel-specific. | pending |
+| Alpha marker panel-only reachability traversal | `scripts/verify-extension-package.mjs` | pinned | Replaced the panel-reachability predicate with a package-wide rendered-marker check; full Vitest failed at `da7a9f3`: `package-verifier.test.ts` — `refuses a marker no entry can reach`, `does not mistake an import-shaped string for a panel dependency`, and `refuses a rendered alpha marker only another extension page can reach`. The final test is the added positive control: a genuinely rendered marker reachable only from `offscreen.html`. Guard restored. | pending |
 
 ## Alpha package-marker reachability
 
-The package verifier now checks for a rendered alpha marker anywhere in the
-package. Panel-specific alpha evidence belongs to the browser verifier, which
-loads the side-panel page and asserts its visible alpha surface. Keeping a
-second package-side module graph would add an unobservable duplicate guard.
+The earlier package-wide mutation looked green because its offscreen fixture
+contained only an unrendered marker string. That made the separate rendered
+marker guard reject the package before the panel-root boundary could be
+observed. The fixture now renders the marker from an offscreen-only module, so
+the alpha verifier's panel-only traversal has an independent, named mutation
+failure and remains in place.
