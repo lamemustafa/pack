@@ -38,7 +38,9 @@ function withheldRemedyReplaced(message: string | null): string {
   const withheld: readonly RecoveryFlowAction[] = ["continue-saved-full-year-run"];
   const kept = message
     .split(/(?<=\.)\s+/)
-    .filter((sentence) => !actionsNamedIn(sentence).some((action) => withheld.includes(action)))
+    .filter(
+      (sentence) => !recoveryActionsNamedIn(sentence).some((action) => withheld.includes(action)),
+    )
     .join(" ")
     .trim();
   return kept ? `${kept} ${WITHHELD_FULL_YEAR_MESSAGE}` : WITHHELD_FULL_YEAR_MESSAGE;
@@ -54,9 +56,10 @@ function withheldRemedyReplaced(message: string | null): string {
  * check that was meant to catch exactly that.
  *
  * Reading the message is coarser than a structured field, and it is the only thing that cannot
- * disagree with what the reader sees.
+ * disagree with what the reader sees. It is exported so rendered recovery surfaces can be checked
+ * against the same action vocabulary rather than a hand-maintained test copy.
  */
-function actionsNamedIn(message: string | null): readonly RecoveryFlowAction[] {
+export function recoveryActionsNamedIn(message: string | null): readonly RecoveryFlowAction[] {
   if (!message) return [];
   // "cannot continue" tells the reader an action is unavailable; counting it as naming that action
   // would make every withheld message fail its own check. Negated forms are dropped before the
@@ -112,7 +115,7 @@ export function getRecoveryFlowAvailability(
         guidance: ACTIVE_WITHHELD_FULL_YEAR_MESSAGE,
         isWithheldFullYearRecovery: true,
         message: ACTIVE_WITHHELD_FULL_YEAR_MESSAGE,
-        mentionedActions: actionsNamedIn(ACTIVE_WITHHELD_FULL_YEAR_MESSAGE),
+        mentionedActions: recoveryActionsNamedIn(ACTIVE_WITHHELD_FULL_YEAR_MESSAGE),
       };
     }
     const targetStatus = summary?.fullFiscalYearRecovery?.targetStatus;
@@ -130,8 +133,8 @@ export function getRecoveryFlowAvailability(
     // action this build withholds is replaced rather than shown.
     const durableMessage = summary!.flowStep.safeMessage;
     const withheldActions: readonly RecoveryFlowAction[] = ["continue-saved-full-year-run"];
-    const durableMessageNamesWithheldAction = actionsNamedIn(durableMessage).some((action) =>
-      withheldActions.includes(action),
+    const durableMessageNamesWithheldAction = recoveryActionsNamedIn(durableMessage).some(
+      (action) => withheldActions.includes(action),
     );
     // Replace only the clause that names an unavailable remedy, never the whole message. An
     // interrupted run's durable message says to check browser Downloads before starting again, and
@@ -148,7 +151,7 @@ export function getRecoveryFlowAvailability(
       guidance: WITHHELD_FULL_YEAR_MESSAGE,
       isWithheldFullYearRecovery: true,
       message,
-      mentionedActions: actionsNamedIn(message),
+      mentionedActions: recoveryActionsNamedIn(message),
     };
   }
 
