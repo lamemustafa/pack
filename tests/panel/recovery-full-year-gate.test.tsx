@@ -156,7 +156,7 @@ function hasWithheldRecoveryWording(text: string): boolean {
     /\b(?:retry|retrying|resume|resuming|restart|restarting|try again)\b|\brun(?: this (?:saved )?(?:plan|year))? again\b/i.test(
       text,
     ) ||
-    /\bstart (?:another|fresh|selected) download\b|\bstart (?:this year|pack) again\b/i.test(
+    /\bstart (?:another|fresh|selected) download\b|\bstart(?: download)? again\b|\bstart (?:this year|pack) again\b/i.test(
       text,
     ) ||
     /(?<!cannot )\bcontinue\b/i.test(text)
@@ -461,6 +461,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     const stepLimitMessage = searchStepLimitReachedMessage(SAVED_FULL_YEAR.scope);
     expect(stepLimitMessage).toContain("start Pack again");
     expect(hasWithheldRecoveryWording("Start Pack again.")).toBe(true);
+    expect(hasWithheldRecoveryWording("Start download again.")).toBe(true);
     expect(hasWithheldRecoveryWording("Run this plan again.")).toBe(true);
     await mount(false, true, PINNED_TAB_SAVED_FULL_YEAR);
 
