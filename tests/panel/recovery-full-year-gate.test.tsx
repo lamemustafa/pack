@@ -48,6 +48,16 @@ const SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
   },
 };
 
+const PINNED_TAB_SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
+  ...SAVED_FULL_YEAR,
+  flowStep: {
+    ...SAVED_FULL_YEAR.flowStep,
+    safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
+    safeMessage:
+      "Pack stopped because the GST Portal tab selected for this saved plan is no longer available. Use Cancel and reset for this saved run, then start this year again.",
+  },
+};
+
 let dom: JSDOM;
 let root: Root | null = null;
 let container: Element;
@@ -90,7 +100,7 @@ function buttonLabels(): string[] {
 function hasWithheldRecoveryWording(text: string): boolean {
   return (
     /\b(?:retry|retrying|resume|resuming|restart|restarting|try again)\b/i.test(text) ||
-    /\bstart (?:another|fresh|selected) download\b/i.test(text) ||
+    /\bstart (?:another|fresh|selected) download\b|\bstart this year again\b/i.test(text) ||
     /(?<!cannot )\bcontinue\b/i.test(text)
   );
 }
@@ -209,7 +219,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(container.textContent).not.toContain("This build cannot continue a full-year run");
   });
 
-  it("keeps every rendered withheld-recovery action within the packaged availability", () => {
+  it("keeps every rendered withheld-recovery action within the packaged availability", async () => {
     vi.stubEnv("MODE", "production");
     const recovery = getRecoveryFlowAvailability(SAVED_FULL_YEAR, false);
     expect(recovery.isWithheldFullYearRecovery).toBe(true);
@@ -225,7 +235,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       onRetryTarget: () => undefined,
       onStartFresh: () => undefined,
     };
-    const surfaces = [
+    const surfaces: [string, string, string][] = [
       [
         "popup status",
         renderToStaticMarkup(
@@ -253,22 +263,33 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
         ),
         "Cancel and reset",
       ],
-      [
-        "panel",
-        renderToStaticMarkup(
-          <PanelSurface
-            pack={panelController({
-              lastRunSummary: SAVED_FULL_YEAR,
-              recoverySummary: SAVED_FULL_YEAR,
-              scope: SAVED_FULL_YEAR.scope,
-              scopeLockedForReview: true,
-              scopedFlowSummary: SAVED_FULL_YEAR,
-            })}
-          />,
-        ),
-        "Recovery options",
-      ],
-    ] as const;
+    ];
+
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <PanelSurface
+          pack={panelController({
+            lastRunSummary: SAVED_FULL_YEAR,
+            recoverySummary: SAVED_FULL_YEAR,
+            scope: SAVED_FULL_YEAR.scope,
+            scopeLockedForReview: true,
+            scopedFlowSummary: SAVED_FULL_YEAR,
+          })}
+        />,
+      );
+      await Promise.resolve();
+    });
+    const panelRecovery = container.querySelector("details.recovery-details") as HTMLDetailsElement;
+    expect(panelRecovery).not.toBeNull();
+    await act(async () => {
+      panelRecovery.open = true;
+      panelRecovery.dispatchEvent(
+        new (dom.window as unknown as { Event: typeof Event }).Event("toggle", { bubbles: true }),
+      );
+      await Promise.resolve();
+    });
+    surfaces.push(["panel recovery disclosure", container.textContent ?? "", "Cancel and reset"]);
 
     for (const [surface, markup, positiveControl] of surfaces) {
       const text = new JSDOM(markup).window.document.body.textContent ?? "";
@@ -276,5 +297,17 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       expect(text, surface).toContain(positiveControl);
       expect(hasWithheldRecoveryWording(text), surface).toBe(false);
     }
+  });
+
+  it("replaces the canonical pinned-tab full-year restart instruction", async () => {
+    // Positive control for the independent matcher: this exact durable wording would restart the
+    // unavailable full-year plan if it reached a packaged surface.
+    expect(hasWithheldRecoveryWording(PINNED_TAB_SAVED_FULL_YEAR.flowStep.safeMessage)).toBe(true);
+    await mount(false, true, PINNED_TAB_SAVED_FULL_YEAR);
+
+    const recovery = getRecoveryFlowAvailability(PINNED_TAB_SAVED_FULL_YEAR, false);
+    expect(recovery.message).not.toContain("start this year again");
+    expect(buttonLabels()).toContain("Cancel and reset");
+    expect(hasWithheldRecoveryWording(container.textContent ?? "")).toBe(false);
   });
 });
