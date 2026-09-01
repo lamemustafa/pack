@@ -7,7 +7,15 @@ import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-ret
 vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 
 import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
-import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
+import { InlineStatus } from "../../src/entrypoints/popup/inline-status";
+import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
+import { getPopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
+import {
+  getRecoveryFlowAvailability,
+  recoveryActionsNamedIn,
+} from "../../src/entrypoints/popup/recovery-flow-availability";
+import { renderToStaticMarkup } from "react-dom/server";
+import { panelController } from "./panel-controller.test-helpers";
 
 /**
  * A packaged build withholds the full-year surface everywhere it is offered -- but a ledger
@@ -26,6 +34,7 @@ const SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
   },
   status: "blocked",
   completedPeriods: [],
+  currentPeriod: "May",
   updatedAt: "2026-08-29T00:00:00.000Z",
   flowStep: {
     connectorId: "gst",
@@ -86,6 +95,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
   afterEach(async () => {
     if (root) await act(async () => root?.unmount());
     root = null;
+    vi.unstubAllEnvs();
   });
 
   it("offers no way to resume or restart the run", async () => {
@@ -186,5 +196,79 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     const labels = buttonLabels();
     expect(labels.some((label) => label.includes("Discard saved run and start"))).toBe(true);
     expect(container.textContent).not.toContain("This build cannot continue a full-year run");
+  });
+
+  it("keeps every rendered withheld-recovery action within the packaged availability", () => {
+    vi.stubEnv("MODE", "production");
+    const recovery = getRecoveryFlowAvailability(SAVED_FULL_YEAR, false);
+    expect(recovery.isWithheldFullYearRecovery).toBe(true);
+    expect(recovery.availableActions).toEqual(["cancel-saved-full-year-run"]);
+
+    const callbacks = {
+      onAcknowledgeInterruptedRun: () => undefined,
+      onOpenPortal: () => undefined,
+      onRestartTarget: () => undefined,
+      onResolveFullFiscalYearTarget: () => undefined,
+      onResolveTarget: () => undefined,
+      onRetryFullFiscalYearTarget: () => undefined,
+      onRetryTarget: () => undefined,
+      onStartFresh: () => undefined,
+    };
+    const surfaces = [
+      [
+        "popup status",
+        renderToStaticMarkup(
+          <InlineStatus
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            presentation={getPopupPresentationState(null, SAVED_FULL_YEAR, null)}
+            summary={SAVED_FULL_YEAR}
+          />,
+        ),
+        "Saved full-year run needs attention",
+      ],
+      [
+        "popup recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={SAVED_FULL_YEAR}
+          />,
+        ),
+        "Cancel and reset",
+      ],
+      [
+        "panel",
+        renderToStaticMarkup(
+          <PanelSurface
+            pack={panelController({
+              lastRunSummary: SAVED_FULL_YEAR,
+              recoverySummary: SAVED_FULL_YEAR,
+              scope: SAVED_FULL_YEAR.scope,
+              scopeLockedForReview: true,
+              scopedFlowSummary: SAVED_FULL_YEAR,
+            })}
+          />,
+        ),
+        "Recovery options",
+      ],
+    ] as const;
+
+    for (const [surface, markup, positiveControl] of surfaces) {
+      const text = new JSDOM(markup).window.document.body.textContent ?? "";
+      // Each real presentation rendered its recovery branch before the semantic property below.
+      expect(text, surface).toContain(positiveControl);
+      const namedActions = recoveryActionsNamedIn(text);
+      expect(namedActions, surface).not.toHaveLength(0);
+      expect(
+        namedActions.every((action) => recovery.availableActions.includes(action)),
+        surface,
+      ).toBe(true);
+    }
   });
 });
