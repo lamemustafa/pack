@@ -161,6 +161,54 @@ describe("all-supported full-fiscal-year ledger", () => {
     ).toBeUndefined();
   });
 
+  it("withholds explicit retry once final ZIP recovery has started", () => {
+    const ledger = createLedger();
+    const finalZipRecovery = {
+      ...ledger,
+      status: "blocked" as const,
+      zipPhase: "download-observing" as const,
+      targets: ledger.targets.map((target, index) =>
+        index === 0 ? { ...target, status: "blocked" as const } : target,
+      ),
+    };
+
+    expect(allSupportedExplicitRetryTarget(finalZipRecovery)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(finalZipRecovery).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
+  it("withholds explicit retry when no target has a retryable terminal status", () => {
+    const ledger = createLedger();
+    const resolved = {
+      ...ledger,
+      status: "complete" as const,
+      targets: ledger.targets.map((target) => ({ ...target, status: "not-filed" as const })),
+    };
+
+    expect(allSupportedExplicitRetryTarget(resolved)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(resolved).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
+  it("withholds a later retryable target while an earlier target remains unresolved", () => {
+    const ledger = createLedger();
+    const blockedOutOfOrder = {
+      ...ledger,
+      status: "blocked" as const,
+      targets: ledger.targets.map((target, index) => {
+        if (index === 1) return { ...target, status: "blocked" as const };
+        return target;
+      }),
+    };
+
+    expect(allSupportedExplicitRetryTarget(blockedOutOfOrder)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(blockedOutOfOrder).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
   it("rejects a plan whose immutable concrete-artifact snapshot changes", () => {
     const ledger = createLedger();
     const mutatedArtifacts = [...ledger.targetPlan[0]!.concreteArtifactTypes].reverse();
