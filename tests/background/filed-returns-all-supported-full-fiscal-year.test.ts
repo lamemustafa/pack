@@ -610,6 +610,7 @@ describe("all-supported full-fiscal-year worker", () => {
     const blockedRunner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, blockedRunner);
     const blocked = savedLedger();
+    const blockedSnapshot = structuredClone(blocked);
     const blockedTarget = blocked.targets[0];
     if (!blockedTarget) throw new Error("expected the first target to be blocked");
     const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
@@ -632,6 +633,7 @@ describe("all-supported full-fiscal-year worker", () => {
     });
     expect(retryRunner).not.toHaveBeenCalled();
     expect(savedLedger().targets[0]).toMatchObject({ status: "blocked", attempts: 1 });
+    expect(savedLedger()).toEqual(blockedSnapshot);
   });
 
   it("creates a new completed plan when the current eligible period has advanced", async () => {
@@ -663,6 +665,29 @@ describe("all-supported full-fiscal-year worker", () => {
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
     expect(savedLedger().ledgerId).toBe(completedPlan.ledgerId);
+    expect(runner).toHaveBeenCalledTimes(completedCallCount);
+  });
+
+  it("does not restart a completed plan when the selected year has no eligible periods", async () => {
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const completedPlan = savedLedger();
+    const completedCallCount = runner.mock.calls.length;
+    deps.now = () => new Date("2026-04-01T00:00:00.000Z");
+
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: completedPlan.ledgerId },
+      deps,
+      runner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-no-eligible-periods"],
+      },
+    });
+    expect(zip.discard).toHaveBeenCalledWith(completedPlan.ledgerId);
     expect(runner).toHaveBeenCalledTimes(completedCallCount);
   });
 
