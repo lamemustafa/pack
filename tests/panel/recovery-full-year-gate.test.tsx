@@ -89,7 +89,8 @@ function recoveryReaderText(root: ParentNode): string {
 
 async function panelRecoveryText(
   summary: FiledReturnsFlowSummary,
-): Promise<{ afterExpansion: string; beforeExpansion: string }> {
+  overrides: Partial<ReturnType<typeof panelController>> = {},
+): Promise<{ afterExpansion: string; beforeExpansionWarning: string }> {
   if (root) {
     await act(async () => root?.unmount());
     root = null;
@@ -104,6 +105,7 @@ async function panelRecoveryText(
           scope: summary.scope,
           scopeLockedForReview: true,
           scopedFlowSummary: summary,
+          ...overrides,
         })}
       />,
     );
@@ -111,7 +113,8 @@ async function panelRecoveryText(
   });
   const recovery = container.querySelector("details.recovery-details") as HTMLDetailsElement;
   expect(recovery).not.toBeNull();
-  const beforeExpansion = recoveryReaderText(container);
+  const beforeExpansionWarning =
+    container.querySelector(".panel-recovery-reason")?.textContent ?? "";
   await act(async () => {
     recovery.open = true;
     recovery.dispatchEvent(
@@ -119,7 +122,7 @@ async function panelRecoveryText(
     );
     await Promise.resolve();
   });
-  return { afterExpansion: recoveryReaderText(container), beforeExpansion };
+  return { afterExpansion: recoveryReaderText(container), beforeExpansionWarning };
 }
 
 function buttonLabels(): string[] {
@@ -301,7 +304,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     ];
 
     const panel = await panelRecoveryText(SAVED_FULL_YEAR);
-    expect(panel.beforeExpansion).toContain("Check Downloads before starting again.");
+    expect(panel.beforeExpansionWarning).toContain("Check Downloads before starting again.");
     surfaces.push(["panel recovery disclosure", panel.afterExpansion, "Cancel and reset"]);
 
     for (const [surface, markup, positiveControl] of surfaces) {
@@ -332,5 +335,28 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(panel.afterExpansion).toContain("Cancel and reset");
     expect(panel.afterExpansion).not.toContain("start this year again");
     expect(hasWithheldRecoveryWording(panel.afterExpansion)).toBe(false);
+  });
+
+  it("keeps the packaged panel's cancellation action wired", async () => {
+    const cancel = vi.fn(async () => undefined);
+    const retry = vi.fn(async () => undefined);
+    const startFresh = vi.fn(async () => undefined);
+    await panelRecoveryText(SAVED_FULL_YEAR, {
+      resolveFullFiscalYearTarget: cancel,
+      retryFullFiscalYearTarget: retry,
+      startFreshFiledReturnsFlow: startFresh,
+    });
+
+    const cancelButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel and reset",
+    );
+    expect(cancelButton).toBeDefined();
+    await act(async () => {
+      cancelButton?.click();
+      await Promise.resolve();
+    });
+    expect(cancel).toHaveBeenCalledWith("cancelled");
+    expect(retry).not.toHaveBeenCalled();
+    expect(startFresh).not.toHaveBeenCalled();
   });
 });
