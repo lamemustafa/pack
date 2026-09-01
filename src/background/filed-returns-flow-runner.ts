@@ -388,6 +388,17 @@ export async function retryAllSupportedFiledReturnsFullFiscalYearTarget(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
+    // Recovery may be persisted after the first preflight and before this retry
+    // obtains the shared lease. Re-read it while holding the lease so a newly
+    // durable review is surfaced instead of replaying a portal action.
+    const concurrentRecovery = await allSupportedRecoveryPreflight(leaseScope, deps);
+    if (concurrentRecovery) return concurrentRecovery;
+    const concurrentAllSupportedLock = await allSupportedPlanStartLockResponse(
+      leaseScope,
+      deps,
+      planRoot,
+    );
+    if (concurrentAllSupportedLock) return concurrentAllSupportedLock;
     const retainedArtifactRecovery = await surfaceRetainedArtifactAcquisitionReview(
       leaseScope,
       deps,

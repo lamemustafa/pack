@@ -38,6 +38,7 @@ const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
   "single-period-bundle-scope-conflict",
   "single-period-bundle-state-persist-failed",
   "single-period-bundle-state-read-failed",
+  "filed-return-durable-status-rejected",
 ]);
 
 /**

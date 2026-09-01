@@ -343,7 +343,12 @@ export function usePackPopupController() {
         // A removed plan cannot supply an all-supported summary. Its flow step
         // is authoritative for this action, so leaving the prior summary up
         // would keep a retry control bound to a ledger that no longer exists.
-        if (response.ok && "flowStep" in response && !("flowSummary" in response)) {
+        if (
+          response.ok &&
+          "flowStep" in response &&
+          !("flowSummary" in response) &&
+          !("allSupportedFullFiscalYearFlowSummary" in response)
+        ) {
           setAllSupportedFullFiscalYearFlowSummary(null);
         }
       });
