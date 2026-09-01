@@ -278,8 +278,19 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
   it("keeps every rendered withheld-recovery action within the packaged availability", async () => {
     vi.stubEnv("MODE", "production");
     const recovery = getRecoveryFlowAvailability(SAVED_FULL_YEAR, false);
+    const activeSummary: FiledReturnsFlowSummary = {
+      ...SAVED_FULL_YEAR,
+      status: "running",
+      flowStep: {
+        ...SAVED_FULL_YEAR.flowStep,
+        safeSignals: ["full-fiscal-year-run-active"],
+      },
+    };
+    const activeRecovery = getRecoveryFlowAvailability(activeSummary, false);
     expect(recovery.isWithheldFullYearRecovery).toBe(true);
     expect(recovery.availableActions).toEqual(["cancel-saved-full-year-run"]);
+    // Positive control: this goes through RecoveryActions' distinct active-run branch.
+    expect(activeRecovery.isWithheldFullYearRecovery).toBe(true);
 
     const callbacks = {
       onAcknowledgeInterruptedRun: () => undefined,
@@ -319,11 +330,26 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
         ),
         "Cancel and reset",
       ],
+      [
+        "popup active recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={activeSummary}
+          />,
+        ),
+        "Run in progress",
+      ],
     ];
 
     const panel = await panelRecoveryText(SAVED_FULL_YEAR);
     expect(panel.beforeExpansionWarning).toContain("Check Downloads before starting again.");
     surfaces.push(["panel recovery disclosure", panel.afterExpansion, "Cancel and reset"]);
+    const activePanel = await panelRecoveryText(activeSummary);
+    surfaces.push(["panel active recovery disclosure", activePanel.afterExpansion, "Run in progress"]);
 
     for (const [surface, markup, positiveControl] of surfaces) {
       const text = recoveryReaderText(new JSDOM(markup).window.document.body);
