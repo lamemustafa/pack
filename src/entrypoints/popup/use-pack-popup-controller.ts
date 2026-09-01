@@ -8,6 +8,7 @@ import type {
   FiledReturnsFlowSummary,
 } from "../../connectors/gst/filed-returns-contracts";
 import type {
+  AllSupportedFullFiscalYearTargetRecoveryPayload,
   FullFiscalYearTargetRecoveryPayload,
   PackMessage,
   PackMessageResponse,
@@ -254,6 +255,7 @@ export function usePackPopupController() {
           actionErrorSource.current = null;
           setActionError(null);
           setFiledReturnsFlowSummary(response.flowSummary);
+          setAllSupportedFullFiscalYearFlowSummary(null);
           setScopeState(response.flowSummary.scope);
         } else {
           showActionError(response.flowStep.safeMessage);
@@ -325,6 +327,30 @@ export function usePackPopupController() {
           },
         });
         applyFlowResponse(response);
+      });
+    },
+    [applyFlowResponse, withBusy],
+  );
+
+  const retryAllSupportedFullFiscalYearTarget = React.useCallback(
+    async (payload: AllSupportedFullFiscalYearTargetRecoveryPayload) => {
+      await withBusy("retry-all-supported-filed-returns-full-fiscal-year-target", async () => {
+        const response = await sendPackMessage({
+          type: "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET",
+          payload,
+        });
+        applyFlowResponse(response);
+        // A removed plan cannot supply an all-supported summary. Its flow step
+        // is authoritative for this action, so leaving the prior summary up
+        // would keep a retry control bound to a ledger that no longer exists.
+        if (
+          response.ok &&
+          "flowStep" in response &&
+          !("flowSummary" in response) &&
+          !("allSupportedFullFiscalYearFlowSummary" in response)
+        ) {
+          setAllSupportedFullFiscalYearFlowSummary(null);
+        }
       });
     },
     [applyFlowResponse, withBusy],
@@ -480,6 +506,7 @@ export function usePackPopupController() {
     retryFiledReturnsTarget,
     retryFullFiscalYearTarget,
     restartAllSupportedFullFiscalYearFlow,
+    retryAllSupportedFullFiscalYearTarget,
     scope,
     scopeLockedForReview,
     scopedFlowSummary,

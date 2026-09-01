@@ -8,7 +8,10 @@ import type {
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
-import type { PackMessageResponse } from "../connectors/gst/messages";
+import type {
+  AllSupportedFullFiscalYearTargetRecoveryPayload,
+  PackMessageResponse,
+} from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import type {
   FiledReturnsFlowRunnerDeps,
@@ -17,6 +20,7 @@ import type {
 import type { SinglePeriodRunner } from "./filed-returns-full-fiscal-year";
 import {
   allSupportedResumeMode,
+  allSupportedExplicitRetryTarget,
   canCompleteAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearLedger,
   isAllSupportedFullFiscalYearLedgerStale,
@@ -41,6 +45,7 @@ import {
   reconcileAllSupportedFullFiscalYearZipDownload,
 } from "./filed-returns-all-supported-full-fiscal-year-zip";
 import { targetStatusFromFlowStep } from "./filed-returns-full-fiscal-year-summary";
+import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 
 type AllSupportedRunnerDeps = FiledReturnsFlowRunnerDeps & {
   storageKeys: FiledReturnsFlowRunnerDeps["storageKeys"] & {
@@ -246,6 +251,67 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
   return runAllSupportedFullFiscalYearTargets(deps, replacement, runSinglePeriod);
 }
 
+/**
+ * Replays exactly one reader-reviewed, terminal child target. This is not a
+ * reconciliation of its earlier browser download: a retry happens only after
+ * an explicit message bound to the current immutable ledger revision.
+ */
+export async function retryAllSupportedFullFiscalYearTarget(
+  payload: AllSupportedFullFiscalYearTargetRecoveryPayload,
+  deps: AllSupportedRunnerDeps,
+  runSinglePeriod: SinglePeriodRunner,
+): Promise<PackMessageResponse> {
+  const planRoot = {
+    kind: "all-supported-returns-full-fiscal-year" as const,
+    financialYear: payload.financialYear,
+  };
+  const ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, planRoot);
+  if (
+    !ledger ||
+    ledger.ledgerId !== payload.ledgerId ||
+    ledger.revision !== payload.expectedRevision
+  ) {
+    return allSupportedRecoveryUnavailableResponse(
+      payload.financialYear,
+      "all-supported-full-fiscal-year-recovery-stale",
+      "Pack found newer saved all-supported recovery state. Refresh the panel and review the current target.",
+      ledger,
+      deps,
+    );
+  }
+  if (ledger.zipPhase) {
+    return allSupportedRecoveryUnavailableResponse(
+      payload.financialYear,
+      "all-supported-full-fiscal-year-target-retry-final-zip",
+      "Pack cannot retry an individual target after it started final ZIP recovery.",
+      ledger,
+      deps,
+    );
+  }
+  const target = allSupportedExplicitRetryTarget(ledger);
+  if (
+    !target ||
+    target.financialYear !== payload.financialYear ||
+    target.targetId !== payload.targetId
+  ) {
+    return allSupportedRecoveryUnavailableResponse(
+      payload.financialYear,
+      "all-supported-full-fiscal-year-target-retry-unavailable",
+      "Pack cannot safely retry that saved target. Refresh the panel and review the current fiscal-year plan.",
+      ledger,
+      deps,
+    );
+  }
+
+  const retryLedger = resetAllSupportedTargetForExplicitRetry(
+    ledger,
+    target,
+    deps.now?.() ?? new Date(),
+  );
+  await persistAllSupportedFullFiscalYearLedger(deps, retryLedger);
+  return runAllSupportedFullFiscalYearTargets(deps, retryLedger, runSinglePeriod);
+}
+
 async function continueSavedAllSupportedFullFiscalYearRun(
   deps: AllSupportedRunnerDeps,
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
@@ -310,6 +376,53 @@ async function continueSavedAllSupportedFullFiscalYearRun(
     return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
   }
   return allSupportedResponse(deps, ledger, unresolvedRunStep(ledger));
+}
+
+function resetAllSupportedTargetForExplicitRetry(
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+  target: FiledReturnsAllSupportedFullFiscalYearTarget,
+  now: Date,
+): FiledReturnsAllSupportedFullFiscalYearLedger {
+  const status = canonicalDurableTargetStatus(scopeForTarget(target), "pending", [
+    ...target.safeSignals,
+    "full-fiscal-year-target-retry-approved",
+  ]);
+  return {
+    ...ledger,
+    revision: ledger.revision + 1,
+    status: "partial",
+    currentTargetId: target.targetId,
+    updatedAt: now.toISOString(),
+    targets: ledger.targets.map((candidate) =>
+      candidate.targetId === target.targetId
+        ? {
+            ...candidate,
+            status: "pending",
+            ...status,
+            updatedAt: now.toISOString(),
+          }
+        : candidate,
+    ),
+  };
+}
+
+function allSupportedRecoveryUnavailableResponse(
+  financialYear: string,
+  signal: string,
+  safeMessage: string,
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger | null,
+  deps: AllSupportedRunnerDeps,
+): Promise<PackMessageResponse> {
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: `all-supported-full-fiscal-year:${financialYear}`,
+    state: "user-action-required",
+    safeSignals: [signal],
+    safeMessage,
+  };
+  return ledger
+    ? allSupportedResponse(deps, ledger, flowStep)
+    : Promise.resolve({ ok: true, flowStep });
 }
 
 function persistedPeriodPlanLength(ledger: FiledReturnsAllSupportedFullFiscalYearLedger): number {
@@ -574,6 +687,7 @@ function toAllSupportedSummary(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
   );
+  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger);
   return {
     resumeAvailable: resumeMode !== null,
     ...(resumeMode ? { resumeMode } : {}),
@@ -595,6 +709,15 @@ function toAllSupportedSummary(
     })),
     totalTargets: ledger.targets.length,
     ledgerId: ledger.ledgerId,
+    ...(explicitRetryTarget
+      ? {
+          allSupportedFullFiscalYearRecovery: {
+            targetId: explicitRetryTarget.targetId,
+            expectedRevision: ledger.revision,
+            targetStatus: explicitRetryTarget.status,
+          },
+        }
+      : {}),
     ...(ledger.currentTargetId ? { currentTargetId: ledger.currentTargetId } : {}),
     flowStepScope,
     flowStep,

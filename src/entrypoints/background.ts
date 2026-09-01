@@ -21,6 +21,7 @@ import {
   resolveFullFiscalYearTargetFlow,
   resolveUnconfirmedFiledReturnsDownloadFlow,
   retryFullFiscalYearTargetDownloadFlow,
+  retryAllSupportedFiledReturnsFullFiscalYearTarget,
   startAllSupportedFiledReturnsFullFiscalYearDownloadFlow,
   retryFiledReturnsTargetDownloadFlow,
   startFreshFiledReturnsDownloadFlow,
@@ -181,6 +182,7 @@ function backgroundMessageSource(message: unknown): string {
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
     case "PACK_RETRY_FILED_RETURNS_TARGET":
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
+    case "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET":
       return "a filed-returns download request";
     case "PACK_START_SYNTHETIC_DEMO":
       return "the synthetic reviewer demo";
@@ -219,6 +221,8 @@ function backgroundMessageHandlerSite(message: unknown): `background-message-han
       return "background-message-handler:filed-returns-retry";
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return "background-message-handler:full-fiscal-year-retry";
+    case "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET":
+      return "background-message-handler:all-supported-full-fiscal-year-retry";
     case "PACK_START_SYNTHETIC_DEMO":
       return "background-message-handler:synthetic-demo";
     case "PACK_RUN_DOWNLOAD_PROMPT_PROBE":
@@ -379,6 +383,11 @@ async function handleMessage(
       return retryFiledReturnsTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return retryFullFiscalYearTargetDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET":
+      return retryAllSupportedFiledReturnsFullFiscalYearTarget(
+        message.payload,
+        filedReturnsFlowRunnerDeps(),
+      );
     case "PACK_RESOLVE_UNCONFIRMED_DOWNLOAD":
       return resolveUnconfirmedFiledReturnsDownloadFlow(
         message.payload.scope,

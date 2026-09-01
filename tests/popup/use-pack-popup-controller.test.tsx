@@ -156,6 +156,264 @@ describe("popup background failure presentation", () => {
     expect(controller?.actionError).toBeNull();
   });
 
+  it("replaces an all-supported retry surface with its atomic recovery response", async () => {
+    const allSupportedSummary = {
+      summaryIdentity: {
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      },
+      status: "blocked",
+      completedTargetIds: [],
+      targetEvidence: [],
+      totalTargets: 1,
+      ledgerId: "full-fiscal-year-abc123de",
+      resumeAvailable: false,
+      flowStepScope: {
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+      },
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["synthetic-retry-required"],
+        safeMessage: "Retry the reviewed target.",
+      },
+      allSupportedFullFiscalYearRecovery: {
+        targetId: "synthetic-april",
+        expectedRevision: 3,
+        targetStatus: "blocked",
+      },
+    } as const satisfies FiledReturnsAllSupportedFullFiscalYearFlowSummary;
+    const atomicRecovery: FiledReturnsFlowSummary = {
+      scope: allSupportedSummary.flowStepScope,
+      status: "blocked",
+      completedPeriods: [],
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["single-period-bundle-scope-conflict"],
+        safeMessage: "Pack retained a different selected-file run.",
+      },
+    };
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({
+          ok: true,
+          allSupportedFullFiscalYearFlowSummary: allSupportedSummary,
+        });
+      }
+      if (message.type === "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET") {
+        return Promise.resolve({
+          ok: true,
+          flowStep: atomicRecovery.flowStep,
+          flowSummary: atomicRecovery,
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.allSupportedFullFiscalYearFlowSummary).toEqual(allSupportedSummary);
+
+    await act(async () => {
+      await controller?.retryAllSupportedFullFiscalYearTarget({
+        financialYear: "2025-26",
+        ledgerId: "full-fiscal-year-abc123de",
+        targetId: "synthetic-april",
+        expectedRevision: 3,
+      });
+    });
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET",
+      payload: {
+        financialYear: "2025-26",
+        ledgerId: "full-fiscal-year-abc123de",
+        targetId: "synthetic-april",
+        expectedRevision: 3,
+      },
+    });
+    expect(controller?.allSupportedFullFiscalYearFlowSummary).toBeNull();
+    expect(controller?.lastRunSummary).toEqual(atomicRecovery);
+  });
+
+  it("clears an all-supported retry surface when its reviewed ledger is gone", async () => {
+    const allSupportedSummary = {
+      summaryIdentity: {
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      },
+      status: "blocked",
+      completedTargetIds: [],
+      targetEvidence: [],
+      totalTargets: 1,
+      ledgerId: "full-fiscal-year-abc123de",
+      resumeAvailable: false,
+      flowStepScope: {
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+      },
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["synthetic-retry-required"],
+        safeMessage: "Retry the reviewed target.",
+      },
+      allSupportedFullFiscalYearRecovery: {
+        targetId: "synthetic-april",
+        expectedRevision: 3,
+        targetStatus: "blocked",
+      },
+    } as const satisfies FiledReturnsAllSupportedFullFiscalYearFlowSummary;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({
+          ok: true,
+          allSupportedFullFiscalYearFlowSummary: allSupportedSummary,
+        });
+      }
+      if (message.type === "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET") {
+        return Promise.resolve({
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "all-supported-full-fiscal-year:2025-26",
+            state: "user-action-required",
+            safeSignals: ["all-supported-full-fiscal-year-ledger-missing"],
+            safeMessage: "The reviewed all-supported plan is no longer available.",
+          },
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.allSupportedFullFiscalYearFlowSummary).toEqual(allSupportedSummary);
+
+    await act(async () => {
+      await controller?.retryAllSupportedFullFiscalYearTarget({
+        financialYear: "2025-26",
+        ledgerId: "full-fiscal-year-abc123de",
+        targetId: "synthetic-april",
+        expectedRevision: 3,
+      });
+    });
+
+    expect(controller?.allSupportedFullFiscalYearFlowSummary).toBeNull();
+    expect(controller?.actionError).toBe("The reviewed all-supported plan is no longer available.");
+  });
+
+  it("keeps the authoritative all-supported retry result", async () => {
+    const allSupportedSummary = {
+      summaryIdentity: {
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      },
+      status: "blocked",
+      completedTargetIds: [],
+      targetEvidence: [],
+      totalTargets: 1,
+      ledgerId: "full-fiscal-year-abc123de",
+      resumeAvailable: false,
+      flowStepScope: {
+        financialYear: "2025-26",
+        period: "April",
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+      },
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["synthetic-retry-required"],
+        safeMessage: "Retry the reviewed target.",
+      },
+      allSupportedFullFiscalYearRecovery: {
+        targetId: "synthetic-april",
+        expectedRevision: 3,
+        targetStatus: "blocked",
+      },
+    } as const satisfies FiledReturnsAllSupportedFullFiscalYearFlowSummary;
+    const retriedSummary = {
+      summaryIdentity: allSupportedSummary.summaryIdentity,
+      status: "running" as const,
+      completedTargetIds: ["synthetic-april"],
+      targetEvidence: allSupportedSummary.targetEvidence,
+      totalTargets: allSupportedSummary.totalTargets,
+      ledgerId: allSupportedSummary.ledgerId,
+      resumeAvailable: allSupportedSummary.resumeAvailable,
+      flowStepScope: allSupportedSummary.flowStepScope,
+      flowStep: {
+        ...allSupportedSummary.flowStep,
+        state: "clicked" as const,
+        safeSignals: ["synthetic-target-retried"],
+        safeMessage: "Pack retried the reviewed target.",
+      },
+    } as const satisfies FiledReturnsAllSupportedFullFiscalYearFlowSummary;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({
+          ok: true,
+          allSupportedFullFiscalYearFlowSummary: allSupportedSummary,
+        });
+      }
+      if (message.type === "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET") {
+        return Promise.resolve({
+          ok: true,
+          flowStep: retriedSummary.flowStep,
+          allSupportedFullFiscalYearFlowSummary: retriedSummary,
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await act(async () => {
+      await controller?.refreshFlowSummary();
+    });
+    expect(controller?.allSupportedFullFiscalYearFlowSummary).toEqual(allSupportedSummary);
+
+    await act(async () => {
+      await controller?.retryAllSupportedFullFiscalYearTarget({
+        financialYear: "2025-26",
+        ledgerId: "full-fiscal-year-abc123de",
+        targetId: "synthetic-april",
+        expectedRevision: 3,
+      });
+    });
+
+    expect(controller?.allSupportedFullFiscalYearFlowSummary).toEqual(retriedSummary);
+  });
+
   it("restarts one all-supported root without dispatching the broad local-data clear", async () => {
     mocks.sendMessage.mockImplementation((message: PackMessage) => {
       if (message.type === "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW") {

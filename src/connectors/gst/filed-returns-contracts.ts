@@ -414,6 +414,16 @@ export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
    * root, not the plan the reader actually authorised discarding.
    */
   ledgerId?: string;
+  /**
+   * The exact reviewed target that may be retried after an explicit reader
+   * action. It carries the ledger revision so a stale panel cannot replay a
+   * target in a newer saved plan.
+   */
+  allSupportedFullFiscalYearRecovery?: {
+    targetId: string;
+    expectedRevision: number;
+    targetStatus: FiledReturnsFullFiscalYearTargetStatus;
+  };
   status: "complete" | "running" | "partial" | "blocked" | "cancelled";
   completedAt?: string;
   updatedAt?: string;

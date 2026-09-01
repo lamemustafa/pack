@@ -24,6 +24,52 @@ const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>
   "downloaded",
   "not-filed",
 ]);
+const EXPLICIT_RETRY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
+  "download-unconfirmed",
+  "blocked",
+  "failed",
+  "cancelled",
+  "manually-observed",
+]);
+const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
+  "all-supported-full-fiscal-year-artifact-snapshot-mismatch",
+  "full-fiscal-year-pinned-gst-tab-unavailable",
+  "single-period-bundle-ledger-malformed",
+  "single-period-bundle-scope-conflict",
+  "single-period-bundle-state-persist-failed",
+  "single-period-bundle-state-read-failed",
+  "filed-return-durable-status-rejected",
+]);
+
+/**
+ * The first unresolved target is the only child an explicit retry may replay.
+ * Later targets are still pending because the runner stops at its first
+ * terminal review state; accepting a later ID would execute an unreviewed
+ * earlier target instead of the target the reader authorised.
+ */
+export function allSupportedExplicitRetryTarget(
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+): FiledReturnsAllSupportedFullFiscalYearTarget | null {
+  if (ledger.zipPhase) return null;
+  const targetIndex = ledger.targets.findIndex(isExplicitlyRetryableTarget);
+  if (targetIndex < 0) return null;
+  const target = ledger.targets[targetIndex]!;
+  return ledger.targets
+    .slice(0, targetIndex)
+    .every((candidate) => POSITIVE_TARGET_STATUSES.has(candidate.status)) &&
+    ledger.targets.slice(targetIndex + 1).every((candidate) => candidate.status === "pending")
+    ? target
+    : null;
+}
+
+function isExplicitlyRetryableTarget(
+  target: FiledReturnsAllSupportedFullFiscalYearTarget,
+): boolean {
+  return (
+    EXPLICIT_RETRY_TARGET_STATUSES.has(target.status) &&
+    !target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal))
+  );
+}
 
 /**
  * Whether invoking the same all-supported start again would actually advance this ledger.
