@@ -153,7 +153,9 @@ function buttonLabels(): string[] {
  */
 function hasWithheldRecoveryWording(text: string): boolean {
   return (
-    /\b(?:retry|retrying|resume|resuming|restart|restarting|try again)\b/i.test(text) ||
+    /\b(?:retry|retrying|resume|resuming|restart|restarting|try again)\b|\brun(?: this (?:saved )?(?:plan|year))? again\b/i.test(
+      text,
+    ) ||
     /\bstart (?:another|fresh|selected) download\b|\bstart (?:this year|pack) again\b/i.test(
       text,
     ) ||
@@ -287,10 +289,21 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       },
     };
     const activeRecovery = getRecoveryFlowAvailability(activeSummary, false);
+    const targetReview: FiledReturnsFlowSummary = {
+      ...SAVED_FULL_YEAR,
+      flowStep: {
+        ...SAVED_FULL_YEAR.flowStep,
+        safeSignals: ["filed-returns-target-review-required"],
+      },
+    };
+    delete targetReview.fullFiscalYearRecovery;
+    const targetReviewRecovery = getRecoveryFlowAvailability(targetReview, false);
     expect(recovery.isWithheldFullYearRecovery).toBe(true);
     expect(recovery.availableActions).toEqual(["cancel-saved-full-year-run"]);
     // Positive control: this goes through RecoveryActions' distinct active-run branch.
     expect(activeRecovery.isWithheldFullYearRecovery).toBe(true);
+    // This reaches its own target-review branch, not either full-year recovery branch above.
+    expect(targetReviewRecovery.message).toBeTruthy();
 
     const callbacks = {
       onAcknowledgeInterruptedRun: () => undefined,
@@ -343,6 +356,19 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
         ),
         "Run in progress",
       ],
+      [
+        "popup target-review recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={targetReview}
+          />,
+        ),
+        "Why Pack paused",
+      ],
     ];
 
     const panel = await panelRecoveryText(SAVED_FULL_YEAR);
@@ -353,6 +379,12 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       "panel active recovery disclosure",
       activePanel.afterExpansion,
       "Run in progress",
+    ]);
+    const targetReviewPanel = await panelRecoveryText(targetReview);
+    surfaces.push([
+      "panel target-review recovery disclosure",
+      targetReviewPanel.afterExpansion,
+      "Why Pack paused",
     ]);
 
     for (const [surface, markup, positiveControl] of surfaces) {
@@ -376,6 +408,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     const stepLimitMessage = searchStepLimitReachedMessage(SAVED_FULL_YEAR.scope);
     expect(stepLimitMessage).toContain("start Pack again");
     expect(hasWithheldRecoveryWording("Start Pack again.")).toBe(true);
+    expect(hasWithheldRecoveryWording("Run this plan again.")).toBe(true);
     await mount(false, true, PINNED_TAB_SAVED_FULL_YEAR);
 
     const recovery = getRecoveryFlowAvailability(PINNED_TAB_SAVED_FULL_YEAR, false);
