@@ -56,6 +56,10 @@ const PINNED_TAB_SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
     safeMessage:
       "Pack stopped because the GST Portal tab selected for this saved plan is no longer available. Use Cancel and reset for this saved run, then start this year again.",
   },
+  fullFiscalYearRecovery: {
+    ...SAVED_FULL_YEAR.fullFiscalYearRecovery!,
+    targetStatus: "blocked",
+  },
 };
 
 let dom: JSDOM;
