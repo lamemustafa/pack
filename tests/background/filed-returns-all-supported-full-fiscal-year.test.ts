@@ -636,6 +636,42 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(savedLedger()).toEqual(blockedSnapshot);
   });
 
+  it("preserves the final-ZIP refusal reason for a current reviewed ledger", async () => {
+    zip.export.mockImplementation(async (_ledger, _step, checkpoints) => {
+      await checkpoints.onBeforeDownloadStart(new Date("2026-07-15T00:01:00.000Z"), {
+        lifecycle: "intent",
+        safeSignals: [],
+      });
+      await checkpoints.onDownloadStarted(41);
+      return unconfirmedZipStep();
+    });
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const finalZipRecovery = savedLedger();
+    const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    expect(isAllSupportedFullFiscalYearLedger(finalZipRecovery)).toBe(true);
+    expect(finalZipRecovery.zipPhase).toBe("download-observing");
+    const response = await retryAllSupportedFullFiscalYearTarget(
+      {
+        financialYear: request.financialYear,
+        ledgerId: finalZipRecovery.ledgerId,
+        targetId: finalZipRecovery.targets[0]!.targetId,
+        expectedRevision: finalZipRecovery.revision,
+      },
+      deps,
+      retryRunner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: ["all-supported-full-fiscal-year-target-retry-final-zip"],
+      },
+    });
+    expect(retryRunner).not.toHaveBeenCalled();
+    expect(savedLedger()).toEqual(finalZipRecovery);
+  });
+
   it("creates a new completed plan when the current eligible period has advanced", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
 

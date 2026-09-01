@@ -167,11 +167,15 @@ describe("all-supported full-fiscal-year ledger", () => {
       ...ledger,
       status: "blocked" as const,
       zipPhase: "download-observing" as const,
-      targets: ledger.targets.map((target, index) =>
-        index === 0 ? { ...target, status: "blocked" as const } : target,
-      ),
+      zipDownloadAttempt: { requestedAt: NOW.toISOString(), downloadId: 41 },
+      targets: ledger.targets.map((target) => ({
+        ...target,
+        status: "not-filed" as const,
+        ...canonicalDurableTargetStatus(target, "not-filed", ["filed-return-positively-not-filed"]),
+      })),
     };
 
+    expect(isAllSupportedFullFiscalYearLedger(finalZipRecovery)).toBe(true);
     expect(allSupportedExplicitRetryTarget(finalZipRecovery)).toBeNull();
     expect(
       toAllSupportedFullFiscalYearSummary(finalZipRecovery).allSupportedFullFiscalYearRecovery,
@@ -192,6 +196,29 @@ describe("all-supported full-fiscal-year ledger", () => {
     expect(allSupportedExplicitRetryTarget(blockedOutOfOrder)).toBeNull();
     expect(
       toAllSupportedFullFiscalYearSummary(blockedOutOfOrder).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
+  it("withholds the first retryable target when a later target is already terminal", () => {
+    const ledger = createLedger();
+    const laterOutOfOrder = {
+      ...ledger,
+      status: "blocked" as const,
+      targets: ledger.targets.map((target, index) =>
+        index <= 1
+          ? {
+              ...target,
+              status: "blocked" as const,
+              ...canonicalDurableTargetStatus(target, "blocked", []),
+            }
+          : target,
+      ),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(laterOutOfOrder)).toBe(true);
+    expect(allSupportedExplicitRetryTarget(laterOutOfOrder)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(laterOutOfOrder).allSupportedFullFiscalYearRecovery,
     ).toBeUndefined();
   });
 
