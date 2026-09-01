@@ -13,7 +13,7 @@
 
 | Guard | Location | Classification | Evidence | Recording commit |
 | --- | --- | --- | --- | --- |
-| Retry lease-scope bypass | `src/background/filed-returns-flow-runner.ts` (`if (!leaseScope)`) | unpinned | Replaced the condition with `false`; full Vitest passed at `6f15539` before and after (172 files / 3,139 tests). Guard restored. | pending |
+| Retry lease-scope bypass | `src/background/filed-returns-flow-runner.ts` (`if (!leaseScope)`) | unpinned | Replaced the condition with `false`; full Vitest passed at `6f15539` before and after (172 files / 3,143 tests). Guard restored. | `58278e8` |
 
 ## Alpha package-marker reachability
 
