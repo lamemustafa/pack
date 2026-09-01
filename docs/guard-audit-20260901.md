@@ -25,6 +25,7 @@
 | Restart local-cleanup success | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | pinned | Replaced the cleanup-success guard with `false`; full Vitest failed at `9c04ce0`: `filed-returns-all-supported-full-fiscal-year.test.ts` — `retains the completed root when its scoped local cleanup fails`. Guard restored. | pending |
 | Restart eligible-period plan | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the empty-period-plan guard with `false`; full Vitest passed at `bf64087` before and after (172 files / 3,143 tests). Guard restored. | pending |
 | Restart target-plan expansion | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | unpinned | Replaced the expansion-failure guard with `false`; full Vitest passed at `b521af0` before and after (172 files / 3,143 tests). Guard restored. | pending |
+| Retry current ledger identity and revision | `src/background/filed-returns-all-supported-full-fiscal-year.ts` | pinned | Replaced the freshness guard with `false`; full Vitest failed at `aaee039`: `filed-returns-all-supported-full-fiscal-year.test.ts` — `retries only the current reviewed all-supported target after persisting its reset`. Guard restored. | pending |
 
 ## Alpha package-marker reachability
 
