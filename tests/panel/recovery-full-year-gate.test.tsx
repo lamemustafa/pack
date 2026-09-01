@@ -2,7 +2,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { interruptedFullFiscalYearStep } from "../../src/background/filed-returns-full-fiscal-year-summary";
+import {
+  interruptedFullFiscalYearStep,
+  summariseFullFiscalYearLedger,
+} from "../../src/background/filed-returns-full-fiscal-year-summary";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
 import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
 import { makeCompletedRecoveryLedger } from "../background/full-year-completion-fixtures.test-helpers";
@@ -25,28 +28,10 @@ import { panelController } from "./panel-controller.test-helpers";
  * are withheld and the local ones stay.
  */
 
-const INTERRUPTED_RUNNING_STEP = interruptedFullFiscalYearStep(
-  makeCompletedRecoveryLedger("running"),
-);
-
+const INTERRUPTED_RUNNING_LEDGER = makeCompletedRecoveryLedger("running");
 const SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
-  scope: {
-    financialYear: "2025-26",
-    period: "FULL_FISCAL_YEAR",
-    returnType: "GSTR-3B",
-    artifactType: "PDF",
-  },
-  status: "blocked",
-  completedPeriods: [],
-  currentPeriod: "May",
-  updatedAt: "2026-08-29T00:00:00.000Z",
-  flowStep: INTERRUPTED_RUNNING_STEP,
-  fullFiscalYearRecovery: {
-    ledgerId: "saved",
-    targetId: "GSTR-3B:2025-26:May",
-    expectedRevision: 2,
-    targetStatus: "running",
-  },
+  ...summariseFullFiscalYearLedger(INTERRUPTED_RUNNING_LEDGER, new Date("2026-08-29T00:00:00Z")),
+  flowStep: interruptedFullFiscalYearStep(INTERRUPTED_RUNNING_LEDGER),
 };
 
 const PINNED_TAB_SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
@@ -93,7 +78,18 @@ async function mount(
   });
 }
 
-async function expandedPanelRecoveryText(summary: FiledReturnsFlowSummary): Promise<string> {
+function recoveryReaderText(root: ParentNode): string {
+  const accessibleNames = [
+    ...root.querySelectorAll("[aria-label], input, option, select, textarea"),
+  ]
+    .flatMap((element) => [element.getAttribute("aria-label"), (element as HTMLInputElement).value])
+    .filter((value): value is string => Boolean(value));
+  return [root.textContent ?? "", ...accessibleNames].join(" ");
+}
+
+async function panelRecoveryText(
+  summary: FiledReturnsFlowSummary,
+): Promise<{ afterExpansion: string; beforeExpansion: string }> {
   if (root) {
     await act(async () => root?.unmount());
     root = null;
@@ -115,6 +111,7 @@ async function expandedPanelRecoveryText(summary: FiledReturnsFlowSummary): Prom
   });
   const recovery = container.querySelector("details.recovery-details") as HTMLDetailsElement;
   expect(recovery).not.toBeNull();
+  const beforeExpansion = recoveryReaderText(container);
   await act(async () => {
     recovery.open = true;
     recovery.dispatchEvent(
@@ -122,7 +119,7 @@ async function expandedPanelRecoveryText(summary: FiledReturnsFlowSummary): Prom
     );
     await Promise.resolve();
   });
-  return container.textContent ?? "";
+  return { afterExpansion: recoveryReaderText(container), beforeExpansion };
 }
 
 function buttonLabels(): string[] {
@@ -303,14 +300,12 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       ],
     ];
 
-    surfaces.push([
-      "panel recovery disclosure",
-      await expandedPanelRecoveryText(SAVED_FULL_YEAR),
-      "Cancel and reset",
-    ]);
+    const panel = await panelRecoveryText(SAVED_FULL_YEAR);
+    expect(panel.beforeExpansion).toContain("Check Downloads before starting again.");
+    surfaces.push(["panel recovery disclosure", panel.afterExpansion, "Cancel and reset"]);
 
     for (const [surface, markup, positiveControl] of surfaces) {
-      const text = new JSDOM(markup).window.document.body.textContent ?? "";
+      const text = recoveryReaderText(new JSDOM(markup).window.document.body);
       // Each real presentation rendered its recovery branch before the semantic property below.
       expect(text, surface).toContain(positiveControl);
       expect(hasWithheldRecoveryWording(text), surface).toBe(false);
@@ -333,9 +328,9 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(recovery.message).not.toContain("start this year again");
     expect(buttonLabels()).toContain("Cancel and reset");
     expect(hasWithheldRecoveryWording(container.textContent ?? "")).toBe(false);
-    const panelText = await expandedPanelRecoveryText(PINNED_TAB_SAVED_FULL_YEAR);
-    expect(panelText).toContain("Cancel and reset");
-    expect(panelText).not.toContain("start this year again");
-    expect(hasWithheldRecoveryWording(panelText)).toBe(false);
+    const panel = await panelRecoveryText(PINNED_TAB_SAVED_FULL_YEAR);
+    expect(panel.afterExpansion).toContain("Cancel and reset");
+    expect(panel.afterExpansion).not.toContain("start this year again");
+    expect(hasWithheldRecoveryWording(panel.afterExpansion)).toBe(false);
   });
 });
