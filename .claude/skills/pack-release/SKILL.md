@@ -17,7 +17,7 @@ Read `docs/RELEASE.md` in full before doing anything else in this skill.
 - Confirm you are on the branch/worktree the user intends to release from, and
   that `git status` is clean or the user has explicitly accepted an unclean
   state.
-- Confirm Node 22.13.0 and pnpm 11.1.2 are active (`node -v`, `pnpm -v`) —
+- Confirm Node 24.20.0 and pnpm 11.1.2 are active (`node -v`, `pnpm -v`) —
   these are the exact pinned versions used in CI; do not substitute others.
 - This skill performs real, externally visible actions once you reach the
   Release Please / GitHub release / Chrome Web Store steps. Do not run those
