@@ -2,12 +2,21 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { summariseFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-summary";
+import { searchStepLimitReachedMessage } from "../../src/background/filed-returns-step-limit";
 import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
+import { makeCompletedRecoveryLedger } from "../background/full-year-completion-fixtures.test-helpers";
 
 vi.mock("wxt/browser", () => ({ browser: { tabs: { create: vi.fn() } } }));
 
 import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
+import { InlineStatus } from "../../src/entrypoints/popup/inline-status";
+import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
+import { getPopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
 import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
+import { renderToStaticMarkup } from "react-dom/server";
+import { panelController } from "./panel-controller.test-helpers";
 
 /**
  * A packaged build withholds the full-year surface everywhere it is offered -- but a ledger
@@ -17,28 +26,33 @@ import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recover
  * are withheld and the local ones stay.
  */
 
-const SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
-  scope: {
-    financialYear: "2025-26",
-    period: "FULL_FISCAL_YEAR",
-    returnType: "GSTR-3B",
-    artifactType: "PDF",
-  },
-  status: "blocked",
-  completedPeriods: [],
-  updatedAt: "2026-08-29T00:00:00.000Z",
+const INTERRUPTED_RUNNING_LEDGER = {
+  ...makeCompletedRecoveryLedger("running"),
+  status: "running" as const,
+};
+const SAVED_FULL_YEAR = summariseFullFiscalYearLedger(
+  INTERRUPTED_RUNNING_LEDGER,
+  new Date("2026-08-29T00:00:00Z"),
+);
+
+const PINNED_TAB_SAVED_FULL_YEAR: FiledReturnsFlowSummary = {
+  ...SAVED_FULL_YEAR,
   flowStep: {
-    connectorId: "gst",
-    scopeId: "gst:filed-returns:GSTR-3B",
-    state: "user-action-required",
-    safeSignals: ["full-fiscal-year-run-interrupted"],
-    safeMessage: "Pack stopped before it could confirm the FY 2025-26 run.",
+    ...SAVED_FULL_YEAR.flowStep,
+    state: "blocked",
+    safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
+    safeMessage: canonicalDurableSummaryMessage(SAVED_FULL_YEAR.scope, "blocked", [
+      "full-fiscal-year-pinned-gst-tab-unavailable",
+    ]),
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Discard this saved plan before using a different GST Portal tab.",
+      canResume: false,
+    },
   },
   fullFiscalYearRecovery: {
-    ledgerId: "saved",
-    targetId: "GSTR-3B:2025-26:May",
-    expectedRevision: 2,
-    targetStatus: "running",
+    ...SAVED_FULL_YEAR.fullFiscalYearRecovery!,
+    targetStatus: "blocked",
   },
 };
 
@@ -71,8 +85,82 @@ async function mount(
   });
 }
 
+function recoveryReaderText(root: ParentNode): string {
+  const accessibleNames = [
+    ...root.querySelectorAll(
+      "[aria-label], [aria-description], [title], [alt], [placeholder], input, option, select, textarea",
+    ),
+  ]
+    .flatMap((element) => [
+      element.getAttribute("aria-label"),
+      element.getAttribute("aria-description"),
+      element.getAttribute("title"),
+      element.getAttribute("alt"),
+      element.getAttribute("placeholder"),
+      (element as HTMLInputElement).value,
+    ])
+    .filter((value): value is string => Boolean(value));
+  return [root.textContent ?? "", ...accessibleNames].join(" ");
+}
+
+async function panelRecoveryText(
+  summary: FiledReturnsFlowSummary,
+  overrides: Partial<ReturnType<typeof panelController>> = {},
+): Promise<{ afterExpansion: string; beforeExpansionWarning: string }> {
+  if (root) {
+    await act(async () => root?.unmount());
+    root = null;
+  }
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(
+      <PanelSurface
+        pack={panelController({
+          lastRunSummary: summary,
+          recoverySummary: summary,
+          scope: summary.scope,
+          scopeLockedForReview: true,
+          scopedFlowSummary: summary,
+          ...overrides,
+        })}
+      />,
+    );
+    await Promise.resolve();
+  });
+  const recovery = container.querySelector("details.recovery-details") as HTMLDetailsElement;
+  expect(recovery).not.toBeNull();
+  const beforeExpansionWarning =
+    container.querySelector(".panel-recovery-reason")?.textContent ?? "";
+  await act(async () => {
+    recovery.open = true;
+    recovery.dispatchEvent(
+      new (dom.window as unknown as { Event: typeof Event }).Event("toggle", { bubbles: true }),
+    );
+    await Promise.resolve();
+  });
+  return { afterExpansion: recoveryReaderText(recovery), beforeExpansionWarning };
+}
+
 function buttonLabels(): string[] {
   return [...container.querySelectorAll("button")].map((b) => b.textContent ?? "");
+}
+
+/**
+ * This must remain independent of recovery-flow-availability's classifier: it
+ * protects against a surface adding a new synonym that the model fails to
+ * classify, such as "restart". The one normal wording with "continue" is
+ * deliberately a negated capability statement ("cannot continue").
+ */
+function hasWithheldRecoveryWording(text: string): boolean {
+  return (
+    /\b(?:retry|retrying|resume|resuming|restart|restarting|try again)\b|\brun(?: this (?:saved )?(?:plan|year))? again\b/i.test(
+      text,
+    ) ||
+    /\bstart (?:another|fresh|selected) download\b|\bstart(?: download)? again\b|\bstart (?:this year|pack) again\b/i.test(
+      text,
+    ) ||
+    /(?<!cannot )\bcontinue\b/i.test(text)
+  );
 }
 
 describe("saved full-year recovery in a build that withholds the flow", () => {
@@ -86,6 +174,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
   afterEach(async () => {
     if (root) await act(async () => root?.unmount());
     root = null;
+    vi.unstubAllEnvs();
   });
 
   it("offers no way to resume or restart the run", async () => {
@@ -186,5 +275,249 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     const labels = buttonLabels();
     expect(labels.some((label) => label.includes("Discard saved run and start"))).toBe(true);
     expect(container.textContent).not.toContain("This build cannot continue a full-year run");
+  });
+
+  it("keeps every rendered withheld-recovery action within the packaged availability", async () => {
+    vi.stubEnv("MODE", "production");
+    const recovery = getRecoveryFlowAvailability(SAVED_FULL_YEAR, false);
+    expect(
+      SAVED_FULL_YEAR.targetEvidence?.some((target) => target.outcome === "needs-review"),
+    ).toBe(true);
+    const activeSummary: FiledReturnsFlowSummary = {
+      ...SAVED_FULL_YEAR,
+      status: "running",
+      flowStep: {
+        ...SAVED_FULL_YEAR.flowStep,
+        safeSignals: ["full-fiscal-year-run-active"],
+      },
+    };
+    const activeRecovery = getRecoveryFlowAvailability(activeSummary, false);
+    const resumeConfirmation = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("pending"),
+      new Date("2026-08-29T00:00:00Z"),
+    );
+    const downloadUnconfirmed = summariseFullFiscalYearLedger(
+      makeCompletedRecoveryLedger("download-unconfirmed"),
+      new Date("2026-08-29T00:00:00Z"),
+    );
+    const targetReview: FiledReturnsFlowSummary = {
+      ...SAVED_FULL_YEAR,
+      flowStep: {
+        ...SAVED_FULL_YEAR.flowStep,
+        safeSignals: ["filed-returns-target-review-required"],
+      },
+    };
+    delete targetReview.fullFiscalYearRecovery;
+    const targetReviewRecovery = getRecoveryFlowAvailability(targetReview, false);
+    expect(recovery.isWithheldFullYearRecovery).toBe(true);
+    expect(recovery.availableActions).toEqual(["cancel-saved-full-year-run"]);
+    // Positive control: this goes through RecoveryActions' distinct active-run branch.
+    expect(activeRecovery.isWithheldFullYearRecovery).toBe(true);
+    expect(resumeConfirmation.flowStep.safeSignals).toContain(
+      "full-fiscal-year-resume-confirmation-required",
+    );
+    expect(downloadUnconfirmed.fullFiscalYearRecovery?.targetStatus).toBe("download-unconfirmed");
+    // This reaches its own target-review branch, not either full-year recovery branch above.
+    expect(targetReviewRecovery.message).toBeTruthy();
+
+    const callbacks = {
+      onAcknowledgeInterruptedRun: () => undefined,
+      onOpenPortal: () => undefined,
+      onRestartTarget: () => undefined,
+      onResolveFullFiscalYearTarget: () => undefined,
+      onResolveTarget: () => undefined,
+      onRetryFullFiscalYearTarget: () => undefined,
+      onRetryTarget: () => undefined,
+      onStartFresh: () => undefined,
+    };
+    const surfaces: [string, string, string][] = [
+      [
+        "popup status",
+        renderToStaticMarkup(
+          <InlineStatus
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            presentation={getPopupPresentationState(null, SAVED_FULL_YEAR, null)}
+            summary={SAVED_FULL_YEAR}
+          />,
+        ),
+        "Saved full-year run needs attention",
+      ],
+      [
+        "popup recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={SAVED_FULL_YEAR}
+          />,
+        ),
+        "Cancel and reset",
+      ],
+      [
+        "popup active recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={activeSummary}
+          />,
+        ),
+        "Run in progress",
+      ],
+      [
+        "popup target-review recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={targetReview}
+          />,
+        ),
+        "Why Pack paused",
+      ],
+      [
+        "popup resume-confirmation recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={resumeConfirmation}
+          />,
+        ),
+        "Discard saved run",
+      ],
+      [
+        "popup download-unconfirmed recovery",
+        renderToStaticMarkup(
+          <RecoveryActions
+            {...callbacks}
+            busy={null}
+            fullYearFlowAvailable={false}
+            portalReady
+            summary={downloadUnconfirmed}
+          />,
+        ),
+        "Cancel and reset",
+      ],
+    ];
+
+    const panel = await panelRecoveryText(SAVED_FULL_YEAR);
+    expect(panel.beforeExpansionWarning).toContain("Check Downloads before starting again.");
+    surfaces.push(["panel recovery disclosure", panel.afterExpansion, "Cancel and reset"]);
+    const activePanel = await panelRecoveryText(activeSummary);
+    surfaces.push([
+      "panel active recovery disclosure",
+      activePanel.afterExpansion,
+      "Run in progress",
+    ]);
+    const targetReviewPanel = await panelRecoveryText(targetReview);
+    surfaces.push([
+      "panel target-review recovery disclosure",
+      targetReviewPanel.afterExpansion,
+      "Why Pack paused",
+    ]);
+    const resumeConfirmationPanel = await panelRecoveryText(resumeConfirmation);
+    surfaces.push([
+      "panel resume-confirmation recovery disclosure",
+      resumeConfirmationPanel.afterExpansion,
+      "Discard saved run",
+    ]);
+    const downloadUnconfirmedPanel = await panelRecoveryText(downloadUnconfirmed);
+    surfaces.push([
+      "panel download-unconfirmed recovery disclosure",
+      downloadUnconfirmedPanel.afterExpansion,
+      "Cancel and reset",
+    ]);
+
+    for (const [surface, markup, positiveControl] of surfaces) {
+      const text = recoveryReaderText(new JSDOM(markup).window.document.body);
+      // Each real presentation rendered its recovery branch before the semantic property below.
+      expect(text, surface).toContain(positiveControl);
+      expect(hasWithheldRecoveryWording(text), surface).toBe(false);
+    }
+    expect(surfaces.find(([surface]) => surface === "popup recovery")?.[1]).toContain(
+      "Check Downloads before starting again.",
+    );
+    expect(surfaces.find(([surface]) => surface === "panel recovery disclosure")?.[1]).toContain(
+      "Check Downloads before starting again.",
+    );
+  });
+
+  it("replaces the canonical pinned-tab full-year restart instruction", async () => {
+    // Positive control for the independent matcher: this exact durable wording would restart the
+    // unavailable full-year plan if it reached a packaged surface.
+    expect(hasWithheldRecoveryWording(PINNED_TAB_SAVED_FULL_YEAR.flowStep.safeMessage)).toBe(true);
+    const stepLimitMessage = searchStepLimitReachedMessage(SAVED_FULL_YEAR.scope);
+    expect(stepLimitMessage).toContain("start Pack again");
+    expect(hasWithheldRecoveryWording("Start Pack again.")).toBe(true);
+    expect(hasWithheldRecoveryWording("Start download again.")).toBe(true);
+    expect(hasWithheldRecoveryWording("Run this plan again.")).toBe(true);
+    await mount(false, true, PINNED_TAB_SAVED_FULL_YEAR);
+
+    const recovery = getRecoveryFlowAvailability(PINNED_TAB_SAVED_FULL_YEAR, false);
+    expect(recovery.message).not.toContain("start this year again");
+    expect(buttonLabels()).toContain("Cancel and reset");
+    expect(hasWithheldRecoveryWording(container.textContent ?? "")).toBe(false);
+    const panel = await panelRecoveryText(PINNED_TAB_SAVED_FULL_YEAR);
+    expect(panel.afterExpansion).toContain("Cancel and reset");
+    expect(panel.afterExpansion).not.toContain("start this year again");
+    expect(hasWithheldRecoveryWording(panel.afterExpansion)).toBe(false);
+  });
+
+  it("keeps the packaged panel's cancellation action wired", async () => {
+    const cancel = vi.fn(async () => undefined);
+    const retry = vi.fn(async () => undefined);
+    const startFresh = vi.fn(async () => undefined);
+    await panelRecoveryText(SAVED_FULL_YEAR, {
+      resolveFullFiscalYearTarget: cancel,
+      retryFullFiscalYearTarget: retry,
+      startFreshFiledReturnsFlow: startFresh,
+    });
+
+    const cancelButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel and reset",
+    );
+    expect(cancelButton).toBeDefined();
+    await act(async () => {
+      cancelButton?.click();
+      await Promise.resolve();
+    });
+    expect(cancel).toHaveBeenCalledWith("cancelled");
+    expect(retry).not.toHaveBeenCalled();
+    expect(startFresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps the packaged target-review cancellation action wired", async () => {
+    const targetReview: FiledReturnsFlowSummary = {
+      ...SAVED_FULL_YEAR,
+      flowStep: {
+        ...SAVED_FULL_YEAR.flowStep,
+        safeSignals: ["filed-returns-target-review-required"],
+      },
+    };
+    delete targetReview.fullFiscalYearRecovery;
+    const cancel = vi.fn(async () => undefined);
+    await panelRecoveryText(targetReview, { resolveUnconfirmedDownload: cancel });
+
+    const cancelButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel and reset",
+    );
+    expect(cancelButton).toBeDefined();
+    await act(async () => {
+      cancelButton?.click();
+      await Promise.resolve();
+    });
+    expect(cancel).toHaveBeenCalledWith("cancelled");
   });
 });
