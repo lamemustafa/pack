@@ -10,10 +10,7 @@ import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
 import { InlineStatus } from "../../src/entrypoints/popup/inline-status";
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
 import { getPopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
-import {
-  getRecoveryFlowAvailability,
-  recoveryActionsNamedIn,
-} from "../../src/entrypoints/popup/recovery-flow-availability";
+import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 import { renderToStaticMarkup } from "react-dom/server";
 import { panelController } from "./panel-controller.test-helpers";
 
@@ -82,6 +79,20 @@ async function mount(
 
 function buttonLabels(): string[] {
   return [...container.querySelectorAll("button")].map((b) => b.textContent ?? "");
+}
+
+/**
+ * This must remain independent of recovery-flow-availability's classifier: it
+ * protects against a surface adding a new synonym that the model fails to
+ * classify, such as "restart". The one normal wording with "continue" is
+ * deliberately a negated capability statement ("cannot continue").
+ */
+function hasWithheldRecoveryWording(text: string): boolean {
+  return (
+    /\b(?:retry|retrying|resume|resuming|restart|restarting|try again)\b/i.test(text) ||
+    /\bstart (?:another|fresh|selected) download\b/i.test(text) ||
+    /(?<!cannot )\bcontinue\b/i.test(text)
+  );
 }
 
 describe("saved full-year recovery in a build that withholds the flow", () => {
@@ -263,12 +274,7 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
       const text = new JSDOM(markup).window.document.body.textContent ?? "";
       // Each real presentation rendered its recovery branch before the semantic property below.
       expect(text, surface).toContain(positiveControl);
-      const namedActions = recoveryActionsNamedIn(text);
-      expect(namedActions, surface).not.toHaveLength(0);
-      expect(
-        namedActions.every((action) => recovery.availableActions.includes(action)),
-        surface,
-      ).toBe(true);
+      expect(hasWithheldRecoveryWording(text), surface).toBe(false);
     }
   });
 });
