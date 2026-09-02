@@ -237,13 +237,24 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
   if (periodPlan.length === 0) {
     return { ok: true, flowStep: noEligiblePeriodsStep(request.financialYear) };
   }
-  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
-  if (!expansion.ok) {
-    return { ok: true, flowStep: expansionFailureStep(request.financialYear, expansion.reason) };
-  }
+  // The loader has already validated this immutable target plan against the
+  // current canonical expansion, so its return-level selection is safe to
+  // reuse for the replacement root.
+  const replacementReturnPlan = Array.from(
+    new Map(
+      ledger.targetPlan.map((target) => [
+        target.returnType,
+        {
+          returnType: target.returnType,
+          artifactType: target.artifactType,
+          concreteArtifactTypes: target.concreteArtifactTypes,
+        },
+      ]),
+    ).values(),
+  );
   const replacement = createAllSupportedFullFiscalYearLedger(
     { kind: request.kind, financialYear: request.financialYear },
-    expansion.targets,
+    replacementReturnPlan,
     periodPlan,
     now,
   );
