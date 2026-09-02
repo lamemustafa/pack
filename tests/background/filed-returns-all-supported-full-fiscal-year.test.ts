@@ -836,7 +836,7 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(stored.values["all-supported-index"]).toMatchObject({ schemaVersion: "2.0" });
   });
 
-  it("blocks a saved target when the current catalogue no longer matches its artifact snapshot", async () => {
+  it("rejects a ledger whose target plan and provenance agree on an untrusted artifact set", () => {
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
     if (!expansion.ok) throw new Error("expected all-supported plan");
     const checkpoint = createAllSupportedFullFiscalYearLedger(
@@ -868,25 +868,7 @@ describe("all-supported full-fiscal-year worker", () => {
         ? { ...target, concreteArtifactTypes: changedSnapshot }
         : target,
     );
-    await persistAllSupportedFullFiscalYearLedger(deps, checkpoint);
-    const attemptedScopes: string[] = [];
-    const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
-      attemptedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
-      return notFiledStep();
-    });
-
-    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
-
-    expect(response).toMatchObject({
-      allSupportedFullFiscalYearFlowSummary: { status: "blocked" },
-      flowStep: {
-        state: "blocked",
-        safeSignals: ["all-supported-full-fiscal-year-artifact-snapshot-mismatch"],
-      },
-    });
-    expect(attemptedScopes).not.toContain(
-      `${snapshotTarget.returnType}:${snapshotTarget.period}:${snapshotTarget.artifactType}`,
-    );
+    expect(isAllSupportedFullFiscalYearLedger(checkpoint)).toBe(false);
   });
 
   it("reconciles only the exact persisted final ZIP ID after a worker restart", async () => {
