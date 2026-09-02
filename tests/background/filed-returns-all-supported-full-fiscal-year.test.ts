@@ -22,7 +22,10 @@ import {
   markAllSupportedFullFiscalYearTargetRunning,
   markAllSupportedFullFiscalYearTargetTerminal,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
-import { persistAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
+import {
+  allSupportedFullFiscalYearPlanStorageKey,
+  persistAllSupportedFullFiscalYearLedger,
+} from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
 import {
   FILED_RETURNS_MONTHS,
   getFiledReturnsFullFiscalYearPeriods,
@@ -230,7 +233,7 @@ describe("all-supported full-fiscal-year worker", () => {
       allSavedLedgers().find((ledger) => ledger.planRoot.financialYear === "2025-26")?.ledgerId,
     ).not.toBe(earlierLedger.ledgerId);
     expect(stored.values["all-supported-index"]).toEqual({
-      schemaVersion: "1.0",
+      schemaVersion: "2.0",
       ledgerIdsByPlanRoot: {
         "all-supported-returns-full-fiscal-year:2025-26": expect.any(String),
         "all-supported-returns-full-fiscal-year:2026-27": expect.any(String),
@@ -783,7 +786,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("surfaces a malformed saved-plan index without starting portal work", async () => {
-    stored.values["all-supported-index"] = { schemaVersion: "2.0", ledgerIdsByPlanRoot: {} };
+    stored.values["all-supported-index"] = { schemaVersion: "3.0", ledgerIdsByPlanRoot: {} };
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
@@ -795,6 +798,42 @@ describe("all-supported full-fiscal-year worker", () => {
       },
     });
     expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("names unavailable provenance from a stored pre-change plan without starting portal work", async () => {
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported plan");
+    const ledger = createAllSupportedFullFiscalYearLedger(
+      request,
+      expansion.targets,
+      FILED_RETURNS_MONTHS.slice(0, 3),
+      NOW,
+    );
+    const { planProvenance: _planProvenance, ...legacyLedger } = structuredClone(ledger);
+    stored.values[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)] = {
+      ...legacyLedger,
+      schemaVersion: "1.0",
+    };
+    stored.values["all-supported-index"] = {
+      schemaVersion: "1.0",
+      ledgerIdsByPlanRoot: {
+        "all-supported-returns-full-fiscal-year:2026-27": ledger.ledgerId,
+      },
+    };
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-plan-provenance-unavailable"],
+        safeMessage:
+          "Pack cannot verify the original return and artifact selection for this saved fiscal-year plan. Clear only this affected saved plan before starting again.",
+      },
+    });
+    expect(runner).not.toHaveBeenCalled();
+    expect(stored.values["all-supported-index"]).toMatchObject({ schemaVersion: "2.0" });
   });
 
   it("blocks a saved target when the current catalogue no longer matches its artifact snapshot", async () => {
@@ -816,6 +855,14 @@ describe("all-supported full-fiscal-year worker", () => {
         ? { ...target, concreteArtifactTypes: changedSnapshot }
         : target,
     );
+    checkpoint.planProvenance = {
+      ...checkpoint.planProvenance,
+      returnPlan: checkpoint.planProvenance.returnPlan.map((target) =>
+        target.returnType === snapshotTarget.returnType
+          ? { ...target, concreteArtifactTypes: changedSnapshot }
+          : target,
+      ),
+    };
     checkpoint.targets = checkpoint.targets.map((target) =>
       target.returnType === snapshotTarget.returnType
         ? { ...target, concreteArtifactTypes: changedSnapshot }

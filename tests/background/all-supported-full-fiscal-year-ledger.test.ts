@@ -93,6 +93,19 @@ describe("all-supported full-fiscal-year ledger", () => {
     expect(isAllSupportedFullFiscalYearLedger(shortened)).toBe(false);
   });
 
+  it("rejects a target plan that omits a historically captured return group", () => {
+    const ledger = createLedger();
+    const firstGroupLength = PERIODS.length;
+    const omitted = {
+      ...ledger,
+      targetPlan: ledger.targetPlan.slice(firstGroupLength),
+      targets: ledger.targets.slice(firstGroupLength),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
+    expect(isAllSupportedFullFiscalYearLedger(omitted)).toBe(false);
+  });
+
   it("rejects a plan that substitutes a recognised return type for the canonical group", () => {
     const ledger = createLedger();
     const substituted = {
@@ -302,7 +315,7 @@ describe("all-supported full-fiscal-year ledger", () => {
       ledger,
     );
     expect(stored.current["all-supported-index"]).toEqual({
-      schemaVersion: "1.0",
+      schemaVersion: "2.0",
       ledgerIdsByPlanRoot: {
         [allSupportedFullFiscalYearPlanRootKey(PLAN_ROOT)]: ledger.ledgerId,
       },
@@ -328,7 +341,7 @@ describe("all-supported full-fiscal-year ledger", () => {
     ]);
 
     expect(stored.current["all-supported-index"]).toEqual({
-      schemaVersion: "1.0",
+      schemaVersion: "2.0",
       ledgerIdsByPlanRoot: {
         [allSupportedFullFiscalYearPlanRootKey(first.planRoot)]: first.ledgerId,
         [allSupportedFullFiscalYearPlanRootKey(second.planRoot)]: second.ledgerId,
@@ -343,25 +356,93 @@ describe("all-supported full-fiscal-year ledger", () => {
     });
   });
 
-  it("removes the root index mapping before removing its ledger record", async () => {
+  it("checkpoints removal before deleting its ledger record, then clears the checkpoint", async () => {
     const ledger = createLedger();
     await persistAllSupportedFullFiscalYearLedger(deps, ledger);
     vi.clearAllMocks();
 
     await removeAllSupportedFullFiscalYearLedger(deps, ledger);
 
-    const lastIndexWrite = browserMocks.storage.local.set.mock.invocationCallOrder.at(-1);
+    const indexWrites = browserMocks.storage.local.set.mock.invocationCallOrder;
+    const checkpointIndex =
+      browserMocks.storage.local.set.mock.calls.at(-2)?.[0]?.["all-supported-index"];
     const ledgerRemoval = browserMocks.storage.local.remove.mock.invocationCallOrder.at(-1);
-    expect(lastIndexWrite).toBeDefined();
+    expect(indexWrites).toHaveLength(2);
+    expect(checkpointIndex).toMatchObject({
+      schemaVersion: "2.0",
+      pendingRemoval: {
+        ledgerId: ledger.ledgerId,
+        planRootKey: allSupportedFullFiscalYearPlanRootKey(ledger.planRoot),
+      },
+    });
     expect(ledgerRemoval).toBeDefined();
-    expect(lastIndexWrite!).toBeLessThan(ledgerRemoval!);
+    expect(indexWrites[0]!).toBeLessThan(ledgerRemoval!);
+    expect(indexWrites[1]!).toBeGreaterThan(ledgerRemoval!);
     expect(
       stored.current[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)],
     ).toBeUndefined();
   });
 
-  it("fails closed when an all-supported index is malformed, even without plan records", async () => {
+  it("finishes exactly the checkpointed removal after an interrupted worker operation", async () => {
+    const ledger = createLedger();
+    const planKey = allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId);
+    stored.current[planKey] = ledger;
+    stored.current["all-supported-index"] = {
+      schemaVersion: "2.0",
+      ledgerIdsByPlanRoot: {},
+      pendingRemoval: {
+        ledgerId: ledger.ledgerId,
+        planRootKey: allSupportedFullFiscalYearPlanRootKey(ledger.planRoot),
+      },
+    };
+
+    await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toEqual({
+      state: "valid",
+      ledgers: [],
+    });
+    expect(stored.current[planKey]).toBeUndefined();
+    expect(stored.current["all-supported-index"]).toEqual({
+      schemaVersion: "2.0",
+      ledgerIdsByPlanRoot: {},
+    });
+  });
+
+  it("does not tolerate an unindexed ledger without the exact removal checkpoint", async () => {
+    const ledger = createLedger();
+    stored.current[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)] = ledger;
     stored.current["all-supported-index"] = { schemaVersion: "2.0", ledgerIdsByPlanRoot: {} };
+
+    await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toEqual({
+      state: "malformed",
+    });
+  });
+
+  it("migrates a stored v1 index but fails closed for a pre-provenance ledger", async () => {
+    const ledger = createLedger();
+    const { planProvenance: _planProvenance, ...legacyLedger } = structuredClone(ledger);
+    const planKey = allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId);
+    stored.current[planKey] = { ...legacyLedger, schemaVersion: "1.0" };
+    stored.current["all-supported-index"] = {
+      schemaVersion: "1.0",
+      ledgerIdsByPlanRoot: {
+        [allSupportedFullFiscalYearPlanRootKey(ledger.planRoot)]: ledger.ledgerId,
+      },
+    };
+
+    await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toEqual({
+      state: "provenance-unavailable",
+    });
+    expect(stored.current["all-supported-index"]).toEqual({
+      schemaVersion: "2.0",
+      ledgerIdsByPlanRoot: {
+        [allSupportedFullFiscalYearPlanRootKey(ledger.planRoot)]: ledger.ledgerId,
+      },
+    });
+    expect(stored.current[planKey]).toMatchObject({ schemaVersion: "1.0" });
+  });
+
+  it("fails closed when an all-supported index is malformed, even without plan records", async () => {
+    stored.current["all-supported-index"] = { schemaVersion: "3.0", ledgerIdsByPlanRoot: {} };
 
     await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toEqual({
       state: "malformed",
