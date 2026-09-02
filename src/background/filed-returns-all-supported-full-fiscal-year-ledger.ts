@@ -16,6 +16,7 @@ import { mergeFiledReturnsDownloadDiagnosticState } from "./filed-returns-downlo
 import { isCanonicalFullFiscalYearPeriodPlan } from "./filed-returns-full-fiscal-year-validation";
 import {
   ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION,
+  ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
   ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION,
   createAllSupportedFullFiscalYearTargetId,
   isAllSupportedFullFiscalYearLedger,
@@ -180,6 +181,7 @@ export function createAllSupportedFullFiscalYearLedger(
     lastReconciledAt: timestamp,
     planProvenance: {
       schemaVersion: ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION,
+      catalogueVersion: ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
       returnPlan: returnPlan.map((target) => ({
         returnType: target.returnType,
         artifactType: target.artifactType,

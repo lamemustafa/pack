@@ -259,7 +259,7 @@ async function allSupportedPlanStartLockResponse(
 ): Promise<PackMessageResponse | null> {
   if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
   const state = await readAllSupportedPlanLedgersStorageState(deps);
-  if (state.state !== "valid") {
+  if (state.state === "malformed") {
     return {
       ok: true,
       flowStep: {
@@ -277,6 +277,7 @@ async function allSupportedPlanStartLockResponse(
       },
     };
   }
+  if (state.state !== "valid") return null;
   if (
     !state.ledgers.some(
       (ledger) =>

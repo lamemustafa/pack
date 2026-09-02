@@ -38,6 +38,8 @@ import { canonicalFullFiscalYearPlanPeriods } from "./filed-returns-full-fiscal-
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION =
   "all-supported-filed-returns-targets-v1" as const;
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION = "1.0" as const;
+export const ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION =
+  "gst-filed-returns-catalogue-v1" as const;
 
 /**
  * The return-level catalogue snapshot captured when a plan is created. It is
@@ -46,8 +48,35 @@ export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION = "1.0" as c
  */
 export interface FiledReturnsAllSupportedFullFiscalYearPlanProvenance {
   schemaVersion: typeof ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION;
+  catalogueVersion: typeof ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION;
   returnPlan: FiledReturnsAllSupportedFullFiscalYearPlanTarget[];
 }
+
+// This registry is the trusted historical membership authority. When the live
+// catalogue changes, retain this entry and add a new version; never rewrite a
+// version that can already occur in persisted storage.
+const HISTORICAL_RETURN_PLANS = {
+  "gst-filed-returns-catalogue-v1": [
+    {
+      returnType: "GSTR-3B",
+      artifactType: "PDF_AND_EXCEL",
+      concreteArtifactTypes: ["PDF", "JSON"],
+    },
+    {
+      returnType: "GSTR-1",
+      artifactType: "PDF_AND_EXCEL",
+      concreteArtifactTypes: ["PDF", "EXCEL"],
+    },
+    {
+      returnType: "GSTR-2B",
+      artifactType: "PDF_AND_EXCEL",
+      concreteArtifactTypes: ["PDF", "EXCEL", "JSON"],
+    },
+  ],
+} as const satisfies Record<
+  typeof ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
+  readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[]
+>;
 
 export interface FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget extends FiledReturnsAllSupportedFullFiscalYearPlanTarget {
   targetId: string;
@@ -175,7 +204,7 @@ const LEDGER_KEYS = [
   "zipDownloadAttempt",
   "zipPhase",
 ] as const;
-const PLAN_PROVENANCE_KEYS = ["schemaVersion", "returnPlan"] as const;
+const PLAN_PROVENANCE_KEYS = ["catalogueVersion", "schemaVersion", "returnPlan"] as const;
 const RETURN_PLAN_TARGET_KEYS = ["artifactType", "concreteArtifactTypes", "returnType"] as const;
 const PLAN_TARGET_KEYS = [
   "artifactType",
@@ -317,7 +346,24 @@ function isPlanProvenance(
   const provenance = input as Partial<FiledReturnsAllSupportedFullFiscalYearPlanProvenance>;
   return (
     provenance.schemaVersion === ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION &&
-    isReturnPlan(provenance.returnPlan)
+    provenance.catalogueVersion === ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION &&
+    isReturnPlan(provenance.returnPlan) &&
+    sameReturnPlan(provenance.returnPlan, HISTORICAL_RETURN_PLANS[provenance.catalogueVersion])
+  );
+}
+
+function sameReturnPlan(
+  left: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
+  right: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (target, index) =>
+        target.returnType === right[index]?.returnType &&
+        target.artifactType === right[index]?.artifactType &&
+        sameArtifacts(target.concreteArtifactTypes, right[index]?.concreteArtifactTypes ?? []),
+    )
   );
 }
 
