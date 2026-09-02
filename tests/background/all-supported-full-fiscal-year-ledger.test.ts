@@ -214,11 +214,18 @@ describe("all-supported full-fiscal-year ledger", () => {
       ...ledger,
       status: "blocked" as const,
       targets: ledger.targets.map((target, index) => {
-        if (index === 1) return { ...target, status: "blocked" as const };
+        if (index === 1) {
+          return {
+            ...target,
+            status: "blocked" as const,
+            ...canonicalDurableTargetStatus(target, "blocked", []),
+          };
+        }
         return target;
       }),
     };
 
+    expect(isAllSupportedFullFiscalYearLedger(blockedOutOfOrder)).toBe(true);
     expect(allSupportedExplicitRetryTarget(blockedOutOfOrder)).toBeNull();
     expect(
       toAllSupportedFullFiscalYearSummary(blockedOutOfOrder).allSupportedFullFiscalYearRecovery,
