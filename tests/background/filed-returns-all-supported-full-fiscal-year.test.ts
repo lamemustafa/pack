@@ -113,6 +113,47 @@ beforeEach(() => {
 });
 
 describe("all-supported full-fiscal-year worker", () => {
+  it("blocks a restart when the saved-plan index is malformed", async () => {
+    stored.values[deps.storageKeys.allSupportedFullFiscalYearLedgerIndex] = {
+      schemaVersion: "invalid",
+    };
+    const runner = vi.fn<SinglePeriodRunner>();
+
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: "full-fiscal-year-abc123de" },
+      deps,
+      runner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+      },
+    });
+    expect(zip.discard).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("blocks a restart whose reviewed saved plan no longer exists", async () => {
+    const runner = vi.fn<SinglePeriodRunner>();
+
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: "full-fiscal-year-abc123de" },
+      deps,
+      runner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-restart-plan-not-found"],
+      },
+    });
+    expect(zip.discard).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
   it("replaces only the requested completed root with a durable fresh plan", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
     const earlierRequest = { ...request, financialYear: "2025-26" } as const;
@@ -565,6 +606,73 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(savedLedger().revision).toBeGreaterThan(blocked.revision);
   });
 
+  it("refuses a retry that names a different reviewed target", async () => {
+    const blockedRunner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, blockedRunner);
+    const blocked = savedLedger();
+    const blockedSnapshot = structuredClone(blocked);
+    const blockedTarget = blocked.targets[0];
+    if (!blockedTarget) throw new Error("expected the first target to be blocked");
+    const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    const response = await retryAllSupportedFullFiscalYearTarget(
+      {
+        financialYear: request.financialYear,
+        ledgerId: blocked.ledgerId,
+        targetId: `${blockedTarget.targetId}-different`,
+        expectedRevision: blocked.revision,
+      },
+      deps,
+      retryRunner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: ["all-supported-full-fiscal-year-target-retry-unavailable"],
+      },
+    });
+    expect(retryRunner).not.toHaveBeenCalled();
+    expect(savedLedger().targets[0]).toMatchObject({ status: "blocked", attempts: 1 });
+    expect(savedLedger()).toEqual(blockedSnapshot);
+  });
+
+  it("preserves the final-ZIP refusal reason for a current reviewed ledger", async () => {
+    zip.export.mockImplementation(async (_ledger, _step, checkpoints) => {
+      await checkpoints.onBeforeDownloadStart(new Date("2026-07-15T00:01:00.000Z"), {
+        lifecycle: "intent",
+        safeSignals: [],
+      });
+      await checkpoints.onDownloadStarted(41);
+      return unconfirmedZipStep();
+    });
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const finalZipRecovery = savedLedger();
+    const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    expect(isAllSupportedFullFiscalYearLedger(finalZipRecovery)).toBe(true);
+    expect(finalZipRecovery.zipPhase).toBe("download-observing");
+    const response = await retryAllSupportedFullFiscalYearTarget(
+      {
+        financialYear: request.financialYear,
+        ledgerId: finalZipRecovery.ledgerId,
+        targetId: finalZipRecovery.targets[0]!.targetId,
+        expectedRevision: finalZipRecovery.revision,
+      },
+      deps,
+      retryRunner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: ["all-supported-full-fiscal-year-target-retry-final-zip"],
+        safeMessage: "Pack cannot retry an individual target after it started final ZIP recovery.",
+      },
+    });
+    expect(retryRunner).not.toHaveBeenCalled();
+    expect(savedLedger()).toEqual(finalZipRecovery);
+  });
+
   it("creates a new completed plan when the current eligible period has advanced", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
 
@@ -594,6 +702,29 @@ describe("all-supported full-fiscal-year worker", () => {
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
     expect(savedLedger().ledgerId).toBe(completedPlan.ledgerId);
+    expect(runner).toHaveBeenCalledTimes(completedCallCount);
+  });
+
+  it("does not restart a completed plan when the selected year has no eligible periods", async () => {
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+    const completedPlan = savedLedger();
+    const completedCallCount = runner.mock.calls.length;
+    deps.now = () => new Date("2026-04-01T00:00:00.000Z");
+
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: completedPlan.ledgerId },
+      deps,
+      runner,
+    );
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-no-eligible-periods"],
+      },
+    });
+    expect(zip.discard).toHaveBeenCalledWith(completedPlan.ledgerId);
     expect(runner).toHaveBeenCalledTimes(completedCallCount);
   });
 

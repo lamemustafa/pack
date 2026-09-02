@@ -161,6 +161,100 @@ describe("all-supported full-fiscal-year ledger", () => {
     ).toBeUndefined();
   });
 
+  it("withholds explicit retry once final ZIP recovery has started", () => {
+    const ledger = createLedger();
+    const finalZipRecovery = {
+      ...ledger,
+      status: "blocked" as const,
+      zipPhase: "download-observing" as const,
+      zipDownloadAttempt: { requestedAt: NOW.toISOString(), downloadId: 41 },
+      targets: ledger.targets.map((target) => ({
+        ...target,
+        status: "not-filed" as const,
+        ...canonicalDurableTargetStatus(target, "not-filed", ["filed-return-positively-not-filed"]),
+      })),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(finalZipRecovery)).toBe(true);
+    expect(allSupportedExplicitRetryTarget(finalZipRecovery)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(finalZipRecovery).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
+  it("withholds explicit retry while accepted ZIP restaging is required", () => {
+    const ledger = createLedger();
+    const restagingRequired = {
+      ...ledger,
+      status: "blocked" as const,
+      zipPhase: "restaging-required" as const,
+      targets: ledger.targets.map((target, index) =>
+        index === 0
+          ? {
+              ...target,
+              status: "blocked" as const,
+              ...canonicalDurableTargetStatus(target, "blocked", [
+                "full-fiscal-year-restaging-required",
+              ]),
+            }
+          : target,
+      ),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(restagingRequired)).toBe(true);
+    expect(allSupportedExplicitRetryTarget(restagingRequired)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(restagingRequired).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
+  it("withholds a later retryable target while an earlier target remains unresolved", () => {
+    const ledger = createLedger();
+    const blockedOutOfOrder = {
+      ...ledger,
+      status: "blocked" as const,
+      targets: ledger.targets.map((target, index) => {
+        if (index === 1) {
+          return {
+            ...target,
+            status: "blocked" as const,
+            ...canonicalDurableTargetStatus(target, "blocked", []),
+          };
+        }
+        return target;
+      }),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(blockedOutOfOrder)).toBe(true);
+    expect(allSupportedExplicitRetryTarget(blockedOutOfOrder)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(blockedOutOfOrder).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
+  it("withholds the first retryable target when a later target is already terminal", () => {
+    const ledger = createLedger();
+    const laterOutOfOrder = {
+      ...ledger,
+      status: "blocked" as const,
+      targets: ledger.targets.map((target, index) =>
+        index <= 1
+          ? {
+              ...target,
+              status: "blocked" as const,
+              ...canonicalDurableTargetStatus(target, "blocked", []),
+            }
+          : target,
+      ),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(laterOutOfOrder)).toBe(true);
+    expect(allSupportedExplicitRetryTarget(laterOutOfOrder)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(laterOutOfOrder).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
   it("rejects a plan whose immutable concrete-artifact snapshot changes", () => {
     const ledger = createLedger();
     const mutatedArtifacts = [...ledger.targetPlan[0]!.concreteArtifactTypes].reverse();

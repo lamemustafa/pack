@@ -853,10 +853,11 @@ describe("alpha builds", () => {
     expect(result.output).toContain('Unresolved static import "./missing.js" from chunks/panel.js');
   });
 
-  it("refuses an alpha marker only another extension page can reach", async () => {
+  it("refuses a rendered alpha marker only another extension page can reach", async () => {
     const outputDir = await createValidPackage();
-    // Positive control: this marker is genuinely reachable from offscreen.html,
-    // so a traversal rooted in every packaged page accepts the invalid alpha.
+    // The marker is rendered in offscreen.html, but no panel module can reach it.
+    // This names the package-verifier boundary directly rather than relying on
+    // the separate unrendered-marker guard.
     await writeFile(
       path.join(outputDir, "chunks", "offscreen.js"),
       'import "./alpha-surface.js";\nexport default 1;\n',
@@ -864,7 +865,7 @@ describe("alpha builds", () => {
     );
     await writeFile(
       path.join(outputDir, "chunks", "alpha-surface.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      renderedAlphaSurface,
       "utf8",
     );
 
