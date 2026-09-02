@@ -129,6 +129,8 @@ describe("all-supported full-fiscal-year worker", () => {
       flowStep: {
         state: "blocked",
         safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+        safeMessage:
+          "Pack could not verify the saved all-supported fiscal-year plan index. Clear the affected local recovery state before starting again.",
       },
     });
     expect(zip.discard).not.toHaveBeenCalled();
@@ -148,6 +150,8 @@ describe("all-supported full-fiscal-year worker", () => {
       flowStep: {
         state: "blocked",
         safeSignals: ["all-supported-full-fiscal-year-restart-plan-not-found"],
+        safeMessage:
+          "Pack could not find the saved fiscal-year plan to restart. Refresh this panel and try again.",
       },
     });
     expect(zip.discard).not.toHaveBeenCalled();
@@ -722,6 +726,7 @@ describe("all-supported full-fiscal-year worker", () => {
       flowStep: {
         state: "blocked",
         safeSignals: ["all-supported-full-fiscal-year-no-eligible-periods"],
+        safeMessage: "Pack could not find an eligible period for FY 2026-27.",
       },
     });
     expect(zip.discard).toHaveBeenCalledWith(completedPlan.ledgerId);
