@@ -182,6 +182,32 @@ describe("all-supported full-fiscal-year ledger", () => {
     ).toBeUndefined();
   });
 
+  it("withholds explicit retry while accepted ZIP restaging is required", () => {
+    const ledger = createLedger();
+    const restagingRequired = {
+      ...ledger,
+      status: "blocked" as const,
+      zipPhase: "restaging-required" as const,
+      targets: ledger.targets.map((target, index) =>
+        index === 0
+          ? {
+              ...target,
+              status: "blocked" as const,
+              ...canonicalDurableTargetStatus(target, "blocked", [
+                "full-fiscal-year-restaging-required",
+              ]),
+            }
+          : target,
+      ),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(restagingRequired)).toBe(true);
+    expect(allSupportedExplicitRetryTarget(restagingRequired)).toBeNull();
+    expect(
+      toAllSupportedFullFiscalYearSummary(restagingRequired).allSupportedFullFiscalYearRecovery,
+    ).toBeUndefined();
+  });
+
   it("withholds a later retryable target while an earlier target remains unresolved", () => {
     const ledger = createLedger();
     const blockedOutOfOrder = {
