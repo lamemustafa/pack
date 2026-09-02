@@ -666,8 +666,7 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(response).toMatchObject({
       flowStep: {
         safeSignals: ["all-supported-full-fiscal-year-target-retry-final-zip"],
-        safeMessage:
-          "Pack cannot retry an individual target after it started final ZIP recovery.",
+        safeMessage: "Pack cannot retry an individual target after it started final ZIP recovery.",
       },
     });
     expect(retryRunner).not.toHaveBeenCalled();
