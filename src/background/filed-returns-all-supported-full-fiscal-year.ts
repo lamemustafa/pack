@@ -128,7 +128,10 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
   const periodPlan = getFiledReturnsFullFiscalYearPeriods(request.financialYear, now);
   const storageState = await readAllSupportedPlanLedgersStorageState(deps);
   if (storageState.state !== "valid") {
-    return { ok: true, flowStep: malformedSavedPlanIndexStep(request.financialYear) };
+    return {
+      ok: true,
+      flowStep: savedPlanStorageStateStep(request.financialYear, storageState.state),
+    };
   }
   let ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
 
@@ -179,7 +182,10 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
 ): Promise<PackMessageResponse> {
   const storageState = await readAllSupportedPlanLedgersStorageState(deps);
   if (storageState.state !== "valid") {
-    return { ok: true, flowStep: malformedSavedPlanIndexStep(request.financialYear) };
+    return {
+      ok: true,
+      flowStep: savedPlanStorageStateStep(request.financialYear, storageState.state),
+    };
   }
   const ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
   if (!ledger) {
@@ -808,7 +814,30 @@ function matchesConcreteArtifactSnapshot(
   );
 }
 
-function malformedSavedPlanIndexStep(financialYear: string): PortalFlowStepResult {
+function savedPlanStorageStateStep(
+  financialYear: string,
+  state: "provenance-unavailable" | "removal-pending" | "malformed",
+): PortalFlowStepResult {
+  if (state === "provenance-unavailable") {
+    return {
+      connectorId: "gst",
+      scopeId: `all-supported-full-fiscal-year:${financialYear}`,
+      state: "blocked",
+      safeSignals: ["all-supported-full-fiscal-year-plan-provenance-unavailable"],
+      safeMessage:
+        "Pack cannot verify the original return and artifact selection for this saved fiscal-year plan. Clear only this affected saved plan before starting again.",
+    };
+  }
+  if (state === "removal-pending") {
+    return {
+      connectorId: "gst",
+      scopeId: `all-supported-full-fiscal-year:${financialYear}`,
+      state: "blocked",
+      safeSignals: ["all-supported-full-fiscal-year-plan-removal-recovery-pending"],
+      safeMessage:
+        "Pack is finishing an interrupted saved-plan removal. Refresh this panel before starting another fiscal-year plan.",
+    };
+  }
   return {
     connectorId: "gst",
     scopeId: `all-supported-full-fiscal-year:${financialYear}`,

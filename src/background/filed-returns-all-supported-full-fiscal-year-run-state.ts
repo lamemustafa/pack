@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import { runFiledReturnsOperationCriticalSection } from "./filed-returns-active-run";
 import { ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX } from "./storage-keys";
 import type { FiledReturnsAllSupportedFullFiscalYearIdentity } from "../connectors/gst/filed-returns-contracts";
+import { isCanonicalFullFiscalYearLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { canCompleteAllSupportedFullFiscalYearLedger } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import {
   isAllSupportedFullFiscalYearLedger,
@@ -11,10 +12,19 @@ import {
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
 
 const PLAN_STORAGE_KEY_PREFIX = ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX;
-const PLAN_INDEX_SCHEMA_VERSION = "1.0";
+const PLAN_INDEX_SCHEMA_VERSION = "2.0";
 
 type AllSupportedPlanLedgerIndex = {
   schemaVersion: typeof PLAN_INDEX_SCHEMA_VERSION;
+  ledgerIdsByPlanRoot: Record<string, string>;
+  pendingRemoval?: {
+    ledgerId: string;
+    planRootKey: string;
+  };
+};
+
+type LegacyAllSupportedPlanLedgerIndex = {
+  schemaVersion: "1.0";
   ledgerIdsByPlanRoot: Record<string, string>;
 };
 
@@ -26,6 +36,8 @@ type LedgerStorageDeps = {
 
 export type AllSupportedPlanLedgersStorageState =
   | { state: "valid"; ledgers: FiledReturnsAllSupportedFullFiscalYearLedger[] }
+  | { state: "provenance-unavailable" }
+  | { state: "removal-pending" }
   | { state: "malformed" };
 
 export function allSupportedFullFiscalYearPlanStorageKey(ledgerId: string): string {
@@ -74,11 +86,30 @@ export async function readAllSupportedPlanLedgersStorageState(
   }
   const index = parseAllSupportedPlanLedgerIndex(indexValue);
   if (!index) return { state: "malformed" };
+  if (index.pendingRemoval) {
+    try {
+      await finishPendingRemoval(indexKey, index);
+    } catch {
+      return { state: "removal-pending" };
+    }
+    return readAllSupportedPlanLedgersStorageState(deps);
+  }
   const ledgerIds = Object.values(index.ledgerIdsByPlanRoot);
   if (new Set(ledgerIds).size !== ledgerIds.length) return { state: "malformed" };
   const expectedPlanKeys = ledgerIds.map(allSupportedFullFiscalYearPlanStorageKey);
   if (expectedPlanKeys.some((key) => !planKeys.includes(key))) {
     return { state: "malformed" };
+  }
+  if (index.needsMigration) {
+    await browser.storage.local.set({ [indexKey]: serialiseAllSupportedPlanLedgerIndex(index) });
+    return readAllSupportedPlanLedgersStorageState(deps);
+  }
+  if (
+    ledgerIds.some((ledgerId) =>
+      isPreProvenanceLedger(values[allSupportedFullFiscalYearPlanStorageKey(ledgerId)]),
+    )
+  ) {
+    return { state: "provenance-unavailable" };
   }
   const supersededPlanKeys = planKeys.filter((key) => !expectedPlanKeys.includes(key));
   if (
@@ -121,7 +152,7 @@ async function persistAllSupportedFullFiscalYearLedgerWithinOperation(
   if (!isAllSupportedFullFiscalYearLedger(ledger)) {
     throw new Error("Pack could not verify the all-supported full-year ledger before saving it.");
   }
-  if ((await readAllSupportedPlanLedgersStorageState(deps)).state === "malformed") {
+  if ((await readAllSupportedPlanLedgersStorageState(deps)).state !== "valid") {
     throw new Error("Pack could not verify the all-supported saved-plan index before saving.");
   }
   const index = (await readAllSupportedPlanLedgerIndex(indexKey)) ?? {
@@ -141,7 +172,7 @@ async function persistAllSupportedFullFiscalYearLedgerWithinOperation(
   index.ledgerIdsByPlanRoot[planRootKey] = ledger.ledgerId;
   await browser.storage.local.set({
     [allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)]: ledger,
-    [indexKey]: index,
+    [indexKey]: serialiseAllSupportedPlanLedgerIndex(index),
   });
   if (previousId && previousId !== ledger.ledgerId) {
     await browser.storage.local.remove(allSupportedFullFiscalYearPlanStorageKey(previousId));
@@ -171,11 +202,13 @@ async function removeAllSupportedFullFiscalYearLedgerWithinOperation(
     throw new Error("Pack could not match the all-supported saved plan before removing it.");
   }
   delete index.ledgerIdsByPlanRoot[planRootKey];
-  await browser.storage.local.set({ [indexKey]: index });
-  // An MV3 worker can stop between awaits. Leaving a replaceable terminal ledger
-  // without an index entry is readable and recoverable; leaving an index entry
-  // that points at a removed ledger makes the entire root store malformed.
+  index.pendingRemoval = { ledgerId: ledger.ledgerId, planRootKey };
+  await browser.storage.local.set({ [indexKey]: serialiseAllSupportedPlanLedgerIndex(index) });
+  // The checkpoint makes either post-await state recoverable: the reader only
+  // tolerates this exact unindexed ledger and finishes removal on restart.
   await browser.storage.local.remove(allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId));
+  delete index.pendingRemoval;
+  await browser.storage.local.set({ [indexKey]: serialiseAllSupportedPlanLedgerIndex(index) });
 }
 
 export async function clearAllSupportedFullFiscalYearLedgerPlans(
@@ -204,15 +237,20 @@ async function readAllSupportedPlanLedgerIndex(
   key: string,
 ): Promise<AllSupportedPlanLedgerIndex | null> {
   const values = await browser.storage.local.get(key);
-  return parseAllSupportedPlanLedgerIndex(values[key]);
+  const index = parseAllSupportedPlanLedgerIndex(values[key]);
+  return index ? serialiseAllSupportedPlanLedgerIndex(index) : null;
 }
 
-function parseAllSupportedPlanLedgerIndex(value: unknown): AllSupportedPlanLedgerIndex | null {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["schemaVersion", "ledgerIdsByPlanRoot"]))
-    return null;
-  const index = value as Partial<AllSupportedPlanLedgerIndex>;
+function parseAllSupportedPlanLedgerIndex(
+  value: unknown,
+): (AllSupportedPlanLedgerIndex & { needsMigration: boolean }) | null {
+  if (!isRecord(value)) return null;
+  const isV1 = hasOnlyKeys(value, ["schemaVersion", "ledgerIdsByPlanRoot"]);
+  const isV2 = hasOnlyKeys(value, ["schemaVersion", "ledgerIdsByPlanRoot", "pendingRemoval"]);
+  if (!isV1 && !isV2) return null;
+  const index = value as Partial<AllSupportedPlanLedgerIndex | LegacyAllSupportedPlanLedgerIndex>;
   if (
-    index.schemaVersion !== PLAN_INDEX_SCHEMA_VERSION ||
+    (index.schemaVersion !== "1.0" && index.schemaVersion !== PLAN_INDEX_SCHEMA_VERSION) ||
     !isRecord(index.ledgerIdsByPlanRoot) ||
     !Object.entries(index.ledgerIdsByPlanRoot).every(
       ([planRootKey, ledgerId]) =>
@@ -221,10 +259,66 @@ function parseAllSupportedPlanLedgerIndex(value: unknown): AllSupportedPlanLedge
   ) {
     return null;
   }
+  const pendingRemoval = (index as Partial<AllSupportedPlanLedgerIndex>).pendingRemoval;
+  if (
+    pendingRemoval !== undefined &&
+    (!isRecord(pendingRemoval) ||
+      !hasOnlyKeys(pendingRemoval, ["ledgerId", "planRootKey"]) ||
+      !isCanonicalFullFiscalYearLedgerId(pendingRemoval.ledgerId) ||
+      !isAllSupportedPlanRootStorageKey(pendingRemoval.planRootKey) ||
+      pendingRemoval.planRootKey in index.ledgerIdsByPlanRoot ||
+      Object.values(index.ledgerIdsByPlanRoot).includes(pendingRemoval.ledgerId))
+  ) {
+    return null;
+  }
   return {
     schemaVersion: PLAN_INDEX_SCHEMA_VERSION,
     ledgerIdsByPlanRoot: { ...index.ledgerIdsByPlanRoot },
+    ...(pendingRemoval
+      ? {
+          pendingRemoval: {
+            ledgerId: pendingRemoval.ledgerId,
+            planRootKey: pendingRemoval.planRootKey,
+          },
+        }
+      : {}),
+    needsMigration: index.schemaVersion === "1.0",
   };
+}
+
+function serialiseAllSupportedPlanLedgerIndex(
+  index: AllSupportedPlanLedgerIndex,
+): AllSupportedPlanLedgerIndex {
+  return {
+    schemaVersion: PLAN_INDEX_SCHEMA_VERSION,
+    ledgerIdsByPlanRoot: { ...index.ledgerIdsByPlanRoot },
+    ...(index.pendingRemoval ? { pendingRemoval: { ...index.pendingRemoval } } : {}),
+  };
+}
+
+async function finishPendingRemoval(
+  indexKey: string,
+  index: AllSupportedPlanLedgerIndex,
+): Promise<void> {
+  const pendingRemoval = index.pendingRemoval;
+  if (!pendingRemoval) return;
+  await browser.storage.local.remove(
+    allSupportedFullFiscalYearPlanStorageKey(pendingRemoval.ledgerId),
+  );
+  const complete = serialiseAllSupportedPlanLedgerIndex(index);
+  delete complete.pendingRemoval;
+  await browser.storage.local.set({ [indexKey]: complete });
+}
+
+function isPreProvenanceLedger(value: unknown): boolean {
+  return isRecord(value) && value.schemaVersion === "1.0";
+}
+
+function isAllSupportedPlanRootStorageKey(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^all-supported-returns-full-fiscal-year:20\d{2}-\d{2}$/.test(value)
+  );
 }
 
 function canReplaceLedger(ledger: FiledReturnsAllSupportedFullFiscalYearLedger): boolean {

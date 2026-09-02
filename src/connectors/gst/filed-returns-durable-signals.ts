@@ -247,6 +247,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "all-supported-full-fiscal-year-local-cleanup-retry",
   "all-supported-full-fiscal-year-plan-no-full-fiscal-year-returns",
   "all-supported-full-fiscal-year-plan-index-malformed",
+  "all-supported-full-fiscal-year-plan-provenance-unavailable",
+  "all-supported-full-fiscal-year-plan-removal-recovery-pending",
   "all-supported-full-fiscal-year-plan-return-has-no-offered-artifacts",
   "all-supported-full-fiscal-year-restart-local-cleanup-failed",
   "all-supported-full-fiscal-year-restart-plan-not-found",

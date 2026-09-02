@@ -3,7 +3,10 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import type { FiledReturnsAllSupportedFullFiscalYearPlanTarget } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import {
+  expandAllSupportedFullFiscalYearTargetPlan,
+  type FiledReturnsAllSupportedFullFiscalYearPlanTarget,
+} from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { createFiledReturnsLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import type { FiledReturnsMonth } from "../connectors/gst/filed-returns-scope";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
@@ -13,6 +16,7 @@ import { mergeFiledReturnsDownloadDiagnosticState } from "./filed-returns-downlo
 import { isCanonicalFullFiscalYearPeriodPlan } from "./filed-returns-full-fiscal-year-validation";
 import {
   ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION,
+  ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION,
   createAllSupportedFullFiscalYearTargetId,
   isAllSupportedFullFiscalYearLedger,
   type FiledReturnsAllSupportedFullFiscalYearLedger,
@@ -150,6 +154,9 @@ export function createAllSupportedFullFiscalYearLedger(
   if (!isCanonicalFullFiscalYearPeriodPlan(planRoot.financialYear, periods)) {
     throw new Error("Invalid all-supported full-year period plan.");
   }
+  if (!matchesCurrentAllSupportedReturnPlan(returnPlan)) {
+    throw new Error("Invalid all-supported full-year return-plan provenance.");
+  }
   const targetPlan = createAllSupportedFullFiscalYearTargetPlan(planRoot, returnPlan, periods);
   if (targetPlan.length === 0) {
     throw new Error("An all-supported full-year plan needs at least one target.");
@@ -159,7 +166,7 @@ export function createAllSupportedFullFiscalYearLedger(
   if (!eligibleThrough)
     throw new Error("An all-supported full-year plan needs an eligible period.");
   const ledger: FiledReturnsAllSupportedFullFiscalYearLedger = {
-    schemaVersion: "1.0",
+    schemaVersion: "2.0",
     planVersion: ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION,
     connectorVersion: GST_CONNECTOR_DESCRIPTOR.version,
     createdWithExtensionVersion: PACK_PRODUCT_VERSION,
@@ -171,6 +178,14 @@ export function createAllSupportedFullFiscalYearLedger(
     updatedAt: timestamp,
     eligibleThrough,
     lastReconciledAt: timestamp,
+    planProvenance: {
+      schemaVersion: ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION,
+      returnPlan: returnPlan.map((target) => ({
+        returnType: target.returnType,
+        artifactType: target.artifactType,
+        concreteArtifactTypes: [...target.concreteArtifactTypes],
+      })),
+    },
     targetPlan,
     targets: targetPlan.map((target) => {
       const scope = targetScope(target);
@@ -187,6 +202,29 @@ export function createAllSupportedFullFiscalYearLedger(
     throw new Error("Invalid all-supported full-year ledger snapshot.");
   }
   return ledger;
+}
+
+function matchesCurrentAllSupportedReturnPlan(
+  returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
+): boolean {
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  return (
+    expansion.ok &&
+    returnPlan.length === expansion.targets.length &&
+    returnPlan.every((target, index) => {
+      const expected = expansion.targets[index];
+      return (
+        expected !== undefined &&
+        target.returnType === expected.returnType &&
+        target.artifactType === expected.artifactType &&
+        target.concreteArtifactTypes.length === expected.concreteArtifactTypes.length &&
+        target.concreteArtifactTypes.every(
+          (artifactType, artifactIndex) =>
+            artifactType === expected.concreteArtifactTypes[artifactIndex],
+        )
+      );
+    })
+  );
 }
 
 export function createAllSupportedFullFiscalYearTargetPlan(

@@ -13,7 +13,6 @@ import {
   isFiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
-  expandAllSupportedFullFiscalYearTargetPlan,
   isAllSupportedFullFiscalYearRequest,
   type FiledReturnsAllSupportedFullFiscalYearPlanTarget,
 } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
@@ -38,6 +37,17 @@ import { canonicalFullFiscalYearPlanPeriods } from "./filed-returns-full-fiscal-
 
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION =
   "all-supported-filed-returns-targets-v1" as const;
+export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION = "1.0" as const;
+
+/**
+ * The return-level catalogue snapshot captured when a plan is created. It is
+ * deliberately separate from the period-level target plan: the latter proves
+ * every planned period still belongs to this exact historical return set.
+ */
+export interface FiledReturnsAllSupportedFullFiscalYearPlanProvenance {
+  schemaVersion: typeof ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION;
+  returnPlan: FiledReturnsAllSupportedFullFiscalYearPlanTarget[];
+}
 
 export interface FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget extends FiledReturnsAllSupportedFullFiscalYearPlanTarget {
   targetId: string;
@@ -58,7 +68,7 @@ export interface FiledReturnsAllSupportedFullFiscalYearTarget extends FiledRetur
 }
 
 export interface FiledReturnsAllSupportedFullFiscalYearLedger {
-  schemaVersion: "1.0";
+  schemaVersion: "2.0";
   planVersion: typeof ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION;
   connectorVersion: string;
   createdWithExtensionVersion: string;
@@ -75,6 +85,7 @@ export interface FiledReturnsAllSupportedFullFiscalYearLedger {
   updatedAt: string;
   eligibleThrough: FiledReturnsMonth;
   lastReconciledAt: string;
+  planProvenance: FiledReturnsAllSupportedFullFiscalYearPlanProvenance;
   targetPlan: FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[];
   targets: FiledReturnsAllSupportedFullFiscalYearTarget[];
 }
@@ -151,6 +162,7 @@ const LEDGER_KEYS = [
   "lastReconciledAt",
   "ledgerId",
   "planRoot",
+  "planProvenance",
   "planVersion",
   "portalTabId",
   "portalTabSessionId",
@@ -163,6 +175,8 @@ const LEDGER_KEYS = [
   "zipDownloadAttempt",
   "zipPhase",
 ] as const;
+const PLAN_PROVENANCE_KEYS = ["schemaVersion", "returnPlan"] as const;
+const RETURN_PLAN_TARGET_KEYS = ["artifactType", "concreteArtifactTypes", "returnType"] as const;
 const PLAN_TARGET_KEYS = [
   "artifactType",
   "concreteArtifactTypes",
@@ -190,7 +204,7 @@ export function isAllSupportedFullFiscalYearLedger(
   if (!isRecord(input) || !hasOnlyKeys(input, LEDGER_KEYS)) return false;
   const ledger = input as Partial<FiledReturnsAllSupportedFullFiscalYearLedger>;
   if (
-    ledger.schemaVersion !== "1.0" ||
+    ledger.schemaVersion !== "2.0" ||
     ledger.planVersion !== ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION ||
     !isCanonicalFullFiscalYearLedgerId(ledger.ledgerId) ||
     !isAllSupportedFullFiscalYearRequest(ledger.planRoot) ||
@@ -230,8 +244,16 @@ export function isAllSupportedFullFiscalYearLedger(
     ledger.status !== "complete"
   )
     return false;
+  if (!isPlanProvenance(ledger.planProvenance)) return false;
   const targetPlan = ledger.targetPlan;
-  if (!isTargetPlan(targetPlan, ledger.planRoot.financialYear, ledger.eligibleThrough))
+  if (
+    !isTargetPlan(
+      targetPlan,
+      ledger.planRoot.financialYear,
+      ledger.eligibleThrough,
+      ledger.planProvenance,
+    )
+  )
     return false;
   if (!Array.isArray(ledger.targets) || ledger.targets.length !== targetPlan.length) return false;
   if (!ledger.targets.every((target, index) => isTarget(target, targetPlan[index]))) return false;
@@ -263,21 +285,22 @@ function isTargetPlan(
   input: unknown,
   financialYear: string,
   eligibleThrough: FiledReturnsMonth,
+  planProvenance: FiledReturnsAllSupportedFullFiscalYearPlanProvenance,
 ): input is FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[] {
   if (!Array.isArray(input) || input.length === 0) return false;
   const periods = canonicalFullFiscalYearPlanPeriods(financialYear, eligibleThrough);
   if (!periods) return false;
-  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
-  if (!expansion.ok || input.length !== expansion.targets.length * periods.length) return false;
+  if (input.length !== planProvenance.returnPlan.length * periods.length) return false;
   let index = 0;
-  for (const expectedReturn of expansion.targets) {
+  for (const expectedReturn of planProvenance.returnPlan) {
     for (const period of periods) {
       const target = input[index];
       if (
         !isPlanTarget(target, financialYear) ||
         target.returnType !== expectedReturn.returnType ||
         target.period !== period ||
-        target.artifactType !== expectedReturn.artifactType
+        target.artifactType !== expectedReturn.artifactType ||
+        !sameArtifacts(target.concreteArtifactTypes, expectedReturn.concreteArtifactTypes)
       ) {
         return false;
       }
@@ -285,6 +308,39 @@ function isTargetPlan(
     }
   }
   return true;
+}
+
+function isPlanProvenance(
+  input: unknown,
+): input is FiledReturnsAllSupportedFullFiscalYearPlanProvenance {
+  if (!isRecord(input) || !hasOnlyKeys(input, PLAN_PROVENANCE_KEYS)) return false;
+  const provenance = input as Partial<FiledReturnsAllSupportedFullFiscalYearPlanProvenance>;
+  return (
+    provenance.schemaVersion === ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION &&
+    isReturnPlan(provenance.returnPlan)
+  );
+}
+
+function isReturnPlan(input: unknown): input is FiledReturnsAllSupportedFullFiscalYearPlanTarget[] {
+  if (!Array.isArray(input) || input.length === 0) return false;
+  const returnTypes = new Set<string>();
+  return input.every((target) => {
+    if (!isReturnPlanTarget(target) || returnTypes.has(target.returnType)) return false;
+    returnTypes.add(target.returnType);
+    return true;
+  });
+}
+
+function isReturnPlanTarget(
+  input: unknown,
+): input is FiledReturnsAllSupportedFullFiscalYearPlanTarget {
+  if (!isRecord(input) || !hasOnlyKeys(input, RETURN_PLAN_TARGET_KEYS)) return false;
+  const target = input as Partial<FiledReturnsAllSupportedFullFiscalYearPlanTarget>;
+  return (
+    isFiledReturnsReturnType(target.returnType) &&
+    isFiledReturnsArtifactType(target.artifactType) &&
+    hasCanonicalConcreteArtifacts(target.artifactType, target.concreteArtifactTypes)
+  );
 }
 
 function isPlanTarget(
