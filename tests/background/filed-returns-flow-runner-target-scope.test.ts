@@ -7,6 +7,7 @@ import {
   FULL_FISCAL_YEAR_PERIOD,
   getFiledReturnsFullFiscalYearPeriods,
 } from "../../src/connectors/gst/filed-returns-scope";
+import * as AllSupportedPlanModule from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import type * as FiledReturnsTargetReviewModule from "../../src/background/filed-returns-target-review";
 
 const mocks = vi.hoisted(() => ({
@@ -285,6 +286,33 @@ describe("filed returns retained target scoping", () => {
     });
     expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
     expect(allSupportedFlowMocks.retryAllSupportedFullFiscalYearTarget).not.toHaveBeenCalled();
+  });
+
+  it("delegates a retry without acquiring a lease when the target plan cannot expand", async () => {
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    const planExpansion = vi
+      .spyOn(AllSupportedPlanModule, "expandAllSupportedFullFiscalYearTargetPlan")
+      .mockReturnValueOnce({ ok: false, reason: "no-full-fiscal-year-returns" });
+
+    try {
+      const response = await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+        {
+          financialYear: "2026-27",
+          ledgerId: "full-fiscal-year-abc123de",
+          targetId: "GSTR-3B:2026-27:June",
+          expectedRevision: 4,
+        },
+        { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+      );
+
+      expect(response).toMatchObject({
+        flowStep: { safeSignals: ["all-supported-target-retried"] },
+      });
+      expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+      expect(allSupportedFlowMocks.retryAllSupportedFullFiscalYearTarget).toHaveBeenCalledOnce();
+    } finally {
+      planExpansion.mockRestore();
+    }
   });
 
   it("rechecks retained recovery after acquiring the all-supported retry lease", async () => {
