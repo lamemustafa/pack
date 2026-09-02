@@ -10,11 +10,13 @@ import {
   reconcilePersistedAllSupportedFullFiscalYearZipDownload,
   startAllSupportedFullFiscalYearDownloadFlow,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year";
+import { retryAllSupportedFiledReturnsFullFiscalYearTarget } from "../../src/background/filed-returns-flow-runner";
 import type { SinglePeriodRunner } from "../../src/background/filed-returns-full-fiscal-year";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import * as AllSupportedPlanModule from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import {
   createAllSupportedFullFiscalYearLedger,
   markAllSupportedFullFiscalYearTargetRunning,
@@ -113,6 +115,50 @@ beforeEach(() => {
 });
 
 describe("all-supported full-fiscal-year worker", () => {
+  it("fails closed with the real retry diagnostic when the canonical plan cannot expand", async () => {
+    deps.storageKeys.activeRun = "active-run";
+    stored.values["active-run"] = {
+      schemaVersion: "1.0",
+      runId: "filed-returns-run-m0abc123",
+      revision: 1,
+      scope: {
+        artifactType: "PDF",
+        financialYear: request.financialYear,
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      status: "running",
+      leaseUpdatedAt: NOW.toISOString(),
+    };
+    const planExpansion = vi
+      .spyOn(AllSupportedPlanModule, "expandAllSupportedFullFiscalYearTargetPlan")
+      .mockReturnValueOnce({ ok: false, reason: "no-full-fiscal-year-returns" });
+
+    try {
+      const response = await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+        {
+          financialYear: request.financialYear,
+          ledgerId: "full-fiscal-year-abc123de",
+          targetId: "GSTR-3B:2026-27:June",
+          expectedRevision: 4,
+        },
+        deps,
+      );
+
+      expect(response).toMatchObject({
+        flowStep: {
+          state: "user-action-required",
+          safeSignals: ["all-supported-full-fiscal-year-recovery-stale"],
+          safeMessage:
+            "Pack found newer saved all-supported recovery state. Refresh the panel and review the current target.",
+        },
+      });
+    } finally {
+      planExpansion.mockRestore();
+      delete deps.storageKeys.activeRun;
+    }
+  });
+
   it("blocks a restart when the saved-plan index is malformed", async () => {
     stored.values[deps.storageKeys.allSupportedFullFiscalYearLedgerIndex] = {
       schemaVersion: "invalid",
