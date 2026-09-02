@@ -809,7 +809,8 @@ describe("all-supported full-fiscal-year worker", () => {
       FILED_RETURNS_MONTHS.slice(0, 3),
       NOW,
     );
-    const { planProvenance: _planProvenance, ...legacyLedger } = structuredClone(ledger);
+    const legacyLedger = structuredClone(ledger) as unknown as Record<string, unknown>;
+    delete legacyLedger.planProvenance;
     stored.values[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)] = {
       ...legacyLedger,
       schemaVersion: "1.0",

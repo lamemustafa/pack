@@ -419,7 +419,8 @@ describe("all-supported full-fiscal-year ledger", () => {
 
   it("migrates a stored v1 index but fails closed for a pre-provenance ledger", async () => {
     const ledger = createLedger();
-    const { planProvenance: _planProvenance, ...legacyLedger } = structuredClone(ledger);
+    const legacyLedger = structuredClone(ledger) as unknown as Record<string, unknown>;
+    delete legacyLedger.planProvenance;
     const planKey = allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId);
     stored.current[planKey] = { ...legacyLedger, schemaVersion: "1.0" };
     stored.current["all-supported-index"] = {
