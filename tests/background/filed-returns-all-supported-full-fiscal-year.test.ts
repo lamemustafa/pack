@@ -324,6 +324,9 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(
       (response as { flowStep: { safeSignals: readonly string[] } }).flowStep.safeSignals,
     ).toContain("all-supported-full-fiscal-year-restart-plan-superseded");
+    expect((response as { flowStep: { safeMessage: string } }).flowStep.safeMessage).toBe(
+      "This fiscal-year plan changed since Pack showed it. Refresh this panel and check it before discarding.",
+    );
 
     // The same request naming the ledger actually held still succeeds, so the
     // guard rejects a mismatch rather than every restart.
