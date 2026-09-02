@@ -48,7 +48,7 @@ export const ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION =
  */
 export interface FiledReturnsAllSupportedFullFiscalYearPlanProvenance {
   schemaVersion: typeof ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION;
-  catalogueVersion: typeof ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION;
+  catalogueVersion: AllSupportedFullFiscalYearCatalogueVersion;
   returnPlan: FiledReturnsAllSupportedFullFiscalYearPlanTarget[];
 }
 
@@ -73,10 +73,11 @@ const HISTORICAL_RETURN_PLANS = {
       concreteArtifactTypes: ["PDF", "EXCEL", "JSON"],
     },
   ],
-} as const satisfies Record<
-  typeof ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
-  readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[]
+} as const satisfies Readonly<
+  Record<string, readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[]>
 >;
+
+type AllSupportedFullFiscalYearCatalogueVersion = keyof typeof HISTORICAL_RETURN_PLANS;
 
 export interface FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget extends FiledReturnsAllSupportedFullFiscalYearPlanTarget {
   targetId: string;
@@ -346,10 +347,16 @@ function isPlanProvenance(
   const provenance = input as Partial<FiledReturnsAllSupportedFullFiscalYearPlanProvenance>;
   return (
     provenance.schemaVersion === ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION &&
-    provenance.catalogueVersion === ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION &&
+    isKnownCatalogueVersion(provenance.catalogueVersion) &&
     isReturnPlan(provenance.returnPlan) &&
     sameReturnPlan(provenance.returnPlan, HISTORICAL_RETURN_PLANS[provenance.catalogueVersion])
   );
+}
+
+function isKnownCatalogueVersion(
+  input: unknown,
+): input is AllSupportedFullFiscalYearCatalogueVersion {
+  return typeof input === "string" && input in HISTORICAL_RETURN_PLANS;
 }
 
 function sameReturnPlan(
