@@ -4,6 +4,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
+  ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
   expandAllSupportedFullFiscalYearTargetPlan,
   type FiledReturnsAllSupportedFullFiscalYearPlanTarget,
 } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
@@ -16,7 +17,6 @@ import { mergeFiledReturnsDownloadDiagnosticState } from "./filed-returns-downlo
 import { isCanonicalFullFiscalYearPeriodPlan } from "./filed-returns-full-fiscal-year-validation";
 import {
   ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION,
-  ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
   ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION,
   createAllSupportedFullFiscalYearTargetId,
   isAllSupportedFullFiscalYearLedger,

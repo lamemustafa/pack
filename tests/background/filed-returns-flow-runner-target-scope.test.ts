@@ -230,6 +230,28 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["provenance-unavailable", "all-supported-full-fiscal-year-plan-provenance-unavailable"],
+    ["removal-pending", "all-supported-full-fiscal-year-plan-removal-pending"],
+  ] as const)("blocks an atomic start while saved-plan state is %s", async (state, signal) => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    allSupportedRunStateMocks.readAllSupportedPlanLedgersStorageState.mockResolvedValue({ state });
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" },
+    } as never);
+
+    expect(response).toMatchObject({ flowStep: { state: "blocked", safeSignals: [signal] } });
+    expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
   it("passes the bound completed ledger to the durable all-supported restart", async () => {
     // The restart request is bound to the displayed ledger. The worker owns
     // replacement persistence so the old root is never deleted in isolation.

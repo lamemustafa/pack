@@ -27,7 +27,7 @@ import {
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
   clearAllSupportedFullFiscalYearLedgerPlans,
-  readAllSupportedPlanLedgersStorageState,
+  readAllSupportedPlanLedgersStorageStateWithinOperation,
 } from "./filed-returns-all-supported-full-fiscal-year-run-state";
 
 export interface PackLocalDataDeps {
@@ -94,9 +94,9 @@ async function clearPackLocalDataWithinOperation(
   const planLedgers = await readPlanLedgersStorageState(deps);
   requiresBroadStagingClear ||= planLedgers.state === "malformed";
   const allSupportedPlanLedgers = deps.storageKeys.allSupportedFullFiscalYearLedgerIndex
-    ? await readAllSupportedPlanLedgersStorageState(deps)
+    ? await readAllSupportedPlanLedgersStorageStateWithinOperation(deps)
     : { state: "valid" as const, ledgers: [] };
-  requiresBroadStagingClear ||= allSupportedPlanLedgers.state === "malformed";
+  requiresBroadStagingClear ||= allSupportedPlanLedgers.state !== "valid";
 
   if (requiresBroadStagingClear) {
     const clearSignals = await discardAllFiledReturnsStaging();

@@ -259,25 +259,37 @@ async function allSupportedPlanStartLockResponse(
 ): Promise<PackMessageResponse | null> {
   if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
   const state = await readAllSupportedPlanLedgersStorageState(deps);
-  if (state.state === "malformed") {
+  if (state.state !== "valid") {
+    const unavailable = state.state === "provenance-unavailable";
+    const removalPending = state.state === "removal-pending";
     return {
       ok: true,
       flowStep: {
         connectorId: "gst",
         scopeId: filedReturnScopeId(scope.returnType),
         state: "blocked",
-        safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
-        safeMessage:
-          "Pack could not verify the saved all-supported fiscal-year plan index before starting another return.",
+        safeSignals: [
+          unavailable
+            ? "all-supported-full-fiscal-year-plan-provenance-unavailable"
+            : removalPending
+              ? "all-supported-full-fiscal-year-plan-removal-pending"
+              : "all-supported-full-fiscal-year-plan-index-malformed",
+        ],
+        safeMessage: unavailable
+          ? "Pack cannot verify an existing saved fiscal-year plan before starting another return."
+          : removalPending
+            ? "Pack is finishing removal of a saved fiscal-year plan before starting another return."
+            : "Pack could not verify the saved all-supported fiscal-year plan index before starting another return.",
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
-          message: "Clear local Pack data before starting another return.",
+          message: unavailable
+            ? "Clear local Pack data before starting another return."
+            : "Retry after Pack finishes the saved-plan recovery.",
           canResume: false,
         },
       },
     };
   }
-  if (state.state !== "valid") return null;
   if (
     !state.ledgers.some(
       (ledger) =>

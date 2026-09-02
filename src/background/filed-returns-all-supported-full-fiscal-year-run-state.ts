@@ -76,6 +76,14 @@ export async function readAllSupportedFullFiscalYearLedgerById(
 export async function readAllSupportedPlanLedgersStorageState(
   deps: LedgerStorageDeps,
 ): Promise<AllSupportedPlanLedgersStorageState> {
+  return runFiledReturnsOperationCriticalSection(() =>
+    readAllSupportedPlanLedgersStorageStateWithinOperation(deps),
+  );
+}
+
+export async function readAllSupportedPlanLedgersStorageStateWithinOperation(
+  deps: LedgerStorageDeps,
+): Promise<AllSupportedPlanLedgersStorageState> {
   const indexKey = deps.storageKeys.allSupportedFullFiscalYearLedgerIndex;
   if (!indexKey) return { state: "malformed" };
   const values = await browser.storage.local.get(null);
@@ -92,7 +100,7 @@ export async function readAllSupportedPlanLedgersStorageState(
     } catch {
       return { state: "removal-pending" };
     }
-    return readAllSupportedPlanLedgersStorageState(deps);
+    return readAllSupportedPlanLedgersStorageStateWithinOperation(deps);
   }
   const ledgerIds = Object.values(index.ledgerIdsByPlanRoot);
   if (new Set(ledgerIds).size !== ledgerIds.length) return { state: "malformed" };
@@ -102,7 +110,7 @@ export async function readAllSupportedPlanLedgersStorageState(
   }
   if (index.needsMigration) {
     await browser.storage.local.set({ [indexKey]: serialiseAllSupportedPlanLedgerIndex(index) });
-    return readAllSupportedPlanLedgersStorageState(deps);
+    return readAllSupportedPlanLedgersStorageStateWithinOperation(deps);
   }
   if (
     ledgerIds.some((ledgerId) =>
@@ -152,7 +160,7 @@ async function persistAllSupportedFullFiscalYearLedgerWithinOperation(
   if (!isAllSupportedFullFiscalYearLedger(ledger)) {
     throw new Error("Pack could not verify the all-supported full-year ledger before saving it.");
   }
-  if ((await readAllSupportedPlanLedgersStorageState(deps)).state !== "valid") {
+  if ((await readAllSupportedPlanLedgersStorageStateWithinOperation(deps)).state !== "valid") {
     throw new Error("Pack could not verify the all-supported saved-plan index before saving.");
   }
   const index = (await readAllSupportedPlanLedgerIndex(indexKey)) ?? {
@@ -216,6 +224,19 @@ export async function clearAllSupportedFullFiscalYearLedgerPlans(
 ): Promise<void> {
   const indexKey = deps.storageKeys.allSupportedFullFiscalYearLedgerIndex;
   if (!indexKey) return;
+  const index = await readAllSupportedPlanLedgerIndex(indexKey);
+  if (index) {
+    for (const [planRootKey, ledgerId] of Object.entries(index.ledgerIdsByPlanRoot)) {
+      const [kind, financialYear] = planRootKey.split(":");
+      if (!kind || !financialYear) {
+        throw new Error("Pack could not verify the all-supported saved plan before clearing it.");
+      }
+      await removeAllSupportedFullFiscalYearLedgerWithinOperation(deps, {
+        ledgerId,
+        planRoot: { kind: "all-supported-returns-full-fiscal-year", financialYear },
+      });
+    }
+  }
   const values = await browser.storage.local.get(null);
   const planKeys = Object.keys(values).filter((key) => key.startsWith(PLAN_STORAGE_KEY_PREFIX));
   await browser.storage.local.remove([...planKeys, indexKey]);
@@ -302,10 +323,18 @@ async function finishPendingRemoval(
 ): Promise<void> {
   const pendingRemoval = index.pendingRemoval;
   if (!pendingRemoval) return;
+  const current = await readAllSupportedPlanLedgerIndex(indexKey);
+  if (
+    !current?.pendingRemoval ||
+    current.pendingRemoval.ledgerId !== pendingRemoval.ledgerId ||
+    current.pendingRemoval.planRootKey !== pendingRemoval.planRootKey
+  ) {
+    throw new Error("Pack could not verify the saved-plan removal checkpoint.");
+  }
   await browser.storage.local.remove(
     allSupportedFullFiscalYearPlanStorageKey(pendingRemoval.ledgerId),
   );
-  const complete = serialiseAllSupportedPlanLedgerIndex(index);
+  const complete = serialiseAllSupportedPlanLedgerIndex(current);
   delete complete.pendingRemoval;
   await browser.storage.local.set({ [indexKey]: complete });
 }

@@ -13,7 +13,9 @@ import {
   isFiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
+  HISTORICAL_ALL_SUPPORTED_FULL_FISCAL_YEAR_RETURN_PLANS,
   isAllSupportedFullFiscalYearRequest,
+  type AllSupportedFullFiscalYearCatalogueVersion,
   type FiledReturnsAllSupportedFullFiscalYearPlanTarget,
 } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import {
@@ -38,8 +40,6 @@ import { canonicalFullFiscalYearPlanPeriods } from "./filed-returns-full-fiscal-
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION =
   "all-supported-filed-returns-targets-v1" as const;
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION = "1.0" as const;
-export const ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION =
-  "gst-filed-returns-catalogue-v1" as const;
 
 /**
  * The return-level catalogue snapshot captured when a plan is created. It is
@@ -51,33 +51,6 @@ export interface FiledReturnsAllSupportedFullFiscalYearPlanProvenance {
   catalogueVersion: AllSupportedFullFiscalYearCatalogueVersion;
   returnPlan: FiledReturnsAllSupportedFullFiscalYearPlanTarget[];
 }
-
-// This registry is the trusted historical membership authority. When the live
-// catalogue changes, retain this entry and add a new version; never rewrite a
-// version that can already occur in persisted storage.
-const HISTORICAL_RETURN_PLANS = {
-  "gst-filed-returns-catalogue-v1": [
-    {
-      returnType: "GSTR-3B",
-      artifactType: "PDF_AND_EXCEL",
-      concreteArtifactTypes: ["PDF", "JSON"],
-    },
-    {
-      returnType: "GSTR-1",
-      artifactType: "PDF_AND_EXCEL",
-      concreteArtifactTypes: ["PDF", "EXCEL"],
-    },
-    {
-      returnType: "GSTR-2B",
-      artifactType: "PDF_AND_EXCEL",
-      concreteArtifactTypes: ["PDF", "EXCEL", "JSON"],
-    },
-  ],
-} as const satisfies Readonly<
-  Record<string, readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[]>
->;
-
-type AllSupportedFullFiscalYearCatalogueVersion = keyof typeof HISTORICAL_RETURN_PLANS;
 
 export interface FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget extends FiledReturnsAllSupportedFullFiscalYearPlanTarget {
   targetId: string;
@@ -349,14 +322,19 @@ function isPlanProvenance(
     provenance.schemaVersion === ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_PROVENANCE_VERSION &&
     isKnownCatalogueVersion(provenance.catalogueVersion) &&
     isReturnPlan(provenance.returnPlan) &&
-    sameReturnPlan(provenance.returnPlan, HISTORICAL_RETURN_PLANS[provenance.catalogueVersion])
+    sameReturnPlan(
+      provenance.returnPlan,
+      HISTORICAL_ALL_SUPPORTED_FULL_FISCAL_YEAR_RETURN_PLANS[provenance.catalogueVersion],
+    )
   );
 }
 
 function isKnownCatalogueVersion(
   input: unknown,
 ): input is AllSupportedFullFiscalYearCatalogueVersion {
-  return typeof input === "string" && input in HISTORICAL_RETURN_PLANS;
+  return (
+    typeof input === "string" && input in HISTORICAL_ALL_SUPPORTED_FULL_FISCAL_YEAR_RETURN_PLANS
+  );
 }
 
 function sameReturnPlan(
