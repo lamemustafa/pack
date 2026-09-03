@@ -51,6 +51,7 @@ import {
 import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
+  savedPlanStorageStateRecoveryMessage,
 } from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
@@ -285,9 +286,10 @@ async function allSupportedPlanStartLockResponse(
             : "Pack could not verify the saved all-supported fiscal-year plan index before starting another return.",
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
-          message: unavailable
-            ? "Clear local Pack data before starting another return."
-            : "Retry after Pack finishes the saved-plan recovery.",
+          // One owner: a malformed index recovers no more than an unverifiable
+          // provenance does, and it used to land in the "wait for recovery"
+          // arm simply by being the default of a two-way ternary.
+          message: savedPlanStorageStateRecoveryMessage(state.state),
           canResume: false,
         },
       },

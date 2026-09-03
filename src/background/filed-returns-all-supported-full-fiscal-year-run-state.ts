@@ -87,6 +87,23 @@ export function allSupportedFullFiscalYearPlanRootFromKey(
  * name the same durable signal for the same storage state; two hand-written
  * copies of that mapping is the drift this repository keeps paying for.
  */
+/**
+ * What a reader can actually do about each unverifiable saved-plan state.
+ *
+ * Only an interrupted removal recovers on its own. An unverifiable provenance
+ * and a malformed index both stay blocked until the saved state is cleared, so
+ * telling the reader to wait for a recovery is an instruction that never comes
+ * true -- and a malformed index used to fall into exactly that branch because
+ * it was the default arm of a two-way ternary.
+ */
+export function savedPlanStorageStateRecoveryMessage(
+  state: Exclude<AllSupportedPlanLedgersStorageState["state"], "valid">,
+): string {
+  return state === "removal-pending"
+    ? "Retry after Pack finishes the saved-plan recovery."
+    : `Open Pack's options and use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d before starting another return.`;
+}
+
 export function savedPlanStorageStateStep(
   financialYear: string,
   state: Exclude<AllSupportedPlanLedgersStorageState["state"], "valid">,
