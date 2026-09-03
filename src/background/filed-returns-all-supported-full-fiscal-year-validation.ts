@@ -333,7 +333,8 @@ function isKnownCatalogueVersion(
   input: unknown,
 ): input is AllSupportedFullFiscalYearCatalogueVersion {
   return (
-    typeof input === "string" && input in HISTORICAL_ALL_SUPPORTED_FULL_FISCAL_YEAR_RETURN_PLANS
+    typeof input === "string" &&
+    Object.hasOwn(HISTORICAL_ALL_SUPPORTED_FULL_FISCAL_YEAR_RETURN_PLANS, input)
   );
 }
 

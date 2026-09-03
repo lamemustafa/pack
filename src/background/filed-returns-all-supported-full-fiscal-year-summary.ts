@@ -14,6 +14,7 @@ import {
 import { isFiledReturnsRunLeaseLive } from "./filed-returns-active-run";
 import {
   readAllSupportedPlanLedgersStorageState,
+  savedPlanStorageStateStep,
   type AllSupportedPlanLedgersStorageState,
 } from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import type {
@@ -42,7 +43,7 @@ export async function readCurrentAllSupportedFullFiscalYearFlowSummary(
 ): Promise<FiledReturnsAllSupportedFullFiscalYearFlowSummary | null> {
   if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
   const state = await readAllSupportedPlanLedgersStorageState(deps);
-  if (state.state !== "valid") return null;
+  if (state.state !== "valid") return unresolvedSavedPlanSummary(state);
   const now = deps.now?.() ?? new Date();
   const ledger = currentLedger(state, now);
   if (!ledger) return null;
@@ -59,6 +60,45 @@ export async function readCurrentAllSupportedFullFiscalYearFlowSummary(
     ),
     allSupportedTerminalPlanRoots(state.ledgers),
   );
+}
+
+/**
+ * Projects an unverifiable saved plan as a blocked summary rather than as
+ * nothing.
+ *
+ * Returning `null` here let `PACK_GET_FILED_RETURNS_FLOW_SUMMARY` fall through
+ * to an unrelated atomic summary while every start was already being refused,
+ * so the reader was shown a healthy surface for a state only the start path
+ * would ever name.
+ *
+ * `malformed` is deliberately still `null`: its index is exactly the record
+ * that failed to parse, so there is no plan root the summary could honestly
+ * claim to be blocked on. Naming an invented year would be worse than naming
+ * none. The start paths continue to fail closed with their own registered
+ * signal, and Options-level clearing remains the route out.
+ */
+function unresolvedSavedPlanSummary(
+  state: Exclude<AllSupportedPlanLedgersStorageState, { state: "valid" }>,
+): FiledReturnsAllSupportedFullFiscalYearFlowSummary | null {
+  const planRoot =
+    state.state === "provenance-unavailable"
+      ? (state.planRoots[0] ?? null)
+      : state.state === "removal-pending"
+        ? state.planRoot
+        : null;
+  if (!planRoot) return null;
+  return {
+    summaryIdentity: { ...planRoot },
+    status: "blocked",
+    completedTargetIds: [],
+    targetEvidence: [],
+    totalTargets: 0,
+    // No `ledgerId` and no recovery target: the panel's destructive and retry
+    // controls each require one, so an unverifiable plan cannot be discarded,
+    // resumed or retried from this projection by accident.
+    resumeAvailable: false,
+    flowStep: savedPlanStorageStateStep(planRoot.financialYear, state.state),
+  };
 }
 
 export function toAllSupportedFullFiscalYearSummary(

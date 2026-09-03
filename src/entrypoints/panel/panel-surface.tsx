@@ -368,9 +368,11 @@ function AllSupportedRunStatus({
           Your pack · All supported returns · FY {summary.summaryIdentity.financialYear}
         </strong>
       </p>
-      <p>
-        {returnCount} return types · {periodCount} periods
-      </p>
+      {summary.targetEvidence.length > 0 ? (
+        <p>
+          {returnCount} return types · {periodCount} periods
+        </p>
+      ) : null}
       <p aria-live="polite">{summary.flowStep.safeMessage}</p>
       {canRestart ? (
         <button

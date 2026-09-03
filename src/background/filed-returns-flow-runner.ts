@@ -272,7 +272,7 @@ async function allSupportedPlanStartLockResponse(
           unavailable
             ? "all-supported-full-fiscal-year-plan-provenance-unavailable"
             : removalPending
-              ? "all-supported-full-fiscal-year-plan-removal-pending"
+              ? "all-supported-full-fiscal-year-plan-removal-recovery-pending"
               : "all-supported-full-fiscal-year-plan-index-malformed",
         ],
         safeMessage: unavailable

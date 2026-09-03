@@ -33,6 +33,7 @@ import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
   persistAllSupportedFullFiscalYearLedger,
+  savedPlanStorageStateStep,
 } from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import type {
   AllSupportedFullFiscalYearZipPhase,
@@ -812,40 +813,6 @@ function matchesConcreteArtifactSnapshot(
     current.length === target.concreteArtifactTypes.length &&
     current.every((artifactType, index) => artifactType === target.concreteArtifactTypes[index])
   );
-}
-
-function savedPlanStorageStateStep(
-  financialYear: string,
-  state: "provenance-unavailable" | "removal-pending" | "malformed",
-): PortalFlowStepResult {
-  if (state === "provenance-unavailable") {
-    return {
-      connectorId: "gst",
-      scopeId: `all-supported-full-fiscal-year:${financialYear}`,
-      state: "blocked",
-      safeSignals: ["all-supported-full-fiscal-year-plan-provenance-unavailable"],
-      safeMessage:
-        "Pack cannot verify the original return and artifact selection for this saved fiscal-year plan. Clear only this affected saved plan before starting again.",
-    };
-  }
-  if (state === "removal-pending") {
-    return {
-      connectorId: "gst",
-      scopeId: `all-supported-full-fiscal-year:${financialYear}`,
-      state: "blocked",
-      safeSignals: ["all-supported-full-fiscal-year-plan-removal-recovery-pending"],
-      safeMessage:
-        "Pack is finishing an interrupted saved-plan removal. Refresh this panel before starting another fiscal-year plan.",
-    };
-  }
-  return {
-    connectorId: "gst",
-    scopeId: `all-supported-full-fiscal-year:${financialYear}`,
-    state: "blocked",
-    safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
-    safeMessage:
-      "Pack could not verify the saved all-supported fiscal-year plan index. Clear the affected local recovery state before starting again.",
-  };
 }
 
 function mergeRetriedArtifactSignals(

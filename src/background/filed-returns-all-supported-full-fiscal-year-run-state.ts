@@ -1,7 +1,10 @@
 import { browser } from "wxt/browser";
 import { runFiledReturnsOperationCriticalSection } from "./filed-returns-active-run";
 import { ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX } from "./storage-keys";
-import type { FiledReturnsAllSupportedFullFiscalYearIdentity } from "../connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsAllSupportedFullFiscalYearIdentity,
+  PortalFlowStepResult,
+} from "../connectors/gst/filed-returns-contracts";
 import { isCanonicalFullFiscalYearLedgerId } from "../connectors/gst/filed-returns-ledger-id";
 import { canCompleteAllSupportedFullFiscalYearLedger } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import {
@@ -36,8 +39,16 @@ type LedgerStorageDeps = {
 
 export type AllSupportedPlanLedgersStorageState =
   | { state: "valid"; ledgers: FiledReturnsAllSupportedFullFiscalYearLedger[] }
-  | { state: "provenance-unavailable" }
-  | { state: "removal-pending" }
+  /**
+   * The plan roots whose ledgers predate provenance. They are carried so a
+   * reader can be told *which* saved year it must clear; a blocked state the
+   * summary cannot name is one the reader cannot act on.
+   */
+  | {
+      state: "provenance-unavailable";
+      planRoots: readonly FiledReturnsAllSupportedFullFiscalYearIdentity[];
+    }
+  | { state: "removal-pending"; planRoot: FiledReturnsAllSupportedFullFiscalYearIdentity | null }
   | { state: "malformed" };
 
 export function allSupportedFullFiscalYearPlanStorageKey(ledgerId: string): string {
@@ -48,6 +59,66 @@ export function allSupportedFullFiscalYearPlanRootKey(
   planRoot: FiledReturnsAllSupportedFullFiscalYearIdentity,
 ): string {
   return `${planRoot.kind}:${planRoot.financialYear}`;
+}
+
+/**
+ * The one inverse of `allSupportedFullFiscalYearPlanRootKey`. Every caller that
+ * needs the identity back out of a stored index key goes through this, so the
+ * key's shape has a single owner rather than a predicate here and a `split(":")`
+ * somewhere else that disagree about what a canonical key is.
+ */
+export function allSupportedFullFiscalYearPlanRootFromKey(
+  planRootKey: string,
+): FiledReturnsAllSupportedFullFiscalYearIdentity | null {
+  const [kind, financialYear, ...rest] = planRootKey.split(":");
+  if (kind === undefined || financialYear === undefined || rest.length !== 0) return null;
+  const candidate = { kind, financialYear };
+  return isAllSupportedFullFiscalYearPlanRootKey(candidate) &&
+    planRootKey === allSupportedFullFiscalYearPlanRootKey(candidate)
+    ? candidate
+    : null;
+}
+
+/**
+ * The blocked step a reader is shown when saved-plan state cannot be verified.
+ *
+ * Owned here because both the start paths and the summary projection have to
+ * name the same durable signal for the same storage state; two hand-written
+ * copies of that mapping is the drift this repository keeps paying for.
+ */
+export function savedPlanStorageStateStep(
+  financialYear: string,
+  state: Exclude<AllSupportedPlanLedgersStorageState["state"], "valid">,
+): PortalFlowStepResult {
+  const scopeId = `all-supported-full-fiscal-year:${financialYear}`;
+  if (state === "provenance-unavailable") {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "blocked",
+      safeSignals: ["all-supported-full-fiscal-year-plan-provenance-unavailable"],
+      safeMessage:
+        "Pack cannot verify the original return and artifact selection for this saved fiscal-year plan. Clear only this affected saved plan before starting again.",
+    };
+  }
+  if (state === "removal-pending") {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "blocked",
+      safeSignals: ["all-supported-full-fiscal-year-plan-removal-recovery-pending"],
+      safeMessage:
+        "Pack is finishing an interrupted saved-plan removal. Refresh this panel before starting another fiscal-year plan.",
+    };
+  }
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "blocked",
+    safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+    safeMessage:
+      "Pack could not verify the saved all-supported fiscal-year plan index. Clear the affected local recovery state before starting again.",
+  };
 }
 
 export async function readAllSupportedFullFiscalYearLedgerForPlanRoot(
@@ -81,8 +152,21 @@ export async function readAllSupportedPlanLedgersStorageState(
   );
 }
 
+/**
+ * How many times a read may repair the index and look again.
+ *
+ * Each repair used to tail-call this reader with no budget, so a `set` that did
+ * not take -- a failed write, an exhausted quota, a value the parser keeps
+ * flagging -- put the service worker in an unbounded read/write/read loop
+ * inside the operation critical section, with no terminal state and nothing
+ * user-visible. Two passes is one more than any repair needs; exhausting the
+ * budget is itself a finding, so it fails closed rather than trying again.
+ */
+const MAX_STORAGE_STATE_REPAIR_PASSES = 2;
+
 export async function readAllSupportedPlanLedgersStorageStateWithinOperation(
   deps: LedgerStorageDeps,
+  repairPass = 0,
 ): Promise<AllSupportedPlanLedgersStorageState> {
   const indexKey = deps.storageKeys.allSupportedFullFiscalYearLedgerIndex;
   if (!indexKey) return { state: "malformed" };
@@ -98,9 +182,20 @@ export async function readAllSupportedPlanLedgersStorageStateWithinOperation(
     try {
       await finishPendingRemoval(indexKey, index);
     } catch {
-      return { state: "removal-pending" };
+      return {
+        state: "removal-pending",
+        planRoot: allSupportedFullFiscalYearPlanRootFromKey(index.pendingRemoval.planRootKey),
+      };
     }
-    return readAllSupportedPlanLedgersStorageStateWithinOperation(deps);
+    // The repair reported success, so the checkpoint should be gone. If a
+    // re-read still finds one, the write did not survive, and the honest state
+    // is the one the removal was left in -- not another attempt.
+    return repairPass < MAX_STORAGE_STATE_REPAIR_PASSES
+      ? readAllSupportedPlanLedgersStorageStateWithinOperation(deps, repairPass + 1)
+      : {
+          state: "removal-pending",
+          planRoot: allSupportedFullFiscalYearPlanRootFromKey(index.pendingRemoval.planRootKey),
+        };
   }
   const ledgerIds = Object.values(index.ledgerIdsByPlanRoot);
   if (new Set(ledgerIds).size !== ledgerIds.length) return { state: "malformed" };
@@ -110,14 +205,30 @@ export async function readAllSupportedPlanLedgersStorageStateWithinOperation(
   }
   if (index.needsMigration) {
     await browser.storage.local.set({ [indexKey]: serialiseAllSupportedPlanLedgerIndex(index) });
-    return readAllSupportedPlanLedgersStorageStateWithinOperation(deps);
+    // An index that still reads as unmigrated after its migration was written
+    // is an index Pack cannot vouch for; treat that as malformed rather than
+    // rewriting it forever.
+    return repairPass < MAX_STORAGE_STATE_REPAIR_PASSES
+      ? readAllSupportedPlanLedgersStorageStateWithinOperation(deps, repairPass + 1)
+      : { state: "malformed" };
   }
-  if (
-    ledgerIds.some((ledgerId) =>
+  const preProvenancePlanRootKeys = Object.entries(index.ledgerIdsByPlanRoot)
+    .filter(([, ledgerId]) =>
       isPreProvenanceLedger(values[allSupportedFullFiscalYearPlanStorageKey(ledgerId)]),
     )
-  ) {
-    return { state: "provenance-unavailable" };
+    .map(([planRootKey]) => planRootKey);
+  if (preProvenancePlanRootKeys.length > 0) {
+    // The state is decided by the ledgers, never by whether their keys parse:
+    // an unparseable key drops a name from the report, it does not make the
+    // saved plan verifiable.
+    return {
+      state: "provenance-unavailable",
+      planRoots: preProvenancePlanRootKeys
+        .map(allSupportedFullFiscalYearPlanRootFromKey)
+        .filter((planRoot): planRoot is FiledReturnsAllSupportedFullFiscalYearIdentity =>
+          Boolean(planRoot),
+        ),
+    };
   }
   const supersededPlanKeys = planKeys.filter((key) => !expectedPlanKeys.includes(key));
   if (
@@ -371,13 +482,7 @@ function requireIndexKey(deps: LedgerStorageDeps): string {
 }
 
 function isCanonicalPlanRootKey(value: string): boolean {
-  const [kind, financialYear, ...rest] = value.split(":");
-  if (kind === undefined || financialYear === undefined || rest.length !== 0) return false;
-  const candidate = { kind, financialYear };
-  return (
-    isAllSupportedFullFiscalYearPlanRootKey(candidate) &&
-    value === allSupportedFullFiscalYearPlanRootKey(candidate)
-  );
+  return allSupportedFullFiscalYearPlanRootFromKey(value) !== null;
 }
 
 function isBoundedString(input: unknown, min: number, max: number): input is string {
