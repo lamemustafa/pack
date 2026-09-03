@@ -413,6 +413,70 @@ describe("all-supported full-fiscal-year ledger", () => {
     });
   });
 
+  it("refuses to delete a plan record that does not answer to the removal checkpoint", async () => {
+    const ledger = createLedger();
+    const planKey = allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId);
+    // The stored record carries a different ledger id than the checkpoint that
+    // names its key. Comparing two copies of the checkpoint proves only that
+    // the checkpoint agrees with itself, and deleting on that basis drops a
+    // ledger while its ledger-keyed staged files stay on disk -- then clears
+    // the checkpoint, so the index reads healthy and broad cleanup never runs.
+    stored.current[planKey] = { ...ledger, ledgerId: "all-supported-full-fiscal-year-00009999" };
+    stored.current["all-supported-index"] = {
+      schemaVersion: "2.0",
+      ledgerIdsByPlanRoot: {},
+      pendingRemoval: {
+        ledgerId: ledger.ledgerId,
+        planRootKey: allSupportedFullFiscalYearPlanRootKey(ledger.planRoot),
+      },
+    };
+
+    await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toEqual({
+      state: "removal-pending",
+      planRoot: ledger.planRoot,
+    });
+    expect(stored.current[planKey]).toBeDefined();
+    expect(stored.current["all-supported-index"]).toMatchObject({
+      pendingRemoval: { ledgerId: ledger.ledgerId },
+    });
+  });
+
+  it("finishes an in-flight removal instead of overwriting its checkpoint", async () => {
+    const stranded = createLedger();
+    const other = {
+      ...createLedger(),
+      ledgerId: "all-supported-full-fiscal-year-00008888",
+      planRoot: { ...PLAN_ROOT, financialYear: "2024-25" },
+    };
+    const strandedKey = allSupportedFullFiscalYearPlanStorageKey(stranded.ledgerId);
+    stored.current[strandedKey] = stranded;
+    stored.current[allSupportedFullFiscalYearPlanStorageKey(other.ledgerId)] = other;
+    stored.current["all-supported-index"] = {
+      schemaVersion: "2.0",
+      ledgerIdsByPlanRoot: {
+        [allSupportedFullFiscalYearPlanRootKey(other.planRoot)]: other.ledgerId,
+      },
+      pendingRemoval: {
+        ledgerId: stranded.ledgerId,
+        planRootKey: allSupportedFullFiscalYearPlanRootKey(stranded.planRoot),
+      },
+    };
+
+    await removeAllSupportedFullFiscalYearLedger(deps, other);
+
+    // The first root was already unindexed; its checkpoint was the only record
+    // that could finish or explain its removal, so writing the second root's
+    // checkpoint over it would have stranded the first ledger for good.
+    expect(stored.current[strandedKey]).toBeUndefined();
+    expect(
+      stored.current[allSupportedFullFiscalYearPlanStorageKey(other.ledgerId)],
+    ).toBeUndefined();
+    expect(stored.current["all-supported-index"]).toEqual({
+      schemaVersion: "2.0",
+      ledgerIdsByPlanRoot: {},
+    });
+  });
+
   it("gives up on an index migration that never takes instead of rewriting it forever", async () => {
     const ledger = createLedger();
     stored.current[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)] = ledger;

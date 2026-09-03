@@ -16,6 +16,7 @@ import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-retu
 import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
 import * as AllSupportedPlanModule from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import {
   createAllSupportedFullFiscalYearLedger,
@@ -829,8 +830,10 @@ describe("all-supported full-fiscal-year worker", () => {
       flowStep: {
         state: "blocked",
         safeSignals: ["all-supported-full-fiscal-year-plan-provenance-unavailable"],
-        safeMessage:
-          "Pack cannot verify the original return and artifact selection for this saved fiscal-year plan. Clear only this affected saved plan before starting again.",
+        // Derived, not transcribed: a message naming a control the product does
+        // not carry is an instruction the reader cannot follow, and this is the
+        // only saved-plan state whose escape is Options rather than the panel.
+        safeMessage: expect.stringContaining(PACK_CLEAR_LOCAL_DATA_ACTION_LABEL),
       },
     });
     expect(runner).not.toHaveBeenCalled();
