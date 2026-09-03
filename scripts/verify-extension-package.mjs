@@ -4,30 +4,30 @@ import path from "node:path";
 import ts from "typescript";
 
 const args = process.argv.slice(2);
-// An alpha build is a real distributable that live testing runs against, so it
+// A source-surfaces build is a real distributable that live testing runs against, so it
 // needs every check here -- the home-path and telemetry checks caught a genuine
 // leak in one. It differs from a packaged build in exactly one respect: the
-// alpha surface marker must be present rather than absent. Without this flag
-// the marker check refuses the alpha output before anything else is inspected,
+// source-surface marker must be present rather than absent. Without this flag
+// the marker check refuses the source-surfaces output before anything else is inspected,
 // which left that build unverified entirely.
 const flags = args.filter((arg) => arg.startsWith("--"));
 const outputDirectories = args.filter((arg) => !arg.startsWith("--"));
-if (flags.some((flag) => flag !== "--alpha") || outputDirectories.length !== 1) {
+if (flags.some((flag) => flag !== "--source-surfaces") || outputDirectories.length !== 1) {
   throw new Error(
-    "usage: node scripts/verify-extension-package.mjs [--alpha] <extension-output-dir>",
+    "usage: node scripts/verify-extension-package.mjs [--source-surfaces] <extension-output-dir>",
   );
 }
-const alphaMode = flags.includes("--alpha");
-// JSDOM is only evidence machinery for the alpha-only panel reachability
+const sourceSurfacesMode = flags.includes("--source-surfaces");
+// JSDOM is only evidence machinery for the source-surface panel reachability
 // graph. Loading it for ordinary packaged-build verification makes every
 // short-lived verifier invocation pay its initialization cost.
-const JSDOM = alphaMode ? (await import("jsdom")).JSDOM : null;
+const JSDOM = sourceSurfacesMode ? (await import("jsdom")).JSDOM : null;
 const outputDir = path.resolve(outputDirectories[0]);
-let sawAlphaSurfaceMarker = false;
+let sawSourceSurfaceMarker = false;
 
 /**
  * Every file the panel entry can actually load, followed through static imports.
- * Alpha evidence is restricted to this set: a marker sitting in another page's
+ * Source-surface evidence is restricted to this set: a marker sitting in another page's
  * bundle proves nothing about the panel surface, and a marker in a chunk nothing
  * imports proves only that a string exists on disk.
  */
@@ -123,7 +123,7 @@ function staticModuleSpecifiers(fileName, contents) {
   });
 }
 
-function hasRenderedAlphaSurfaceMarker(fileName, contents, marker) {
+function hasRenderedSourceSurfaceMarker(fileName, contents, marker) {
   const source = ts.createSourceFile(
     fileName,
     contents,
@@ -177,7 +177,7 @@ function resolveOutputSpecifier(dir, fromFile, specifier) {
     : path.resolve(path.dirname(fromFile), specifier);
 }
 
-const reachableFiles = alphaMode ? await reachableFromPanelHtml(outputDir) : new Set();
+const reachableFiles = sourceSurfacesMode ? await reachableFromPanelHtml(outputDir) : new Set();
 
 const harnessPolicyPath =
   process.env.PACK_HARNESS_POLICY_PATH ??
@@ -432,10 +432,14 @@ const forbiddenPackSourcePatterns = [
   /\bcaches\.open\s*\(/i,
 ];
 
-// Alpha flows are permitted only in WXT's source-build `alpha` mode. The JSX
+// Source-surface flows are permitted only in WXT's `source-surfaces` mode. The JSX
 // marker is removed from a production bundle by Vite's compile-time mode
 // replacement; finding it in a release package means the exclusion failed.
-const forbiddenAlphaSurfaceMarkers = ["data-pack-alpha-surface"];
+const forbiddenSourceSurfaceMarkers = ["data-pack-source-surface"];
+// Artifacts built before the mode rename carry this marker. They must never be
+// treated as a packaged build, and source-surfaces verification must accept
+// only the current marker contract.
+const legacySourceSurfaceMarkers = ["data-pack-alpha-surface"];
 // A distributable is never a development build, whatever mode produced it. The
 // home-path check catches one symptom of the React development transform, but
 // only when the builder's path matches a known home pattern -- a build made
@@ -486,15 +490,22 @@ for (const file of await listFiles(outputDir)) {
         );
       }
     }
-    for (const marker of forbiddenAlphaSurfaceMarkers) {
-      if (!contents.includes(marker)) continue;
-      if (!alphaMode) {
+    for (const marker of legacySourceSurfaceMarkers) {
+      if (contents.includes(marker)) {
         throw new Error(
-          `Alpha surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
+          `Legacy source-surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
         );
       }
-      if (reachableFiles.has(file) && hasRenderedAlphaSurfaceMarker(file, contents, marker)) {
-        sawAlphaSurfaceMarker = true;
+    }
+    for (const marker of forbiddenSourceSurfaceMarkers) {
+      if (!contents.includes(marker)) continue;
+      if (!sourceSurfacesMode) {
+        throw new Error(
+          `Source-surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
+        );
+      }
+      if (reachableFiles.has(file) && hasRenderedSourceSurfaceMarker(file, contents, marker)) {
+        sawSourceSurfaceMarker = true;
       }
     }
   }
@@ -531,17 +542,17 @@ for (const file of await listFiles(path.join(process.cwd(), "src"))) {
   assertNoForbiddenTelemetry(contents, file);
 }
 
-if (alphaMode && !sawAlphaSurfaceMarker) {
-  // A silently gate-less "alpha" build is the failure this mode exists to
+if (sourceSurfacesMode && !sawSourceSurfaceMarker) {
+  // A silently gate-less source-surfaces build is the failure this mode exists to
   // catch: it would pass every other check while shipping none of the surface
   // the build was made to exercise.
   throw new Error(
-    `No alpha surface marker reachable from the panel in ${path.relative(process.cwd(), outputDir)}; this is not an alpha build.`,
+    `No source-surface marker reachable from the panel in ${path.relative(process.cwd(), outputDir)}; this is not a source-surfaces build.`,
   );
 }
 console.log(
-  alphaMode
-    ? "Pack WXT alpha extension package verification passed."
+  sourceSurfacesMode
+    ? "Pack WXT source-surfaces extension package verification passed."
     : "Pack WXT extension package verification passed.",
 );
 

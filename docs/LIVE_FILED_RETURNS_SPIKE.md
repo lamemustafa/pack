@@ -66,7 +66,7 @@ not a public launch path.
   extension-owned local download and observes the exact returned browser
   download id. A run is considered completed only when the browser reports a
   completed non-empty file; a mere portal-button click remains unconfirmed.
-- Target-bound portal-created evidence: the source-build alpha has one narrower
+- Target-bound portal-created evidence: the source-surfaces build has one narrower
   path for a single-period GSTR-3B PDF when the exact action delegates the
   portal-created Blob download instead of returning captured bytes. Pack accepts
   only one browser candidate bound to the action window, selected period, PDF
@@ -324,7 +324,7 @@ an explicit selected-file ZIP and its recovery/cleanup lifecycle. It must not
 expose those bytes, copied cookies, headers, raw protected URLs, local
 filenames, or local paths.
 
-The current source-build alpha also recognises one fail-closed
+The current source-surfaces build also recognises one fail-closed
 `target-bound-portal-click-blob` evidence class. It applies only to a
 single-period GSTR-3B PDF after the exact target action delegates a
 portal-created Blob download and strict transient browser metadata yields one

@@ -21,19 +21,19 @@ export default defineConfig({
   srcDir: "src",
   modules: ["@wxt-dev/module-react"],
   vite: (env) => {
-    // `--mode alpha` selects which surfaces compile in; it does not mean "a
+    // `--mode source-surfaces` selects which surfaces compile in; it does not mean "a
     // development build". Vite derives `isProduction` from NODE_ENV, which it
     // only defaults to production when the mode is literally "production", so
-    // an alpha build shipped the React development JSX transform and inlined
+    // a source-surfaces build shipped the React development JSX transform and inlined
     // absolute source paths -- including the builder's home directory -- into
-    // the bundle. Alpha builds are what live testing runs against, so they
+    // the bundle. Source-surfaces builds are what live testing runs against, so they
     // have to be production builds that merely expose more surface.
     //
-    // The mode itself must stay "alpha": `import.meta.env.MODE === "alpha"`
-    // is the constant the alpha gate folds on, and rewriting it here would
+    // The mode itself must stay "source-surfaces": `import.meta.env.MODE === "source-surfaces"`
+    // is the constant the source-surfaces gate folds on, and rewriting it here would
     // silently remove every gated surface.
-    // Gated on the command, not the mode. `wxt dev --mode alpha` serves the
-    // alpha-gated UI and needs the development transform and refresh; only a
+    // Gated on the command, not the mode. `wxt dev --mode source-surfaces` serves the
+    // source-surface-gated UI and needs the development transform and refresh; only a
     // build produces the artifact that must not carry them.
     if (env.command === "build") process.env.NODE_ENV = "production";
     return { build: { modulePreload: false } };

@@ -14,11 +14,11 @@ ensureHeadedChromiumDisplay();
 
 const args = process.argv.slice(2);
 const flags = args.filter((arg) => arg.startsWith("--"));
-const alphaMode = args.includes("--alpha");
+const sourceSurfacesMode = args.includes("--source-surfaces");
 const outputDirectories = args.filter((arg) => !arg.startsWith("--"));
-if (flags.some((flag) => flag !== "--alpha") || outputDirectories.length > 1) {
+if (flags.some((flag) => flag !== "--source-surfaces") || outputDirectories.length > 1) {
   throw new Error(
-    "usage: node scripts/verify-extension-browser.mjs [--alpha] [extension-output-dir]",
+    "usage: node scripts/verify-extension-browser.mjs [--source-surfaces] [extension-output-dir]",
   );
 }
 const extensionDir = outputDirectories[0]
@@ -102,7 +102,7 @@ try {
   await assertOptionsPageLoads(context, extensionId);
   await assertPanelPageLoads(context, extensionId);
   await assertPanelSignInContext(context, extensionId);
-  if (alphaMode) await assertAlphaPanelSurface(context, extensionId);
+  if (sourceSurfacesMode) await assertSourceSurfacePanelSurface(context, extensionId);
   await assertHostilePageCannotMessageExtension(context);
   assertDeniedUnexpectedNetwork();
   assertSanitizedBrowserLogs();
@@ -468,7 +468,7 @@ async function assertPanelSignInContext(browserContext, extensionId) {
   }
 }
 
-async function assertAlphaPanelSurface(browserContext, extensionId) {
+async function assertSourceSurfacePanelSurface(browserContext, extensionId) {
   const gstPage = await browserContext.newPage();
   attachPageLogging(gstPage);
   const panelPage = await browserContext.newPage();
@@ -487,7 +487,7 @@ async function assertAlphaPanelSurface(browserContext, extensionId) {
     await panelPage.goto(`chrome-extension://${extensionId}/panel.html`);
     await panelPage.getByRole("button", { name: /Choose return, year and period/ }).click();
     await panelPage
-      .locator('[data-pack-alpha-surface="full-fiscal-year"]')
+      .locator('[data-pack-source-surface="full-fiscal-year"]')
       .waitFor({ state: "visible", timeout: 5_000 });
   } finally {
     await panelPage.close();

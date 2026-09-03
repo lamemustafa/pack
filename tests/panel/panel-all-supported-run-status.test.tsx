@@ -127,7 +127,7 @@ describe("all-supported panel progress", () => {
     // The summary itself still renders; only the actions are withheld.
     expect(packaged).toContain("Your pack · All supported returns · FY 2025-26");
 
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     expect(render(completed)).toContain("Discard this year&#x27;s saved plan and run again");
   });
 
@@ -166,7 +166,7 @@ describe("all-supported panel progress", () => {
     // Restart clears local staging and removes the ledger before the runner
     // reaches its tab preflight, so an ungated click destroys the completed
     // history and then blocks on the first target.
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     const completed = summary(["saved", "not-filed"], "complete", [0, 1]);
 
     const signedOut = render(completed, SIGNED_OUT);
@@ -177,7 +177,7 @@ describe("all-supported panel progress", () => {
   });
 
   it("gates a portal-bound resume on the portal but never a local-only one", () => {
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     const portalBound = {
       ...summary(["saved", "pending"], "running", [0]),
       resumeAvailable: true,
@@ -192,7 +192,7 @@ describe("all-supported panel progress", () => {
   });
 
   it("renders an explicit, portal-bound retry for the exact review target", () => {
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     const reviewable = {
       ...summary(["pending"], "running", []),
       allSupportedFullFiscalYearRecovery: {
@@ -209,7 +209,7 @@ describe("all-supported panel progress", () => {
   });
 
   it("puts an explicit same-year restart beside the completed summary", () => {
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     const markup = render(summary(["saved", "not-filed"], "complete", [0, 1]));
 
     expect(markup).toContain("Your pack · All supported returns · FY 2025-26");
@@ -287,8 +287,8 @@ describe("all-supported panel progress", () => {
     expect(markup).toContain("1 needs review");
   });
 
-  it("renders all return groups at alpha mode with no duplicate summary or hidden identifiers", () => {
-    vi.stubEnv("MODE", "alpha");
+  it("renders all return groups at source-surfaces mode with no duplicate summary or hidden identifiers", () => {
+    vi.stubEnv("MODE", "source-surfaces");
     const returnTypes = ["GSTR-1", "GSTR-2B", "GSTR-3B"] as const;
     const periods = [
       "April",
@@ -325,7 +325,7 @@ describe("all-supported panel progress", () => {
         .map((entry) => entry.targetId),
     });
 
-    // This all-returns preset is alpha-only. Its rendered restart control is
+    // This all-returns preset is source-surfaces-only. Its rendered restart control is
     // the precondition that keeps the grouped-evidence assertions non-vacuous.
     expect(markup).toContain("Discard this year&#x27;s saved plan and run everything last year");
     expect(markup.match(/class="evidence-row /g)).toHaveLength(36);

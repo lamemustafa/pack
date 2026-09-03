@@ -225,7 +225,7 @@ function guideControlCount(): number {
 
 describe("panel guided scope interaction", () => {
   beforeEach(() => {
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     dom = new JSDOM("<div id='root'></div>", {
       pretendToBeVisual: true,
       url: "https://extension.test",
@@ -242,12 +242,28 @@ describe("panel guided scope interaction", () => {
     vi.unstubAllEnvs();
   });
 
-  it("renders the alpha surface marker on the guided panel element", async () => {
+  it("renders the source-surfaces surface marker on the guided panel element", async () => {
     await mount();
 
-    const alphaSurface = container.querySelector('[data-pack-alpha-surface="full-fiscal-year"]');
-    expect(alphaSurface?.tagName).toBe("SECTION");
-    expect(alphaSurface?.classList.contains("panel-guide")).toBe(true);
+    const sourceSurface = container.querySelector('[data-pack-source-surface="full-fiscal-year"]');
+    expect(sourceSurface?.tagName).toBe("SECTION");
+    expect(sourceSurface?.classList.contains("panel-guide")).toBe(true);
+  });
+
+  it("blocks the full-year scope without naming an internal build mode", async () => {
+    // The label a reader sees when the gated surface is absent had no test at
+    // all, so the mode rename walked "alpha" out of this sentence and
+    // "source-surfaces" straight back in. The property, not the wording: this
+    // copy is addressed to a taxpayer, so no build-mode name belongs in it.
+    vi.stubEnv("MODE", "production");
+    await mountGuidedScope({ portalSignedIn: true, savedRun: null });
+    await clickButtonContaining("Choose return, year and period");
+    await clickButton("Continue");
+    await clickButton("Continue");
+    await clickButton("Continue");
+
+    expect(container.textContent).toContain("not available in the published build");
+    expect(container.textContent).not.toMatch(/source-surfaces|\balpha\b/i);
   });
 
   it("does not offer an unavailable full-year resume in a packaged build", async () => {
@@ -331,7 +347,7 @@ describe("panel guided scope interaction", () => {
     expect(container.textContent).not.toContain("Step 1 of 4");
 
     await clickButtonContaining("Choose return, year and period");
-    expect(container.innerHTML).toContain("data-pack-alpha-surface");
+    expect(container.innerHTML).toContain("data-pack-source-surface");
   });
 
   it("places complete last-year retrieval first and starts its exact financial year without moving focus", async () => {
@@ -387,7 +403,7 @@ describe("panel guided scope interaction", () => {
     });
   });
 
-  it("wires the last-year alpha recipe from the composed panel without substituting this year", async () => {
+  it("wires the last-year source-surfaces recipe from the composed panel without substituting this year", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-30T00:00:00.000Z"));
     const onStartAllReturnsFullYear = vi.fn();

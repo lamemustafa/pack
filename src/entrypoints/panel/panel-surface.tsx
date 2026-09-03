@@ -21,7 +21,7 @@ import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
-import { PanelGuidedScope, isPackAlphaBuildMode } from "./panel-guided-scope";
+import { PanelGuidedScope, isPackSourceSurfaceBuildMode } from "./panel-guided-scope";
 import {
   panelAllReturnsFullYearPreset,
   panelAllReturnsFullYearResumePlan,
@@ -56,7 +56,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const allSupportedRunning = allSupportedSummary?.status === "running";
   const running =
     pack.effectiveBusy !== null || summary?.status === "running" || allSupportedRunning;
-  const fullYearFlowAvailable = isPackAlphaBuildMode(import.meta.env.MODE);
+  const fullYearFlowAvailable = isPackSourceSurfaceBuildMode(import.meta.env.MODE);
   const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
   const recoveryReason = recoveryAvailability.message;
 

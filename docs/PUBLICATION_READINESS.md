@@ -77,7 +77,7 @@ summary` sheet stating the portal's own availability totals and the GSTR-3B
   exact-ZIP clean-profile, real-browser restart/resume, reconciliation, and
   privacy-review evidence.
   Until those gates are recorded, the next production build will expose full-year
-  controls only in the maintainer-only source build created with `pnpm exec wxt build --mode alpha`.
+  controls only in the maintainer-only source-surfaces build created with `pnpm exec wxt build --mode source-surfaces`.
   That command is for local qualification work only: its output must not be
   zipped, submitted, or described as live evidence. It is compiled out of the
   next packaged Store build. The package verifier rejects the source-only surface

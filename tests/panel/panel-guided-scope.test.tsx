@@ -30,7 +30,7 @@ function renderGuide() {
 
 describe("panel guided scope", () => {
   beforeEach(() => {
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-30T00:00:00.000Z"));
   });

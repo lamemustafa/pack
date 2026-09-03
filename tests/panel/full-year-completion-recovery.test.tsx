@@ -16,7 +16,7 @@ import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recover
 
 describe("whole-panel unresolved completion recovery", () => {
   beforeEach(() => {
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
   });
 
   afterEach(() => {
