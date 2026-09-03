@@ -132,7 +132,7 @@ describe("all-supported panel progress", () => {
   });
 
   it("renders an identity-less malformed-index block without a fiscal year or plan action", () => {
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     const malformedIndexBlock: FiledReturnsAllSupportedFullFiscalYearFlowSummary = {
       status: "blocked",
       completedTargetIds: [],
