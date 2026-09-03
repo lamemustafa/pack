@@ -81,7 +81,12 @@ const browserMocks = vi.hoisted(() => ({
       }),
       remove: vi.fn(async () => undefined),
       setAccessLevel: vi.fn(async () => undefined),
-      set: vi.fn(async () => undefined),
+      // Declared with the argument the real API takes. A zero-argument mock
+      // cannot be given an implementation that reads what was written, which
+      // is the only way to model a store that honours its own writes.
+      set: vi.fn(async (_values?: unknown): Promise<void> => {
+        void _values;
+      }),
     },
     session: {
       clear: vi.fn(async () => undefined),
