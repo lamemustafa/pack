@@ -209,7 +209,7 @@ describe("extension package verifier", () => {
     const result = await runVerifier(outputDir);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("Source-surfaces surface marker data-pack-source-surface");
+    expect(result.output).toContain("Source-surface marker data-pack-source-surface");
   });
 
   it("rejects sensitive policy markers from the vendored harness snapshot", async () => {
@@ -930,7 +930,7 @@ describe("source-surfaces builds", () => {
     const result = await runVerifier(outputDir);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("Source-surfaces surface marker");
+    expect(result.output).toContain("Source-surface marker");
   });
 });
 
