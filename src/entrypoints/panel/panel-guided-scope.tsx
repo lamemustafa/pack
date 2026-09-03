@@ -286,8 +286,7 @@ export function PanelGuidedScope({
       : !sourceSurfacesEnabled && isFullFiscalYearScope(scope)
         ? {
             disabled: true as const,
-            label:
-              "This full-year flow is available only in a source-surfaces build.",
+            label: "This full-year flow is available only in a source-surfaces build.",
           }
         : portalSignedIn
           ? null
