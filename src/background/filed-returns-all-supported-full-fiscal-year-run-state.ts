@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import { runFiledReturnsOperationCriticalSection } from "./filed-returns-active-run";
 import { ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_STORAGE_KEY_PREFIX } from "./storage-keys";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../core/recovery-actions";
 import type {
   FiledReturnsAllSupportedFullFiscalYearIdentity,
   PortalFlowStepResult,
@@ -97,8 +98,11 @@ export function savedPlanStorageStateStep(
       scopeId,
       state: "blocked",
       safeSignals: ["all-supported-full-fiscal-year-plan-provenance-unavailable"],
-      safeMessage:
-        "Pack cannot verify the original return and artifact selection for this saved fiscal-year plan. Clear only this affected saved plan before starting again.",
+      // Naming a per-plan discard was naming a control that does not exist:
+      // this projection deliberately withholds the ledger id every discard,
+      // resume and retry control requires, so Options' clear-all is the only
+      // shipped escape and the message has to say so.
+      safeMessage: `Pack cannot verify the original return and artifact selection for this saved fiscal-year plan. Open Pack's options and use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d before starting again.`,
     };
   }
   if (state === "removal-pending") {
@@ -204,7 +208,15 @@ export async function readAllSupportedPlanLedgersStorageStateWithinOperation(
     return { state: "malformed" };
   }
   if (index.needsMigration) {
-    await browser.storage.local.set({ [indexKey]: serialiseAllSupportedPlanLedgerIndex(index) });
+    try {
+      await browser.storage.local.set({ [indexKey]: serialiseAllSupportedPlanLedgerIndex(index) });
+    } catch {
+      // A migration Pack cannot write is an index Pack cannot vouch for. Naming
+      // that keeps the clear path -- the only in-product escape -- reachable,
+      // where letting the rejection escape turned every summary and start
+      // request into the generic handler error with no route out.
+      return { state: "malformed" };
+    }
     // An index that still reads as unmigrated after its migration was written
     // is an index Pack cannot vouch for; treat that as malformed rather than
     // rewriting it forever.
@@ -312,9 +324,21 @@ async function removeAllSupportedFullFiscalYearLedgerWithinOperation(
   ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "ledgerId" | "planRoot">,
 ): Promise<void> {
   const indexKey = requireIndexKey(deps);
-  const index = await readAllSupportedPlanLedgerIndex(indexKey);
+  let index = await readAllSupportedPlanLedgerIndex(indexKey);
   if (!index) {
     throw new Error("Pack could not verify the all-supported saved-plan index before removing it.");
+  }
+  if (index.pendingRemoval && index.pendingRemoval.ledgerId !== ledger.ledgerId) {
+    // Writing this root's checkpoint over another root's strands that root:
+    // it is already unindexed, and the checkpoint was the only record that
+    // could finish or explain its removal.
+    await finishPendingRemoval(indexKey, index);
+    index = await readAllSupportedPlanLedgerIndex(indexKey);
+    if (!index || index.pendingRemoval) {
+      throw new Error(
+        "Pack could not finish an earlier saved-plan removal before starting another.",
+      );
+    }
   }
   const planRootKey = allSupportedFullFiscalYearPlanRootKey(ledger.planRoot);
   if (index.ledgerIdsByPlanRoot[planRootKey] !== ledger.ledgerId) {
@@ -338,14 +362,19 @@ export async function clearAllSupportedFullFiscalYearLedgerPlans(
   const index = await readAllSupportedPlanLedgerIndex(indexKey);
   if (index) {
     for (const [planRootKey, ledgerId] of Object.entries(index.ledgerIdsByPlanRoot)) {
-      const [kind, financialYear] = planRootKey.split(":");
-      if (!kind || !financialYear) {
-        throw new Error("Pack could not verify the all-supported saved plan before clearing it.");
+      const planRoot = allSupportedFullFiscalYearPlanRootFromKey(planRootKey);
+      // Checkpointed removal is how this stays recoverable when it is
+      // interrupted; it is not what makes the clear complete. The catch-all
+      // below removes every plan key and the index unconditionally, so a root
+      // this loop cannot check-point must not be allowed to stop it -- a clear
+      // that gives up half-way leaves exactly the taxpayer state it was asked
+      // to delete.
+      if (!planRoot) continue;
+      try {
+        await removeAllSupportedFullFiscalYearLedgerWithinOperation(deps, { ledgerId, planRoot });
+      } catch {
+        continue;
       }
-      await removeAllSupportedFullFiscalYearLedgerWithinOperation(deps, {
-        ledgerId,
-        planRoot: { kind: "all-supported-returns-full-fiscal-year", financialYear },
-      });
     }
   }
   const values = await browser.storage.local.get(null);
@@ -442,9 +471,28 @@ async function finishPendingRemoval(
   ) {
     throw new Error("Pack could not verify the saved-plan removal checkpoint.");
   }
-  await browser.storage.local.remove(
-    allSupportedFullFiscalYearPlanStorageKey(pendingRemoval.ledgerId),
-  );
+  const planKey = allSupportedFullFiscalYearPlanStorageKey(pendingRemoval.ledgerId);
+  const storedPlan = (await browser.storage.local.get(planKey))[planKey];
+  // An absent record is the ordinary post-interruption case: the removal got
+  // as far as deleting it and the checkpoint is all that is left to clear.
+  if (storedPlan !== undefined) {
+    // Comparing two copies of the checkpoint only proves the checkpoint agrees
+    // with itself. Deleting a record that does not answer to it would drop a
+    // ledger while its ledger-keyed staged files stay on disk, and then clear
+    // the checkpoint so the index reads healthy and broad cleanup never runs.
+    const storedPlanRoot = isRecord(storedPlan) ? storedPlan.planRoot : undefined;
+    if (
+      !isRecord(storedPlan) ||
+      storedPlan.ledgerId !== pendingRemoval.ledgerId ||
+      !isAllSupportedFullFiscalYearPlanRootKey(storedPlanRoot) ||
+      allSupportedFullFiscalYearPlanRootKey(storedPlanRoot) !== pendingRemoval.planRootKey
+    ) {
+      throw new Error(
+        "Pack could not match the saved plan named by the removal checkpoint, so it was not deleted.",
+      );
+    }
+    await browser.storage.local.remove(planKey);
+  }
   const complete = serialiseAllSupportedPlanLedgerIndex(current);
   delete complete.pendingRemoval;
   await browser.storage.local.set({ [indexKey]: complete });

@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { browser } from "wxt/browser";
 import type { ArchiveManifest } from "../../core/contracts";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../core/recovery-actions";
 import type { PackMessageResponse } from "../../connectors/gst/messages";
 import "../../styles/global.css";
 import { runFileSystemAccessProbe } from "./file-system-access-probe";
@@ -171,7 +172,7 @@ export function OptionsPage() {
           {busy === "manifest" ? "Loading..." : "Last synthetic demo manifest"}
         </button>
         <button type="button" disabled={busy !== null} onClick={() => void clearLocalData()}>
-          {busy === "clear" ? "Clearing..." : "Clear local data and discard saved plans"}
+          {busy === "clear" ? "Clearing..." : PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}
         </button>
         <button
           type="button"
