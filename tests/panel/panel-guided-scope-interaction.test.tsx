@@ -250,6 +250,22 @@ describe("panel guided scope interaction", () => {
     expect(sourceSurface?.classList.contains("panel-guide")).toBe(true);
   });
 
+  it("blocks the full-year scope without naming an internal build mode", async () => {
+    // The label a reader sees when the gated surface is absent had no test at
+    // all, so the mode rename walked "alpha" out of this sentence and
+    // "source-surfaces" straight back in. The property, not the wording: this
+    // copy is addressed to a taxpayer, so no build-mode name belongs in it.
+    vi.stubEnv("MODE", "production");
+    await mountGuidedScope({ portalSignedIn: true, savedRun: null });
+    await clickButtonContaining("Choose return, year and period");
+    await clickButton("Continue");
+    await clickButton("Continue");
+    await clickButton("Continue");
+
+    expect(container.textContent).toContain("not available in the published build");
+    expect(container.textContent).not.toMatch(/source-surfaces|\balpha\b/i);
+  });
+
   it("does not offer an unavailable full-year resume in a packaged build", async () => {
     vi.stubEnv("MODE", "production");
     await mountGuidedScope({
