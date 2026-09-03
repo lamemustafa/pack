@@ -232,7 +232,7 @@ describe("filed returns retained target scoping", () => {
 
   it.each([
     ["provenance-unavailable", "all-supported-full-fiscal-year-plan-provenance-unavailable"],
-    ["removal-pending", "all-supported-full-fiscal-year-plan-removal-pending"],
+    ["removal-pending", "all-supported-full-fiscal-year-plan-removal-recovery-pending"],
   ] as const)("blocks an atomic start while saved-plan state is %s", async (state, signal) => {
     const requestedScope = {
       artifactType: "PDF",

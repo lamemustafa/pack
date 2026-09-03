@@ -223,19 +223,24 @@ describe("Pack local data clearing", () => {
     expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
     const indexKey = "pack:all-supported-full-fiscal-year-ledger-index";
     const planKey = allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId);
-    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
-      if (key == null) {
-        return {
-          [indexKey]: {
-            schemaVersion: "1.0",
-            ledgerIdsByPlanRoot: {
-              [allSupportedFullFiscalYearPlanRootKey(planRoot)]: ledger.ledgerId,
-            },
-          },
-          [planKey]: ledger,
-        };
-      }
-      return {};
+    // A schema-1.0 index is migrated in place by the reader, so this mock has
+    // to honour the write the way real storage does. A `set` that silently did
+    // nothing left the reader re-reading an index that never changed, which is
+    // not a state any browser produces.
+    const stored: Record<string, unknown> = {
+      [indexKey]: {
+        schemaVersion: "1.0",
+        ledgerIdsByPlanRoot: {
+          [allSupportedFullFiscalYearPlanRootKey(planRoot)]: ledger.ledgerId,
+        },
+      },
+      [planKey]: ledger,
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key == null ? { ...stored } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: unknown) => {
+      Object.assign(stored, values as Record<string, unknown>);
     });
     const background = await import("../../src/entrypoints/background");
 

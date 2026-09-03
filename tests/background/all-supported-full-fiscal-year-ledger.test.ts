@@ -63,6 +63,12 @@ describe("all-supported full-fiscal-year ledger", () => {
   beforeEach(() => {
     stored.current = {};
     vi.clearAllMocks();
+    // `clearAllMocks` clears calls, not implementations. A test that makes a
+    // write silently fail would otherwise leave every later test writing into
+    // a void, which reads as an unrelated failure in whichever one runs next.
+    browserMocks.storage.local.set.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(stored.current, values);
+    });
   });
 
   it("persists one immutable atomic target per return and period", () => {
@@ -407,6 +413,46 @@ describe("all-supported full-fiscal-year ledger", () => {
     });
   });
 
+  it("gives up on an index migration that never takes instead of rewriting it forever", async () => {
+    const ledger = createLedger();
+    stored.current[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)] = ledger;
+    stored.current["all-supported-index"] = {
+      schemaVersion: "1.0",
+      ledgerIdsByPlanRoot: {
+        [allSupportedFullFiscalYearPlanRootKey(ledger.planRoot)]: ledger.ledgerId,
+      },
+    };
+    // A write that resolves without persisting is what an exhausted quota or a
+    // torn-down worker looks like from in here. The reader used to tail-call
+    // itself on every repair, so this state ran the service worker out of
+    // memory inside the operation critical section with nothing user-visible.
+    browserMocks.storage.local.set.mockImplementation(async () => undefined);
+
+    await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toEqual({
+      state: "malformed",
+    });
+    expect(browserMocks.storage.local.set.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+
+  it("gives up on a removal checkpoint that never clears instead of retrying forever", async () => {
+    const ledger = createLedger();
+    stored.current[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)] = ledger;
+    stored.current["all-supported-index"] = {
+      schemaVersion: "2.0",
+      ledgerIdsByPlanRoot: {},
+      pendingRemoval: {
+        ledgerId: ledger.ledgerId,
+        planRootKey: allSupportedFullFiscalYearPlanRootKey(ledger.planRoot),
+      },
+    };
+    browserMocks.storage.local.set.mockImplementation(async () => undefined);
+
+    await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toEqual({
+      state: "removal-pending",
+      planRoot: ledger.planRoot,
+    });
+  });
+
   it("does not tolerate an unindexed ledger without the exact removal checkpoint", async () => {
     const ledger = createLedger();
     stored.current[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)] = ledger;
@@ -430,8 +476,12 @@ describe("all-supported full-fiscal-year ledger", () => {
       },
     };
 
+    // The affected plan root is part of the state, not incidental to it: the
+    // summary names the year the reader has to clear, so a state that forgot
+    // which year it was blocked on would go back to being undiagnosable.
     await expect(readAllSupportedPlanLedgersStorageState(deps)).resolves.toEqual({
       state: "provenance-unavailable",
+      planRoots: [ledger.planRoot],
     });
     expect(stored.current["all-supported-index"]).toEqual({
       schemaVersion: "2.0",
