@@ -48,7 +48,10 @@ import {
   readRetainedPlanLedgers,
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
-import { readAllSupportedPlanLedgersStorageState } from "./filed-returns-all-supported-full-fiscal-year-run-state";
+import {
+  readAllSupportedFullFiscalYearLedgerForPlanRoot,
+  readAllSupportedPlanLedgersStorageState,
+} from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
   malformedTargetReviewResponse,
@@ -333,7 +336,9 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
   deps: FiledReturnsFlowRunnerDeps,
   options: { discardCompletedPlanRoot?: boolean } = {},
 ): Promise<PackMessageResponse> {
-  const leaseScope = allSupportedLeaseScope(request);
+  const leaseScope = await allSupportedLeaseScope(request, deps);
+  // Reached only when neither the current catalogue nor a saved plan can name
+  // a target, so the worker's own no-plan answer performs no portal work.
   if (!leaseScope) {
     return startAllSupportedFullFiscalYearDownloadFlow(
       request,
@@ -384,7 +389,7 @@ export async function retryAllSupportedFiledReturnsFullFiscalYearTarget(
     kind: "all-supported-returns-full-fiscal-year",
     financialYear: payload.financialYear,
   };
-  const leaseScope = allSupportedLeaseScope(planRoot);
+  const leaseScope = await allSupportedLeaseScope(planRoot, deps);
   if (!leaseScope) {
     return retryAllSupportedFullFiscalYearTarget(
       payload,
@@ -484,17 +489,39 @@ function retainedFullFiscalYearPlanLockResponse(
   };
 }
 
-function allSupportedLeaseScope(
+/**
+ * The scope the shared run lease is taken against for an all-supported root.
+ *
+ * The current catalogue supplies it whenever it can expand. When it cannot, a
+ * saved plan validated against a retained historical catalogue is still
+ * resumable, and binding the lease to that plan's own first target is what
+ * keeps it resumable *under* the lease: the callers' `!leaseScope` fallback
+ * reaches the worker directly, so a historical plan that produced no scope
+ * would have executed persisted portal targets alongside another active run.
+ */
+async function allSupportedLeaseScope(
   request: FiledReturnsAllSupportedFullFiscalYearRequest,
-): FiledReturnsDownloadScope | null {
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<FiledReturnsDownloadScope | null> {
   const expansion = expandAllSupportedFullFiscalYearTargetPlan();
   const first = expansion.ok ? expansion.targets[0] : undefined;
-  if (!first) return null;
+  if (first) {
+    return {
+      financialYear: request.financialYear,
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: first.returnType,
+      artifactType: first.artifactType,
+    };
+  }
+  if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
+  const saved = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
+  const savedFirst = saved?.targets[0];
+  if (!savedFirst) return null;
   return {
     financialYear: request.financialYear,
     period: FULL_FISCAL_YEAR_PERIOD,
-    returnType: first.returnType,
-    artifactType: first.artifactType,
+    returnType: savedFirst.returnType,
+    artifactType: savedFirst.artifactType,
   };
 }
 
