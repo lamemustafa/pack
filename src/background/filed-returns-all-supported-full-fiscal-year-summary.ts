@@ -71,11 +71,10 @@ export async function readCurrentAllSupportedFullFiscalYearFlowSummary(
  * so the reader was shown a healthy surface for a state only the start path
  * would ever name.
  *
- * `malformed` is deliberately still `null`: its index is exactly the record
- * that failed to parse, so there is no plan root the summary could honestly
- * claim to be blocked on. Naming an invented year would be worse than naming
- * none. The start paths continue to fail closed with their own registered
- * signal, and Options-level clearing remains the route out.
+ * A malformed index has no plan root the summary can honestly claim to be
+ * blocked on. It is still projected so this boundary cannot fall through to
+ * an unrelated atomic summary, but it withholds `summaryIdentity` rather than
+ * inventing a fiscal year. Options-level clearing remains the route out.
  */
 function unresolvedSavedPlanSummary(
   state: Exclude<AllSupportedPlanLedgersStorageState, { state: "valid" }>,
@@ -86,9 +85,8 @@ function unresolvedSavedPlanSummary(
       : state.state === "removal-pending"
         ? state.planRoot
         : null;
-  if (!planRoot) return null;
   return {
-    summaryIdentity: { ...planRoot },
+    ...(planRoot ? { summaryIdentity: { ...planRoot } } : {}),
     status: "blocked",
     completedTargetIds: [],
     targetEvidence: [],
@@ -97,7 +95,7 @@ function unresolvedSavedPlanSummary(
     // controls each require one, so an unverifiable plan cannot be discarded,
     // resumed or retried from this projection by accident.
     resumeAvailable: false,
-    flowStep: savedPlanStorageStateStep(planRoot.financialYear, state.state),
+    flowStep: savedPlanStorageStateStep(planRoot?.financialYear, state.state),
   };
 }
 

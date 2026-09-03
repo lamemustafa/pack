@@ -180,7 +180,7 @@ describe("all-supported full-fiscal-year worker", () => {
         state: "blocked",
         safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
         safeMessage:
-          "Pack could not verify the saved all-supported fiscal-year plan index. Clear the affected local recovery state before starting again.",
+          "Open Pack's options and use \u201cClear local data and discard saved plans\u201d before starting another return.",
       },
     });
     expect(zip.discard).not.toHaveBeenCalled();

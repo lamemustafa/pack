@@ -105,10 +105,12 @@ export function savedPlanStorageStateRecoveryMessage(
 }
 
 export function savedPlanStorageStateStep(
-  financialYear: string,
+  financialYear: string | undefined,
   state: Exclude<AllSupportedPlanLedgersStorageState["state"], "valid">,
 ): PortalFlowStepResult {
-  const scopeId = `all-supported-full-fiscal-year:${financialYear}`;
+  const scopeId = financialYear
+    ? `all-supported-full-fiscal-year:${financialYear}`
+    : "all-supported-full-fiscal-year";
   if (state === "provenance-unavailable") {
     return {
       connectorId: "gst",
@@ -137,8 +139,7 @@ export function savedPlanStorageStateStep(
     scopeId,
     state: "blocked",
     safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
-    safeMessage:
-      "Pack could not verify the saved all-supported fiscal-year plan index. Clear the affected local recovery state before starting again.",
+    safeMessage: savedPlanStorageStateRecoveryMessage(state),
   };
 }
 

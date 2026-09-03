@@ -76,7 +76,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
    * act on what they can see.
    */
   const restartFromSummaryCard = async () => {
-    if (!allSupportedSummary) return;
+    if (!allSupportedSummary?.summaryIdentity) return;
     const financialYear = allSupportedSummary.summaryIdentity.financialYear;
     const displayedPeriods = new Set(
       allSupportedSummary.targetEvidence.map((entry) => entry.period),
@@ -164,12 +164,20 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 fullYearFlowAvailable={fullYearFlowAvailable}
                 portalReady={portalSignedIn}
                 onRestart={() => void restartFromSummaryCard()}
-                onResume={() =>
-                  void pack.startAllSupportedFullFiscalYearFlow(allSupportedSummary.summaryIdentity)
-                }
+                onResume={() => {
+                  if (!allSupportedSummary.summaryIdentity) return;
+                  void pack.startAllSupportedFullFiscalYearFlow(
+                    allSupportedSummary.summaryIdentity,
+                  );
+                }}
                 onRetryTarget={() => {
                   const recovery = allSupportedSummary.allSupportedFullFiscalYearRecovery;
-                  if (!recovery || allSupportedSummary.ledgerId === undefined) return;
+                  if (
+                    !recovery ||
+                    !allSupportedSummary.summaryIdentity ||
+                    allSupportedSummary.ledgerId === undefined
+                  )
+                    return;
                   void pack.retryAllSupportedFullFiscalYearTarget({
                     financialYear: allSupportedSummary.summaryIdentity.financialYear,
                     ledgerId: allSupportedSummary.ledgerId,
@@ -365,7 +373,8 @@ function AllSupportedRunStatus({
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>
         <strong>
-          Your pack · All supported returns · FY {summary.summaryIdentity.financialYear}
+          Your pack · All supported returns
+          {summary.summaryIdentity ? ` · FY ${summary.summaryIdentity.financialYear}` : ""}
         </strong>
       </p>
       {summary.targetEvidence.length > 0 ? (
@@ -517,8 +526,9 @@ function getAllSupportedRunBlock(
   if (["complete", "cancelled"].includes(summary.status)) return null;
   return {
     disabled: true,
-    label:
-      "Discard the saved all-supported fiscal-year plan from its run summary before starting another return.",
+    label: summary.summaryIdentity
+      ? "Discard the saved all-supported fiscal-year plan from its run summary before starting another return."
+      : summary.flowStep.safeMessage,
   };
 }
 
@@ -532,7 +542,7 @@ function getAllSupportedTerminalBlocks(
 }[] {
   const terminalRoots =
     summary?.terminalPlanRoots ??
-    (summary && ["complete", "cancelled"].includes(summary.status)
+    (summary?.summaryIdentity && ["complete", "cancelled"].includes(summary.status)
       ? [
           {
             financialYear: summary.summaryIdentity.financialYear,
