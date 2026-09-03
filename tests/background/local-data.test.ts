@@ -81,7 +81,12 @@ const browserMocks = vi.hoisted(() => ({
       }),
       remove: vi.fn(async () => undefined),
       setAccessLevel: vi.fn(async () => undefined),
-      set: vi.fn(async () => undefined),
+      // Declared with the argument the real API takes. A zero-argument mock
+      // cannot be given an implementation that reads what was written, which
+      // is the only way to model a store that honours its own writes.
+      set: vi.fn(async (_values?: unknown): Promise<void> => {
+        void _values;
+      }),
     },
     session: {
       clear: vi.fn(async () => undefined),
@@ -223,19 +228,24 @@ describe("Pack local data clearing", () => {
     expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
     const indexKey = "pack:all-supported-full-fiscal-year-ledger-index";
     const planKey = allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId);
-    browserMocks.storage.local.get.mockImplementation(async (key: unknown) => {
-      if (key == null) {
-        return {
-          [indexKey]: {
-            schemaVersion: "1.0",
-            ledgerIdsByPlanRoot: {
-              [allSupportedFullFiscalYearPlanRootKey(planRoot)]: ledger.ledgerId,
-            },
-          },
-          [planKey]: ledger,
-        };
-      }
-      return {};
+    // A schema-1.0 index is migrated in place by the reader, so this mock has
+    // to honour the write the way real storage does. A `set` that silently did
+    // nothing left the reader re-reading an index that never changed, which is
+    // not a state any browser produces.
+    const stored: Record<string, unknown> = {
+      [indexKey]: {
+        schemaVersion: "1.0",
+        ledgerIdsByPlanRoot: {
+          [allSupportedFullFiscalYearPlanRootKey(planRoot)]: ledger.ledgerId,
+        },
+      },
+      [planKey]: ledger,
+    };
+    browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
+      key == null ? { ...stored } : {},
+    );
+    browserMocks.storage.local.set.mockImplementation(async (values: unknown) => {
+      Object.assign(stored, values as Record<string, unknown>);
     });
     const background = await import("../../src/entrypoints/background");
 

@@ -48,7 +48,11 @@ import {
   readRetainedPlanLedgers,
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
-import { readAllSupportedPlanLedgersStorageState } from "./filed-returns-all-supported-full-fiscal-year-run-state";
+import {
+  readAllSupportedFullFiscalYearLedgerForPlanRoot,
+  readAllSupportedPlanLedgersStorageState,
+  savedPlanStorageStateRecoveryMessage,
+} from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import {
   clearFiledReturnsTargetReview,
   malformedTargetReviewResponse,
@@ -259,19 +263,33 @@ async function allSupportedPlanStartLockResponse(
 ): Promise<PackMessageResponse | null> {
   if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
   const state = await readAllSupportedPlanLedgersStorageState(deps);
-  if (state.state === "malformed") {
+  if (state.state !== "valid") {
+    const unavailable = state.state === "provenance-unavailable";
+    const removalPending = state.state === "removal-pending";
     return {
       ok: true,
       flowStep: {
         connectorId: "gst",
         scopeId: filedReturnScopeId(scope.returnType),
         state: "blocked",
-        safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
-        safeMessage:
-          "Pack could not verify the saved all-supported fiscal-year plan index before starting another return.",
+        safeSignals: [
+          unavailable
+            ? "all-supported-full-fiscal-year-plan-provenance-unavailable"
+            : removalPending
+              ? "all-supported-full-fiscal-year-plan-removal-recovery-pending"
+              : "all-supported-full-fiscal-year-plan-index-malformed",
+        ],
+        safeMessage: unavailable
+          ? "Pack cannot verify an existing saved fiscal-year plan before starting another return."
+          : removalPending
+            ? "Pack is finishing removal of a saved fiscal-year plan before starting another return."
+            : "Pack could not verify the saved all-supported fiscal-year plan index before starting another return.",
         userAction: {
           type: "RETRY_PORTAL_GENERATION",
-          message: "Clear local Pack data before starting another return.",
+          // One owner: a malformed index recovers no more than an unverifiable
+          // provenance does, and it used to land in the "wait for recovery"
+          // arm simply by being the default of a two-way ternary.
+          message: savedPlanStorageStateRecoveryMessage(state.state),
           canResume: false,
         },
       },
@@ -320,7 +338,9 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
   deps: FiledReturnsFlowRunnerDeps,
   options: { discardCompletedPlanRoot?: boolean } = {},
 ): Promise<PackMessageResponse> {
-  const leaseScope = allSupportedLeaseScope(request);
+  const leaseScope = await allSupportedLeaseScope(request, deps);
+  // Reached only when neither the current catalogue nor a saved plan can name
+  // a target, so the worker's own no-plan answer performs no portal work.
   if (!leaseScope) {
     return startAllSupportedFullFiscalYearDownloadFlow(
       request,
@@ -371,7 +391,7 @@ export async function retryAllSupportedFiledReturnsFullFiscalYearTarget(
     kind: "all-supported-returns-full-fiscal-year",
     financialYear: payload.financialYear,
   };
-  const leaseScope = allSupportedLeaseScope(planRoot);
+  const leaseScope = await allSupportedLeaseScope(planRoot, deps);
   if (!leaseScope) {
     return retryAllSupportedFullFiscalYearTarget(
       payload,
@@ -471,17 +491,39 @@ function retainedFullFiscalYearPlanLockResponse(
   };
 }
 
-function allSupportedLeaseScope(
+/**
+ * The scope the shared run lease is taken against for an all-supported root.
+ *
+ * The current catalogue supplies it whenever it can expand. When it cannot, a
+ * saved plan validated against a retained historical catalogue is still
+ * resumable, and binding the lease to that plan's own first target is what
+ * keeps it resumable *under* the lease: the callers' `!leaseScope` fallback
+ * reaches the worker directly, so a historical plan that produced no scope
+ * would have executed persisted portal targets alongside another active run.
+ */
+async function allSupportedLeaseScope(
   request: FiledReturnsAllSupportedFullFiscalYearRequest,
-): FiledReturnsDownloadScope | null {
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<FiledReturnsDownloadScope | null> {
   const expansion = expandAllSupportedFullFiscalYearTargetPlan();
   const first = expansion.ok ? expansion.targets[0] : undefined;
-  if (!first) return null;
+  if (first) {
+    return {
+      financialYear: request.financialYear,
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: first.returnType,
+      artifactType: first.artifactType,
+    };
+  }
+  if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return null;
+  const saved = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
+  const savedFirst = saved?.targets[0];
+  if (!savedFirst) return null;
   return {
     financialYear: request.financialYear,
     period: FULL_FISCAL_YEAR_PERIOD,
-    returnType: first.returnType,
-    artifactType: first.artifactType,
+    returnType: savedFirst.returnType,
+    artifactType: savedFirst.artifactType,
   };
 }
 

@@ -432,8 +432,14 @@ export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   targetEvidence: FiledReturnsAllSupportedFullFiscalYearTargetEvidence[];
   totalTargets: number;
   currentTargetId?: string;
-  /** The atomic target scope to which the current flow step is bound. */
-  flowStepScope: FiledReturnsDownloadScope;
+  /**
+   * The atomic target scope to which the current flow step is bound.
+   *
+   * Absent only when the summary is not projected from a plan at all -- a saved
+   * plan Pack cannot verify has no target, and inventing one would assert a
+   * return type nothing in storage supports.
+   */
+  flowStepScope?: FiledReturnsDownloadScope;
   flowStep: PortalFlowStepResult;
   /**
    * Whether re-invoking this same all-supported start resumes the saved plan rather than beginning

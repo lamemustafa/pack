@@ -8,6 +8,8 @@ import {
   getFiledReturnsFullFiscalYearPeriods,
 } from "../../src/connectors/gst/filed-returns-scope";
 import type * as FiledReturnsTargetReviewModule from "../../src/background/filed-returns-target-review";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
+import type * as AllSupportedCatalogueModule from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 
 const mocks = vi.hoisted(() => ({
   readCurrentFiledReturnsTargetReviewStorageState: vi.fn(),
@@ -49,7 +51,16 @@ const fullFiscalYearRunStateMocks = vi.hoisted(() => ({
   readRetainedPlanLedgers: vi.fn(),
 }));
 const allSupportedRunStateMocks = vi.hoisted(() => ({
+  readAllSupportedFullFiscalYearLedgerForPlanRoot: vi.fn(),
   readAllSupportedPlanLedgersStorageState: vi.fn(),
+}));
+type ExpandAllSupportedPlan =
+  (typeof AllSupportedCatalogueModule)["expandAllSupportedFullFiscalYearTargetPlan"];
+const catalogueMocks = vi.hoisted(() => ({
+  expandAllSupportedFullFiscalYearTargetPlan: vi.fn(),
+  // The real expansion, captured inside the mock factory. Importing it at the
+  // top level would resolve to the mock and recurse.
+  actual: { expand: null as null | (() => unknown) },
 }));
 const allSupportedFlowMocks = vi.hoisted(() => ({
   restartCompletedAllSupportedFullFiscalYearPlan: vi.fn(),
@@ -76,9 +87,15 @@ vi.mock(
     readRetainedPlanLedgers: fullFiscalYearRunStateMocks.readRetainedPlanLedgers,
   }),
 );
+// Partial: replacing the module wholesale hid every export the runner did not
+// already use, so adding one surfaced as a missing-export failure in three
+// unrelated tests rather than at the call site.
 vi.mock(
   "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state",
-  () => allSupportedRunStateMocks,
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    ...allSupportedRunStateMocks,
+  }),
 );
 vi.mock(
   "../../src/background/filed-returns-all-supported-full-fiscal-year",
@@ -91,6 +108,18 @@ vi.mock(
     startAllSupportedFullFiscalYearDownloadFlow:
       allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow,
   }),
+);
+vi.mock(
+  "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year",
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof AllSupportedCatalogueModule>();
+    catalogueMocks.actual.expand = actual.expandAllSupportedFullFiscalYearTargetPlan;
+    return {
+      ...actual,
+      expandAllSupportedFullFiscalYearTargetPlan:
+        catalogueMocks.expandAllSupportedFullFiscalYearTargetPlan,
+    };
+  },
 );
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
   createMalformedArtifactAcquisitionCheckpointReference:
@@ -139,6 +168,11 @@ describe("filed returns retained target scoping", () => {
       },
     });
     activeRunMocks.acquireFiledReturnsRun.mockResolvedValue({ run: { id: "synthetic-run" } });
+    allSupportedRunStateMocks.readAllSupportedFullFiscalYearLedgerForPlanRoot.mockResolvedValue(
+      null,
+    );
+    catalogueMocks.expandAllSupportedFullFiscalYearTargetPlan.mockImplementation((() =>
+      catalogueMocks.actual.expand!()) as ExpandAllSupportedPlan);
     activeRunMocks.releaseFiledReturnsRun.mockResolvedValue(undefined);
     activeRunMocks.startFiledReturnsRunLeaseRenewal.mockReturnValue(() => undefined);
     fullFiscalYearRunStateMocks.readPlanLedgersStorageState.mockResolvedValue({
@@ -228,6 +262,91 @@ describe("filed returns retained target scoping", () => {
     });
     expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["provenance-unavailable", "all-supported-full-fiscal-year-plan-provenance-unavailable"],
+    ["removal-pending", "all-supported-full-fiscal-year-plan-removal-recovery-pending"],
+    ["malformed", "all-supported-full-fiscal-year-plan-index-malformed"],
+  ] as const)("blocks an atomic start while saved-plan state is %s", async (state, signal) => {
+    const requestedScope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "June",
+      returnType: "GSTR-3B",
+    } as const satisfies FiledReturnsDownloadScope;
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    allSupportedRunStateMocks.readAllSupportedPlanLedgersStorageState.mockResolvedValue({ state });
+
+    const response = await startFiledReturnsDownloadFlow(requestedScope, {
+      storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" },
+    } as never);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: [signal],
+        // Only an interrupted removal recovers by itself. Telling the reader to
+        // wait for a recovery that never finishes is the failure this pins, and
+        // a malformed index reached that message by being a ternary's default.
+        userAction: {
+          message:
+            state === "removal-pending"
+              ? expect.stringContaining("Retry after Pack finishes")
+              : expect.stringContaining(PACK_CLEAR_LOCAL_DATA_ACTION_LABEL),
+        },
+      },
+    });
+    expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
+    expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
+  });
+
+  it("takes the run lease from a saved historical plan the current catalogue cannot expand", async () => {
+    // The saved plan is validated against a retained historical catalogue, so
+    // it stays resumable after the current catalogue stops expanding. The lease
+    // scope used to come from the current catalogue alone, so exactly that plan
+    // reached the worker through the lease-free fallback and could replay
+    // persisted portal targets alongside another live run.
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    catalogueMocks.expandAllSupportedFullFiscalYearTargetPlan.mockReturnValue({
+      ok: false,
+      reason: "synthetic-catalogue-withdrawn",
+    } as never);
+    allSupportedRunStateMocks.readAllSupportedFullFiscalYearLedgerForPlanRoot.mockResolvedValue({
+      ledgerId: "full-fiscal-year-abc123de",
+      planRoot: { kind: "all-supported-returns-full-fiscal-year", financialYear: "2026-27" },
+      targets: [{ returnType: "GSTR-3B", artifactType: "PDF", period: "June" }],
+    });
+    const activeResponse = {
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked" as const,
+        safeSignals: ["filed-returns-run-active"],
+        safeMessage: "Synthetic active run.",
+      },
+    };
+    activeRunMocks.acquireFiledReturnsRun.mockResolvedValue({ response: activeResponse });
+
+    const response = await startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+      { kind: "all-supported-returns-full-fiscal-year", financialYear: "2026-27" },
+      { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+    );
+
+    expect(activeRunMocks.acquireFiledReturnsRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        financialYear: "2026-27",
+        period: FULL_FISCAL_YEAR_PERIOD,
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+      }),
+      expect.anything(),
+    );
+    expect(response).toEqual(activeResponse);
+    expect(
+      allSupportedFlowMocks.startAllSupportedFullFiscalYearDownloadFlow,
+    ).not.toHaveBeenCalled();
   });
 
   it("passes the bound completed ledger to the durable all-supported restart", async () => {

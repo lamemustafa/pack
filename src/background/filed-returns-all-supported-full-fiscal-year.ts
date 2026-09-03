@@ -33,6 +33,7 @@ import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
   persistAllSupportedFullFiscalYearLedger,
+  savedPlanStorageStateStep,
 } from "./filed-returns-all-supported-full-fiscal-year-run-state";
 import type {
   AllSupportedFullFiscalYearZipPhase,
@@ -128,7 +129,10 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
   const periodPlan = getFiledReturnsFullFiscalYearPeriods(request.financialYear, now);
   const storageState = await readAllSupportedPlanLedgersStorageState(deps);
   if (storageState.state !== "valid") {
-    return { ok: true, flowStep: malformedSavedPlanIndexStep(request.financialYear) };
+    return {
+      ok: true,
+      flowStep: savedPlanStorageStateStep(request.financialYear, storageState.state),
+    };
   }
   let ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
 
@@ -179,7 +183,10 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
 ): Promise<PackMessageResponse> {
   const storageState = await readAllSupportedPlanLedgersStorageState(deps);
   if (storageState.state !== "valid") {
-    return { ok: true, flowStep: malformedSavedPlanIndexStep(request.financialYear) };
+    return {
+      ok: true,
+      flowStep: savedPlanStorageStateStep(request.financialYear, storageState.state),
+    };
   }
   const ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
   if (!ledger) {
@@ -806,17 +813,6 @@ function matchesConcreteArtifactSnapshot(
     current.length === target.concreteArtifactTypes.length &&
     current.every((artifactType, index) => artifactType === target.concreteArtifactTypes[index])
   );
-}
-
-function malformedSavedPlanIndexStep(financialYear: string): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: `all-supported-full-fiscal-year:${financialYear}`,
-    state: "blocked",
-    safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
-    safeMessage:
-      "Pack could not verify the saved all-supported fiscal-year plan index. Clear the affected local recovery state before starting again.",
-  };
 }
 
 function mergeRetriedArtifactSignals(

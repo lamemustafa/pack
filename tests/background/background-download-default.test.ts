@@ -505,6 +505,92 @@ describe("background filed returns download defaults", () => {
     });
   });
 
+  it("blocks the summary on a saved plan whose provenance cannot be verified", async () => {
+    const now = new Date();
+    const financialYear = getFiledReturnsFinancialYearOptions(now)[0]!;
+    const periods = getFiledReturnsFullFiscalYearPeriods(financialYear, now);
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported full-year plan");
+    const planRoot = {
+      kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+      financialYear,
+    } as const;
+    const ledger = createAllSupportedFullFiscalYearLedger(
+      planRoot,
+      expansion.targets,
+      periods,
+      now,
+    );
+    const preProvenanceLedger = structuredClone(ledger) as unknown as Record<string, unknown>;
+    delete preProvenanceLedger.planProvenance;
+    // An unrelated atomic completion is the surface the reader was shown while
+    // every start was already refused. It stays in the fixture precisely so the
+    // assertion below fails if the block ever falls through to it again.
+    const unrelatedOrdinaryCompletion: FiledReturnsFlowSummary = {
+      scope: { financialYear, period: "May", returnType: "GSTR-3B" },
+      status: "complete",
+      completedAt: "2026-08-02T00:00:00.000Z",
+      completedPeriods: ["May"],
+      currentPeriod: "May",
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-positively-not-filed"],
+        safeMessage: "Pack found no filed GSTR-3B return for the selected period.",
+      },
+    };
+    browserMocks.setLocalStorage({
+      [PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex]: {
+        schemaVersion: "1.0",
+        ledgerIdsByPlanRoot: {
+          [allSupportedFullFiscalYearPlanRootKey(planRoot)]: ledger.ledgerId,
+        },
+      },
+      [allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)]: {
+        ...preProvenanceLedger,
+        schemaVersion: "1.0",
+      },
+    });
+    browserMocks.setSessionStorage({
+      [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary]: unrelatedOrdinaryCompletion,
+    });
+
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      allSupportedFullFiscalYearFlowSummary: {
+        status: "blocked",
+        summaryIdentity: planRoot,
+        resumeAvailable: false,
+        flowStep: {
+          state: "blocked",
+          safeSignals: ["all-supported-full-fiscal-year-plan-provenance-unavailable"],
+        },
+      },
+    });
+    // The reader must be told what to do, and must not be handed a control that
+    // acts on a plan Pack cannot verify.
+    expect(
+      (
+        response as {
+          allSupportedFullFiscalYearFlowSummary: { flowStep: { safeMessage?: string } };
+        }
+      ).allSupportedFullFiscalYearFlowSummary.flowStep.safeMessage,
+    ).toContain("Clear");
+    expect(response).not.toHaveProperty(
+      "allSupportedFullFiscalYearFlowSummary.allSupportedFullFiscalYearRecovery",
+    );
+    expect(response).not.toHaveProperty("allSupportedFullFiscalYearFlowSummary.ledgerId");
+    expect(response).not.toHaveProperty("flowSummary");
+  });
+
   it("leaves validated offscreen staging messages for the offscreen document", async () => {
     await import("../../src/entrypoints/background");
     const listener = browserMocks.getMessageListener();

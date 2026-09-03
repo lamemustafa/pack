@@ -25,6 +25,35 @@ export interface FiledReturnsAllSupportedFullFiscalYearPlanTarget {
   concreteArtifactTypes: readonly FiledReturnsConcreteArtifactType[];
 }
 
+// Persisted catalogue versions are GST connector knowledge. Retain each
+// released version verbatim so background recovery can validate a saved plan
+// without treating its own contents as an authority.
+export const ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION =
+  "gst-filed-returns-catalogue-v1" as const;
+export const HISTORICAL_ALL_SUPPORTED_FULL_FISCAL_YEAR_RETURN_PLANS = {
+  [ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION]: [
+    {
+      returnType: "GSTR-3B",
+      artifactType: "PDF_AND_EXCEL",
+      concreteArtifactTypes: ["PDF", "JSON"],
+    },
+    {
+      returnType: "GSTR-1",
+      artifactType: "PDF_AND_EXCEL",
+      concreteArtifactTypes: ["PDF", "EXCEL"],
+    },
+    {
+      returnType: "GSTR-2B",
+      artifactType: "PDF_AND_EXCEL",
+      concreteArtifactTypes: ["PDF", "EXCEL", "JSON"],
+    },
+  ],
+} as const satisfies Readonly<
+  Record<string, readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[]>
+>;
+export type AllSupportedFullFiscalYearCatalogueVersion =
+  keyof typeof HISTORICAL_ALL_SUPPORTED_FULL_FISCAL_YEAR_RETURN_PLANS;
+
 export type FiledReturnsAllSupportedFullFiscalYearPlanExpansion =
   | {
       ok: true;

@@ -16,13 +16,17 @@ import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-retu
 import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
 import * as AllSupportedPlanModule from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import {
   createAllSupportedFullFiscalYearLedger,
   markAllSupportedFullFiscalYearTargetRunning,
   markAllSupportedFullFiscalYearTargetTerminal,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
-import { persistAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
+import {
+  allSupportedFullFiscalYearPlanStorageKey,
+  persistAllSupportedFullFiscalYearLedger,
+} from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
 import {
   FILED_RETURNS_MONTHS,
   getFiledReturnsFullFiscalYearPeriods,
@@ -230,7 +234,7 @@ describe("all-supported full-fiscal-year worker", () => {
       allSavedLedgers().find((ledger) => ledger.planRoot.financialYear === "2025-26")?.ledgerId,
     ).not.toBe(earlierLedger.ledgerId);
     expect(stored.values["all-supported-index"]).toEqual({
-      schemaVersion: "1.0",
+      schemaVersion: "2.0",
       ledgerIdsByPlanRoot: {
         "all-supported-returns-full-fiscal-year:2025-26": expect.any(String),
         "all-supported-returns-full-fiscal-year:2026-27": expect.any(String),
@@ -783,7 +787,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("surfaces a malformed saved-plan index without starting portal work", async () => {
-    stored.values["all-supported-index"] = { schemaVersion: "2.0", ledgerIdsByPlanRoot: {} };
+    stored.values["all-supported-index"] = { schemaVersion: "3.0", ledgerIdsByPlanRoot: {} };
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
@@ -797,7 +801,46 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(runner).not.toHaveBeenCalled();
   });
 
-  it("blocks a saved target when the current catalogue no longer matches its artifact snapshot", async () => {
+  it("names unavailable provenance from a stored pre-change plan without starting portal work", async () => {
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported plan");
+    const ledger = createAllSupportedFullFiscalYearLedger(
+      request,
+      expansion.targets,
+      FILED_RETURNS_MONTHS.slice(0, 3),
+      NOW,
+    );
+    const legacyLedger = structuredClone(ledger) as unknown as Record<string, unknown>;
+    delete legacyLedger.planProvenance;
+    stored.values[allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)] = {
+      ...legacyLedger,
+      schemaVersion: "1.0",
+    };
+    stored.values["all-supported-index"] = {
+      schemaVersion: "1.0",
+      ledgerIdsByPlanRoot: {
+        "all-supported-returns-full-fiscal-year:2026-27": ledger.ledgerId,
+      },
+    };
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-plan-provenance-unavailable"],
+        // Derived, not transcribed: a message naming a control the product does
+        // not carry is an instruction the reader cannot follow, and this is the
+        // only saved-plan state whose escape is Options rather than the panel.
+        safeMessage: expect.stringContaining(PACK_CLEAR_LOCAL_DATA_ACTION_LABEL),
+      },
+    });
+    expect(runner).not.toHaveBeenCalled();
+    expect(stored.values["all-supported-index"]).toMatchObject({ schemaVersion: "2.0" });
+  });
+
+  it("rejects a ledger whose target plan and provenance agree on an untrusted artifact set", () => {
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
     if (!expansion.ok) throw new Error("expected all-supported plan");
     const checkpoint = createAllSupportedFullFiscalYearLedger(
@@ -816,30 +859,20 @@ describe("all-supported full-fiscal-year worker", () => {
         ? { ...target, concreteArtifactTypes: changedSnapshot }
         : target,
     );
+    checkpoint.planProvenance = {
+      ...checkpoint.planProvenance,
+      returnPlan: checkpoint.planProvenance.returnPlan.map((target) =>
+        target.returnType === snapshotTarget.returnType
+          ? { ...target, concreteArtifactTypes: changedSnapshot }
+          : target,
+      ),
+    };
     checkpoint.targets = checkpoint.targets.map((target) =>
       target.returnType === snapshotTarget.returnType
         ? { ...target, concreteArtifactTypes: changedSnapshot }
         : target,
     );
-    await persistAllSupportedFullFiscalYearLedger(deps, checkpoint);
-    const attemptedScopes: string[] = [];
-    const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
-      attemptedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
-      return notFiledStep();
-    });
-
-    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
-
-    expect(response).toMatchObject({
-      allSupportedFullFiscalYearFlowSummary: { status: "blocked" },
-      flowStep: {
-        state: "blocked",
-        safeSignals: ["all-supported-full-fiscal-year-artifact-snapshot-mismatch"],
-      },
-    });
-    expect(attemptedScopes).not.toContain(
-      `${snapshotTarget.returnType}:${snapshotTarget.period}:${snapshotTarget.artifactType}`,
-    );
+    expect(isAllSupportedFullFiscalYearLedger(checkpoint)).toBe(false);
   });
 
   it("reconciles only the exact persisted final ZIP ID after a worker restart", async () => {
