@@ -139,7 +139,13 @@ export function savedPlanStorageStateStep(
     scopeId,
     state: "blocked",
     safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
-    safeMessage: savedPlanStorageStateRecoveryMessage(state),
+    // Cause first, then the shared instruction. Delegating the whole message
+    // removed the duplicate correctly but took the diagnosis with it, leaving
+    // the one state that also withholds its fiscal year saying neither what
+    // happened nor which plan it happened to -- only "destroy your saved
+    // plans". Its two sibling states above both name a cause; a terminal state
+    // that names none cannot be diagnosed from outside.
+    safeMessage: `Pack could not verify the saved all-supported fiscal-year plan index. ${savedPlanStorageStateRecoveryMessage(state)}`,
   };
 }
 
