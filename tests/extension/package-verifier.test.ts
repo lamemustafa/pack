@@ -212,6 +212,23 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Source-surface marker data-pack-source-surface");
   });
 
+  it.each([
+    ["packaged verification", []],
+    ["source-surfaces verification", ["--source-surfaces"]],
+  ])("rejects the legacy marker during %s", async (_label, flags) => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "assets/legacy-source-surface.js",
+      'const marker = "data-pack-alpha-surface";',
+    );
+
+    const result = await runVerifier(outputDir, {}, flags);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("Legacy source-surface marker data-pack-alpha-surface");
+  });
+
   it("rejects sensitive policy markers from the vendored harness snapshot", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(

@@ -436,6 +436,10 @@ const forbiddenPackSourcePatterns = [
 // marker is removed from a production bundle by Vite's compile-time mode
 // replacement; finding it in a release package means the exclusion failed.
 const forbiddenSourceSurfaceMarkers = ["data-pack-source-surface"];
+// Artifacts built before the mode rename carry this marker. They must never be
+// treated as a packaged build, and source-surfaces verification must accept
+// only the current marker contract.
+const legacySourceSurfaceMarkers = ["data-pack-alpha-surface"];
 // A distributable is never a development build, whatever mode produced it. The
 // home-path check catches one symptom of the React development transform, but
 // only when the builder's path matches a known home pattern -- a build made
@@ -483,6 +487,13 @@ for (const file of await listFiles(outputDir)) {
       if (contents.includes(marker)) {
         throw new Error(
           `React development marker ${marker} in ${path.relative(process.cwd(), file)}; this is a development build.`,
+        );
+      }
+    }
+    for (const marker of legacySourceSurfaceMarkers) {
+      if (contents.includes(marker)) {
+        throw new Error(
+          `Legacy source-surface marker ${marker} found in ${path.relative(process.cwd(), file)}`,
         );
       }
     }
