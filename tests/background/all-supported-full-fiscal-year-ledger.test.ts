@@ -15,6 +15,8 @@ import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
   removeAllSupportedFullFiscalYearLedger,
+  savedPlanStorageStateRecoveryMessage,
+  savedPlanStorageStateStep,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
 import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
 import { toAllSupportedFullFiscalYearSummary } from "../../src/background/filed-returns-all-supported-full-fiscal-year-summary";
@@ -476,6 +478,24 @@ describe("all-supported full-fiscal-year ledger", () => {
       ledgerIdsByPlanRoot: {},
     });
   });
+
+  it.each(["provenance-unavailable", "removal-pending", "malformed"] as const)(
+    "names what Pack found as well as what to do for saved-plan state %s",
+    (state) => {
+      const { safeMessage } = savedPlanStorageStateStep("2026-27", state);
+      const sentences = (safeMessage ?? "").split(". ").filter(Boolean);
+
+      // The invariant, not the wording: a blocked state has to say what Pack
+      // found before it says what to do. `malformed` once delegated its whole
+      // message to the shared instruction, so the one state that also
+      // withholds its fiscal year told the reader to clear every saved plan
+      // and never said why -- undiagnosable from outside, and the only one of
+      // the three that was.
+      expect(sentences.length).toBeGreaterThanOrEqual(2);
+      expect(sentences[0]).toMatch(/^Pack /);
+      expect(safeMessage).not.toBe(savedPlanStorageStateRecoveryMessage(state));
+    },
+  );
 
   it("gives up on an index migration that never takes instead of rewriting it forever", async () => {
     const ledger = createLedger();
