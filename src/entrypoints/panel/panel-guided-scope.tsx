@@ -28,8 +28,8 @@ import {
 } from "./panel-guided-scope-model";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
 
-export function isPackAlphaBuildMode(buildMode: string): boolean {
-  return buildMode === "alpha";
+export function isPackSourceSurfaceBuildMode(buildMode: string): boolean {
+  return buildMode === "source-surfaces";
 }
 
 export function PanelGuidedScope({
@@ -81,25 +81,25 @@ export function PanelGuidedScope({
   onRestartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan & { ledgerId?: string }) => void;
 }) {
   // Keep this expression in the panel module: Vite replaces it during a WXT
-  // production build, so the alpha JSX below is removed from packaged output.
-  // Deliberately the literal comparison rather than `isPackAlphaBuildMode`, despite the duplication.
-  // A direct `import.meta.env.MODE === "alpha"` constant-folds at build time, so the alpha JSX below
+  // production build, so the source-surface JSX below is removed from packaged output.
+  // Deliberately the literal comparison rather than `isPackSourceSurfaceBuildMode`, despite the duplication.
+  // A direct `import.meta.env.MODE === "source-surfaces"` constant-folds at build time, so the source-surface JSX below
   // is dead-code eliminated from a packaged build. Routing it through a function call defeats that:
-  // the branch survives, the `data-pack-alpha-surface` marker reaches the bundle, and
+  // the branch survives, the `data-pack-source-surface` marker reaches the bundle, and
   // `verify-extension-package` fails -- which is how this was caught.
-  const alphaSurfacesEnabled = import.meta.env.MODE === "alpha";
+  const sourceSurfacesEnabled = import.meta.env.MODE === "source-surfaces";
   const [view, setView] = React.useState<"presets" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
   const selectRef = React.useRef<HTMLSelectElement>(null);
   const presetDoorRef = React.useRef<HTMLButtonElement>(null);
   const focusTarget = React.useRef<"preset-door" | "select" | null>(null);
   const steps = panelGuidedSteps(scope).map((candidate) =>
-    panelGuidedStepForDisplay(candidate, alphaSurfacesEnabled),
+    panelGuidedStepForDisplay(candidate, sourceSurfacesEnabled),
   );
   const step = steps[activeStep] ?? steps[0];
   const recoveryAvailability = getRecoveryFlowAvailability(
     flowSummary,
-    alphaSurfacesEnabled,
+    sourceSurfacesEnabled,
     scopeLockedForReview,
   );
   const [, refreshPresetSnapshot] = React.useState(0);
@@ -110,7 +110,7 @@ export function PanelGuidedScope({
   const financialYears = getFiledReturnsFinancialYearOptions(presetAsOf);
   const currentFinancialYear = financialYears[0];
   const presets =
-    alphaSurfacesEnabled && currentFinancialYear
+    sourceSurfacesEnabled && currentFinancialYear
       ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
       : [];
   const allReturnsFinancialYears = [
@@ -120,7 +120,7 @@ export function PanelGuidedScope({
       ? [allReturnsResumePlan.financialYear]
       : []),
   ];
-  const allReturnsPresets = alphaSurfacesEnabled
+  const allReturnsPresets = sourceSurfacesEnabled
     ? allReturnsFinancialYears.reverse().flatMap((financialYear) => {
         const preset = panelAllReturnsFullYearPreset(financialYear, presetAsOf);
         return preset ? [preset] : [];
@@ -283,11 +283,11 @@ export function PanelGuidedScope({
     scopeExternalBlock ??
     (canRetryFullFiscalYearZipWithoutPortal(scopeSummary)
       ? null
-      : !alphaSurfacesEnabled && isFullFiscalYearScope(scope)
+      : !sourceSurfacesEnabled && isFullFiscalYearScope(scope)
         ? {
             disabled: true as const,
             label:
-              "This full-year flow is available only in a source build qualified for alpha use.",
+              "This full-year flow is available only in a source-surfaces build.",
           }
         : portalSignedIn
           ? null
@@ -297,7 +297,7 @@ export function PanelGuidedScope({
     <section
       className="panel-guide"
       aria-labelledby="panel-guide-title"
-      {...(alphaSurfacesEnabled ? { "data-pack-alpha-surface": "full-fiscal-year" } : {})}
+      {...(sourceSurfacesEnabled ? { "data-pack-source-surface": "full-fiscal-year" } : {})}
     >
       <div
         className="panel-guide-progress"
