@@ -286,7 +286,11 @@ export function PanelGuidedScope({
       : !sourceSurfacesEnabled && isFullFiscalYearScope(scope)
         ? {
             disabled: true as const,
-            label: "This full-year flow is available only in a source-surfaces build.",
+            // Addressed to a taxpayer, not to a contributor. Naming the build
+            // mode here -- "alpha" before the rename, "source-surfaces" after
+            // -- tells the reader nothing they can act on, and is exactly the
+            // internal vocabulary the mode rename was meant to stop leaking.
+            label: "This full-year flow is not available in the published build of Pack.",
           }
         : portalSignedIn
           ? null
