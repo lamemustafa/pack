@@ -98,8 +98,10 @@ export function panelAllReturnsFullYearResumePlan(
     "summaryIdentity" | "targetEvidence"
   >,
 ): PanelAllReturnsFullYearResumePlan | null {
+  const summaryIdentity = summary.summaryIdentity;
+  if (!summaryIdentity) return null;
   const targets = summary.targetEvidence.filter(
-    (target) => target.financialYear === summary.summaryIdentity.financialYear,
+    (target) => target.financialYear === summaryIdentity.financialYear,
   );
   if (targets.length === 0) return null;
 
@@ -124,7 +126,7 @@ export function panelAllReturnsFullYearResumePlan(
     return null;
 
   return {
-    financialYear: summary.summaryIdentity.financialYear,
+    financialYear: summaryIdentity.financialYear,
     returnTypes: Array.from(returnTypes),
     returnCount: returnTypes.size,
     periodCount: periods.size,

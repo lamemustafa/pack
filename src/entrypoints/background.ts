@@ -447,6 +447,7 @@ function isStaleAllSupportedCompatibilityLease(
 ): boolean {
   return Boolean(
     flowSummary &&
+    allSupportedSummary.summaryIdentity &&
     flowSummary.status === "blocked" &&
     flowSummary.scope.period === "FULL_FISCAL_YEAR" &&
     flowSummary.scope.financialYear === allSupportedSummary.summaryIdentity.financialYear &&

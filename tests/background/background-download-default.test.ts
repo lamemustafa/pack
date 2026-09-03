@@ -591,6 +591,103 @@ describe("background filed returns download defaults", () => {
     expect(response).not.toHaveProperty("flowSummary");
   });
 
+  it("blocks the summary on a malformed saved-plan index without inventing a fiscal year", async () => {
+    const financialYear = getFiledReturnsFinancialYearOptions(new Date())[0]!;
+    // An unrelated atomic completion is the surface the reader was shown while
+    // every start was already refused. It stays in the fixture precisely so the
+    // assertion below fails if the block ever falls through to it again.
+    const unrelatedOrdinaryCompletion: FiledReturnsFlowSummary = {
+      scope: { financialYear, period: "May", returnType: "GSTR-3B" },
+      status: "complete",
+      completedAt: "2026-08-02T00:00:00.000Z",
+      completedPeriods: ["May"],
+      currentPeriod: "May",
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-positively-not-filed"],
+        safeMessage: "Pack found no filed GSTR-3B return for the selected period.",
+      },
+    };
+    browserMocks.setLocalStorage({
+      [PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex]: {
+        schemaVersion: "invalid",
+      },
+    });
+    browserMocks.setSessionStorage({
+      [PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary]: unrelatedOrdinaryCompletion,
+    });
+
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      allSupportedFullFiscalYearFlowSummary: {
+        status: "blocked",
+        resumeAvailable: false,
+        flowStep: {
+          state: "blocked",
+          safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+          safeMessage:
+            "Pack could not verify the saved all-supported fiscal-year plan index. Open Pack's options and use \u201cClear local data and discard saved plans\u201d before starting another return.",
+        },
+      },
+    });
+    expect(response).not.toHaveProperty("allSupportedFullFiscalYearFlowSummary.summaryIdentity");
+    expect(response).not.toHaveProperty(
+      "allSupportedFullFiscalYearFlowSummary.allSupportedFullFiscalYearRecovery",
+    );
+    expect(response).not.toHaveProperty("allSupportedFullFiscalYearFlowSummary.ledgerId");
+    expect(response).not.toHaveProperty("flowSummary");
+  });
+
+  it("keeps a malformed saved-plan index authoritative over a same-year stale compatibility lease", async () => {
+    const now = new Date(Date.now() - 60_000);
+    const financialYear = getFiledReturnsFinancialYearOptions(now)[0]!;
+    browserMocks.setLocalStorage({
+      [PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun]: {
+        schemaVersion: "1.0",
+        runId: "00000000-0000-4000-8000-000000000001",
+        revision: 1,
+        scope: {
+          financialYear,
+          period: "FULL_FISCAL_YEAR",
+          returnType: "GSTR-3B",
+          artifactType: "PDF",
+        },
+        status: "running",
+        leaseUpdatedAt: now.toISOString(),
+      },
+      [PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex]: {
+        schemaVersion: "invalid",
+      },
+    });
+
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({
+      type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      allSupportedFullFiscalYearFlowSummary: {
+        status: "blocked",
+        flowStep: {
+          safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+        },
+      },
+    });
+    expect(response).not.toHaveProperty("allSupportedFullFiscalYearFlowSummary.summaryIdentity");
+    expect(response).not.toHaveProperty("flowSummary");
+  });
+
   it("leaves validated offscreen staging messages for the offscreen document", async () => {
     await import("../../src/entrypoints/background");
     const listener = browserMocks.getMessageListener();

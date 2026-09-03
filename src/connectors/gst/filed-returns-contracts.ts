@@ -406,7 +406,13 @@ export interface FiledReturnsAllSupportedFullFiscalYearTargetEvidence {
  * period-only evidence applies across return types.
  */
 export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
-  summaryIdentity: FiledReturnsAllSupportedFullFiscalYearIdentity;
+  /**
+   * The saved plan this summary can honestly identify.
+   *
+   * Absent when the root index itself is malformed: no parsed record can
+   * safely name a fiscal year or authorise a plan action in that state.
+   */
+  summaryIdentity?: FiledReturnsAllSupportedFullFiscalYearIdentity;
   /**
    * The ledger this summary was projected from. A destructive action names it
    * so the background can refuse when the indexed ledger for the root has been

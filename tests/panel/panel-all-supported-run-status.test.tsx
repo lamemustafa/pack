@@ -131,6 +131,37 @@ describe("all-supported panel progress", () => {
     expect(render(completed)).toContain("Discard this year&#x27;s saved plan and run again");
   });
 
+  it("renders an identity-less malformed-index block without a fiscal year or plan action", () => {
+    vi.stubEnv("MODE", "source-surfaces");
+    const malformedIndexBlock: FiledReturnsAllSupportedFullFiscalYearFlowSummary = {
+      status: "blocked",
+      completedTargetIds: [],
+      targetEvidence: [],
+      totalTargets: 0,
+      resumeAvailable: false,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "all-supported-full-fiscal-year",
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-plan-index-malformed"],
+        safeMessage:
+          "Pack could not verify the saved all-supported fiscal-year plan index. Open Pack's options and use \u201cClear local data and discard saved plans\u201d before starting another return.",
+      },
+    };
+
+    const markup = render(malformedIndexBlock);
+
+    expect(markup).toContain("Your pack · All supported returns");
+    expect(markup).not.toContain("FY undefined");
+    expect(markup).not.toContain("Discard this year&#x27;s saved plan and run again");
+    expect(markup).not.toContain("Resume this plan");
+    expect(markup).not.toContain("Review Downloads, then retry");
+    expect(markup).toContain("Clear local data and discard saved plans");
+    expect(markup).not.toContain(
+      "Discard the saved all-supported fiscal-year plan from its run summary before starting another return.",
+    );
+  });
+
   it("will not restart without a signed-in portal tab", () => {
     // Restart clears local staging and removes the ledger before the runner
     // reaches its tab preflight, so an ungated click destroys the completed
