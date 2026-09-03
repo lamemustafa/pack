@@ -5,14 +5,14 @@ import { describe, expect, it } from "vitest";
 
 /**
  * The regression this file exists for is only observable in the emitted
- * bundle: `--mode alpha` once produced a React development build, and neither
+ * bundle: `--mode source-surfaces` once produced a React development build, and neither
  * a config-side-effect assertion nor a synthetic package fixture could see it.
  * Both stay green if WXT hook timing or the Vite React plugin changes, because
  * neither runs the real thing. This one builds it.
  */
 
 const rootDir = process.cwd();
-const ALPHA_OUTPUT = path.join(rootDir, ".output", "chrome-mv3-alpha");
+const SOURCE_SURFACES_OUTPUT = path.join(rootDir, ".output", "chrome-mv3-source-surfaces");
 
 function pnpmCommandFor(platform: NodeJS.Platform): string {
   return platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -40,7 +40,7 @@ async function listFiles(dir: string): Promise<string[]> {
   return nested.flat();
 }
 
-describe("the emitted alpha artifact", () => {
+describe("the emitted source-surfaces artifact", () => {
   it("uses the Windows pnpm executable when that platform runs the artifact test", () => {
     expect(pnpmCommandFor("win32")).toBe("pnpm.cmd");
     expect(pnpmCommandFor("darwin")).toBe("pnpm");
@@ -50,10 +50,10 @@ describe("the emitted alpha artifact", () => {
     // A successful process exit is not evidence that WXT refreshed this
     // directory. Clear a deliberately stale artifact first, then assert the
     // build is the source of every inspected file below.
-    await mkdir(ALPHA_OUTPUT, { recursive: true });
-    const staleProof = path.join(ALPHA_OUTPUT, "stale-alpha-artifact-proof");
+    await mkdir(SOURCE_SURFACES_OUTPUT, { recursive: true });
+    const staleProof = path.join(SOURCE_SURFACES_OUTPUT, "stale-source-surfaces-artifact-proof");
     await writeFile(staleProof, "stale");
-    await rm(ALPHA_OUTPUT, { force: true, recursive: true });
+    await rm(SOURCE_SURFACES_OUTPUT, { force: true, recursive: true });
     await expect(readFile(staleProof, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
     const built = await run(pnpmCommandFor(process.platform), [
@@ -61,11 +61,11 @@ describe("the emitted alpha artifact", () => {
       "wxt",
       "build",
       "--mode",
-      "alpha",
+      "source-surfaces",
     ]);
     expect(built.ok, built.output.slice(-2000)).toBe(true);
 
-    const files = await listFiles(ALPHA_OUTPUT);
+    const files = await listFiles(SOURCE_SURFACES_OUTPUT);
     const scripts = files.filter((file) => file.endsWith(".js"));
     expect(scripts.length).toBeGreaterThan(0);
 
@@ -77,7 +77,7 @@ describe("the emitted alpha artifact", () => {
     for (const marker of ["jsxDEV", "react/jsx-dev-runtime", "react-jsx-dev-runtime"]) {
       expect(
         sources.some((source) => source.includes(marker)),
-        `${marker} in the alpha build`,
+        `${marker} in the source-surfaces build`,
       ).toBe(false);
     }
 
@@ -87,29 +87,29 @@ describe("the emitted alpha artifact", () => {
       expect(/\/(?:Users|home|root|workspace)\/[^\s"']+\.tsx?/.test(source)).toBe(false);
     }
 
-    // Still an alpha build: the surface the mode exists to expose is present.
-    expect(sources.some((source) => source.includes("data-pack-alpha-surface"))).toBe(true);
+    // Still a source-surfaces build: the surface the mode exists to expose is present.
+    expect(sources.some((source) => source.includes("data-pack-source-surface"))).toBe(true);
 
     const verified = await run("node", [
       "scripts/verify-extension-package.mjs",
-      "--alpha",
-      ALPHA_OUTPUT,
+      "--source-surfaces",
+      SOURCE_SURFACES_OUTPUT,
     ]);
-    expect(verified.output).toContain("alpha extension package verification passed");
+    expect(verified.output).toContain("source-surfaces extension package verification passed");
     expect(verified.ok).toBe(true);
 
     const browserVerified = await run("node", [
       "scripts/verify-extension-browser.mjs",
-      "--alpha",
-      ALPHA_OUTPUT,
+      "--source-surfaces",
+      SOURCE_SURFACES_OUTPUT,
     ]);
     expect(browserVerified.output).toContain('"status": "pass"');
     expect(browserVerified.ok).toBe(true);
 
     const mistypedBrowserFlag = await run("node", [
       "scripts/verify-extension-browser.mjs",
-      "--aplha",
-      ALPHA_OUTPUT,
+      "--source-surface",
+      SOURCE_SURFACES_OUTPUT,
     ]);
     expect(mistypedBrowserFlag.ok).toBe(false);
     expect(mistypedBrowserFlag.output).toContain(

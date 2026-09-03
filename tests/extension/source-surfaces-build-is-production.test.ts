@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import config from "../../wxt.config";
 
 /**
- * `--mode alpha` selects which surfaces compile in. It is not a development
+ * `--mode source-surfaces` selects which surfaces compile in. It is not a development
  * mode, but Vite derives `isProduction` from NODE_ENV and only defaults that
- * to production when the mode is literally "production" -- so alpha builds
+ * to production when the mode is literally "production" -- so source-surfaces builds
  * shipped the React development JSX transform and inlined absolute source
- * paths, including the builder's home directory, into the bundle. Alpha is
+ * paths, including the builder's home directory, into the bundle. Source-surfaces is
  * the build live testing runs against, so it has to be a production build
  * that merely exposes more surface.
  */
@@ -29,9 +29,9 @@ function resolveVite(mode: string, command: "build" | "serve") {
   return { nodeEnv: process.env.NODE_ENV, returned };
 }
 
-describe("alpha builds are production builds", () => {
-  it("puts the alpha build in production so it carries no development transform", () => {
-    expect(resolveVite("alpha", "build").nodeEnv).toBe("production");
+describe("source-surfaces builds are production builds", () => {
+  it("puts the source-surfaces build in production so it carries no development transform", () => {
+    expect(resolveVite("source-surfaces", "build").nodeEnv).toBe("production");
   });
 
   it("leaves the packaged production build in production too", () => {
@@ -39,20 +39,20 @@ describe("alpha builds are production builds", () => {
   });
 
   it("does not force production onto a dev server, whichever mode it serves", () => {
-    // `wxt dev --mode alpha` serves the gated UI and needs the development
+    // `wxt dev --mode source-surfaces` serves the gated UI and needs the development
     // transform and refresh. Keying this off the mode rather than the command
     // broke exactly that combination, and an earlier version of this test hid
     // it by passing command "build" for the case it labelled "development".
     expect(resolveVite("development", "serve").nodeEnv).toBeUndefined();
-    expect(resolveVite("alpha", "serve").nodeEnv).toBeUndefined();
+    expect(resolveVite("source-surfaces", "serve").nodeEnv).toBeUndefined();
     expect(resolveVite("production", "serve").nodeEnv).toBeUndefined();
   });
 
   it("never rewrites the mode itself", () => {
-    // The alpha gate folds on `import.meta.env.MODE === "alpha"`. Returning a
+    // The source-surfaces gate folds on `import.meta.env.MODE === "source-surfaces"`. Returning a
     // different mode from this hook would silently delete every gated surface
     // while leaving the build green.
-    const { returned } = resolveVite("alpha", "build");
+    const { returned } = resolveVite("source-surfaces", "build");
     expect(returned).not.toHaveProperty("mode");
   });
 });

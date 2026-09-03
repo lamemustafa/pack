@@ -99,7 +99,7 @@ function renderSummary(
 
 describe("whole-panel cleanup action", () => {
   beforeEach(() => {
-    vi.stubEnv("MODE", "alpha");
+    vi.stubEnv("MODE", "source-surfaces");
     dom = new JSDOM("<div id='root'></div>", {
       pretendToBeVisual: true,
       url: "https://extension.test",
