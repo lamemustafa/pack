@@ -212,11 +212,11 @@ describe("panel surface", () => {
     expect(markup).not.toContain("Which return?");
   });
 
-  it("keeps full-year alpha surfaces out of the default packaged chooser", () => {
+  it("keeps full-year source-surfaces surfaces out of the default packaged chooser", () => {
     const markup = renderToStaticMarkup(<PanelSurface pack={controller()} />);
     expect(markup).toContain("Choose return, year and period");
     expect(markup).not.toContain("This year&#x27;s GSTR-3B");
-    expect(markup).not.toContain("data-pack-alpha-surface");
+    expect(markup).not.toContain("data-pack-source-surface");
     expect(markup).not.toContain("Catalogue &amp; limits");
     expect(markup).not.toContain("Step 1 of 4");
   });

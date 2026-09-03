@@ -92,7 +92,7 @@ describe("popup background failure presentation", () => {
     });
   });
 
-  it("routes the all-supported alpha recipe through its distinct root-plan message", async () => {
+  it("routes the all-supported source-surfaces recipe through its distinct root-plan message", async () => {
     mocks.sendMessage.mockImplementation((message: PackMessage) => {
       if (message.type === "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW") {
         return Promise.resolve({

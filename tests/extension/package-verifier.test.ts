@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const rootDir = process.cwd();
 const createdDirs: string[] = [];
-const renderedAlphaSurface =
-  'const surface = runtime.jsx("section", { "data-pack-alpha-surface": "full-fiscal-year" });\nexport default surface;\n';
+const renderedSourceSurface =
+  'const surface = runtime.jsx("section", { "data-pack-source-surface": "full-fiscal-year" });\nexport default surface;\n';
 
 describe("extension package verifier", () => {
   afterEach(async () => {
@@ -198,18 +198,18 @@ describe("extension package verifier", () => {
     }
   });
 
-  it("rejects an alpha-only panel marker in a packaged artifact", async () => {
+  it("rejects a source-surface-only panel marker in a packaged artifact", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
       outputDir,
-      "assets/alpha-panel.js",
-      'const marker = "data-pack-alpha-surface";',
+      "assets/source-surfaces-panel.js",
+      'const marker = "data-pack-source-surface";',
     );
 
     const result = await runVerifier(outputDir);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("Alpha surface marker data-pack-alpha-surface");
+    expect(result.output).toContain("Source-surfaces surface marker data-pack-source-surface");
   });
 
   it("rejects sensitive policy markers from the vendored harness snapshot", async () => {
@@ -559,21 +559,21 @@ describe("action-to-panel binding", () => {
   });
 });
 
-describe("alpha builds", () => {
-  // An alpha build is what live testing runs against, and it went unverified
+describe("source-surfaces builds", () => {
+  // A source-surfaces build is what live testing runs against, and it went unverified
   // entirely: pointed at that output the marker check refused it before any
   // other check ran, so a real leak -- the React development transform and an
   // absolute builder path -- sat in it undetected.
-  it("requires the alpha surface the build exists to carry", async () => {
+  it("requires the source-surfaces surface the build exists to carry", async () => {
     const outputDir = await createValidPackage();
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("this is not an alpha build");
+    expect(result.output).toContain("this is not a source-surfaces build");
   });
 
-  it("rejects a mistyped alpha option instead of falling back to package verification", async () => {
+  it("rejects a mistyped source-surfaces option instead of falling back to package verification", async () => {
     const outputDir = await createValidPackage();
 
     const result = await runVerifier(outputDir, {}, ["--aplha"]);
@@ -582,22 +582,22 @@ describe("alpha builds", () => {
     expect(result.output).toContain("usage: node scripts/verify-extension-package.mjs");
   });
 
-  it("accepts an alpha build whose panel actually loads the gated surface", async () => {
+  it("accepts a source-surfaces build whose panel actually loads the gated surface", async () => {
     const outputDir = await createValidPackage();
     await writeFile(
       path.join(outputDir, "chunks", "panel.js"),
-      'import "./alpha-surface.js";\nexport default 1;\n',
+      'import "./source-surface.js";\nexport default 1;\n',
       "utf8",
     );
     await writeFile(
-      path.join(outputDir, "chunks", "alpha-surface.js"),
-      renderedAlphaSurface,
+      path.join(outputDir, "chunks", "source-surface.js"),
+      renderedSourceSurface,
       "utf8",
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
-    expect(result.output).toContain("alpha extension package verification passed");
+    expect(result.output).toContain("source-surfaces extension package verification passed");
     expect(result.status).toBe(0);
   });
 
@@ -605,11 +605,11 @@ describe("alpha builds", () => {
     const outputDir = await createValidPackage();
     await writeFile(
       path.join(outputDir, "chunks", "panel.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
       "utf8",
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("reachable from the panel");
@@ -619,42 +619,42 @@ describe("alpha builds", () => {
     const outputDir = await createValidPackage();
     await writeFile(
       path.join(outputDir, "chunks", "panel.js"),
-      'const surface: string = runtime.jsx("section", { "data-pack-alpha-surface": "full-fiscal-year" });\nexport default surface;\n',
+      'const surface: string = runtime.jsx("section", { "data-pack-source-surface": "full-fiscal-year" });\nexport default surface;\n',
       "utf8",
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("Malformed reachable module: chunks/panel.js");
   });
 
-  it("traces a panel import graph when the alpha output argument is relative", async () => {
+  it("traces a panel import graph when the source-surfaces output argument is relative", async () => {
     const outputDir = await createValidPackage();
     await writeFile(
       path.join(outputDir, "chunks", "panel.js"),
-      'import "./alpha-surface.js";\nexport default 1;\n',
+      'import "./source-surface.js";\nexport default 1;\n',
       "utf8",
     );
     await writeFile(
-      path.join(outputDir, "chunks", "alpha-surface.js"),
-      renderedAlphaSurface,
+      path.join(outputDir, "chunks", "source-surface.js"),
+      renderedSourceSurface,
       "utf8",
     );
 
-    const result = await runVerifier(path.relative(rootDir, outputDir), {}, ["--alpha"]);
+    const result = await runVerifier(path.relative(rootDir, outputDir), {}, ["--source-surfaces"]);
 
     expect(result.status).toBe(0);
-    expect(result.output).toContain("alpha extension package verification passed");
+    expect(result.output).toContain("source-surfaces extension package verification passed");
   });
 
   it("refuses a marker no entry can reach", async () => {
     // A gated surface compiled out of the panel while a stale chunk still holds
     // the string would otherwise read as a correctly gated build.
     const outputDir = await createValidPackage();
-    await writeFile(path.join(outputDir, "orphan-surface.js"), renderedAlphaSurface, "utf8");
+    await writeFile(path.join(outputDir, "orphan-surface.js"), renderedSourceSurface, "utf8");
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("reachable from the panel");
@@ -664,16 +664,16 @@ describe("alpha builds", () => {
     const outputDir = await createValidPackage();
     await writeFile(
       path.join(outputDir, "chunks", "panel.js"),
-      "const example = 'import \"./alpha-surface.js\"';\nexport default example;\n",
+      "const example = 'import \"./source-surface.js\"';\nexport default example;\n",
       "utf8",
     );
     await writeFile(
-      path.join(outputDir, "chunks", "alpha-surface.js"),
-      renderedAlphaSurface,
+      path.join(outputDir, "chunks", "source-surface.js"),
+      renderedSourceSurface,
       "utf8",
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("reachable from the panel");
@@ -684,15 +684,15 @@ describe("alpha builds", () => {
     await writePackageFile(
       outputDir,
       "panel.html",
-      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><!-- <script type="module" src="/chunks/alpha-surface.js"></script> --></body></html>',
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><!-- <script type="module" src="/chunks/source-surface.js"></script> --></body></html>',
     );
     await writePackageFile(
       outputDir,
-      "chunks/alpha-surface.js",
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "chunks/source-surface.js",
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("reachable from the panel");
@@ -703,15 +703,15 @@ describe("alpha builds", () => {
     await writePackageFile(
       outputDir,
       "panel.html",
-      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="application/json" src="/chunks/alpha-surface.js"></script></body></html>',
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="application/json" src="/chunks/source-surface.js"></script></body></html>',
     );
     await writePackageFile(
       outputDir,
-      "chunks/alpha-surface.js",
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "chunks/source-surface.js",
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("reachable from the panel");
@@ -720,15 +720,15 @@ describe("alpha builds", () => {
   it.each([
     [
       "a noscript panel tag",
-      '<noscript><script type="module" src="/chunks/alpha-surface.js"></script></noscript>',
+      '<noscript><script type="module" src="/chunks/source-surface.js"></script></noscript>',
     ],
     [
       "an SVG script element",
-      '<svg><script type="module" src="/chunks/alpha-surface.js"></script></svg>',
+      '<svg><script type="module" src="/chunks/source-surface.js"></script></svg>',
     ],
     [
       "a document base",
-      '<base href="https://example.invalid/"><script type="module" src="/chunks/alpha-surface.js"></script>',
+      '<base href="https://example.invalid/"><script type="module" src="/chunks/source-surface.js"></script>',
     ],
   ])("does not use %s as a panel module entry", async (_label, inertMarkup) => {
     const outputDir = await createValidPackage();
@@ -739,11 +739,11 @@ describe("alpha builds", () => {
     );
     await writePackageFile(
       outputDir,
-      "chunks/alpha-surface.js",
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "chunks/source-surface.js",
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("reachable from the panel");
@@ -754,18 +754,18 @@ describe("alpha builds", () => {
     await writePackageFile(
       outputDir,
       "chunks/panel.js",
-      'import "//chunks/alpha-surface.js";\nexport default 1;\n',
+      'import "//chunks/source-surface.js";\nexport default 1;\n',
     );
     await writePackageFile(
       outputDir,
-      "chunks/alpha-surface.js",
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "chunks/source-surface.js",
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain('Unresolved static import "//chunks/alpha-surface.js"');
+    expect(result.output).toContain('Unresolved static import "//chunks/source-surface.js"');
   });
 
   it("does not resolve a module fragment as a packaged filename", async () => {
@@ -773,14 +773,14 @@ describe("alpha builds", () => {
     await writePackageFile(
       outputDir,
       "chunks/panel.js",
-      'import "./alpha-surface#proof.js";\nexport default 1;\n',
+      'import "./source-surface#proof.js";\nexport default 1;\n',
     );
-    await writePackageFile(outputDir, "chunks/alpha-surface#proof.js", renderedAlphaSurface);
+    await writePackageFile(outputDir, "chunks/source-surface#proof.js", renderedSourceSurface);
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain('Unresolved static import "./alpha-surface#proof.js"');
+    expect(result.output).toContain('Unresolved static import "./source-surface#proof.js"');
   });
 
   it("rejects a non-JavaScript module entry before its marker can count", async () => {
@@ -788,14 +788,14 @@ describe("alpha builds", () => {
     await writePackageFile(
       outputDir,
       "panel.html",
-      '<!doctype html><html><body><script type="module" src="/chunks/alpha.json"></script></body></html>',
+      '<!doctype html><html><body><script type="module" src="/chunks/source-surface.json"></script></body></html>',
     );
-    await writePackageFile(outputDir, "chunks/alpha.json", renderedAlphaSurface);
+    await writePackageFile(outputDir, "chunks/source-surface.json", renderedSourceSurface);
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("Non-JavaScript module resource: chunks/alpha.json");
+    expect(result.output).toContain("Non-JavaScript module resource: chunks/source-surface.json");
   });
 
   it("does not follow a static import recovered from malformed JavaScript", async () => {
@@ -803,33 +803,33 @@ describe("alpha builds", () => {
     await writePackageFile(
       outputDir,
       "chunks/panel.js",
-      'import "./alpha-surface.js";\nconst broken = ;\n',
+      'import "./source-surface.js";\nconst broken = ;\n',
     );
     await writePackageFile(
       outputDir,
-      "chunks/alpha-surface.js",
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      "chunks/source-surface.js",
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("Malformed reachable module: chunks/panel.js");
   });
 
-  it("rejects a malformed reachable module even when it contains the alpha marker", async () => {
+  it("rejects a malformed reachable module even when it contains the source-surfaces marker", async () => {
     const outputDir = await createValidPackage();
-    await writePackageFile(outputDir, "chunks/panel.js", renderedAlphaSurface);
+    await writePackageFile(outputDir, "chunks/panel.js", renderedSourceSurface);
 
-    const validResult = await runVerifier(outputDir, {}, ["--alpha"]);
+    const validResult = await runVerifier(outputDir, {}, ["--source-surfaces"]);
     expect(validResult.status).toBe(0);
 
     await writePackageFile(
       outputDir,
       "chunks/panel.js",
-      'const surface = "data-pack-alpha-surface";\nconst broken = ;\n',
+      'const surface = "data-pack-source-surface";\nconst broken = ;\n',
     );
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("Malformed reachable module: chunks/panel.js");
@@ -837,74 +837,74 @@ describe("alpha builds", () => {
 
   it("rejects a marker-bearing module whose static dependency is unresolved", async () => {
     const outputDir = await createValidPackage();
-    await writePackageFile(outputDir, "chunks/panel.js", renderedAlphaSurface);
+    await writePackageFile(outputDir, "chunks/panel.js", renderedSourceSurface);
 
-    const validResult = await runVerifier(outputDir, {}, ["--alpha"]);
+    const validResult = await runVerifier(outputDir, {}, ["--source-surfaces"]);
     expect(validResult.status).toBe(0);
 
     await writePackageFile(
       outputDir,
       "chunks/panel.js",
-      'import "./missing.js";\nconst surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      'import "./missing.js";\nconst surface = "data-pack-source-surface";\nexport default surface;\n',
     );
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain('Unresolved static import "./missing.js" from chunks/panel.js');
   });
 
-  it("refuses a rendered alpha marker only another extension page can reach", async () => {
+  it("refuses a rendered source-surfaces marker only another extension page can reach", async () => {
     const outputDir = await createValidPackage();
     // The marker is rendered in offscreen.html, but no panel module can reach it.
     // This names the package-verifier boundary directly rather than relying on
     // the separate unrendered-marker guard.
     await writeFile(
       path.join(outputDir, "chunks", "offscreen.js"),
-      'import "./alpha-surface.js";\nexport default 1;\n',
+      'import "./source-surface.js";\nexport default 1;\n',
       "utf8",
     );
     await writeFile(
-      path.join(outputDir, "chunks", "alpha-surface.js"),
-      renderedAlphaSurface,
+      path.join(outputDir, "chunks", "source-surface.js"),
+      renderedSourceSurface,
       "utf8",
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("reachable from the panel");
   });
 
-  it("refuses the React development transform in an alpha build", async () => {
+  it("refuses the React development transform in a source-surfaces build", async () => {
     // Names the transform rather than inferring it from a leaked home path: a
     // build made under a directory the redaction policy does not recognise
     // leaks nothing recognisable and would otherwise pass.
     const outputDir = await createValidPackage();
     await writeFile(
       path.join(outputDir, "chunks", "panel.js"),
-      'import "./alpha-surface.js";\nconst jsxDEV = "react/jsx-dev-runtime";\nexport default jsxDEV;\n',
+      'import "./source-surface.js";\nconst jsxDEV = "react/jsx-dev-runtime";\nexport default jsxDEV;\n',
       "utf8",
     );
     await writeFile(
-      path.join(outputDir, "chunks", "alpha-surface.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      path.join(outputDir, "chunks", "source-surface.js"),
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
       "utf8",
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("this is a development build");
   });
 
-  it("still rejects a builder path in an alpha build", async () => {
-    // The regression this mode exists for: a development-mode alpha build
+  it("still rejects a builder path in a source-surfaces build", async () => {
+    // The regression this mode exists for: a development-mode source-surfaces build
     // inlines an absolute source path containing the builder's home
-    // directory. Every other check applies to an alpha build unchanged.
+    // directory. Every other check applies to a source-surfaces build unchanged.
     const outputDir = await createValidPackage();
     await writeFile(
-      path.join(outputDir, "alpha-surface.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      path.join(outputDir, "source-surface.js"),
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
       "utf8",
     );
     await writeFile(
@@ -913,7 +913,7 @@ describe("alpha builds", () => {
       "utf8",
     );
 
-    const result = await runVerifier(outputDir, {}, ["--alpha"]);
+    const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("home-path");
@@ -922,15 +922,15 @@ describe("alpha builds", () => {
   it("keeps refusing the marker in a packaged build", async () => {
     const outputDir = await createValidPackage();
     await writeFile(
-      path.join(outputDir, "alpha-surface.js"),
-      'const surface = "data-pack-alpha-surface";\nexport default surface;\n',
+      path.join(outputDir, "source-surface.js"),
+      'const surface = "data-pack-source-surface";\nexport default surface;\n',
       "utf8",
     );
 
     const result = await runVerifier(outputDir);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("Alpha surface marker");
+    expect(result.output).toContain("Source-surfaces surface marker");
   });
 });
 
