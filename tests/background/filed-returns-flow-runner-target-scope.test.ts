@@ -8,6 +8,7 @@ import {
   getFiledReturnsFullFiscalYearPeriods,
 } from "../../src/connectors/gst/filed-returns-scope";
 import type * as FiledReturnsTargetReviewModule from "../../src/background/filed-returns-target-review";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
 import type * as AllSupportedCatalogueModule from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 
 const mocks = vi.hoisted(() => ({
@@ -86,9 +87,15 @@ vi.mock(
     readRetainedPlanLedgers: fullFiscalYearRunStateMocks.readRetainedPlanLedgers,
   }),
 );
+// Partial: replacing the module wholesale hid every export the runner did not
+// already use, so adding one surfaced as a missing-export failure in three
+// unrelated tests rather than at the call site.
 vi.mock(
   "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state",
-  () => allSupportedRunStateMocks,
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    ...allSupportedRunStateMocks,
+  }),
 );
 vi.mock(
   "../../src/background/filed-returns-all-supported-full-fiscal-year",
@@ -260,6 +267,7 @@ describe("filed returns retained target scoping", () => {
   it.each([
     ["provenance-unavailable", "all-supported-full-fiscal-year-plan-provenance-unavailable"],
     ["removal-pending", "all-supported-full-fiscal-year-plan-removal-recovery-pending"],
+    ["malformed", "all-supported-full-fiscal-year-plan-index-malformed"],
   ] as const)("blocks an atomic start while saved-plan state is %s", async (state, signal) => {
     const requestedScope = {
       artifactType: "PDF",
@@ -274,7 +282,21 @@ describe("filed returns retained target scoping", () => {
       storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" },
     } as never);
 
-    expect(response).toMatchObject({ flowStep: { state: "blocked", safeSignals: [signal] } });
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: [signal],
+        // Only an interrupted removal recovers by itself. Telling the reader to
+        // wait for a recovery that never finishes is the failure this pins, and
+        // a malformed index reached that message by being a ternary's default.
+        userAction: {
+          message:
+            state === "removal-pending"
+              ? expect.stringContaining("Retry after Pack finishes")
+              : expect.stringContaining(PACK_CLEAR_LOCAL_DATA_ACTION_LABEL),
+        },
+      },
+    });
     expect(activeRunMocks.acquireFiledReturnsRun).not.toHaveBeenCalled();
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
