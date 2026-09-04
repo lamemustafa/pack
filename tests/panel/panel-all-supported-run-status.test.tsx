@@ -91,7 +91,7 @@ function actionButton(markup: string, label: string): string {
   return markup.slice(markup.lastIndexOf("<button", index), index);
 }
 const restartButton = (markup: string) =>
-  actionButton(markup, "Discard this year&#x27;s saved plan and run again");
+  actionButton(markup, "Discard the saved FY 2025-26 plan and run again");
 const resumeButton = (markup: string) => actionButton(markup, "Resume this plan");
 const retryTargetButton = (markup: string) =>
   actionButton(markup, "Review Downloads, then retry GSTR-3B for April");
@@ -122,13 +122,13 @@ describe("all-supported panel progress", () => {
     const completed = summary(["saved", "not-filed"], "complete", [0, 1]);
 
     const packaged = render(completed);
-    expect(packaged).not.toContain("Discard this year&#x27;s saved plan and run again");
+    expect(packaged).not.toContain("Discard the saved FY 2025-26 plan and run again");
     expect(packaged).not.toContain("Resume this plan");
     // The summary itself still renders; only the actions are withheld.
     expect(packaged).toContain("Your pack · All supported returns · FY 2025-26");
 
     vi.stubEnv("MODE", "source-surfaces");
-    expect(render(completed)).toContain("Discard this year&#x27;s saved plan and run again");
+    expect(render(completed)).toContain("Discard the saved FY 2025-26 plan and run again");
   });
 
   it("renders an identity-less malformed-index block without a fiscal year or plan action", () => {
@@ -153,7 +153,7 @@ describe("all-supported panel progress", () => {
 
     expect(markup).toContain("Your pack · All supported returns");
     expect(markup).not.toContain("FY undefined");
-    expect(markup).not.toContain("Discard this year&#x27;s saved plan and run again");
+    expect(markup).not.toContain("Discard the saved FY 2025-26 plan and run again");
     expect(markup).not.toContain("Resume this plan");
     expect(markup).not.toContain("Review Downloads, then retry");
     expect(markup).toContain("Clear local data and discard saved plans");
@@ -170,7 +170,7 @@ describe("all-supported panel progress", () => {
     const completed = summary(["saved", "not-filed"], "complete", [0, 1]);
 
     const signedOut = render(completed, SIGNED_OUT);
-    expect(signedOut).toContain("Discard this year&#x27;s saved plan and run again");
+    expect(signedOut).toContain("Discard the saved FY 2025-26 plan and run again");
     expect(restartButton(signedOut)).toContain("disabled");
 
     expect(restartButton(render(completed))).not.toContain("disabled");
@@ -213,7 +213,7 @@ describe("all-supported panel progress", () => {
     const markup = render(summary(["saved", "not-filed"], "complete", [0, 1]));
 
     expect(markup).toContain("Your pack · All supported returns · FY 2025-26");
-    expect(markup).toContain("Discard this year&#x27;s saved plan and run again");
+    expect(markup).toContain("Discard the saved FY 2025-26 plan and run again");
     expect(markup).toContain("1 of 2 saved");
     expect(markup).toContain("browser may have saved the ZIP under a different name");
     expect(markup.indexOf("Your pack · All supported returns")).toBeLessThan(
@@ -327,7 +327,7 @@ describe("all-supported panel progress", () => {
 
     // This all-returns preset is source-surfaces-only. Its rendered restart control is
     // the precondition that keeps the grouped-evidence assertions non-vacuous.
-    expect(markup).toContain("Discard this year&#x27;s saved plan and run everything last year");
+    expect(markup).toContain("Discard the saved FY 2025-26 plan and run everything last year");
     expect(markup.match(/class="evidence-row /g)).toHaveLength(36);
     expect(markup).toContain('aria-label="GSTR-1 results"');
     expect(markup).toContain('aria-label="GSTR-2B results"');
