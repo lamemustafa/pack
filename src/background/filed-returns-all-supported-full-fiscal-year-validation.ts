@@ -308,6 +308,12 @@ function isTargetPlan(
     if (!isPeriodPlan(periodPlan, financialYear, planProvenance.returnPlan)) {
       return false;
     }
+    const latestPlannedPeriodIndex = Math.max(
+      ...periodPlan.flatMap((plan) =>
+        plan.periods.map((period) => FILED_RETURNS_MONTHS.indexOf(period)),
+      ),
+    );
+    if (FILED_RETURNS_MONTHS[latestPlannedPeriodIndex] !== eligibleThrough) return false;
     const expectedTargetCount = periodPlan.reduce((count, plan) => count + plan.periods.length, 0);
     if (input.length !== expectedTargetCount) return false;
     let index = 0;

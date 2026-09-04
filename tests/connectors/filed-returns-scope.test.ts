@@ -7,6 +7,7 @@ import {
   getFiledReturnsPeriodOptions,
   getFiledReturnsScopePeriodOptions,
   isFullFiscalYearScope,
+  isStructurallySupportedFiledReturnsStartScope,
   isSupportedFiledReturnsScope,
   isSupportedFiledReturnsStartScope,
   normaliseFiledReturnsScope,
@@ -375,6 +376,22 @@ describe("filed returns GST scope", () => {
         new Date("2027-05-12T00:00:00+05:30"),
       ),
     ).toBe(true);
+  });
+
+  it("rejects future current-FY months from structural recovery validation", () => {
+    const asOf = new Date("2026-09-04T00:00:00+05:30");
+    expect(
+      isStructurallySupportedFiledReturnsStartScope(
+        { financialYear: "2026-27", period: "August", returnType: "GSTR-3B" },
+        asOf,
+      ),
+    ).toBe(true);
+    expect(
+      isStructurallySupportedFiledReturnsStartScope(
+        { financialYear: "2026-27", period: "March", returnType: "GSTR-3B" },
+        asOf,
+      ),
+    ).toBe(false);
   });
 
   it("rejects unsupported fiscal years and months", () => {

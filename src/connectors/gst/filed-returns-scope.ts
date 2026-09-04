@@ -202,6 +202,10 @@ export function isStructurallySupportedFiledReturnsStartScope(
   if (isFullFiscalYearScope(input)) return supportsFullFiscalYearFiledReturnsRun(input.returnType);
   if (!(FILED_RETURNS_MONTHS as readonly string[]).includes(input.period)) return false;
   const period = input.period as FiledReturnsMonth;
+  if (input.financialYear === getFiledReturnsFinancialYearOptions(asOf)[0]) {
+    const currentFiscalMonthIndex = (getIndianDateParts(asOf).monthIndex + 9) % 12;
+    if (FILED_RETURNS_MONTHS.indexOf(period) >= currentFiscalMonthIndex) return false;
+  }
   return (
     input.financialYear !== GST_LAUNCH_FINANCIAL_YEAR ||
     FILED_RETURNS_MONTHS.indexOf(period) >= FILED_RETURNS_MONTHS.indexOf(GST_LAUNCH_MONTH)
