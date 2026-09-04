@@ -84,6 +84,10 @@ describe("all-supported full-fiscal-year ledger", () => {
     expect(ledger.targetPlan.every((target) => target.concreteArtifactTypes.length > 0)).toBe(true);
   });
 
+  it.each([null, false, "", 0])("rejects a present non-array period plan: %j", (periodPlan) => {
+    expect(isAllSupportedFullFiscalYearLedger({ ...createLedger(), periodPlan })).toBe(false);
+  });
+
   it("rejects a persisted plan whose repeated return group is reordered or shortened", () => {
     const ledger = createLedger();
     const reordered = {

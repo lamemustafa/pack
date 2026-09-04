@@ -364,6 +364,19 @@ describe("filed returns GST scope", () => {
     );
   });
 
+  it("uses the supplied instant for structural start validation", () => {
+    expect(
+      isSupportedFiledReturnsStartScope(
+        {
+          financialYear: "2027-28",
+          period: "April",
+          returnType: "GSTR-1",
+        },
+        new Date("2027-05-12T00:00:00+05:30"),
+      ),
+    ).toBe(true);
+  });
+
   it("rejects unsupported fiscal years and months", () => {
     expect(
       isSupportedFiledReturnsScope({

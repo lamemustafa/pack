@@ -304,7 +304,7 @@ function isTargetPlan(
   periodPlan: unknown,
 ): input is FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[] {
   if (!Array.isArray(input) || input.length === 0) return false;
-  if (periodPlan) {
+  if (periodPlan !== undefined) {
     if (!isPeriodPlan(periodPlan, financialYear, planProvenance.returnPlan)) {
       return false;
     }

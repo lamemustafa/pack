@@ -221,7 +221,7 @@ export function isSupportedFiledReturnsStartScope(
   input: FiledReturnsDownloadScope,
   asOf = new Date(),
 ): boolean {
-  if (!isStructurallySupportedFiledReturnsStartScope(input)) return false;
+  if (!isStructurallySupportedFiledReturnsStartScope(input, asOf)) return false;
   if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
   if (isFullFiscalYearScope(input)) {
     return (
