@@ -17,6 +17,7 @@ import {
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import {
+  discardAllReturnsPlanLabel,
   panelAllReturnsFullYearPreset,
   panelFullFiscalYearPresets,
   panelGuidedStepForDisplay,
@@ -461,6 +462,10 @@ function AllReturnsPreset({
   const restartable = onRestart !== undefined;
   const coverageLabel = displayedPlan.returnTypes.map(shortReturnLabel).join(" · ");
   const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
+  const restartLabel = discardAllReturnsPlanLabel(
+    displayedPlan.financialYear,
+    `run ${displayedPlan.label.toLowerCase()}`,
+  );
 
   return (
     <React.Fragment>
@@ -469,7 +474,7 @@ function AllReturnsPreset({
         type="button"
         disabled={disabled}
         aria-describedby={disabledReason ? (sharedDisabledReasonId ?? disabledReasonId) : undefined}
-        aria-label={`${restartable ? `Discard this year's saved plan and run ${displayedPlan.label.toLowerCase()}` : displayedPlan.label}. ${coverageLabel}.`}
+        aria-label={`${restartable ? restartLabel : displayedPlan.label}. ${coverageLabel}.`}
         onClick={() => {
           if (onRestart) {
             // Restart discards a completed plan and starts a new one. A panel
@@ -502,11 +507,7 @@ function AllReturnsPreset({
           onStart({ kind: plan.kind, financialYear: plan.financialYear });
         }}
       >
-        <span>
-          {restartable
-            ? `Discard this year's saved plan and run ${displayedPlan.label.toLowerCase()}`
-            : displayedPlan.label}
-        </span>
+        <span>{restartable ? restartLabel : displayedPlan.label}</span>
         <span className="panel-everything-preset-coverage">{coverageLabel}</span>
       </button>
       {disabledReason && !sharedDisabledReasonId ? (

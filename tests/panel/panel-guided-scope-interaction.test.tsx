@@ -743,7 +743,7 @@ describe("panel guided scope interaction", () => {
 
     // Fresh: the displayed periods still match the live plan, and the request
     // names the ledger the reader reviewed rather than only its fiscal year.
-    await clickButtonContaining("Discard this year's saved plan and run again");
+    await clickButtonContaining("Discard the saved FY 2026-27 plan and run again");
     expect(restart).toHaveBeenCalledExactlyOnceWith({
       kind: "all-supported-returns-full-fiscal-year",
       financialYear: "2026-27",
@@ -757,7 +757,7 @@ describe("panel guided scope interaction", () => {
     expect(panelAllReturnsFullYearPreset("2026-27")?.periodCount).toBeGreaterThan(
       eligibleNow.length,
     );
-    await clickButtonContaining("Discard this year's saved plan and run again");
+    await clickButtonContaining("Discard the saved FY 2026-27 plan and run again");
     expect(restart).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalled();
   });
@@ -799,7 +799,7 @@ describe("panel guided scope interaction", () => {
       false,
     );
 
-    await clickButtonContaining("Discard this year's saved plan and run again");
+    await clickButtonContaining("Discard the saved FY 2026-27 plan and run again");
 
     expect(refresh).toHaveBeenCalledOnce();
     expect(restart).not.toHaveBeenCalled();
@@ -963,9 +963,20 @@ describe("panel guided scope interaction", () => {
         .filter((preset) => !preset.classList.contains("panel-everything-preset"))
         .every((preset) => !preset.disabled),
     ).toBe(true);
-    expect(container.textContent).toContain("Discard this year's saved plan and run again");
-    expect(container.textContent).toContain(
-      "Discard this year's saved plan and run everything last year",
+    const summaryRestart = container.querySelector<HTMLButtonElement>(
+      ".panel-all-supported-action",
+    );
+    const summaryRestartLabel = "Discard the saved FY 2025-26 plan and run again";
+    expect(summaryRestart?.textContent?.trim()).toBe(summaryRestartLabel);
+    expect(summaryRestart?.getAttribute("aria-label")).toBe(summaryRestartLabel);
+
+    const priorYearPresetRestart = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),
+    ).find((button) => button.textContent?.includes("run everything last year"));
+    const priorYearPresetLabel = "Discard the saved FY 2025-26 plan and run everything last year";
+    expect(priorYearPresetRestart?.querySelector("span")?.textContent).toBe(priorYearPresetLabel);
+    expect(priorYearPresetRestart?.getAttribute("aria-label")).toBe(
+      `${priorYearPresetLabel}. 3B · R1 · 2B.`,
     );
   });
 
