@@ -756,11 +756,11 @@ describe("all-supported full-fiscal-year worker", () => {
 
     const periodPlan = savedLedger().periodPlan;
     expect(periodPlan).toEqual([
-      { returnType: "GSTR-3B", periods: [] },
+      { returnType: "GSTR-3B", periods: ["April", "May"] },
       { returnType: "GSTR-1", periods: ["April", "May", "June"] },
-      { returnType: "GSTR-2B", periods: [] },
+      { returnType: "GSTR-2B", periods: ["April", "May"] },
     ]);
-    expect(savedLedger().targetPlan.every((target) => target.returnType === "GSTR-1")).toBe(true);
+    expect(savedLedger().targetPlan.some((target) => target.returnType === "GSTR-1")).toBe(true);
   });
 
   it("does not replace a completed plan when clock correction narrows eligibility", async () => {

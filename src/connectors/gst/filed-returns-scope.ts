@@ -315,35 +315,35 @@ function getFiledReturnsPeriods(
 }
 
 /**
- * Pack does not know whether the signed-in taxpayer files monthly or under QRMP.
  * Verified 2026-09-04 against the GST Portal Returns FAQs: GSTR-1 Q10 gives the
  * 11th monthly and 13th post-quarterly dates; GSTR-2B Q4 gives the 14th monthly
  * and post-quarterly generation date; GSTR-3B Q4 gives the 20th monthly and
- * 22nd/24th post-quarterly dates. Use the later QRMP availability-or-filing cut-off
- * for each return type, using GSTR-2B's generation date and the other returns'
- * filing cut-offs, so the planner does not offer a period before that threshold.
+ * 22nd/24th post-quarterly dates. Pack uses the monthly dates as filing/generation
+ * eligibility thresholds for its planner: GSTR-2B's generation date and the other
+ * returns' filing cut-offs. They are not a claim about exact portal availability.
+ * A QRMP period may legitimately be absent until later; that must be a clean
+ * not-filed outcome rather than a stalled run (#286).
  */
 function isFiledReturnPeriodEligible(
   periodCalendar: { year: number; monthIndex: number },
   asOf: Date,
   returnType: FiledReturnsReturnType,
 ): boolean {
-  const cutoff = conservativeAvailabilityOrFilingCutoff(periodCalendar, returnType);
+  const cutoff = monthlyFilingOrGenerationEligibilityThreshold(periodCalendar, returnType);
   const today = getIndianDateParts(asOf);
   if (today.year !== cutoff.year) return today.year > cutoff.year;
   if (today.monthIndex !== cutoff.monthIndex) return today.monthIndex > cutoff.monthIndex;
   return today.day >= cutoff.day;
 }
 
-function conservativeAvailabilityOrFilingCutoff(
+function monthlyFilingOrGenerationEligibilityThreshold(
   periodCalendar: { year: number; monthIndex: number },
   returnType: FiledReturnsReturnType,
 ): { year: number; monthIndex: number; day: number } {
-  const quarterEndMonthIndex = Math.floor(periodCalendar.monthIndex / 3) * 3 + 2;
-  const firstFollowingMonthIndex = (quarterEndMonthIndex + 1) % 12;
-  const firstFollowingMonthYear = periodCalendar.year + (quarterEndMonthIndex === 11 ? 1 : 0);
-  const day = returnType === "GSTR-1" ? 13 : returnType === "GSTR-2B" ? 14 : 24;
-  return { year: firstFollowingMonthYear, monthIndex: firstFollowingMonthIndex, day };
+  const followingMonthIndex = (periodCalendar.monthIndex + 1) % 12;
+  const followingMonthYear = periodCalendar.year + (periodCalendar.monthIndex === 11 ? 1 : 0);
+  const day = returnType === "GSTR-1" ? 11 : returnType === "GSTR-2B" ? 14 : 20;
+  return { year: followingMonthYear, monthIndex: followingMonthIndex, day };
 }
 
 function parseFinancialYearStartYear(financialYear: string): number | null {

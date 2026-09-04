@@ -706,7 +706,7 @@ describe("panel guided scope interaction", () => {
     vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
     const restart = vi.fn(async () => undefined);
     const refresh = vi.fn(async () => undefined);
-    const eligibleNow = ["April", "May", "June"] as const;
+    const eligibleNow = ["April", "May", "June", "July"] as const;
     expect(panelAllReturnsFullYearPreset("2026-27")?.periodCount).toBe(eligibleNow.length);
     await mount(
       {
