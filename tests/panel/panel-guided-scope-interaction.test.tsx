@@ -1099,8 +1099,16 @@ describe("panel guided scope interaction", () => {
         }),
       ]),
     );
-    expect(container.textContent).toContain(
-      "Discard the saved all-supported fiscal-year plan from its run summary before starting another return.",
+    const sharedReason =
+      "Discard the saved all-supported fiscal-year plan from its run summary before starting another return.";
+    expect(container.textContent).toContain(sharedReason);
+    expect(container.querySelectorAll(".panel-preset-reason")).toHaveLength(1);
+    const blockedPresets = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
+    );
+    expect(blockedPresets.length).toBeGreaterThan(1);
+    expect(blockedPresets.map((preset) => preset.getAttribute("aria-describedby"))).toEqual(
+      Array(blockedPresets.length).fill("panel-presets-shared-reason"),
     );
   });
 
@@ -1123,7 +1131,7 @@ describe("panel guided scope interaction", () => {
     );
     expect(presets.length).toBeGreaterThan(0);
     const reasonIds = presets.map((preset) => preset.getAttribute("aria-describedby"));
-    expect(new Set(reasonIds).size).toBe(reasonIds.length);
+    expect(new Set(reasonIds)).toEqual(new Set(["panel-presets-shared-reason"]));
     for (const preset of presets) {
       expect(preset.disabled).toBe(true);
       const reasonId = preset.getAttribute("aria-describedby");
