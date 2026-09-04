@@ -1153,6 +1153,24 @@ describe("panel guided scope interaction", () => {
     }
   });
 
+  it("keeps individual sign-in reasons when no saved-plan block is shared", async () => {
+    await mountGuidedScope({ portalSignedIn: false, savedRun: null });
+
+    const presets = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".panel-preset-list button"),
+    );
+    expect(presets.length).toBeGreaterThan(1);
+    expect(container.querySelector("#panel-presets-shared-reason")).toBeNull();
+    for (const preset of presets) {
+      expect(preset.disabled).toBe(true);
+      const reasonId = preset.getAttribute("aria-describedby");
+      expect(reasonId).toMatch(/^preset-.+-reason$/);
+      expect(reasonId && dom.window.document.getElementById(reasonId)?.textContent).toContain(
+        "Open a signed-in GST Portal tab to continue.",
+      );
+    }
+  });
+
   it("renders the sign-in recovery state instead of preset controls on the authentication landing page", async () => {
     await mount(
       {

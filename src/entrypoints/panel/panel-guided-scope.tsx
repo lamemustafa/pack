@@ -198,7 +198,7 @@ export function PanelGuidedScope({
                     key={preset.financialYear}
                     busy={busy}
                     externalBlock={presetBlock}
-                    {...(presetBlock === sharedExternalBlock
+                    {...(sharedExternalBlock !== null && presetBlock === sharedExternalBlock
                       ? { sharedDisabledReasonId: sharedExternalBlockId }
                       : {})}
                     primary={preset.financialYear === financialYears[1]}
@@ -253,7 +253,7 @@ export function PanelGuidedScope({
                   aria-label={`${preset.label}. Downloads ${artifactDescription}.`}
                   aria-describedby={
                     disabledReason
-                      ? blockForPreset === sharedExternalBlock
+                      ? sharedExternalBlock !== null && blockForPreset === sharedExternalBlock
                         ? sharedExternalBlockId
                         : `preset-${preset.scope.returnType}-reason`
                       : undefined
@@ -282,7 +282,8 @@ export function PanelGuidedScope({
                 >
                   <span>{preset.label}</span>
                 </button>
-                {disabledReason && blockForPreset !== sharedExternalBlock ? (
+                {disabledReason &&
+                (sharedExternalBlock === null || blockForPreset !== sharedExternalBlock) ? (
                   <p
                     className="panel-preset-reason"
                     id={`preset-${preset.scope.returnType}-reason`}
