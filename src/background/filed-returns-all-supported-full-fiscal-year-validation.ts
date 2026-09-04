@@ -267,7 +267,6 @@ export function isAllSupportedFullFiscalYearLedger(
       ledger.eligibleThrough,
       ledger.planProvenance,
       ledger.periodPlan,
-      ledger.createdAt,
     )
   )
     return false;
@@ -303,7 +302,6 @@ function isTargetPlan(
   eligibleThrough: FiledReturnsMonth,
   planProvenance: FiledReturnsAllSupportedFullFiscalYearPlanProvenance,
   periodPlan: unknown,
-  _createdAt: string,
 ): input is FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[] {
   if (!Array.isArray(input) || input.length === 0) return false;
   if (periodPlan) {
