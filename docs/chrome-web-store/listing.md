@@ -64,25 +64,27 @@ ComplyEaze Pack: GST Return Downloader
 Summary from package:
 
 ```text
-Beta: locally download your filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements.
+Download filed GSTR-1 and GSTR-3B returns and auto-drafted GSTR-2B statements locally. No account or stored portal credentials.
 ```
 
 Description:
 
 ```text
-Download filed GST returns locally from your active GST Portal session.
+ComplyEaze Pack helps an authorised user, already signed in to the GST Portal in Chrome, download their own filed GSTR-3B and GSTR-1 artifacts and their own auto-drafted GSTR-2B statements to their device.
 
-ComplyEaze Pack helps authorised users download their own filed GST returns and auto-drafted GSTR-2B statements using GST Portal pages already open in Chrome. The Store-supported beta scope is:
+There is no Pack or ComplyEaze account. Pack never asks for or stores GST Portal credentials, OTPs, CAPTCHA answers, cookies, or tokens. The extension does not upload GST documents or return contents to ComplyEaze. Its content script runs only on the four declared gst.gov.in hosts. Artifact capture starts only after an explicit user action. Before treating a selected GST artifact as downloaded, Pack verifies it as complete and non-empty, and retains only local, redacted recovery status if an interrupted run needs review.
+
+The Pack website's privacy notice separately discloses its Sentry error diagnostics. The browser extension has no analytics or telemetry and does not send extension data to Sentry.
+
+Supported scope: one return period at a time. Available formats depend on the selected GST Portal page; Pack saves a PDF, Excel workbook, or JSON response only when that page provides the selected artifact.
 
 • GSTR-3B: filed-return summary PDF
-• GSTR-1: summary PDF and, when the portal provides it, e-invoice details Excel
-• GSTR-2B: auto-drafted statement, as summary PDF
+• GSTR-1: filed-return summary PDF and, when the GST Portal provides it, e-invoice details Excel
+• GSTR-2B: auto-drafted statement summary PDF
 
-Files are saved by Chrome to the user's device. Pack does not require a Pack or ComplyEaze account. It does not ask for or store GST Portal credentials, OTPs, CAPTCHA responses, cookies, or session tokens, and it does not upload GST documents or return contents to ComplyEaze.
+What Pack does not do: file returns, act on behalf of a taxpayer, or provide full-year bundles.
 
-Store-supported use is a single return period at a time. The package contains further capability that this listing does not claim, because the release evidence for those claims is not yet recorded.
-
-Pack's content script runs only on the four declared GST Portal hosts. When a supported page loads, it reads page context locally so Pack can identify eligible workflows; artifact capture and downloads start only after an explicit user action. Pack keeps limited redacted recovery state locally so interrupted work does not retry blindly. Temporary artifact bytes may be staged in browser-local OPFS for explicit capture or ZIP operations. Pack normally removes those bytes after confirmed export or explicit discard; if local cleanup fails, it retains them with a cleanup-pending status until a later cleanup attempt succeeds.
+ComplyEaze Pack is open source under the Apache-2.0 license: https://github.com/lamemustafa/pack
 
 ComplyEaze Pack is an independent third-party tool. It is not affiliated with, endorsed by, or operated by GSTN, CBIC, or the Government of India.
 ```
@@ -104,7 +106,7 @@ Other fields:
 Single purpose:
 
 ```text
-ComplyEaze Pack lets authorised GST Portal users locally download their own selected GSTR-1 and GSTR-3B filed-return artifacts and auto-drafted GSTR-2B statements from an active browser session. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
+ComplyEaze Pack lets an authorised user, already signed in to the GST Portal, locally download their own selected filed GSTR-1 and GSTR-3B artifacts and auto-drafted GSTR-2B statements. It does not file returns, request credentials, or transmit GST documents to ComplyEaze.
 ```
 
 Permission justifications:
@@ -112,25 +114,31 @@ Permission justifications:
 ### `downloads`
 
 ```text
-Used only after an explicit user action to save a target-bound GST Portal artifact or Pack-created ZIP locally, verify that Chrome reports a completed non-empty download, or create bounded synthetic reviewer-demo and download-prompt diagnostic files from Pack's Options page.
+Used after an explicit user action to save a target-bound GST Portal artifact or Pack-created ZIP locally and verify that Chrome reports the download completed and non-empty. The Options page also creates user-started synthetic reviewer-demo and download-prompt test files.
 ```
 
 ### `offscreen`
 
 ```text
-Used only for a bundled extension-owned offscreen document to create and revoke temporary Blob URLs, stage user-selected PDF, Excel or portal-data JSON bytes in browser-local OPFS for interrupted ZIP recovery, and assemble a requested ZIP. It loads no remote content and closes after the bounded operation.
+Used only by a bundled extension-owned offscreen document to create and revoke temporary Blob URLs, stage user-selected PDF, Excel, or portal-data JSON bytes in browser-local OPFS for interrupted ZIP recovery, and assemble a requested ZIP. It loads no remote content and closes after the bounded operation.
 ```
 
 ### `scripting`
 
 ```text
-Used only on the four declared GST Portal hosts to detect supported filed-return pages; verify the selected return, financial year, period, and artifact identity; activate user-requested portal download controls and, for those action-bound capture paths, intercept the resulting fetch, XHR, or Blob response in the page's main world so the selected PDF or Excel bytes can be saved locally or staged in OPFS; and, when portal data (JSON) is the requested artifact, issue one authenticated same-origin request from the page's own context to the portal's JSON endpoint for the verified period so those bytes can be saved locally or staged in OPFS.
+Used only on the four declared GST Portal hosts to detect supported pages, verify the selected return, financial year, period, and artifact, and activate a user-requested portal download control. For that action-bound capture, it can intercept the resulting PDF or Excel response in the page's main world for local saving or OPFS staging; when portal data (JSON) is selected, it can make one authenticated same-origin request from the page context for the verified period. It does not run on other sites.
+```
+
+### `sidePanel`
+
+```text
+Used only to provide Pack's user-facing control panel while the authorised user works in their GST Portal tab. It keeps the user-initiated workflow visible without requiring access to unrelated tabs or websites.
 ```
 
 ### `storage`
 
 ```text
-Used for local-only install metadata, the allow-listed GST origin, selected scope and run lease, redacted recovery status, and synthetic demo summaries including synthetic filenames and relative paths. It does not store credentials, cookies, OTPs, CAPTCHA responses, taxpayer identifiers, portal HTML, raw GST Portal URLs, real GST filenames or local paths, or tax values. Temporary artifact bytes are isolated in browser-local OPFS, not chrome.storage. Pack normally removes those bytes after confirmed export or explicit discard; if cleanup fails, it retains them locally with a cleanup-pending status until a later cleanup attempt succeeds.
+Used for local-only install metadata, the allow-listed GST origin, selected scope and run lease, redacted recovery status, and synthetic-demo summaries with synthetic filenames and relative paths. It does not store credentials, cookies, OTPs, CAPTCHA responses, taxpayer identifiers, portal HTML, raw GST Portal URLs, real GST filenames or local paths, or tax values. Temporary artifact bytes are isolated in browser-local OPFS, not chrome.storage, and normally removed after confirmed export or explicit discard; a cleanup failure leaves a local cleanup-pending status until a later cleanup attempt succeeds.
 ```
 
 ### Host permissions
@@ -170,6 +178,9 @@ categories Pack necessarily handles while moving a user's chosen filed return:
 
 Certify all three Limited Use statements. Privacy policy URL:
 `https://pack.complyeaze.com/privacy`.
+
+The privacy policy separately discloses Sentry error diagnostics for the Pack website. They are not
+extension analytics or telemetry: the extension does not send extension data to Sentry.
 
 Chrome's official FAQ explicitly states that local processing or storage still
 requires disclosure:

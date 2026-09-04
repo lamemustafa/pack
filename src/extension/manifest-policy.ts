@@ -23,7 +23,7 @@ export const PACK_GST_HOST_PERMISSIONS = [
 export const PACK_EXTENSION_NAME = "ComplyEaze Pack: GST Return Downloader";
 export const PACK_EXTENSION_SHORT_NAME = "ComplyEaze Pack";
 export const PACK_EXTENSION_DESCRIPTION =
-  "Beta: locally download your filed GSTR-1 and GSTR-3B returns and your GSTR-2B statements.";
+  "Download filed GSTR-1 and GSTR-3B returns and auto-drafted GSTR-2B statements locally. No account or stored portal credentials.";
 export const PACK_EXTENSION_CSP = "script-src 'self'; object-src 'self'";
 export const PACK_EXTENSION_HOMEPAGE_URL = "https://pack.complyeaze.com/gst";
 export const PACK_EXTENSION_ICONS = {
