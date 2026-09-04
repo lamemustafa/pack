@@ -208,6 +208,15 @@ export function isStructurallySupportedFiledReturnsStartScope(
   );
 }
 
+export function isStructurallySupportedFiledReturnsScope(
+  input: FiledReturnsDownloadScope,
+  asOf = new Date(),
+): boolean {
+  return (
+    !isFullFiscalYearScope(input) && isStructurallySupportedFiledReturnsStartScope(input, asOf)
+  );
+}
+
 export function isSupportedFiledReturnsStartScope(
   input: FiledReturnsDownloadScope,
   asOf = new Date(),

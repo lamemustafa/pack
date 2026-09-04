@@ -24,7 +24,6 @@ import {
 } from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
-  getFiledReturnsFullFiscalYearPeriods,
   type FiledReturnsMonth,
 } from "../connectors/gst/filed-returns-scope";
 import {
@@ -36,7 +35,10 @@ import {
   hasPositiveFiledReturnsDownloadEvidence,
   isValidFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
-import { canonicalFullFiscalYearPlanPeriods } from "./filed-returns-full-fiscal-year-validation";
+import {
+  canonicalFullFiscalYearPlanPeriods,
+  isCanonicalFullFiscalYearPeriodPlan,
+} from "./filed-returns-full-fiscal-year-validation";
 
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION =
   "all-supported-filed-returns-targets-v1" as const;
@@ -301,11 +303,11 @@ function isTargetPlan(
   eligibleThrough: FiledReturnsMonth,
   planProvenance: FiledReturnsAllSupportedFullFiscalYearPlanProvenance,
   periodPlan: unknown,
-  createdAt: string,
+  _createdAt: string,
 ): input is FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[] {
   if (!Array.isArray(input) || input.length === 0) return false;
   if (periodPlan) {
-    if (!isPeriodPlan(periodPlan, financialYear, planProvenance.returnPlan, new Date(createdAt))) {
+    if (!isPeriodPlan(periodPlan, financialYear, planProvenance.returnPlan)) {
       return false;
     }
     const expectedTargetCount = periodPlan.reduce((count, plan) => count + plan.periods.length, 0);
@@ -358,33 +360,29 @@ function isPeriodPlan(
   input: unknown,
   financialYear: string,
   returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
-  asOf: Date,
 ): input is FiledReturnsAllSupportedFullFiscalYearPeriodPlan[] {
   if (!Array.isArray(input)) return false;
   return (
     input.length === returnPlan.length &&
     input.every((candidate, index) => {
       const expectedReturn = returnPlan[index];
-      if (!isRecord(candidate) || !Array.isArray(candidate.periods)) return false;
+      if (
+        !isRecord(candidate) ||
+        !hasOnlyKeys(candidate, ["returnType", "periods"]) ||
+        !Array.isArray(candidate.periods)
+      ) {
+        return false;
+      }
       const plan = candidate as { periods: unknown[]; returnType?: unknown };
       return (
         expectedReturn !== undefined &&
         plan.returnType === expectedReturn.returnType &&
         plan.periods.every(isFiledReturnsMonth) &&
-        sameMonths(
-          plan.periods as FiledReturnsMonth[],
-          getFiledReturnsFullFiscalYearPeriods(financialYear, asOf, expectedReturn.returnType),
-        )
+        (plan.periods.length === 0 ||
+          isCanonicalFullFiscalYearPeriodPlan(financialYear, plan.periods as FiledReturnsMonth[]))
       );
     })
   );
-}
-
-function sameMonths(
-  left: readonly FiledReturnsMonth[],
-  right: readonly FiledReturnsMonth[],
-): boolean {
-  return left.length === right.length && left.every((month, index) => month === right[index]);
 }
 
 function isPlanProvenance(

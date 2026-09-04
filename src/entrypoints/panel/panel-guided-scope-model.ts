@@ -76,6 +76,8 @@ export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPl
   readonly artifactCount: number;
   /** The maximum concrete portal-file requests before not-filed outcomes. */
   readonly fileCount: number;
+  /** Atomic targets expected at the displayed eligibility snapshot. */
+  readonly targetSignature: string;
 }
 
 /**
@@ -239,6 +241,14 @@ export function panelAllReturnsFullYearPreset(
           target.concreteArtifactTypes.length,
       0,
     ),
+    targetSignature: expansion.targets
+      .flatMap((target) =>
+        (periodsByReturn.find((plan) => plan.returnType === target.returnType)?.periods ?? []).map(
+          (period) => `${target.returnType}:${target.artifactType}:${period}`,
+        ),
+      )
+      .sort()
+      .join("|"),
   };
 }
 

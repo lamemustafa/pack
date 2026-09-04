@@ -149,8 +149,10 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
     if (
       ledger.status === "complete" &&
       periodPlan.some((plan) => plan.periods.length > 0) &&
-      createAllSupportedFullFiscalYearTargetPlan(request, expansion.targets, periodPlan).length >
-        ledger.targetPlan.length
+      hasNewAllSupportedTargets(
+        createAllSupportedFullFiscalYearTargetPlan(request, expansion.targets, periodPlan),
+        ledger,
+      )
     ) {
       ledger = createAllSupportedFullFiscalYearLedger(request, expansion.targets, periodPlan, now);
       await persistAllSupportedFullFiscalYearLedger(deps, ledger);
@@ -440,6 +442,14 @@ function allSupportedPeriodPlan(
     returnType,
     periods: getFiledReturnsFullFiscalYearPeriods(financialYear, now, returnType),
   }));
+}
+
+function hasNewAllSupportedTargets(
+  candidate: ReturnType<typeof createAllSupportedFullFiscalYearTargetPlan>,
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+): boolean {
+  const existingTargetIds = new Set(ledger.targetPlan.map((target) => target.targetId));
+  return candidate.some((target) => !existingTargetIds.has(target.targetId));
 }
 
 function allSupportedZipOwners(

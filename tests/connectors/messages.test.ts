@@ -334,6 +334,16 @@ describe("message boundary", () => {
       isPackMessage({
         type: "PACK_RETRY_FILED_RETURNS_TARGET",
         payload: {
+          financialYear: "2026-27",
+          period: "August",
+          returnType: "GSTR-3B",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_RETRY_FILED_RETURNS_TARGET",
+        payload: {
           financialYear: "2025-26",
           period: FULL_FISCAL_YEAR_PERIOD,
           returnType: "GSTR-3B",
