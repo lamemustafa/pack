@@ -9,7 +9,10 @@ import {
   type FiledReturnsAllSupportedFullFiscalYearPlanTarget,
 } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { createFiledReturnsLedgerId } from "../connectors/gst/filed-returns-ledger-id";
-import type { FiledReturnsMonth } from "../connectors/gst/filed-returns-scope";
+import {
+  FILED_RETURNS_MONTHS,
+  type FiledReturnsMonth,
+} from "../connectors/gst/filed-returns-scope";
 import { GST_CONNECTOR_DESCRIPTOR } from "../connectors/gst/constants";
 import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import { PACK_PRODUCT_VERSION } from "../extension/version";
@@ -22,6 +25,7 @@ import {
   isAllSupportedFullFiscalYearLedger,
   type FiledReturnsAllSupportedFullFiscalYearLedger,
   type FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget,
+  type FiledReturnsAllSupportedFullFiscalYearPeriodPlan,
   type FiledReturnsAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
 
@@ -149,21 +153,21 @@ export function allSupportedResumeMode(
 export function createAllSupportedFullFiscalYearLedger(
   planRoot: FiledReturnsAllSupportedFullFiscalYearIdentity,
   returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
-  periods: readonly FiledReturnsMonth[],
+  periods:
+    readonly FiledReturnsMonth[] | readonly FiledReturnsAllSupportedFullFiscalYearPeriodPlan[],
   now: Date,
 ): FiledReturnsAllSupportedFullFiscalYearLedger {
-  if (!isCanonicalFullFiscalYearPeriodPlan(planRoot.financialYear, periods)) {
-    throw new Error("Invalid all-supported full-year period plan.");
-  }
   if (!matchesCurrentAllSupportedReturnPlan(returnPlan)) {
     throw new Error("Invalid all-supported full-year return-plan provenance.");
   }
-  const targetPlan = createAllSupportedFullFiscalYearTargetPlan(planRoot, returnPlan, periods);
+  const hasReturnSpecificPeriodPlan = periods[0] !== undefined && typeof periods[0] !== "string";
+  const periodPlan = normaliseAllSupportedPeriodPlan(planRoot.financialYear, returnPlan, periods);
+  const targetPlan = createAllSupportedFullFiscalYearTargetPlan(planRoot, returnPlan, periodPlan);
   if (targetPlan.length === 0) {
     throw new Error("An all-supported full-year plan needs at least one target.");
   }
   const timestamp = now.toISOString();
-  const eligibleThrough = periods.at(-1);
+  const eligibleThrough = latestEligiblePeriod(periodPlan);
   if (!eligibleThrough)
     throw new Error("An all-supported full-year plan needs an eligible period.");
   const ledger: FiledReturnsAllSupportedFullFiscalYearLedger = {
@@ -188,6 +192,9 @@ export function createAllSupportedFullFiscalYearLedger(
         concreteArtifactTypes: [...target.concreteArtifactTypes],
       })),
     },
+    ...(hasReturnSpecificPeriodPlan
+      ? { periodPlan: periodPlan.map((plan) => ({ ...plan, periods: [...plan.periods] })) }
+      : {}),
     targetPlan,
     targets: targetPlan.map((target) => {
       const scope = targetScope(target);
@@ -232,9 +239,11 @@ function matchesCurrentAllSupportedReturnPlan(
 export function createAllSupportedFullFiscalYearTargetPlan(
   planRoot: FiledReturnsAllSupportedFullFiscalYearIdentity,
   returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
-  periods: readonly FiledReturnsMonth[],
+  periods:
+    readonly FiledReturnsMonth[] | readonly FiledReturnsAllSupportedFullFiscalYearPeriodPlan[],
 ): FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[] {
   if (returnPlan.length === 0 || periods.length === 0) return [];
+  const periodPlan = normaliseAllSupportedPeriodPlan(planRoot.financialYear, returnPlan, periods);
   const targetIds = new Set<string>();
   const returnTypes = new Set<string>();
   const targetPlan: FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[] = [];
@@ -243,7 +252,11 @@ export function createAllSupportedFullFiscalYearTargetPlan(
       throw new Error("An all-supported full-year plan cannot repeat a return type.");
     }
     returnTypes.add(returnTarget.returnType);
-    for (const period of periods) {
+    const periodsForReturn = periodPlan.find(
+      (plan) => plan.returnType === returnTarget.returnType,
+    )?.periods;
+    if (!periodsForReturn) throw new Error("Missing all-supported full-year return period plan.");
+    for (const period of periodsForReturn) {
       const targetId = createAllSupportedFullFiscalYearTargetId(
         planRoot.financialYear,
         period,
@@ -265,6 +278,56 @@ export function createAllSupportedFullFiscalYearTargetPlan(
     }
   }
   return targetPlan;
+}
+
+function normaliseAllSupportedPeriodPlan(
+  financialYear: string,
+  returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
+  input: readonly FiledReturnsMonth[] | readonly FiledReturnsAllSupportedFullFiscalYearPeriodPlan[],
+): FiledReturnsAllSupportedFullFiscalYearPeriodPlan[] {
+  const first = input[0];
+  let plan: FiledReturnsAllSupportedFullFiscalYearPeriodPlan[];
+  if (typeof first === "string" || first === undefined) {
+    if (!input.every((entry) => typeof entry === "string")) {
+      throw new Error("Invalid all-supported full-year period plan.");
+    }
+    plan = returnPlan.map((target) => ({
+      returnType: target.returnType,
+      periods: [...(input as readonly FiledReturnsMonth[])],
+    }));
+  } else {
+    if (!input.every((entry) => typeof entry === "object" && entry !== null)) {
+      throw new Error("Invalid all-supported full-year period plan.");
+    }
+    plan = (input as readonly FiledReturnsAllSupportedFullFiscalYearPeriodPlan[]).map((entry) => ({
+      returnType: entry.returnType,
+      periods: [...entry.periods],
+    }));
+  }
+  if (
+    plan.length !== returnPlan.length ||
+    !plan.every((entry, index) => {
+      const expected = returnPlan[index];
+      return (
+        expected !== undefined &&
+        entry.returnType === expected.returnType &&
+        (entry.periods.length === 0 ||
+          isCanonicalFullFiscalYearPeriodPlan(financialYear, entry.periods))
+      );
+    })
+  ) {
+    throw new Error("Invalid all-supported full-year period plan.");
+  }
+  return plan;
+}
+
+function latestEligiblePeriod(
+  periodPlan: readonly FiledReturnsAllSupportedFullFiscalYearPeriodPlan[],
+): FiledReturnsMonth | undefined {
+  return periodPlan
+    .flatMap((plan) => plan.periods)
+    .sort((left, right) => FILED_RETURNS_MONTHS.indexOf(left) - FILED_RETURNS_MONTHS.indexOf(right))
+    .at(-1);
 }
 
 export function canCompleteAllSupportedFullFiscalYearLedger(

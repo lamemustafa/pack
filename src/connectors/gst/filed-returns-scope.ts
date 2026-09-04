@@ -183,12 +183,36 @@ export function isSupportedFiledReturnsScope(
   );
 }
 
+/**
+ * Validates a saved scope's stable identity without making the active-run
+ * recovery path depend on today's filing cutoff. A run that started before a
+ * cutoff can be interrupted after it; recovery must still show that exact
+ * reader-reviewed scope rather than classifying its durable state as damaged.
+ */
+export function isStructurallySupportedFiledReturnsStartScope(
+  input: FiledReturnsDownloadScope,
+  asOf = new Date(),
+): boolean {
+  if (!isFiledReturnsFinancialYear(input.financialYear)) return false;
+  if (input.financialYear < GST_LAUNCH_FINANCIAL_YEAR) return false;
+  if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
+  if (!isFiledReturnsReturnType(input.returnType) || !isSupportedArtifactSelection(input)) {
+    return false;
+  }
+  if (isFullFiscalYearScope(input)) return supportsFullFiscalYearFiledReturnsRun(input.returnType);
+  if (!(FILED_RETURNS_MONTHS as readonly string[]).includes(input.period)) return false;
+  const period = input.period as FiledReturnsMonth;
+  return (
+    input.financialYear !== GST_LAUNCH_FINANCIAL_YEAR ||
+    FILED_RETURNS_MONTHS.indexOf(period) >= FILED_RETURNS_MONTHS.indexOf(GST_LAUNCH_MONTH)
+  );
+}
+
 export function isSupportedFiledReturnsStartScope(
   input: FiledReturnsDownloadScope,
   asOf = new Date(),
 ): boolean {
-  if (!isFiledReturnsReturnType(input.returnType)) return false;
-  if (!isSupportedArtifactSelection(input)) return false;
+  if (!isStructurallySupportedFiledReturnsStartScope(input)) return false;
   if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
   if (isFullFiscalYearScope(input)) {
     return (
@@ -286,22 +310,23 @@ function getFiledReturnsPeriods(
  * Verified 2026-09-04 against the GST Portal Returns FAQs: GSTR-1 Q10 gives the
  * 11th monthly and 13th post-quarterly dates; GSTR-2B Q4 gives the 14th monthly
  * and post-quarterly generation date; GSTR-3B Q4 gives the 20th monthly and
- * 22nd/24th post-quarterly dates. Use the later QRMP cut-off for each return type
- * so the planner does not offer a period before it can be due for that frequency.
+ * 22nd/24th post-quarterly dates. Use the later QRMP availability-or-filing cut-off
+ * for each return type, using GSTR-2B's generation date and the other returns'
+ * filing cut-offs, so the planner does not offer a period before that threshold.
  */
 function isFiledReturnPeriodEligible(
   periodCalendar: { year: number; monthIndex: number },
   asOf: Date,
   returnType: FiledReturnsReturnType,
 ): boolean {
-  const cutoff = conservativeFilingCutoff(periodCalendar, returnType);
+  const cutoff = conservativeAvailabilityOrFilingCutoff(periodCalendar, returnType);
   const today = getIndianDateParts(asOf);
   if (today.year !== cutoff.year) return today.year > cutoff.year;
   if (today.monthIndex !== cutoff.monthIndex) return today.monthIndex > cutoff.monthIndex;
   return today.day >= cutoff.day;
 }
 
-function conservativeFilingCutoff(
+function conservativeAvailabilityOrFilingCutoff(
   periodCalendar: { year: number; monthIndex: number },
   returnType: FiledReturnsReturnType,
 ): { year: number; monthIndex: number; day: number } {

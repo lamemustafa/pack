@@ -188,9 +188,6 @@ export function panelAllReturnsFullYearPreset(
   asOf = new Date(),
   catalogue: readonly PresetCatalogueEntry[] = supportedFiledReturnsCatalogueEntries(),
 ): PanelAllReturnsFullYearPreset | null {
-  const periodCount = getFiledReturnsFullFiscalYearPeriods(financialYear, asOf).length;
-  if (periodCount === 0) return null;
-
   const expansion = expandAllSupportedFullFiscalYearTargetPlan({
     catalogueEntries: catalogue.map(({ returnType, capability }) => ({
       returnType,
@@ -199,6 +196,13 @@ export function panelAllReturnsFullYearPreset(
     offeredArtifacts: filedReturnsOfferedArtifacts,
   });
   if (!expansion.ok) return null;
+
+  const periodsByReturn = expansion.targets.map(({ returnType }) => ({
+    returnType,
+    periods: getFiledReturnsFullFiscalYearPeriods(financialYear, asOf, returnType),
+  }));
+  const periodCount = new Set(periodsByReturn.flatMap((plan) => plan.periods)).size;
+  if (periodCount === 0) return null;
 
   const artifactCount = expansion.targets.reduce(
     (count, target) => count + target.concreteArtifactTypes.length,
@@ -227,7 +231,14 @@ export function panelAllReturnsFullYearPreset(
     returnCount: expansion.targets.length,
     periodCount,
     artifactCount,
-    fileCount: periodCount * artifactCount,
+    fileCount: expansion.targets.reduce(
+      (count, target) =>
+        count +
+        (periodsByReturn.find((plan) => plan.returnType === target.returnType)?.periods.length ??
+          0) *
+          target.concreteArtifactTypes.length,
+      0,
+    ),
   };
 }
 

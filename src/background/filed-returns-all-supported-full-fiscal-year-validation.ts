@@ -24,6 +24,7 @@ import {
 } from "../connectors/gst/filed-returns-return-types";
 import {
   FILED_RETURNS_MONTHS,
+  getFiledReturnsFullFiscalYearPeriods,
   type FiledReturnsMonth,
 } from "../connectors/gst/filed-returns-scope";
 import {
@@ -58,6 +59,11 @@ export interface FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget extends 
   period: FiledReturnsMonth;
 }
 
+export interface FiledReturnsAllSupportedFullFiscalYearPeriodPlan {
+  returnType: FiledReturnsReturnType;
+  periods: FiledReturnsMonth[];
+}
+
 export interface FiledReturnsAllSupportedFullFiscalYearTarget extends FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget {
   status: FiledReturnsFullFiscalYearTargetStatus;
   attempts: number;
@@ -89,6 +95,8 @@ export interface FiledReturnsAllSupportedFullFiscalYearLedger {
   eligibleThrough: FiledReturnsMonth;
   lastReconciledAt: string;
   planProvenance: FiledReturnsAllSupportedFullFiscalYearPlanProvenance;
+  /** Present on new ledgers so each return retains its own statutory cutoff. */
+  periodPlan?: FiledReturnsAllSupportedFullFiscalYearPeriodPlan[];
   targetPlan: FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[];
   targets: FiledReturnsAllSupportedFullFiscalYearTarget[];
 }
@@ -166,6 +174,7 @@ const LEDGER_KEYS = [
   "ledgerId",
   "planRoot",
   "planProvenance",
+  "periodPlan",
   "planVersion",
   "portalTabId",
   "portalTabSessionId",
@@ -255,6 +264,8 @@ export function isAllSupportedFullFiscalYearLedger(
       ledger.planRoot.financialYear,
       ledger.eligibleThrough,
       ledger.planProvenance,
+      ledger.periodPlan,
+      ledger.createdAt,
     )
   )
     return false;
@@ -289,8 +300,38 @@ function isTargetPlan(
   financialYear: string,
   eligibleThrough: FiledReturnsMonth,
   planProvenance: FiledReturnsAllSupportedFullFiscalYearPlanProvenance,
+  periodPlan: unknown,
+  createdAt: string,
 ): input is FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[] {
   if (!Array.isArray(input) || input.length === 0) return false;
+  if (periodPlan) {
+    if (!isPeriodPlan(periodPlan, financialYear, planProvenance.returnPlan, new Date(createdAt))) {
+      return false;
+    }
+    const expectedTargetCount = periodPlan.reduce((count, plan) => count + plan.periods.length, 0);
+    if (input.length !== expectedTargetCount) return false;
+    let index = 0;
+    for (const expectedReturn of planProvenance.returnPlan) {
+      const periods = periodPlan.find(
+        (plan) => plan.returnType === expectedReturn.returnType,
+      )?.periods;
+      if (!periods) return false;
+      for (const period of periods) {
+        const target = input[index];
+        if (
+          !isPlanTarget(target, financialYear) ||
+          target.returnType !== expectedReturn.returnType ||
+          target.period !== period ||
+          target.artifactType !== expectedReturn.artifactType ||
+          !sameArtifacts(target.concreteArtifactTypes, expectedReturn.concreteArtifactTypes)
+        ) {
+          return false;
+        }
+        index += 1;
+      }
+    }
+    return true;
+  }
   const periods = canonicalFullFiscalYearPlanPeriods(financialYear, eligibleThrough);
   if (!periods) return false;
   if (input.length !== planProvenance.returnPlan.length * periods.length) return false;
@@ -311,6 +352,39 @@ function isTargetPlan(
     }
   }
   return true;
+}
+
+function isPeriodPlan(
+  input: unknown,
+  financialYear: string,
+  returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
+  asOf: Date,
+): input is FiledReturnsAllSupportedFullFiscalYearPeriodPlan[] {
+  if (!Array.isArray(input)) return false;
+  return (
+    input.length === returnPlan.length &&
+    input.every((candidate, index) => {
+      const expectedReturn = returnPlan[index];
+      if (!isRecord(candidate) || !Array.isArray(candidate.periods)) return false;
+      const plan = candidate as { periods: unknown[]; returnType?: unknown };
+      return (
+        expectedReturn !== undefined &&
+        plan.returnType === expectedReturn.returnType &&
+        plan.periods.every(isFiledReturnsMonth) &&
+        sameMonths(
+          plan.periods as FiledReturnsMonth[],
+          getFiledReturnsFullFiscalYearPeriods(financialYear, asOf, expectedReturn.returnType),
+        )
+      );
+    })
+  );
+}
+
+function sameMonths(
+  left: readonly FiledReturnsMonth[],
+  right: readonly FiledReturnsMonth[],
+): boolean {
+  return left.length === right.length && left.every((month, index) => month === right[index]);
 }
 
 function isPlanProvenance(

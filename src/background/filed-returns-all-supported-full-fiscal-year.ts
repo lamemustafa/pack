@@ -6,7 +6,10 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
-import { expandAllSupportedFullFiscalYearTargetPlan } from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import {
+  expandAllSupportedFullFiscalYearTargetPlan,
+  type FiledReturnsAllSupportedFullFiscalYearPlanTarget,
+} from "../connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
 import type {
   AllSupportedFullFiscalYearTargetRecoveryPayload,
@@ -23,6 +26,7 @@ import {
   allSupportedExplicitRetryTarget,
   canCompleteAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearLedger,
+  createAllSupportedFullFiscalYearTargetPlan,
   isAllSupportedFullFiscalYearLedgerStale,
   markAllSupportedFullFiscalYearTargetRunning,
   markAllSupportedFullFiscalYearTargetTerminal,
@@ -38,6 +42,7 @@ import {
 import type {
   AllSupportedFullFiscalYearZipPhase,
   FiledReturnsAllSupportedFullFiscalYearLedger,
+  FiledReturnsAllSupportedFullFiscalYearPeriodPlan,
   FiledReturnsAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
 import {
@@ -126,7 +131,6 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
   runSinglePeriod: SinglePeriodRunner,
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
-  const periodPlan = getFiledReturnsFullFiscalYearPeriods(request.financialYear, now);
   const storageState = await readAllSupportedPlanLedgersStorageState(deps);
   if (storageState.state !== "valid") {
     return {
@@ -134,21 +138,20 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
       flowStep: savedPlanStorageStateStep(request.financialYear, storageState.state),
     };
   }
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  if (!expansion.ok) {
+    return { ok: true, flowStep: expansionFailureStep(request.financialYear, expansion.reason) };
+  }
+  const periodPlan = allSupportedPeriodPlan(request.financialYear, now, expansion.targets);
   let ledger = await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request);
 
   if (ledger) {
     if (
       ledger.status === "complete" &&
-      periodPlan.length > 0 &&
-      periodPlan.length > persistedPeriodPlanLength(ledger)
+      periodPlan.some((plan) => plan.periods.length > 0) &&
+      createAllSupportedFullFiscalYearTargetPlan(request, expansion.targets, periodPlan).length >
+        ledger.targetPlan.length
     ) {
-      const expansion = expandAllSupportedFullFiscalYearTargetPlan();
-      if (!expansion.ok) {
-        return {
-          ok: true,
-          flowStep: expansionFailureStep(request.financialYear, expansion.reason),
-        };
-      }
       ledger = createAllSupportedFullFiscalYearLedger(request, expansion.targets, periodPlan, now);
       await persistAllSupportedFullFiscalYearLedger(deps, ledger);
       return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
@@ -156,12 +159,8 @@ export async function startAllSupportedFullFiscalYearDownloadFlow(
     return continueSavedAllSupportedFullFiscalYearRun(deps, ledger, runSinglePeriod);
   }
 
-  if (periodPlan.length === 0) {
+  if (!periodPlan.some((plan) => plan.periods.length > 0)) {
     return { ok: true, flowStep: noEligiblePeriodsStep(request.financialYear) };
-  }
-  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
-  if (!expansion.ok) {
-    return { ok: true, flowStep: expansionFailureStep(request.financialYear, expansion.reason) };
   }
 
   ledger = createAllSupportedFullFiscalYearLedger(request, expansion.targets, periodPlan, now);
@@ -240,13 +239,13 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
     });
   }
   const now = deps.now?.() ?? new Date();
-  const periodPlan = getFiledReturnsFullFiscalYearPeriods(request.financialYear, now);
-  if (periodPlan.length === 0) {
-    return { ok: true, flowStep: noEligiblePeriodsStep(request.financialYear) };
-  }
   const expansion = expandAllSupportedFullFiscalYearTargetPlan();
   if (!expansion.ok) {
     return { ok: true, flowStep: expansionFailureStep(request.financialYear, expansion.reason) };
+  }
+  const periodPlan = allSupportedPeriodPlan(request.financialYear, now, expansion.targets);
+  if (!periodPlan.some((plan) => plan.periods.length > 0)) {
+    return { ok: true, flowStep: noEligiblePeriodsStep(request.financialYear) };
   }
   const replacement = createAllSupportedFullFiscalYearLedger(
     { kind: request.kind, financialYear: request.financialYear },
@@ -432,11 +431,15 @@ function allSupportedRecoveryUnavailableResponse(
     : Promise.resolve({ ok: true, flowStep });
 }
 
-function persistedPeriodPlanLength(ledger: FiledReturnsAllSupportedFullFiscalYearLedger): number {
-  const firstReturnType = ledger.targetPlan[0]?.returnType;
-  return firstReturnType
-    ? ledger.targetPlan.filter((target) => target.returnType === firstReturnType).length
-    : 0;
+function allSupportedPeriodPlan(
+  financialYear: string,
+  now: Date,
+  returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
+): FiledReturnsAllSupportedFullFiscalYearPeriodPlan[] {
+  return returnPlan.map(({ returnType }) => ({
+    returnType,
+    periods: getFiledReturnsFullFiscalYearPeriods(financialYear, now, returnType),
+  }));
 }
 
 function allSupportedZipOwners(
@@ -1033,7 +1036,7 @@ function noEligiblePeriodsStep(financialYear: string): PortalFlowStepResult {
     scopeId: "gst-filed-returns-private-v0",
     state: "blocked",
     safeSignals: ["all-supported-full-fiscal-year-no-eligible-periods"],
-    safeMessage: `No periods in FY ${financialYear} have reached Pack's conservative filing-eligibility cut-off yet.`,
+    safeMessage: `No periods in FY ${financialYear} have reached Pack's conservative availability-or-filing cut-off yet.`,
   };
 }
 

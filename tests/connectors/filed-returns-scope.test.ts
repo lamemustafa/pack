@@ -42,7 +42,7 @@ describe("filed returns GST scope", () => {
     ]);
   });
 
-  it("waits for each return type's conservative filing cutoff in the current Indian financial year", () => {
+  it("waits for each return type's conservative availability-or-filing cutoff in the current Indian financial year", () => {
     expect(
       getFiledReturnsPeriodOptions("2026-27", new Date("2026-07-12T18:29:59.999Z"), "GSTR-1"),
     ).toEqual([]);

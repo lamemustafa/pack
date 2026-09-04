@@ -80,6 +80,34 @@ describe("filed returns active run recovery", () => {
     });
   });
 
+  it("preserves an interrupted scope after its current-year cutoff has not yet passed", async () => {
+    const currentYearRun: ActiveFiledReturnsRun = {
+      ...ACTIVE_RUN,
+      scope: { ...ACTIVE_RUN.scope, period: "June" },
+    };
+    browserMocks.storage.local.get.mockResolvedValue({ "active-run": currentYearRun });
+
+    const state = await readActiveFiledReturnsRunStorageState(
+      { storageKeys: { activeRun: "active-run" } },
+      new Date("2026-07-15T00:01:00Z"),
+    );
+
+    expect(state).toMatchObject({ state: "valid", run: { scope: currentYearRun.scope } });
+  });
+
+  it("fails closed for a future financial year in saved active-run metadata", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({
+      "active-run": { ...ACTIVE_RUN, scope: { ...ACTIVE_RUN.scope, financialYear: "2099-00" } },
+    });
+
+    const state = await readActiveFiledReturnsRunStorageState(
+      { storageKeys: { activeRun: "active-run" } },
+      new Date("2026-07-15T00:01:00Z"),
+    );
+
+    expect(state).toMatchObject({ state: "malformed", recoverableScope: null });
+  });
+
   it("acknowledges an interrupted run by removing only the active run key", async () => {
     const response = await acknowledgeInterruptedFiledReturnsRun({
       storageKeys: { activeRun: "active-run" },

@@ -748,6 +748,21 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(runner.mock.calls.length).toBeGreaterThan(completedCallCount);
   });
 
+  it("records each return type's own current-year eligible periods", async () => {
+    deps.now = () => new Date("2026-07-13T12:30:00.000Z");
+    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    const periodPlan = savedLedger().periodPlan;
+    expect(periodPlan).toEqual([
+      { returnType: "GSTR-3B", periods: [] },
+      { returnType: "GSTR-1", periods: ["April", "May", "June"] },
+      { returnType: "GSTR-2B", periods: [] },
+    ]);
+    expect(savedLedger().targetPlan.every((target) => target.returnType === "GSTR-1")).toBe(true);
+  });
+
   it("does not replace a completed plan when clock correction narrows eligibility", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
 
@@ -780,7 +795,7 @@ describe("all-supported full-fiscal-year worker", () => {
         state: "blocked",
         safeSignals: ["all-supported-full-fiscal-year-no-eligible-periods"],
         safeMessage:
-          "No periods in FY 2026-27 have reached Pack's conservative filing-eligibility cut-off yet.",
+          "No periods in FY 2026-27 have reached Pack's conservative availability-or-filing cut-off yet.",
       },
     });
     expect(zip.discard).toHaveBeenCalledWith(completedPlan.ledgerId);
