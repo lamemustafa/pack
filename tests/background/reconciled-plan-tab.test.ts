@@ -57,7 +57,7 @@ const deps: FiledReturnsFlowRunnerDeps = {
     fullFiscalYearLedger: "ledger",
     observation: "observation",
   },
-  now: () => new Date("2026-07-15T00:00:00.000Z"),
+  now: () => new Date("2026-07-25T00:00:00.000Z"),
 };
 beforeEach(() => {
   vi.clearAllMocks();

@@ -42,14 +42,48 @@ describe("filed returns GST scope", () => {
     ]);
   });
 
-  it("exposes only elapsed periods for the current Indian financial year", () => {
+  it("waits for each return type's conservative filing cutoff in the current Indian financial year", () => {
     expect(
-      getFiledReturnsPeriodOptions("2026-27", new Date("2026-06-24T00:00:00+05:30")).map(
+      getFiledReturnsPeriodOptions("2026-27", new Date("2026-07-12T18:29:59.999Z"), "GSTR-1"),
+    ).toEqual([]);
+    expect(
+      getFiledReturnsPeriodOptions("2026-27", new Date("2026-07-12T18:30:00.000Z"), "GSTR-1").map(
         (option) => option.value,
       ),
-    ).toEqual(["April", "May"]);
+    ).toEqual(["April", "May", "June"]);
+
     expect(
-      getFiledReturnsPeriodOptions("2025-26", new Date("2026-06-24T00:00:00+05:30")).map(
+      getFiledReturnsPeriodOptions("2026-27", new Date("2026-07-13T18:29:59.999Z"), "GSTR-2B"),
+    ).toEqual([]);
+    expect(
+      getFiledReturnsPeriodOptions("2026-27", new Date("2026-07-13T18:30:00.000Z"), "GSTR-2B").map(
+        (option) => option.value,
+      ),
+    ).toEqual(["April", "May", "June"]);
+
+    expect(
+      getFiledReturnsPeriodOptions("2026-27", new Date("2026-07-23T18:29:59.999Z"), "GSTR-3B"),
+    ).toEqual([]);
+    expect(
+      getFiledReturnsPeriodOptions("2026-27", new Date("2026-07-23T18:30:00.000Z"), "GSTR-3B").map(
+        (option) => option.value,
+      ),
+    ).toEqual(["April", "May", "June"]);
+  });
+
+  it("does not plan the immediately preceding month early in a current-year month", () => {
+    expect(
+      getFiledReturnsFullFiscalYearPeriods(
+        "2026-27",
+        new Date("2026-09-03T00:00:00+05:30"),
+        "GSTR-3B",
+      ),
+    ).not.toContain("August");
+  });
+
+  it("keeps every launch-scoped month eligible for a prior financial year", () => {
+    expect(
+      getFiledReturnsPeriodOptions("2025-26", new Date("2026-06-24T00:00:00+05:30"), "GSTR-1").map(
         (option) => option.value,
       ),
     ).toEqual([
@@ -93,8 +127,25 @@ describe("filed returns GST scope", () => {
       "March",
     ]);
     expect(
-      getFiledReturnsFullFiscalYearPeriods("2026-27", new Date("2026-06-24T00:00:00+05:30")),
-    ).toEqual(["April", "May"]);
+      getFiledReturnsFullFiscalYearPeriods(
+        "2026-27",
+        new Date("2026-06-24T00:00:00+05:30"),
+        "GSTR-3B",
+      ),
+    ).toEqual([]);
+  });
+
+  it("falls back to the latest eligible financial year when the current year has no periods", () => {
+    expect(
+      normaliseFiledReturnsScope(
+        {
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-3B",
+        },
+        new Date("2026-04-03T00:00:00+05:30"),
+      ),
+    ).toMatchObject({ financialYear: "2025-26", period: "April", returnType: "GSTR-3B" });
   });
 
   it("exposes full fiscal year as a start-only user option without changing the default", () => {

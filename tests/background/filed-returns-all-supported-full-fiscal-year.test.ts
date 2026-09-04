@@ -80,7 +80,7 @@ vi.mock("../../src/background/filed-returns-all-supported-full-fiscal-year-zip",
   reconcileAllSupportedFullFiscalYearZipDownload: zip.reconcile,
 }));
 
-const NOW = new Date("2026-07-15T00:00:00.000Z");
+const NOW = new Date("2026-07-25T00:00:00.000Z");
 const request = {
   kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
   financialYear: "2026-27",
@@ -736,7 +736,7 @@ describe("all-supported full-fiscal-year worker", () => {
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     const completedPlan = savedLedger();
     const completedCallCount = runner.mock.calls.length;
-    deps.now = () => new Date("2026-08-15T00:00:00.000Z");
+    deps.now = () => new Date("2026-10-25T00:00:00.000Z");
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -779,7 +779,8 @@ describe("all-supported full-fiscal-year worker", () => {
       flowStep: {
         state: "blocked",
         safeSignals: ["all-supported-full-fiscal-year-no-eligible-periods"],
-        safeMessage: "Pack could not find an eligible period for FY 2026-27.",
+        safeMessage:
+          "No periods in FY 2026-27 have reached Pack's conservative filing-eligibility cut-off yet.",
       },
     });
     expect(zip.discard).toHaveBeenCalledWith(completedPlan.ledgerId);

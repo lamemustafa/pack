@@ -32,7 +32,7 @@ const ACTIVE_RUN = {
     returnType: "GSTR-3B",
   },
   status: "running",
-  leaseUpdatedAt: "2026-06-24T00:00:00.000Z",
+  leaseUpdatedAt: "2026-07-25T00:00:00.000Z",
 } satisfies ActiveFiledReturnsRun;
 
 describe("filed returns active run recovery", () => {
@@ -44,7 +44,7 @@ describe("filed returns active run recovery", () => {
   it("summarises an orphaned active run as blocked without requiring a start click", async () => {
     const summary = await readActiveFiledReturnsRunSummary({
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:01:00Z"),
+      now: () => new Date("2026-07-25T00:01:00Z"),
     });
 
     expect(summary).toMatchObject({
@@ -71,7 +71,7 @@ describe("filed returns active run recovery", () => {
 
     const summary = await readActiveFiledReturnsRunSummary({
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:01:00Z"),
+      now: () => new Date("2026-07-25T00:01:00Z"),
     });
 
     expect(summary?.flowStep).toMatchObject({
@@ -83,7 +83,7 @@ describe("filed returns active run recovery", () => {
   it("acknowledges an interrupted run by removing only the active run key", async () => {
     const response = await acknowledgeInterruptedFiledReturnsRun({
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:01:00Z"),
+      now: () => new Date("2026-07-25T00:01:00Z"),
     });
 
     expect(response).toMatchObject({
@@ -99,7 +99,7 @@ describe("filed returns active run recovery", () => {
   it("does not acknowledge a still-active run as interrupted", async () => {
     const response = await acknowledgeInterruptedFiledReturnsRun({
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:00:05Z"),
+      now: () => new Date("2026-07-25T00:00:05Z"),
     });
 
     expect(response).toMatchObject({
@@ -119,7 +119,7 @@ describe("filed returns active run recovery", () => {
 
     const response = await acknowledgeInterruptedFiledReturnsRun({
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:01:00Z"),
+      now: () => new Date("2026-07-25T00:01:00Z"),
     });
 
     expect(response).toMatchObject({
@@ -134,14 +134,14 @@ describe("filed returns active run recovery", () => {
   it("renews the active run lease without changing the scope", async () => {
     await renewFiledReturnsRunLease(ACTIVE_RUN, {
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:00:20Z"),
+      now: () => new Date("2026-07-25T00:00:20Z"),
     });
 
     expect(browserMocks.storage.local.set).toHaveBeenCalledWith({
       "active-run": {
         ...ACTIVE_RUN,
         revision: 2,
-        leaseUpdatedAt: "2026-06-24T00:00:20.000Z",
+        leaseUpdatedAt: "2026-07-25T00:00:20.000Z",
       },
     });
   });
@@ -153,7 +153,7 @@ describe("filed returns active run recovery", () => {
 
     const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, {
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:00:05Z"),
+      now: () => new Date("2026-07-25T00:00:05Z"),
     });
 
     expect(result).toMatchObject({
@@ -177,11 +177,11 @@ describe("filed returns active run recovery", () => {
 
     const state = await readActiveFiledReturnsRunStorageState(
       { storageKeys: { activeRun: "active-run" } },
-      new Date("2026-06-24T00:00:05Z"),
+      new Date("2026-07-25T00:00:05Z"),
     );
     const summary = await readActiveFiledReturnsRunSummary({
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:00:05Z"),
+      now: () => new Date("2026-07-25T00:00:05Z"),
     });
 
     expect(state).toEqual({ state: "malformed", recoverableScope: ACTIVE_RUN.scope });
@@ -202,7 +202,7 @@ describe("filed returns active run recovery", () => {
 
     const response = await acknowledgeInterruptedFiledReturnsRun({
       storageKeys: { activeRun: "active-run" },
-      now: () => new Date("2026-06-24T00:01:00Z"),
+      now: () => new Date("2026-07-25T00:01:00Z"),
     });
 
     expect(response).toMatchObject({

@@ -761,14 +761,14 @@ describe("full fiscal year ledger", () => {
       "Pack completed the local full fiscal year run for FY 2026-27.",
     );
 
-    // Resumed and finished in September, by which time June, July and August
-    // have become eligible. The plan does not grow, so the outcome has to say so
+    // Resumed and finished in September, by which time June has become eligible.
+    // The plan does not grow, so the outcome has to say so
     // where the outcome is stated.
     const later = completeFullFiscalYearStep(complete, new Date("2026-09-24T00:00:00.000Z"));
     expect(later.safeSignals).toContain("full-fiscal-year-plan-narrower-than-eligible");
     expect(later.safeMessage).toContain("covers the 2 periods planned when it started");
-    expect(later.safeMessage).toContain("3 more are eligible now, starting with June");
-    expect(later.safeMessage).toContain("Start this year again to include them");
+    expect(later.safeMessage).toContain("1 more is eligible now, starting with June");
+    expect(later.safeMessage).toContain("Start this year again to include it");
   });
 
   it("claims no shortfall for a past year whose plan is the whole year", () => {
