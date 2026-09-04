@@ -219,9 +219,11 @@ export function unplannedEligibleFullFiscalYearPeriods(
   now: Date,
 ): FiledReturnsMonth[] {
   const planned = new Set<string>((ledger.targetPlan ?? ledger.targets).map((t) => t.period));
-  return getFiledReturnsFullFiscalYearPeriods(ledger.scope.financialYear, now).filter(
-    (period) => !planned.has(period),
-  );
+  return getFiledReturnsFullFiscalYearPeriods(
+    ledger.scope.financialYear,
+    now,
+    ledger.scope.returnType,
+  ).filter((period) => !planned.has(period));
 }
 
 export function canCompleteFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {

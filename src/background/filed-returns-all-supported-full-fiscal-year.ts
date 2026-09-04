@@ -1033,7 +1033,7 @@ function noEligiblePeriodsStep(financialYear: string): PortalFlowStepResult {
     scopeId: "gst-filed-returns-private-v0",
     state: "blocked",
     safeSignals: ["all-supported-full-fiscal-year-no-eligible-periods"],
-    safeMessage: `Pack could not find an eligible period for FY ${financialYear}.`,
+    safeMessage: `No periods in FY ${financialYear} have reached Pack's conservative filing-eligibility cut-off yet.`,
   };
 }
 

@@ -145,7 +145,11 @@ export async function startFullFiscalYearDownloadFlow(
   options: { allowExistingLedgerResume?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
-  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
+  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
+    scope.financialYear,
+    now,
+    scope.returnType,
+  );
   let existingLedger = await readLedgerForScope(deps, scope);
   if (existingLedger && hasInconsistentFullFiscalYearCompletion(existingLedger)) {
     const summary = summariseFullFiscalYearLedger(existingLedger, now);
@@ -452,7 +456,11 @@ async function completeRun(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
-  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(ledger.scope.financialYear, now);
+  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
+    ledger.scope.financialYear,
+    now,
+    ledger.scope.returnType,
+  );
   const reconciledLedger =
     plannedPeriods.length > 0
       ? reconcileFullFiscalYearLedgerTargets(ledger, now, plannedPeriods)
@@ -547,7 +555,11 @@ async function reconcilePersistedFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
-  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(ledger.scope.financialYear, now);
+  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
+    ledger.scope.financialYear,
+    now,
+    ledger.scope.returnType,
+  );
   const reconciledLedger =
     plannedPeriods.length > 0
       ? reconcileFullFiscalYearLedgerTargets(ledger, now, plannedPeriods)

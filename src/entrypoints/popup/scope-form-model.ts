@@ -33,7 +33,11 @@ import {
 } from "./flow-summary";
 
 export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
-  const singlePeriodOptions = getFiledReturnsPeriodOptions(scope.financialYear, new Date());
+  const singlePeriodOptions = getFiledReturnsPeriodOptions(
+    scope.financialYear,
+    new Date(),
+    scope.returnType,
+  );
   const scopePeriodOptions = getFiledReturnsScopePeriodOptions(
     scope.financialYear,
     new Date(),

@@ -101,8 +101,9 @@ export function getFiledReturnsFinancialYearOptions(asOf = new Date()): string[]
 export function getFiledReturnsPeriodOptions(
   financialYear: string,
   asOf = new Date(),
+  returnType: FiledReturnsReturnType = "GSTR-3B",
 ): FiledReturnsPeriodOption[] {
-  return getFiledReturnsPeriods(financialYear, asOf).map((month) => ({
+  return getFiledReturnsPeriods(financialYear, asOf, returnType).map((month) => ({
     value: month,
     label: month,
   }));
@@ -113,7 +114,7 @@ export function getFiledReturnsScopePeriodOptions(
   asOf = new Date(),
   returnType: FiledReturnsReturnType = "GSTR-3B",
 ): FiledReturnsScopePeriodOption[] {
-  const periodOptions = getFiledReturnsPeriodOptions(financialYear, asOf);
+  const periodOptions = getFiledReturnsPeriodOptions(financialYear, asOf, returnType);
   if (periodOptions.length === 0) return [];
   if (!supportsFullFiscalYearFiledReturnsRun(returnType)) return periodOptions;
   return [
@@ -128,8 +129,9 @@ export function getFiledReturnsScopePeriodOptions(
 export function getFiledReturnsFullFiscalYearPeriods(
   financialYear: string,
   asOf = new Date(),
+  returnType: FiledReturnsReturnType = "GSTR-3B",
 ): FiledReturnsMonth[] {
-  return getFiledReturnsPeriods(financialYear, asOf);
+  return getFiledReturnsPeriods(financialYear, asOf, returnType);
 }
 
 export function normaliseFiledReturnsScope(
@@ -142,18 +144,19 @@ export function normaliseFiledReturnsScope(
     ? scope.financialYear
     : financialYearOptions[0];
   const financialYear =
-    requestedFinancialYear && getFiledReturnsPeriodOptions(requestedFinancialYear, asOf).length > 0
+    requestedFinancialYear &&
+    getFiledReturnsPeriodOptions(requestedFinancialYear, asOf, returnType).length > 0
       ? requestedFinancialYear
       : (financialYearOptions.find(
-          (candidate) => getFiledReturnsPeriodOptions(candidate, asOf).length > 0,
+          (candidate) => getFiledReturnsPeriodOptions(candidate, asOf, returnType).length > 0,
         ) ?? GST_LAUNCH_FINANCIAL_YEAR);
-  const periodOptions = getFiledReturnsPeriodOptions(financialYear, asOf);
+  const periodOptions = getFiledReturnsPeriodOptions(financialYear, asOf, returnType);
   const period =
     isFullFiscalYearScope(scope) && supportsFullFiscalYearFiledReturnsRun(returnType)
       ? FULL_FISCAL_YEAR_PERIOD
       : periodOptions.some((option) => option.value === scope.period)
         ? scope.period
-        : defaultPeriodForFinancialYear(financialYear, asOf);
+        : defaultPeriodForFinancialYear(financialYear, asOf, returnType);
 
   return {
     financialYear,
@@ -175,7 +178,7 @@ export function isSupportedFiledReturnsScope(
   if (!isFiledReturnsReturnType(input.returnType)) return false;
   if (!isSupportedArtifactSelection(input)) return false;
   if (!getFiledReturnsFinancialYearOptions(asOf).includes(input.financialYear)) return false;
-  return getFiledReturnsPeriodOptions(input.financialYear, asOf).some(
+  return getFiledReturnsPeriodOptions(input.financialYear, asOf, input.returnType).some(
     (option) => option.value === input.period,
   );
 }
@@ -190,7 +193,7 @@ export function isSupportedFiledReturnsStartScope(
   if (isFullFiscalYearScope(input)) {
     return (
       supportsFullFiscalYearFiledReturnsRun(input.returnType) &&
-      getFiledReturnsFullFiscalYearPeriods(input.financialYear, asOf).length > 0
+      getFiledReturnsFullFiscalYearPeriods(input.financialYear, asOf, input.returnType).length > 0
     );
   }
   return isSupportedFiledReturnsScope(input, asOf);
@@ -231,27 +234,34 @@ function getFinancialYearStartYear(year: number, monthIndex: number): number {
 function defaultPeriodForFinancialYear(
   financialYear: string,
   asOf = new Date(),
+  returnType: FiledReturnsReturnType = "GSTR-3B",
 ): FiledReturnsMonth {
-  const firstMonth = getFiledReturnsPeriodOptions(financialYear, asOf)[0];
+  const firstMonth = getFiledReturnsPeriodOptions(financialYear, asOf, returnType)[0];
   return firstMonth?.value ?? GST_LAUNCH_MONTH;
 }
 
-function getIndianDateParts(asOf: Date): { year: number; monthIndex: number } {
+function getIndianDateParts(asOf: Date): { year: number; monthIndex: number; day: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
     month: "numeric",
     timeZone: "Asia/Kolkata",
     year: "numeric",
   }).formatToParts(asOf);
   const year = Number(parts.find((part) => part.type === "year")?.value);
   const month = Number(parts.find((part) => part.type === "month")?.value);
-  return { year, monthIndex: month - 1 };
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+  return { year, monthIndex: month - 1, day };
 }
 
 function formatFinancialYear(startYear: number): string {
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
 }
 
-function getFiledReturnsPeriods(financialYear: string, asOf: Date): FiledReturnsMonth[] {
+function getFiledReturnsPeriods(
+  financialYear: string,
+  asOf: Date,
+  returnType: FiledReturnsReturnType,
+): FiledReturnsMonth[] {
   const financialYearStart = parseFinancialYearStartYear(financialYear);
   if (financialYearStart === null) return [];
 
@@ -262,13 +272,44 @@ function getFiledReturnsPeriods(financialYear: string, asOf: Date): FiledReturns
 
   if (financialYearStart !== getIndianFinancialYearStartYear(asOf)) return launchScopedMonths;
 
-  const previousMonth = getPreviousCompletedCalendarMonth(asOf);
-  return launchScopedMonths.filter((month) => {
-    const periodCalendar = getFiledReturnsPeriodCalendarMonth(financialYearStart, month);
-    if (periodCalendar.year < previousMonth.year) return true;
-    if (periodCalendar.year > previousMonth.year) return false;
-    return periodCalendar.monthIndex <= previousMonth.monthIndex;
-  });
+  return launchScopedMonths.filter((month) =>
+    isFiledReturnPeriodEligible(
+      getFiledReturnsPeriodCalendarMonth(financialYearStart, month),
+      asOf,
+      returnType,
+    ),
+  );
+}
+
+/**
+ * Pack does not know whether the signed-in taxpayer files monthly or under QRMP.
+ * Verified 2026-09-04 against the GST Portal Returns FAQs: GSTR-1 Q10 gives the
+ * 11th monthly and 13th post-quarterly dates; GSTR-2B Q4 gives the 14th monthly
+ * and post-quarterly generation date; GSTR-3B Q4 gives the 20th monthly and
+ * 22nd/24th post-quarterly dates. Use the later QRMP cut-off for each return type
+ * so the planner does not offer a period before it can be due for that frequency.
+ */
+function isFiledReturnPeriodEligible(
+  periodCalendar: { year: number; monthIndex: number },
+  asOf: Date,
+  returnType: FiledReturnsReturnType,
+): boolean {
+  const cutoff = conservativeFilingCutoff(periodCalendar, returnType);
+  const today = getIndianDateParts(asOf);
+  if (today.year !== cutoff.year) return today.year > cutoff.year;
+  if (today.monthIndex !== cutoff.monthIndex) return today.monthIndex > cutoff.monthIndex;
+  return today.day >= cutoff.day;
+}
+
+function conservativeFilingCutoff(
+  periodCalendar: { year: number; monthIndex: number },
+  returnType: FiledReturnsReturnType,
+): { year: number; monthIndex: number; day: number } {
+  const quarterEndMonthIndex = Math.floor(periodCalendar.monthIndex / 3) * 3 + 2;
+  const firstFollowingMonthIndex = (quarterEndMonthIndex + 1) % 12;
+  const firstFollowingMonthYear = periodCalendar.year + (quarterEndMonthIndex === 11 ? 1 : 0);
+  const day = returnType === "GSTR-1" ? 13 : returnType === "GSTR-2B" ? 14 : 24;
+  return { year: firstFollowingMonthYear, monthIndex: firstFollowingMonthIndex, day };
 }
 
 function parseFinancialYearStartYear(financialYear: string): number | null {
@@ -281,12 +322,6 @@ function parseFinancialYearStartYearOrThrow(financialYear: string): number {
   const startYear = parseFinancialYearStartYear(financialYear);
   if (startYear === null) throw new TypeError("Invalid filed-return financial year.");
   return startYear;
-}
-
-function getPreviousCompletedCalendarMonth(asOf: Date): { year: number; monthIndex: number } {
-  const { year, monthIndex } = getIndianDateParts(asOf);
-  if (monthIndex === 0) return { year: year - 1, monthIndex: 11 };
-  return { year, monthIndex: monthIndex - 1 };
 }
 
 function getFiledReturnsPeriodCalendarMonth(

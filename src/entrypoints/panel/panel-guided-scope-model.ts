@@ -145,11 +145,14 @@ export function panelFullFiscalYearPresets(
   asOf = new Date(),
   catalogue: readonly PresetCatalogueEntry[] = supportedFiledReturnsCatalogueEntries(),
 ): readonly PanelFullFiscalYearPreset[] {
-  const periodCount = getFiledReturnsFullFiscalYearPeriods(financialYear, asOf).length;
-  if (periodCount === 0) return [];
-
   return catalogue.flatMap(({ returnType, capability }) => {
     if (!capability.fullFiscalYear) return [];
+    const periodCount = getFiledReturnsFullFiscalYearPeriods(
+      financialYear,
+      asOf,
+      returnType,
+    ).length;
+    if (periodCount === 0) return [];
     // A preset exists to remove a decision. Taking whichever artifact happened to
     // be listed first in the catalogue made that decision silently: "This year's
     // GSTR-2B" fetched a summary PDF while the return offers three formats.
