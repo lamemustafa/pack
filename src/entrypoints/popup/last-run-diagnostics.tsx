@@ -9,7 +9,7 @@ type DiagnosticsSummary =
 
 export function LastRunDiagnostics({ summary }: { summary: DiagnosticsSummary | null }) {
   if (!summary) return null;
-  const scope = "scope" in summary ? summary.scope : summary.flowStepScope;
+  const scope = diagnosticScope(summary);
 
   return (
     <details className="diagnostic-details" aria-label="Run diagnostics">
@@ -36,4 +36,13 @@ export function LastRunDiagnostics({ summary }: { summary: DiagnosticsSummary | 
       </dl>
     </details>
   );
+}
+
+function diagnosticScope(summary: DiagnosticsSummary) {
+  if ("scope" in summary) return summary.scope;
+  if (!summary.currentTargetId) return undefined;
+  const target = summary.targetEvidence.find(
+    ({ targetId }) => targetId === summary.currentTargetId,
+  );
+  return target ? { period: target.period, returnType: target.returnType } : undefined;
 }

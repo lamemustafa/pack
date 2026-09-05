@@ -102,7 +102,7 @@ describe("all-supported panel progress", () => {
   });
 
   it("renders safe diagnostics for a running all-supported run without an atomic counterpart", () => {
-    const running = summary(["pending"], "running", []);
+    const running = { ...summary(["pending"], "running", []), currentTargetId: "synthetic-0" };
     const markup = render(running);
     const diagnosticsStart = markup.indexOf('aria-label="Run diagnostics"');
     const diagnostics = markup.slice(
@@ -115,9 +115,24 @@ describe("all-supported panel progress", () => {
     expect(diagnostics).toContain("<dd>ready</dd>");
     expect(diagnostics).toContain("all-supported-full-fiscal-year-run-active");
     expect(diagnostics).toContain("GSTR-3B");
-    expect(diagnostics).toContain("Full fiscal year");
+    expect(diagnostics).toContain("April");
     expect(diagnostics).not.toContain(running.flowStep.safeMessage);
     expect(diagnostics).not.toContain(running.summaryIdentity!.financialYear);
+  });
+
+  it("omits target details when the all-supported summary describes a plan-wide ZIP state", () => {
+    const zipWide = summary(["saved"], "complete", [0]);
+    const markup = render(zipWide);
+    const diagnosticsStart = markup.indexOf('aria-label="Run diagnostics"');
+    const diagnostics = markup.slice(
+      diagnosticsStart,
+      markup.indexOf("</details>", diagnosticsStart),
+    );
+
+    expect(diagnostics).toContain("<dd>complete</dd>");
+    expect(diagnostics).not.toContain("Affected return type");
+    expect(diagnostics).not.toContain("Affected period");
+    expect(diagnostics).not.toContain(zipWide.flowStepScope!.period);
   });
 
   it("draws the existing progress track with the one saved-file count", () => {
