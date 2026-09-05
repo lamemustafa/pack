@@ -23,6 +23,7 @@ import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
 import { PanelGuidedScope, isPackSourceSurfaceBuildMode } from "./panel-guided-scope";
 import {
+  discardAllReturnsPlanLabel,
   panelAllReturnsFullYearPreset,
   panelAllReturnsFullYearResumePlan,
 } from "./panel-guided-scope-model";
@@ -371,6 +372,9 @@ function AllSupportedRunStatus({
     : undefined;
   const canRetryTarget =
     fullYearFlowAvailable && recovery !== undefined && recoveryEvidence !== undefined;
+  const restartLabel = summary.summaryIdentity
+    ? discardAllReturnsPlanLabel(summary.summaryIdentity.financialYear, "run again")
+    : "Discard the saved plan and run again";
   return (
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>
@@ -390,9 +394,10 @@ function AllSupportedRunStatus({
           className="panel-all-supported-action"
           type="button"
           disabled={busy !== null || !portalReady}
+          aria-label={restartLabel}
           onClick={onRestart}
         >
-          Discard this year's saved plan and run again
+          {restartLabel}
         </button>
       ) : canResume ? (
         <button

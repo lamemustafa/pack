@@ -94,6 +94,11 @@ export interface PanelAllReturnsFullYearResumePlan {
   readonly fileCount: number;
 }
 
+/** Names the exact saved plan a destructive restart will discard. */
+export function discardAllReturnsPlanLabel(financialYear: string, nextAction: string): string {
+  return `Discard the saved FY ${financialYear} plan and ${nextAction}`;
+}
+
 export function panelAllReturnsFullYearResumePlan(
   summary: Pick<
     FiledReturnsAllSupportedFullFiscalYearFlowSummary,
