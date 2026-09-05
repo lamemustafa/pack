@@ -82,7 +82,7 @@ Supported scope: one return period at a time. Available formats depend on the se
 • GSTR-1: filed-return summary PDF and, when the GST Portal provides it, e-invoice details Excel
 • GSTR-2B: auto-drafted statement summary PDF
 
-What Pack does not do: file returns, act on behalf of a taxpayer, or provide full-year bundles.
+What Pack does not do: file returns, or act on behalf of a taxpayer. Full-year bundling is outside the scope this listing supports and is not covered by these claims.
 
 The package contains further capability that this listing does not claim, because the release evidence for those claims is not yet recorded.
 
@@ -181,7 +181,9 @@ categories Pack necessarily handles while moving a user's chosen filed return:
 Certify all three Limited Use statements. Privacy policy URL:
 `https://pack.complyeaze.com/privacy`.
 
-The extension sends no data to Sentry and carries no analytics or telemetry; `verify-extension-package.mjs` rejects any Sentry reference in the built package. What the
+The extension sends no data to Sentry and carries no analytics or telemetry;
+`verify-extension-package.mjs` fails the build if it finds `@sentry/browser`,
+`@sentry/react`, `@sentry/core`, `Sentry.init` or `sentry.io` in the packaged output. What the
 website's own privacy policy says is outside this repository and is not restated here.
 
 Chrome's official FAQ explicitly states that local processing or storage still
