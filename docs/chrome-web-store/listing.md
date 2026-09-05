@@ -64,7 +64,7 @@ ComplyEaze Pack: GST Return Downloader
 Summary from package:
 
 ```text
-Download filed GSTR-1 and GSTR-3B returns and auto-drafted GSTR-2B statements locally. No account or stored portal credentials.
+Beta: Save filed GSTR-1 and GSTR-3B returns and auto-drafted GSTR-2B statements locally. No account or stored portal credentials.
 ```
 
 Description:
@@ -72,7 +72,7 @@ Description:
 ```text
 ComplyEaze Pack helps an authorised user, already signed in to the GST Portal in Chrome, download their own filed GSTR-3B and GSTR-1 artifacts and their own auto-drafted GSTR-2B statements to their device.
 
-There is no Pack or ComplyEaze account. Pack never asks for or stores GST Portal credentials, OTPs, CAPTCHA answers, cookies, or tokens. The extension does not upload GST documents or return contents to ComplyEaze. Its content script runs only on the four declared gst.gov.in hosts. Artifact capture starts only after an explicit user action. Before treating a selected GST artifact as downloaded, Pack verifies it as complete and non-empty, and retains only local, redacted recovery status if an interrupted run needs review.
+There is no Pack or ComplyEaze account. Pack never asks for or stores GST Portal credentials, OTPs, CAPTCHA answers, cookies, or tokens. The extension does not upload GST documents or return contents to ComplyEaze. Its content script runs only on the four declared gst.gov.in hosts. Artifact capture starts only after an explicit user action. Before treating a selected GST artifact as downloaded, Pack verifies it as complete and non-empty, and retains local, redacted recovery status if an interrupted run needs review. Selected artifact bytes may be staged temporarily in browser-local OPFS during capture or ZIP assembly; Pack removes them after a confirmed export or an explicit discard, and retains them with a cleanup-pending status if that cleanup fails.
 
 The Pack website's privacy notice separately discloses its Sentry error diagnostics. The browser extension has no analytics or telemetry and does not send extension data to Sentry.
 
@@ -83,6 +83,8 @@ Supported scope: one return period at a time. Available formats depend on the se
 • GSTR-2B: auto-drafted statement summary PDF
 
 What Pack does not do: file returns, act on behalf of a taxpayer, or provide full-year bundles.
+
+The package contains further capability that this listing does not claim, because the release evidence for those claims is not yet recorded.
 
 ComplyEaze Pack is open source under the Apache-2.0 license: https://github.com/lamemustafa/pack
 
