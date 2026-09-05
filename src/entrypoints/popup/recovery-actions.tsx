@@ -32,7 +32,7 @@ export interface RecoveryActionsProps {
    * withheld; cancelling and recording an observation stay, because both are local and are the
    * way out.
    */
-  fullYearFlowAvailable?: boolean;
+  fullYearFlowAvailable: boolean;
 }
 
 export function RecoveryActions({
@@ -47,7 +47,7 @@ export function RecoveryActions({
   onStartFresh,
   collapsed = false,
   showPortalRetryReason = true,
-  fullYearFlowAvailable = true,
+  fullYearFlowAvailable,
 }: RecoveryActionsProps) {
   const [moreOpen, setMoreOpen] = React.useState(!collapsed);
   const recoveryState = getRecoveryActionState(summary);

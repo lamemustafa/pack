@@ -254,6 +254,7 @@ describe("inline filed-return recovery status", () => {
 
     const markup = renderToStaticMarkup(
       <RecoveryActions
+        fullYearFlowAvailable={true}
         busy={null}
         portalReady={false}
         summary={reconcileSummary}
@@ -356,6 +357,7 @@ describe("inline filed-return recovery status", () => {
 
       const recoveryMarkup = renderToStaticMarkup(
         <RecoveryActions
+          fullYearFlowAvailable={true}
           busy={null}
           portalReady={false}
           summary={summary}
@@ -464,6 +466,7 @@ describe("inline filed-return recovery status", () => {
     );
     const recoveryMarkup = renderToStaticMarkup(
       <RecoveryActions
+        fullYearFlowAvailable={true}
         busy={null}
         portalReady={false}
         summary={summary}
@@ -515,6 +518,7 @@ describe("inline filed-return recovery status", () => {
     );
     const recoveryMarkup = renderToStaticMarkup(
       <RecoveryActions
+        fullYearFlowAvailable={true}
         busy={null}
         portalReady
         summary={summary}
@@ -556,6 +560,7 @@ describe("inline filed-return recovery status", () => {
     );
     const recoveryMarkup = renderToStaticMarkup(
       <RecoveryActions
+        fullYearFlowAvailable={true}
         busy={null}
         portalReady
         summary={summary}
