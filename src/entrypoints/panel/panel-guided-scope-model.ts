@@ -76,6 +76,8 @@ export interface PanelAllReturnsFullYearPreset extends PanelAllReturnsFullYearPl
   readonly artifactCount: number;
   /** The maximum concrete portal-file requests before not-filed outcomes. */
   readonly fileCount: number;
+  /** Atomic targets expected at the displayed eligibility snapshot. */
+  readonly targetSignature: string;
 }
 
 /**
@@ -90,6 +92,11 @@ export interface PanelAllReturnsFullYearResumePlan {
   readonly periodCount: number;
   readonly artifactCount: number;
   readonly fileCount: number;
+}
+
+/** Names the exact saved plan a destructive restart will discard. */
+export function discardAllReturnsPlanLabel(financialYear: string, nextAction: string): string {
+  return `Discard the saved FY ${financialYear} plan and ${nextAction}`;
 }
 
 export function panelAllReturnsFullYearResumePlan(
@@ -145,11 +152,14 @@ export function panelFullFiscalYearPresets(
   asOf = new Date(),
   catalogue: readonly PresetCatalogueEntry[] = supportedFiledReturnsCatalogueEntries(),
 ): readonly PanelFullFiscalYearPreset[] {
-  const periodCount = getFiledReturnsFullFiscalYearPeriods(financialYear, asOf).length;
-  if (periodCount === 0) return [];
-
   return catalogue.flatMap(({ returnType, capability }) => {
     if (!capability.fullFiscalYear) return [];
+    const periodCount = getFiledReturnsFullFiscalYearPeriods(
+      financialYear,
+      asOf,
+      returnType,
+    ).length;
+    if (periodCount === 0) return [];
     // A preset exists to remove a decision. Taking whichever artifact happened to
     // be listed first in the catalogue made that decision silently: "This year's
     // GSTR-2B" fetched a summary PDF while the return offers three formats.
@@ -185,9 +195,6 @@ export function panelAllReturnsFullYearPreset(
   asOf = new Date(),
   catalogue: readonly PresetCatalogueEntry[] = supportedFiledReturnsCatalogueEntries(),
 ): PanelAllReturnsFullYearPreset | null {
-  const periodCount = getFiledReturnsFullFiscalYearPeriods(financialYear, asOf).length;
-  if (periodCount === 0) return null;
-
   const expansion = expandAllSupportedFullFiscalYearTargetPlan({
     catalogueEntries: catalogue.map(({ returnType, capability }) => ({
       returnType,
@@ -196,6 +203,13 @@ export function panelAllReturnsFullYearPreset(
     offeredArtifacts: filedReturnsOfferedArtifacts,
   });
   if (!expansion.ok) return null;
+
+  const periodsByReturn = expansion.targets.map(({ returnType }) => ({
+    returnType,
+    periods: getFiledReturnsFullFiscalYearPeriods(financialYear, asOf, returnType),
+  }));
+  const periodCount = new Set(periodsByReturn.flatMap((plan) => plan.periods)).size;
+  if (periodCount === 0) return null;
 
   const artifactCount = expansion.targets.reduce(
     (count, target) => count + target.concreteArtifactTypes.length,
@@ -224,7 +238,22 @@ export function panelAllReturnsFullYearPreset(
     returnCount: expansion.targets.length,
     periodCount,
     artifactCount,
-    fileCount: periodCount * artifactCount,
+    fileCount: expansion.targets.reduce(
+      (count, target) =>
+        count +
+        (periodsByReturn.find((plan) => plan.returnType === target.returnType)?.periods.length ??
+          0) *
+          target.concreteArtifactTypes.length,
+      0,
+    ),
+    targetSignature: expansion.targets
+      .flatMap((target) =>
+        (periodsByReturn.find((plan) => plan.returnType === target.returnType)?.periods ?? []).map(
+          (period) => `${target.returnType}:${target.artifactType}:${period}`,
+        ),
+      )
+      .sort()
+      .join("|"),
   };
 }
 

@@ -61,6 +61,16 @@ function createLedger(now = NOW) {
   return createAllSupportedFullFiscalYearLedger(PLAN_ROOT, expandedPlan(), PERIODS, now);
 }
 
+function createReturnSpecificLedger(now = NOW) {
+  const returnPlan = expandedPlan();
+  return createAllSupportedFullFiscalYearLedger(
+    PLAN_ROOT,
+    returnPlan,
+    returnPlan.map(({ returnType }) => ({ returnType, periods: [...PERIODS] })),
+    now,
+  );
+}
+
 describe("all-supported full-fiscal-year ledger", () => {
   beforeEach(() => {
     stored.current = {};
@@ -82,6 +92,19 @@ describe("all-supported full-fiscal-year ledger", () => {
       expandedPlan().flatMap(() => PERIODS),
     );
     expect(ledger.targetPlan.every((target) => target.concreteArtifactTypes.length > 0)).toBe(true);
+  });
+
+  it.each([null, false, "", 0])("rejects a present non-array period plan: %j", (periodPlan) => {
+    expect(isAllSupportedFullFiscalYearLedger({ ...createLedger(), periodPlan })).toBe(false);
+  });
+
+  it("rejects a period plan whose eligible-through marker disagrees with its periods", () => {
+    expect(
+      isAllSupportedFullFiscalYearLedger({
+        ...createReturnSpecificLedger(),
+        eligibleThrough: "March",
+      }),
+    ).toBe(false);
   });
 
   it("rejects a persisted plan whose repeated return group is reordered or shortened", () => {

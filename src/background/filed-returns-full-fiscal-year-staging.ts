@@ -320,6 +320,7 @@ export async function finishFullFiscalYearCleanup(
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
     cleanupPendingLedger.scope.financialYear,
     now,
+    cleanupPendingLedger.scope.returnType,
   );
   const reconciledLedger =
     plannedPeriods.length > 0

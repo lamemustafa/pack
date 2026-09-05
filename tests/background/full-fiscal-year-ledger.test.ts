@@ -761,8 +761,9 @@ describe("full fiscal year ledger", () => {
       "Pack completed the local full fiscal year run for FY 2026-27.",
     );
 
-    // Resumed and finished in September, by which time June, July and August
-    // have become eligible. The plan does not grow, so the outcome has to say so
+    // Resumed and finished in September, by which time June through August have
+    // become eligible under the monthly GSTR-3B threshold.
+    // The plan does not grow, so the outcome has to say so
     // where the outcome is stated.
     const later = completeFullFiscalYearStep(complete, new Date("2026-09-24T00:00:00.000Z"));
     expect(later.safeSignals).toContain("full-fiscal-year-plan-narrower-than-eligible");

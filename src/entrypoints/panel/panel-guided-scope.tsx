@@ -17,6 +17,7 @@ import {
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import {
+  discardAllReturnsPlanLabel,
   panelAllReturnsFullYearPreset,
   panelFullFiscalYearPresets,
   panelGuidedStepForDisplay,
@@ -126,6 +127,41 @@ export function PanelGuidedScope({
         return preset ? [preset] : [];
       })
     : [];
+  const allReturnsPresetEntries = allReturnsPresets.map((preset) => {
+    const terminalBlock = allReturnsTerminalBlocks?.find(
+      (block) => block.financialYear === preset.financialYear,
+    );
+    return {
+      preset,
+      terminalBlock,
+      externalBlock:
+        allReturnsResumePlan?.financialYear === preset.financialYear || terminalBlock?.restartPlan
+          ? null
+          : terminalBlock
+            ? { disabled: true as const, label: terminalBlock.label }
+            : (allReturnsExternalBlock ?? externalBlock),
+    };
+  });
+  const presetBlocks = presets.map((preset) =>
+    getScopeMatchedFiledReturnsSummary(preset.scope, savedRun) ? null : externalBlock,
+  );
+  const renderedPresetBlocks = [
+    ...presetBlocks,
+    ...(onStartAllReturnsFullYear
+      ? allReturnsPresetEntries.map((entry) => entry.externalBlock)
+      : []),
+  ];
+  // A saved-plan block is one explanation for every option, not a paragraph
+  // that happens to appear beside every option. Preserve per-preset reasons
+  // whenever any option has a different block or no block at all.
+  const firstRenderedPresetBlock = renderedPresetBlocks[0];
+  const sharedExternalBlock =
+    firstRenderedPresetBlock !== null &&
+    firstRenderedPresetBlock !== undefined &&
+    renderedPresetBlocks.every((block) => block === firstRenderedPresetBlock)
+      ? firstRenderedPresetBlock
+      : null;
+  const sharedExternalBlockId = "panel-presets-shared-reason";
 
   React.useEffect(() => {
     // Initial autofocus can scroll a saved-run warning out of a short panel.
@@ -148,51 +184,47 @@ export function PanelGuidedScope({
     return (
       <section className="panel-presets" aria-labelledby="panel-presets-title">
         <h2 id="panel-presets-title">What do you need?</h2>
+        {sharedExternalBlock ? (
+          <p className="panel-preset-reason" id={sharedExternalBlockId}>
+            {sharedExternalBlock.label}
+          </p>
+        ) : null}
         <div className="panel-preset-list">
-          {onStartAllReturnsFullYear && allReturnsPresets.length > 0 ? (
+          {onStartAllReturnsFullYear && allReturnsPresetEntries.length > 0 ? (
             <div className="panel-everything-preset-group">
-              {allReturnsPresets.map((preset) =>
-                (() => {
-                  const terminalBlock = allReturnsTerminalBlocks?.find(
-                    (block) => block.financialYear === preset.financialYear,
-                  );
-                  return (
-                    <AllReturnsPreset
-                      key={preset.financialYear}
-                      busy={busy}
-                      externalBlock={
-                        allReturnsResumePlan?.financialYear === preset.financialYear ||
-                        terminalBlock?.restartPlan
-                          ? null
-                          : terminalBlock
-                            ? { disabled: true, label: terminalBlock.label }
-                            : (allReturnsExternalBlock ?? externalBlock)
-                      }
-                      primary={preset.financialYear === financialYears[1]}
-                      plan={preset}
-                      {...(allReturnsResumePlan?.financialYear === preset.financialYear
-                        ? { resumePlan: allReturnsResumePlan }
-                        : {})}
-                      {...(terminalBlock?.restartPlan && onRestartAllReturnsFullYear
-                        ? {
-                            onRestart: (plan: PanelAllReturnsFullYearPlan) =>
-                              onRestartAllReturnsFullYear(
-                                terminalBlock.ledgerId === undefined
-                                  ? plan
-                                  : { ...plan, ledgerId: terminalBlock.ledgerId },
-                              ),
-                          }
-                        : {})}
-                      portalReady={portalSignedIn}
-                      onStart={onStartAllReturnsFullYear}
-                      onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
-                    />
-                  );
-                })(),
+              {allReturnsPresetEntries.map(
+                ({ preset, terminalBlock, externalBlock: presetBlock }) => (
+                  <AllReturnsPreset
+                    key={preset.financialYear}
+                    busy={busy}
+                    externalBlock={presetBlock}
+                    {...(sharedExternalBlock !== null && presetBlock === sharedExternalBlock
+                      ? { sharedDisabledReasonId: sharedExternalBlockId }
+                      : {})}
+                    primary={preset.financialYear === financialYears[1]}
+                    plan={preset}
+                    {...(allReturnsResumePlan?.financialYear === preset.financialYear
+                      ? { resumePlan: allReturnsResumePlan }
+                      : {})}
+                    {...(terminalBlock?.restartPlan && onRestartAllReturnsFullYear
+                      ? {
+                          onRestart: (plan: PanelAllReturnsFullYearPlan) =>
+                            onRestartAllReturnsFullYear(
+                              terminalBlock.ledgerId === undefined
+                                ? plan
+                                : { ...plan, ledgerId: terminalBlock.ledgerId },
+                            ),
+                        }
+                      : {})}
+                    portalReady={portalSignedIn}
+                    onStart={onStartAllReturnsFullYear}
+                    onStalePlan={() => refreshPresetSnapshot((current) => current + 1)}
+                  />
+                ),
               )}
             </div>
           ) : null}
-          {presets.map((preset) => {
+          {presets.map((preset, index) => {
             const artifactDescription = preset.scope.artifactType
               ? filedReturnsCapabilityArtifactDescription(
                   preset.scope.returnType,
@@ -201,7 +233,7 @@ export function PanelGuidedScope({
               : "selected portal files";
             const savedRunForPreset = getScopeMatchedFiledReturnsSummary(preset.scope, savedRun);
             const summaryForPreset = savedRunForPreset ?? flowSummary;
-            const blockForPreset = savedRunForPreset ? null : externalBlock;
+            const blockForPreset = presetBlocks[index] ?? null;
             const startAction = getScopeFormStartAction(preset.scope, summaryForPreset, busy, true);
             const disabled =
               !portalSignedIn || blockForPreset?.disabled === true || startAction.disabled;
@@ -220,7 +252,11 @@ export function PanelGuidedScope({
                   disabled={disabled}
                   aria-label={`${preset.label}. Downloads ${artifactDescription}.`}
                   aria-describedby={
-                    disabledReason ? `preset-${preset.scope.returnType}-reason` : undefined
+                    disabledReason
+                      ? sharedExternalBlock !== null && blockForPreset === sharedExternalBlock
+                        ? sharedExternalBlockId
+                        : `preset-${preset.scope.returnType}-reason`
+                      : undefined
                   }
                   onClick={() => {
                     const currentAsOf = new Date();
@@ -246,7 +282,8 @@ export function PanelGuidedScope({
                 >
                   <span>{preset.label}</span>
                 </button>
-                {disabledReason ? (
+                {disabledReason &&
+                (sharedExternalBlock === null || blockForPreset !== sharedExternalBlock) ? (
                   <p
                     className="panel-preset-reason"
                     id={`preset-${preset.scope.returnType}-reason`}
@@ -392,6 +429,7 @@ function AllReturnsPreset({
   plan,
   portalReady,
   resumePlan,
+  sharedDisabledReasonId,
   onRestart,
   onStart,
   onStalePlan,
@@ -402,6 +440,7 @@ function AllReturnsPreset({
   plan: PanelAllReturnsFullYearPreset;
   portalReady: boolean;
   resumePlan?: PanelAllReturnsFullYearResumePlan;
+  sharedDisabledReasonId?: string;
   onRestart?: (plan: PanelAllReturnsFullYearPlan) => void;
   onStart: (plan: PanelAllReturnsFullYearPlan) => void;
   onStalePlan: () => void;
@@ -424,6 +463,10 @@ function AllReturnsPreset({
   const restartable = onRestart !== undefined;
   const coverageLabel = displayedPlan.returnTypes.map(shortReturnLabel).join(" · ");
   const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
+  const restartLabel = discardAllReturnsPlanLabel(
+    displayedPlan.financialYear,
+    `run ${displayedPlan.label.toLowerCase()}`,
+  );
 
   return (
     <React.Fragment>
@@ -431,8 +474,8 @@ function AllReturnsPreset({
         className={`panel-preset panel-everything-preset${primary ? " panel-everything-preset-primary" : ""}`}
         type="button"
         disabled={disabled}
-        aria-describedby={disabledReason ? disabledReasonId : undefined}
-        aria-label={`${restartable ? `Discard this year's saved plan and run ${displayedPlan.label.toLowerCase()}` : displayedPlan.label}. ${coverageLabel}.`}
+        aria-describedby={disabledReason ? (sharedDisabledReasonId ?? disabledReasonId) : undefined}
+        aria-label={`${restartable ? restartLabel : displayedPlan.label}. ${coverageLabel}.`}
         onClick={() => {
           if (onRestart) {
             // Restart discards a completed plan and starts a new one. A panel
@@ -465,14 +508,10 @@ function AllReturnsPreset({
           onStart({ kind: plan.kind, financialYear: plan.financialYear });
         }}
       >
-        <span>
-          {restartable
-            ? `Discard this year's saved plan and run ${displayedPlan.label.toLowerCase()}`
-            : displayedPlan.label}
-        </span>
+        <span>{restartable ? restartLabel : displayedPlan.label}</span>
         <span className="panel-everything-preset-coverage">{coverageLabel}</span>
       </button>
-      {disabledReason ? (
+      {disabledReason && !sharedDisabledReasonId ? (
         <p className="panel-preset-reason" id={disabledReasonId}>
           {disabledReason}
         </p>

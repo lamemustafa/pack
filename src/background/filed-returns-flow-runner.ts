@@ -749,7 +749,11 @@ function blockedRetainedArtifactAcquisitionResponse(
     completedPeriods: [],
     currentPeriod: scope.period,
     totalPeriods: isFullFiscalYearScope(scope)
-      ? getFiledReturnsFullFiscalYearPeriods(scope.financialYear, deps.now?.() ?? new Date()).length
+      ? getFiledReturnsFullFiscalYearPeriods(
+          scope.financialYear,
+          deps.now?.() ?? new Date(),
+          scope.returnType,
+        ).length
       : 1,
     flowStep,
   };
@@ -761,7 +765,11 @@ function blockedScopeTotalPeriods(
   deps: Pick<FiledReturnsFlowRunnerDeps, "now">,
 ): number {
   return isFullFiscalYearScope(scope)
-    ? getFiledReturnsFullFiscalYearPeriods(scope.financialYear, deps.now?.() ?? new Date()).length
+    ? getFiledReturnsFullFiscalYearPeriods(
+        scope.financialYear,
+        deps.now?.() ?? new Date(),
+        scope.returnType,
+      ).length
     : 1;
 }
 

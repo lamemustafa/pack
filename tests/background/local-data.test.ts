@@ -1030,7 +1030,7 @@ describe("Pack local data clearing", () => {
     });
     const summary = await readCurrentFiledReturnsFlowSummary({
       storageKeys: filedReturnsCurrentStateStorageKeys,
-      now: () => new Date("2026-06-24T00:01:00Z"),
+      now: () => new Date("2026-07-25T00:01:00Z"),
     });
 
     expect(summary).toMatchObject({
@@ -1090,7 +1090,7 @@ describe("Pack local data clearing", () => {
     });
     const summary = await readCurrentFiledReturnsFlowSummary({
       storageKeys: filedReturnsCurrentStateStorageKeys,
-      now: () => new Date("2026-06-24T00:01:00Z"),
+      now: () => new Date("2026-07-25T00:01:00Z"),
     });
 
     expect(summary).toMatchObject({
@@ -1149,7 +1149,7 @@ describe("Pack local data clearing", () => {
     });
     const summary = await readCurrentFiledReturnsFlowSummary({
       storageKeys: filedReturnsCurrentStateStorageKeys,
-      now: () => new Date("2026-06-24T00:01:00Z"),
+      now: () => new Date("2026-07-25T00:01:00Z"),
     });
 
     expect(summary).toMatchObject({

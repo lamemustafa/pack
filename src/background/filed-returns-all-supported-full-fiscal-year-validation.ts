@@ -35,7 +35,10 @@ import {
   hasPositiveFiledReturnsDownloadEvidence,
   isValidFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
-import { canonicalFullFiscalYearPlanPeriods } from "./filed-returns-full-fiscal-year-validation";
+import {
+  canonicalFullFiscalYearPlanPeriods,
+  isCanonicalFullFiscalYearPeriodPlan,
+} from "./filed-returns-full-fiscal-year-validation";
 
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION =
   "all-supported-filed-returns-targets-v1" as const;
@@ -56,6 +59,11 @@ export interface FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget extends 
   targetId: string;
   financialYear: string;
   period: FiledReturnsMonth;
+}
+
+export interface FiledReturnsAllSupportedFullFiscalYearPeriodPlan {
+  returnType: FiledReturnsReturnType;
+  periods: FiledReturnsMonth[];
 }
 
 export interface FiledReturnsAllSupportedFullFiscalYearTarget extends FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget {
@@ -89,6 +97,8 @@ export interface FiledReturnsAllSupportedFullFiscalYearLedger {
   eligibleThrough: FiledReturnsMonth;
   lastReconciledAt: string;
   planProvenance: FiledReturnsAllSupportedFullFiscalYearPlanProvenance;
+  /** Present on new ledgers so each return retains its own statutory cutoff. */
+  periodPlan?: FiledReturnsAllSupportedFullFiscalYearPeriodPlan[];
   targetPlan: FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[];
   targets: FiledReturnsAllSupportedFullFiscalYearTarget[];
 }
@@ -166,6 +176,7 @@ const LEDGER_KEYS = [
   "ledgerId",
   "planRoot",
   "planProvenance",
+  "periodPlan",
   "planVersion",
   "portalTabId",
   "portalTabSessionId",
@@ -255,6 +266,7 @@ export function isAllSupportedFullFiscalYearLedger(
       ledger.planRoot.financialYear,
       ledger.eligibleThrough,
       ledger.planProvenance,
+      ledger.periodPlan,
     )
   )
     return false;
@@ -289,8 +301,43 @@ function isTargetPlan(
   financialYear: string,
   eligibleThrough: FiledReturnsMonth,
   planProvenance: FiledReturnsAllSupportedFullFiscalYearPlanProvenance,
+  periodPlan: unknown,
 ): input is FiledReturnsAllSupportedFullFiscalYearLedgerPlanTarget[] {
   if (!Array.isArray(input) || input.length === 0) return false;
+  if (periodPlan !== undefined) {
+    if (!isPeriodPlan(periodPlan, financialYear, planProvenance.returnPlan)) {
+      return false;
+    }
+    const latestPlannedPeriodIndex = Math.max(
+      ...periodPlan.flatMap((plan) =>
+        plan.periods.map((period) => FILED_RETURNS_MONTHS.indexOf(period)),
+      ),
+    );
+    if (FILED_RETURNS_MONTHS[latestPlannedPeriodIndex] !== eligibleThrough) return false;
+    const expectedTargetCount = periodPlan.reduce((count, plan) => count + plan.periods.length, 0);
+    if (input.length !== expectedTargetCount) return false;
+    let index = 0;
+    for (const expectedReturn of planProvenance.returnPlan) {
+      const periods = periodPlan.find(
+        (plan) => plan.returnType === expectedReturn.returnType,
+      )?.periods;
+      if (!periods) return false;
+      for (const period of periods) {
+        const target = input[index];
+        if (
+          !isPlanTarget(target, financialYear) ||
+          target.returnType !== expectedReturn.returnType ||
+          target.period !== period ||
+          target.artifactType !== expectedReturn.artifactType ||
+          !sameArtifacts(target.concreteArtifactTypes, expectedReturn.concreteArtifactTypes)
+        ) {
+          return false;
+        }
+        index += 1;
+      }
+    }
+    return true;
+  }
   const periods = canonicalFullFiscalYearPlanPeriods(financialYear, eligibleThrough);
   if (!periods) return false;
   if (input.length !== planProvenance.returnPlan.length * periods.length) return false;
@@ -311,6 +358,35 @@ function isTargetPlan(
     }
   }
   return true;
+}
+
+function isPeriodPlan(
+  input: unknown,
+  financialYear: string,
+  returnPlan: readonly FiledReturnsAllSupportedFullFiscalYearPlanTarget[],
+): input is FiledReturnsAllSupportedFullFiscalYearPeriodPlan[] {
+  if (!Array.isArray(input)) return false;
+  return (
+    input.length === returnPlan.length &&
+    input.every((candidate, index) => {
+      const expectedReturn = returnPlan[index];
+      if (
+        !isRecord(candidate) ||
+        !hasOnlyKeys(candidate, ["returnType", "periods"]) ||
+        !Array.isArray(candidate.periods)
+      ) {
+        return false;
+      }
+      const plan = candidate as { periods: unknown[]; returnType?: unknown };
+      return (
+        expectedReturn !== undefined &&
+        plan.returnType === expectedReturn.returnType &&
+        plan.periods.every(isFiledReturnsMonth) &&
+        (plan.periods.length === 0 ||
+          isCanonicalFullFiscalYearPeriodPlan(financialYear, plan.periods as FiledReturnsMonth[]))
+      );
+    })
+  );
 }
 
 function isPlanProvenance(

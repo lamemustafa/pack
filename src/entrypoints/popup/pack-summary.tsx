@@ -26,7 +26,8 @@ export function PackSummary({
   const fullYear = isFullFiscalYearScope(scope);
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const totalPeriods =
-    summary?.totalPeriods ?? getFiledReturnsPeriodOptions(scope.financialYear).length;
+    summary?.totalPeriods ??
+    getFiledReturnsPeriodOptions(scope.financialYear, new Date(), scope.returnType).length;
   const fileLabel = filedReturnsArtifactLabel(artifactType, scope.returnType);
   const fullYearMeta = getFullYearMeta(summary);
   const singlePeriodMeta = getSinglePeriodMeta(summary);

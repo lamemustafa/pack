@@ -22,7 +22,8 @@ import {
 import type { ArtifactRequest, ArtifactFailureReason } from "./artifact-source";
 import {
   FULL_FISCAL_YEAR_PERIOD,
-  isSupportedFiledReturnsScope,
+  isStructurallySupportedFiledReturnsScope,
+  isStructurallySupportedFiledReturnsStartScope as hasStructurallySupportedFiledReturnsStartScope,
   isSupportedFiledReturnsStartScope,
 } from "./filed-returns-scope";
 import { isCanonicalFullFiscalYearLedgerId } from "./filed-returns-ledger-id";
@@ -285,7 +286,7 @@ export function isPackMessage(
     case "PACK_CONTENT_OPEN_RETURNS_DASHBOARD_V34":
       return input.payload === undefined;
     case "PACK_RETRY_FILED_RETURNS_TARGET":
-      return isFiledReturnsStartScope(input.payload);
+      return isStructurallySupportedFiledReturnsStartScope(input.payload);
     case "PACK_RETRY_FULL_FISCAL_YEAR_TARGET":
       return isFullFiscalYearTargetRecoveryPayload(input.payload);
     case "PACK_RETRY_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_TARGET":
@@ -414,7 +415,7 @@ function isUnconfirmedDownloadResolution(input: unknown): input is {
 } {
   if (!isRecord(input) || !hasOnlyKeys(input, ["scope", "resolution"])) return false;
   if (input.resolution !== "manually-observed" && input.resolution !== "cancelled") return false;
-  return isFiledReturnsStartScope(input.scope);
+  return isStructurallySupportedFiledReturnsStartScope(input.scope);
 }
 function isFiledReturnsFreshStartPayload(input: unknown): input is FiledReturnsFreshStartPayload {
   if (
@@ -428,7 +429,7 @@ function isFiledReturnsFreshStartPayload(input: unknown): input is FiledReturnsF
   if (input.recovery.kind === "target-review") {
     return (
       hasOnlyKeys(input.recovery, ["kind", "scope"]) &&
-      isFiledReturnsStartScope(input.recovery.scope)
+      isStructurallySupportedFiledReturnsStartScope(input.recovery.scope)
     );
   }
   return (
@@ -515,12 +516,21 @@ function isFiledReturnsDownloadScope(input: unknown): input is FiledReturnsDownl
     ...(artifactType ? { artifactType } : {}),
     ...(input.completedPeriods ? { completedPeriods: input.completedPeriods } : {}),
   };
-  return isSupportedFiledReturnsScope(scope);
+  return isStructurallySupportedFiledReturnsScope(scope);
 }
 
 function isFiledReturnsStartScope(input: unknown): input is FiledReturnsDownloadScope {
   if (!isFiledReturnsScopeShape(input)) return false;
   return isSupportedFiledReturnsStartScope(toFiledReturnsScope(input));
+}
+
+function isStructurallySupportedFiledReturnsStartScope(
+  input: unknown,
+): input is FiledReturnsDownloadScope {
+  return (
+    isFiledReturnsScopeShape(input) &&
+    hasStructurallySupportedFiledReturnsStartScope(toFiledReturnsScope(input))
+  );
 }
 
 function isFiledReturnsScopeShape(input: unknown): input is {

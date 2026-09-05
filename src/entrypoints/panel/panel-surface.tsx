@@ -23,6 +23,7 @@ import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
 import { PanelGuidedScope, isPackSourceSurfaceBuildMode } from "./panel-guided-scope";
 import {
+  discardAllReturnsPlanLabel,
   panelAllReturnsFullYearPreset,
   panelAllReturnsFullYearResumePlan,
 } from "./panel-guided-scope-model";
@@ -78,11 +79,13 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const restartFromSummaryCard = async () => {
     if (!allSupportedSummary?.summaryIdentity) return;
     const financialYear = allSupportedSummary.summaryIdentity.financialYear;
-    const displayedPeriods = new Set(
-      allSupportedSummary.targetEvidence.map((entry) => entry.period),
-    ).size;
+    const displayedTargetSignature = allSupportedSummary.targetEvidence
+      .map((entry) => `${entry.returnType}:${entry.artifactType}:${entry.period}`)
+      .sort()
+      .join("|");
     if (
-      panelAllReturnsFullYearPreset(financialYear, new Date())?.periodCount !== displayedPeriods
+      panelAllReturnsFullYearPreset(financialYear, new Date())?.targetSignature !==
+      displayedTargetSignature
     ) {
       await pack.refreshFlowSummary();
       return;
@@ -316,11 +319,13 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
       <footer className="panel-foot">
         <p className="panel-fine">Local only · GST login and files stay on this device.</p>
         {/*
-          Carried over when the popup folded into this surface. It was the popup's
-          only route to the last run's state, reason and safe signals, so folding
-          without it would have deleted a diagnostic rather than moved it.
+          Carried over when the popup folded into this surface. It is the only
+          route to a run's state, reason and safe signals, so folding without it
+          would have deleted a diagnostic rather than moved it.
         */}
-        <LastRunDiagnostics summary={pack.lastRunSummary} />
+        <LastRunDiagnostics
+          summary={pack.allSupportedFullFiscalYearFlowSummary ?? pack.lastRunSummary}
+        />
         {/* Required wherever the Pack mark appears. See DESIGN.md and AGENTS.md. */}
         <p className="panel-fine">
           Not affiliated with, endorsed by, or operated by GSTN, CBIC, or the Government of India.
@@ -369,6 +374,9 @@ function AllSupportedRunStatus({
     : undefined;
   const canRetryTarget =
     fullYearFlowAvailable && recovery !== undefined && recoveryEvidence !== undefined;
+  const restartLabel = summary.summaryIdentity
+    ? discardAllReturnsPlanLabel(summary.summaryIdentity.financialYear, "run again")
+    : "Discard the saved plan and run again";
   return (
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>
@@ -388,9 +396,10 @@ function AllSupportedRunStatus({
           className="panel-all-supported-action"
           type="button"
           disabled={busy !== null || !portalReady}
+          aria-label={restartLabel}
           onClick={onRestart}
         >
-          Discard this year's saved plan and run again
+          {restartLabel}
         </button>
       ) : canResume ? (
         <button
