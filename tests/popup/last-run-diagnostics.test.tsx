@@ -41,6 +41,21 @@ describe("last-run diagnostics", () => {
     expect(markup).not.toContain("Last run");
   });
 
+  it("uses an atomic full-year run's current period when one target needs attention", () => {
+    const markup = renderToStaticMarkup(
+      <LastRunDiagnostics
+        summary={{
+          ...summary,
+          currentPeriod: "May",
+          scope: { ...summary.scope, period: "FULL_FISCAL_YEAR" },
+        }}
+      />,
+    );
+
+    expect(markup).toContain("<dd>May</dd>");
+    expect(markup).not.toContain("Full fiscal year");
+  });
+
   it("does not render an absent run", () => {
     expect(renderToStaticMarkup(<LastRunDiagnostics summary={null} />)).toBe("");
   });

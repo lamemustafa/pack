@@ -39,7 +39,15 @@ export function LastRunDiagnostics({ summary }: { summary: DiagnosticsSummary | 
 }
 
 function diagnosticScope(summary: DiagnosticsSummary) {
-  if ("scope" in summary) return summary.scope;
+  if ("scope" in summary) {
+    return {
+      ...summary.scope,
+      period:
+        isFullFiscalYearScope(summary.scope) && summary.currentPeriod
+          ? summary.currentPeriod
+          : summary.scope.period,
+    };
+  }
   if (!summary.currentTargetId) return undefined;
   const target = summary.targetEvidence.find(
     ({ targetId }) => targetId === summary.currentTargetId,
