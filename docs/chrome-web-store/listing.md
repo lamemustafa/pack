@@ -74,7 +74,7 @@ ComplyEaze Pack helps an authorised user, already signed in to the GST Portal in
 
 There is no Pack or ComplyEaze account. Pack never asks for or stores GST Portal credentials, OTPs, CAPTCHA answers, cookies, or tokens. The extension does not upload GST documents or return contents to ComplyEaze. Its content script runs only on the four declared gst.gov.in hosts. Artifact capture starts only after an explicit user action. Before treating a selected GST artifact as downloaded, Pack verifies it as complete and non-empty, and retains local, redacted recovery status if an interrupted run needs review. Selected artifact bytes may be staged temporarily in browser-local OPFS during capture or ZIP assembly; Pack removes them after a confirmed export or an explicit discard, and retains them with a cleanup-pending status if that cleanup fails.
 
-The browser extension has no analytics or telemetry and does not send extension data to Sentry or anywhere else. The Pack website is a separate product with its own privacy notice.
+The browser extension has no analytics or telemetry, and sends no data to Sentry or to ComplyEaze. The network requests it does make go only to the GST Portal itself, on the four declared hosts, to carry out a download the user asked for. The Pack website is a separate product with its own privacy notice.
 
 Supported scope: one return period at a time. Available formats depend on the selected GST Portal page; Pack saves a PDF or Excel workbook only when that page provides the selected artifact.
 
@@ -181,8 +181,8 @@ categories Pack necessarily handles while moving a user's chosen filed return:
 Certify all three Limited Use statements. Privacy policy URL:
 `https://pack.complyeaze.com/privacy`.
 
-The privacy policy separately discloses Sentry error diagnostics for the Pack website. They are not
-extension analytics or telemetry: the extension does not send extension data to Sentry.
+The extension sends no data to Sentry and carries no analytics or telemetry; `verify-extension-package.mjs` rejects any Sentry reference in the built package. What the
+website's own privacy policy says is outside this repository and is not restated here.
 
 Chrome's official FAQ explicitly states that local processing or storage still
 requires disclosure:
