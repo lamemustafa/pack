@@ -74,7 +74,7 @@ ComplyEaze Pack helps an authorised user, already signed in to the GST Portal in
 
 There is no Pack or ComplyEaze account. Pack never asks for or stores GST Portal credentials, OTPs, CAPTCHA answers, cookies, or tokens. The extension does not upload GST documents or return contents to ComplyEaze. Its content script runs only on the four declared gst.gov.in hosts. Artifact capture starts only after an explicit user action. Before treating a selected GST artifact as downloaded, Pack verifies it as complete and non-empty, and retains local, redacted recovery status if an interrupted run needs review. Selected artifact bytes may be staged temporarily in browser-local OPFS during capture or ZIP assembly; Pack removes them after a confirmed export or an explicit discard, and retains them with a cleanup-pending status if that cleanup fails.
 
-The Pack website's privacy notice separately discloses its Sentry error diagnostics. The browser extension has no analytics or telemetry and does not send extension data to Sentry.
+The browser extension has no analytics or telemetry and does not send extension data to Sentry or anywhere else. The Pack website is a separate product with its own privacy notice.
 
 Supported scope: one return period at a time. Available formats depend on the selected GST Portal page; Pack saves a PDF or Excel workbook only when that page provides the selected artifact.
 
