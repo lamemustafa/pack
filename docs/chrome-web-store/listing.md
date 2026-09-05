@@ -76,7 +76,7 @@ There is no Pack or ComplyEaze account. Pack never asks for or stores GST Portal
 
 The Pack website's privacy notice separately discloses its Sentry error diagnostics. The browser extension has no analytics or telemetry and does not send extension data to Sentry.
 
-Supported scope: one return period at a time. Available formats depend on the selected GST Portal page; Pack saves a PDF, Excel workbook, or JSON response only when that page provides the selected artifact.
+Supported scope: one return period at a time. Available formats depend on the selected GST Portal page; Pack saves a PDF or Excel workbook only when that page provides the selected artifact.
 
 • GSTR-3B: filed-return summary PDF
 • GSTR-1: filed-return summary PDF and, when the GST Portal provides it, e-invoice details Excel
