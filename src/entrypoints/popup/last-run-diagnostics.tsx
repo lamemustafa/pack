@@ -1,20 +1,21 @@
-import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+  FiledReturnsFlowSummary,
+} from "../../connectors/gst/filed-returns-contracts";
+import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
 
-const TERMINAL_STATUSES = new Set<FiledReturnsFlowSummary["status"]>([
-  "blocked",
-  "cancelled",
-  "complete",
-  "partial",
-]);
+type DiagnosticsSummary =
+  FiledReturnsFlowSummary | FiledReturnsAllSupportedFullFiscalYearFlowSummary;
 
-export function LastRunDiagnostics({ summary }: { summary: FiledReturnsFlowSummary | null }) {
-  if (!summary || !TERMINAL_STATUSES.has(summary.status)) return null;
+export function LastRunDiagnostics({ summary }: { summary: DiagnosticsSummary | null }) {
+  if (!summary) return null;
+  const scope = "scope" in summary ? summary.scope : summary.flowStepScope;
 
   return (
-    <details className="diagnostic-details" aria-label="Last run diagnostics">
+    <details className="diagnostic-details" aria-label="Run diagnostics">
       <summary>Details</summary>
       <dl className="diagnostic-line">
-        <dt>Terminal state</dt>
+        <dt>Run state</dt>
         <dd>{summary.status}</dd>
         <dt>Reason</dt>
         <dd>{summary.flowStep.state}</dd>
@@ -24,6 +25,14 @@ export function LastRunDiagnostics({ summary }: { summary: FiledReturnsFlowSumma
             ? "none"
             : summary.flowStep.safeSignals.join(", ")}
         </dd>
+        {scope ? (
+          <>
+            <dt>Affected return type</dt>
+            <dd>{scope.returnType}</dd>
+            <dt>Affected period</dt>
+            <dd>{isFullFiscalYearScope(scope) ? "Full fiscal year" : scope.period}</dd>
+          </>
+        ) : null}
       </dl>
     </details>
   );

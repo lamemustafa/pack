@@ -19,21 +19,29 @@ const summary: FiledReturnsFlowSummary = {
 };
 
 describe("last-run diagnostics", () => {
-  it("renders only terminal summary reason fields and safe signals", () => {
+  it("renders the run reason fields, safe signals, and affected target only", () => {
     const markup = renderToStaticMarkup(<LastRunDiagnostics summary={summary} />);
 
     expect(markup).toContain("blocked");
     expect(markup).toContain("candidate-not-found");
     expect(markup).toContain("portal-control-missing, artifact-acquisition-failed");
+    expect(markup).toContain("GSTR-3B");
+    expect(markup).toContain("April");
     expect(markup).not.toContain(summary.flowStep.safeMessage);
     expect(markup).not.toContain(summary.scope.financialYear);
-    expect(markup).not.toContain(summary.scope.period);
   });
 
-  it("does not render a running or absent run", () => {
-    expect(
-      renderToStaticMarkup(<LastRunDiagnostics summary={{ ...summary, status: "running" }} />),
-    ).toBe("");
+  it("renders a running run without falsely calling it a last run", () => {
+    const markup = renderToStaticMarkup(
+      <LastRunDiagnostics summary={{ ...summary, status: "running" }} />,
+    );
+
+    expect(markup).toContain("Run diagnostics");
+    expect(markup).toContain("running");
+    expect(markup).not.toContain("Last run");
+  });
+
+  it("does not render an absent run", () => {
     expect(renderToStaticMarkup(<LastRunDiagnostics summary={null} />)).toBe("");
   });
 });

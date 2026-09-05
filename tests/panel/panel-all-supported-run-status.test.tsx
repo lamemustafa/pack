@@ -101,6 +101,25 @@ describe("all-supported panel progress", () => {
     vi.unstubAllEnvs();
   });
 
+  it("renders safe diagnostics for a running all-supported run without an atomic counterpart", () => {
+    const running = summary(["pending"], "running", []);
+    const markup = render(running);
+    const diagnosticsStart = markup.indexOf('aria-label="Run diagnostics"');
+    const diagnostics = markup.slice(
+      diagnosticsStart,
+      markup.indexOf("</details>", diagnosticsStart),
+    );
+
+    expect(markup).toContain('aria-label="Run diagnostics"');
+    expect(diagnostics).toContain("<dd>running</dd>");
+    expect(diagnostics).toContain("<dd>ready</dd>");
+    expect(diagnostics).toContain("all-supported-full-fiscal-year-run-active");
+    expect(diagnostics).toContain("GSTR-3B");
+    expect(diagnostics).toContain("Full fiscal year");
+    expect(diagnostics).not.toContain(running.flowStep.safeMessage);
+    expect(diagnostics).not.toContain(running.summaryIdentity!.financialYear);
+  });
+
   it("draws the existing progress track with the one saved-file count", () => {
     const markup = render(summary(["saved", "pending"], "running", [0]));
 
@@ -335,7 +354,7 @@ describe("all-supported panel progress", () => {
     expect(markup.match(/3 of 36 saved/g)).toHaveLength(1);
     expect(markup).not.toContain("targets checked");
     expect(markup).not.toContain("synthetic-GSTR-1-April");
-    expect(markup).not.toContain("all-supported-full-fiscal-year-run-active");
+    expect(markup).toContain("all-supported-full-fiscal-year-run-active");
     expect(consoleError).not.toHaveBeenCalled();
   });
 });
