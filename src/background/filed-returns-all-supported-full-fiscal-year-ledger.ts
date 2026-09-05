@@ -411,7 +411,7 @@ export function markAllSupportedFullFiscalYearTargetTerminal(
         }
       : target,
   );
-  return {
+  const terminal: FiledReturnsAllSupportedFullFiscalYearLedger = {
     ...ledger,
     revision: nextRevision(ledger),
     status: ledgerStatus(targets, effectiveStatus),
@@ -419,6 +419,11 @@ export function markAllSupportedFullFiscalYearTargetTerminal(
     updatedAt: timestamp,
     targets,
   };
+  // `currentTargetId` is a recovery pointer, not a record of the last write.
+  // Leaving it on a completed target made an interrupted worker window name a
+  // return that had already succeeded as the affected target.
+  if (POSITIVE_TARGET_STATUSES.has(effectiveStatus)) delete terminal.currentTargetId;
+  return terminal;
 }
 
 export function resumeAllSupportedFullFiscalYearLedger(

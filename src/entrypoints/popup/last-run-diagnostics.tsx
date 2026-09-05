@@ -52,5 +52,7 @@ function diagnosticScope(summary: DiagnosticsSummary) {
   const target = summary.targetEvidence.find(
     ({ targetId }) => targetId === summary.currentTargetId,
   );
-  return target ? { period: target.period, returnType: target.returnType } : undefined;
+  return target?.outcome === "running" || target?.outcome === "needs-review"
+    ? { period: target.period, returnType: target.returnType }
+    : undefined;
 }
