@@ -113,6 +113,26 @@ describe("all-supported full-fiscal-year ZIP", () => {
     );
   });
 
+  it("warns when the browser saves the fiscal-year ZIP under a different name without revealing it", async () => {
+    mocks.browser.downloads.search.mockResolvedValue([
+      {
+        id: 91,
+        state: "complete",
+        filename: "/synthetic/Downloads/all-supported-returns-full-year (1).zip",
+      },
+    ]);
+
+    const result = await exportAllSupportedFullFiscalYearZip(completedLedger(), completeStep());
+
+    expect(result.state).toBe("downloaded");
+    expect(result.safeSignals).toContain("zip-download-filename-overridden");
+    expect(result.safeMessage).toContain(
+      "Pack completed the ZIP download, but the browser saved it under a different name. Check browser Downloads before using the file.",
+    );
+    expect(result.safeMessage).not.toContain("/synthetic/Downloads");
+    expect(result.safeMessage).not.toContain("(1).zip");
+  });
+
   it("does not export a ledger whose staged-artifact correlation was removed", async () => {
     const ledger = completedLedger();
     const missing = {
