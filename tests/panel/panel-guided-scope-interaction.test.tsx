@@ -753,7 +753,7 @@ describe("panel guided scope interaction", () => {
     // Stale: another period became eligible while this panel stayed open.
     restart.mockClear();
     refresh.mockClear();
-    vi.setSystemTime(new Date("2026-09-20T00:00:00.000Z"));
+    vi.setSystemTime(new Date("2026-10-25T00:00:00.000Z"));
     expect(panelAllReturnsFullYearPreset("2026-27")?.periodCount).toBeGreaterThan(
       eligibleNow.length,
     );
@@ -782,7 +782,7 @@ describe("panel guided scope interaction", () => {
             completedAt: "2026-08-26T00:00:00.000Z",
             updatedAt: "2026-08-26T00:00:00.000Z",
             completedTargetIds: [],
-            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June"]),
             totalTargets: 28,
             flowStepScope: PANEL_TEST_SCOPE,
             flowStep: {
@@ -982,7 +982,7 @@ describe("panel guided scope interaction", () => {
 
   it("allows a completed current-year root to expand when a new period is eligible", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+    vi.setSystemTime(new Date("2026-10-25T00:00:00.000Z"));
     await mount(
       {
         overrides: {
@@ -996,7 +996,7 @@ describe("panel guided scope interaction", () => {
             completedAt: "2026-08-30T00:00:00.000Z",
             updatedAt: "2026-08-30T00:00:00.000Z",
             completedTargetIds: [],
-            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June", "July"]),
+            targetEvidence: savedAllReturnsEvidence("2026-27", ["April", "May", "June"]),
             totalTargets: 28,
             flowStepScope: PANEL_TEST_SCOPE,
             flowStep: {
@@ -1296,7 +1296,7 @@ describe("panel guided scope interaction", () => {
     await mountGuidedScope({ portalSignedIn: true, savedRun: null });
     expect(container.querySelectorAll(".panel-preset-list button")).toHaveLength(0);
 
-    vi.setSystemTime(new Date("2026-05-31T06:00:00.000Z"));
+    vi.setSystemTime(new Date("2026-07-25T06:00:00.000Z"));
     await act(async () => {
       root?.render(<GuidedScopeHarness portalSignedIn savedRun={null} />);
       await Promise.resolve();
@@ -1318,6 +1318,7 @@ describe("panel guided scope interaction", () => {
           getFiledReturnsFullFiscalYearPeriods(
             preset.scope.financialYear,
             beforeMorePeriodsAreEligible,
+            preset.scope.returnType,
           ).length,
       ),
     );
@@ -1327,6 +1328,7 @@ describe("panel guided scope interaction", () => {
           getFiledReturnsFullFiscalYearPeriods(
             preset.scope.financialYear,
             afterMorePeriodsAreEligible,
+            preset.scope.returnType,
           ).length,
       ),
     );

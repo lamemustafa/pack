@@ -767,7 +767,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("keeps an uncorrelated final ZIP intent in manual review instead of exporting again", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const scope = {
       artifactType: "PDF" as const,
       financialYear: "2026-27",
@@ -852,7 +852,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("reconciles only the exact persisted full-year ZIP download", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const scope = {
       artifactType: "PDF" as const,
       financialYear: "2026-27",
@@ -929,7 +929,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("reconciles every exact final-ZIP ID when independently saved plans coexist", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const first = createObservingZipLedger("2025-26", "full-fiscal-year-12345679", 51, now);
     const second = createObservingZipLedger("2026-27", "full-fiscal-year-12345680", 52, now);
     const indexKey = "full-year-ledger-index";
@@ -970,7 +970,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("moves duplicate final-ZIP ID owners to review without reusing the browser completion", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const first = createObservingZipLedger("2025-26", "full-fiscal-year-12345679", 51, now);
     const second = createObservingZipLedger("2026-27", "full-fiscal-year-12345680", 51, now);
     const indexKey = "full-year-ledger-index";
@@ -1009,7 +1009,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("moves duplicate final-ZIP ID owners to review before scoped Start can reconcile either one", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const first = createObservingZipLedger("2025-26", "full-fiscal-year-12345679", 51, now);
     const second = createObservingZipLedger("2026-27", "full-fiscal-year-12345680", 51, now);
     const indexKey = "full-year-ledger-index";
@@ -1059,8 +1059,8 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("retains the summary outcome across repeated observing reconciliation", async () => {
-    const requestedAt = new Date("2017-08-20T00:00:00.000Z");
-    let clock = new Date("2017-08-20T00:01:00.000Z");
+    const requestedAt = new Date("2017-10-25T00:00:00.000Z");
+    let clock = new Date("2017-10-25T00:01:00.000Z");
     const scope = {
       artifactType: "PDF" as const,
       financialYear: "2017-18",
@@ -1182,7 +1182,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("stages GSTR-3B targets before progressing to one ZIP export", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const scope = {
       artifactType: "PDF" as const,
       financialYear: "2026-27",
@@ -1237,7 +1237,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("keeps the workbook-not-applicable outcome visible through immediate ZIP cleanup without adding it to the ledger", async () => {
-    const now = new Date("2017-08-20T00:00:00.000Z");
+    const now = new Date("2017-10-25T00:00:00.000Z");
     const scope = {
       artifactType: "PDF" as const,
       financialYear: "2017-18",
@@ -1294,7 +1294,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("restores workbook-not-applicable status from session persistence during restart cleanup", async () => {
-    const now = new Date("2017-08-20T00:00:00.000Z");
+    const now = new Date("2017-10-25T00:00:00.000Z");
     const scope = {
       artifactType: "JSON" as const,
       financialYear: "2017-18",
@@ -1357,8 +1357,8 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("restores the intent-checkpoint summary after the cleanup ledger advances", async () => {
-    const intentAt = new Date("2017-08-20T00:00:00.000Z");
-    const cleanupAt = new Date("2017-08-20T00:01:00.000Z");
+    const intentAt = new Date("2017-10-25T00:00:00.000Z");
+    const cleanupAt = new Date("2017-10-25T00:01:00.000Z");
     const scope = {
       artifactType: "JSON" as const,
       financialYear: "2017-18",
@@ -1435,7 +1435,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("does not import a previous same-scope run's summary during cleanup recovery", async () => {
-    const now = new Date("2017-08-20T00:01:00.000Z");
+    const now = new Date("2017-10-25T00:01:00.000Z");
     const scope = {
       artifactType: "JSON" as const,
       financialYear: "2017-18",
@@ -1545,7 +1545,7 @@ describe("full fiscal-year recovery", () => {
       const stopsAtIntentCheckpoint = outcome.safeSignals.includes(
         "full-fiscal-year-summary-failed",
       );
-      const now = new Date("2017-08-20T00:00:00.000Z");
+      const now = new Date("2017-10-25T00:00:00.000Z");
       let clock = now;
       const scope = {
         artifactType: "PDF" as const,
@@ -1691,7 +1691,7 @@ describe("full fiscal-year recovery", () => {
   );
 
   it("passes a fresh GSTR-1 all-formats target to the period flow without narrowing it", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const scope = {
       artifactType: "PDF_AND_EXCEL" as const,
       financialYear: "2026-27",
@@ -1732,7 +1732,7 @@ describe("full fiscal-year recovery", () => {
 
   it("records only the preceding fixed action category when a full-year target reaches a portal system error", async () => {
     mockLocalStorageGet({});
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const scope = {
       artifactType: "PDF_AND_EXCEL" as const,
       financialYear: "2026-27",
@@ -1777,7 +1777,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("passes only the unstaged GSTR-1 artifact to a resumed period flow", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const scope = {
       artifactType: "PDF_AND_EXCEL" as const,
       financialYear: "2026-27",
@@ -1838,7 +1838,7 @@ describe("full fiscal-year recovery", () => {
   });
 
   it("keeps a resumed GSTR-2B all-formats target blocked until both remaining artifacts are staged", async () => {
-    const now = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-07-25T00:00:00.000Z");
     const scope = {
       artifactType: "PDF_AND_EXCEL" as const,
       financialYear: "2026-27",

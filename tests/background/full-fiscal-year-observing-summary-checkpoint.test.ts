@@ -40,8 +40,8 @@ vi.mock("wxt/browser", () => {
 });
 vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", () => zip);
 
-const requestedAt = new Date("2017-08-20T00:00:00.000Z");
-const observedAt = new Date("2017-08-20T00:01:00.000Z");
+const requestedAt = new Date("2017-10-25T00:00:00.000Z");
+const observedAt = new Date("2017-10-25T00:01:00.000Z");
 const scope: FiledReturnsDownloadScope = {
   artifactType: "PDF",
   financialYear: "2017-18",
@@ -50,7 +50,7 @@ const scope: FiledReturnsDownloadScope = {
 };
 const outcomeSignals = [
   "full-fiscal-year-summary-included",
-  "full-fiscal-year-summary-parsed-period-count:1",
+  "full-fiscal-year-summary-parsed-period-count:3",
   "full-fiscal-year-summary-row-count:4",
 ];
 let clock = requestedAt;
@@ -74,7 +74,7 @@ describe("initial observing full-year summary checkpoint", () => {
       status: "complete",
       flowStep: {
         safeSignals: expect.arrayContaining(outcomeSignals),
-        safeMessage: expect.stringContaining("workbook and tidy CSV for 1 period"),
+        safeMessage: expect.stringContaining("workbook and tidy CSV for 3 periods"),
       },
     });
     expect(storedLedger().zipPhase).toBe("cleaned-after-download");
@@ -154,7 +154,7 @@ async function persistInitialObservation(): Promise<void> {
   await startFullFiscalYearDownloadFlow(scope, deps(), runSinglePeriod);
 
   expect(runSinglePeriod).toHaveBeenCalledTimes(
-    getFiledReturnsFullFiscalYearPeriods(scope.financialYear, requestedAt).length,
+    getFiledReturnsFullFiscalYearPeriods(scope.financialYear, requestedAt, scope.returnType).length,
   );
   expect(storedLedger()).toMatchObject({
     zipPhase: "download-observing",
@@ -172,7 +172,7 @@ async function persistInitialObservation(): Promise<void> {
 async function restartAndReconcileCompletedDownload(): Promise<void> {
   // The download finishes while the worker is absent; only the two storage areas survive.
   vi.resetModules();
-  clock = new Date("2017-08-20T00:02:00.000Z");
+  clock = new Date("2017-10-25T00:02:00.000Z");
   zip.reconcileFullFiscalYearZipDownload.mockResolvedValueOnce(
     zipStep("downloaded", [
       "full-fiscal-year-zip-reconciled-by-id",

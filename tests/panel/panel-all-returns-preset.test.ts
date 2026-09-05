@@ -30,6 +30,7 @@ describe("all-returns panel presets", () => {
       periodCount,
       artifactCount,
       fileCount: artifactCount * periodCount,
+      targetSignature: expect.any(String),
     });
   });
 

@@ -79,11 +79,13 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const restartFromSummaryCard = async () => {
     if (!allSupportedSummary?.summaryIdentity) return;
     const financialYear = allSupportedSummary.summaryIdentity.financialYear;
-    const displayedPeriods = new Set(
-      allSupportedSummary.targetEvidence.map((entry) => entry.period),
-    ).size;
+    const displayedTargetSignature = allSupportedSummary.targetEvidence
+      .map((entry) => `${entry.returnType}:${entry.artifactType}:${entry.period}`)
+      .sort()
+      .join("|");
     if (
-      panelAllReturnsFullYearPreset(financialYear, new Date())?.periodCount !== displayedPeriods
+      panelAllReturnsFullYearPreset(financialYear, new Date())?.targetSignature !==
+      displayedTargetSignature
     ) {
       await pack.refreshFlowSummary();
       return;

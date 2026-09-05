@@ -31,8 +31,8 @@ import {
 const UNEXPECTED_PACK_RESPONSE = "Unexpected Pack response.";
 
 export function usePackPopupController() {
-  const [scope, setScopeState] = React.useState<FiledReturnsDownloadScope>(
-    DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE,
+  const [scope, setScopeState] = React.useState<FiledReturnsDownloadScope>(() =>
+    normaliseFiledReturnsScope(DEFAULT_FILED_RETURNS_DOWNLOAD_SCOPE),
   );
   const [context, setContext] = React.useState<PortalContext | null>(null);
   const [filedReturnsFlowSummary, setFiledReturnsFlowSummary] =

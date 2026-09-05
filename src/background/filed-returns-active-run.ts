@@ -9,7 +9,7 @@ import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return
 import {
   FILED_RETURNS_MONTHS,
   FULL_FISCAL_YEAR_PERIOD,
-  isSupportedFiledReturnsStartScope,
+  isStructurallySupportedFiledReturnsStartScope,
 } from "../connectors/gst/filed-returns-scope";
 import { isCanonicalFiledReturnsRunId } from "../connectors/gst/filed-returns-operation-id";
 import type { PackMessageResponse } from "../connectors/gst/messages";
@@ -287,7 +287,7 @@ function parseActiveRunScope(input: unknown, now: Date): FiledReturnsDownloadSco
     ...(scope.artifactType ? { artifactType: scope.artifactType } : {}),
     ...(scope.completedPeriods ? { completedPeriods: [...scope.completedPeriods] } : {}),
   };
-  return isSupportedFiledReturnsStartScope(canonicalScope, now) ? canonicalScope : null;
+  return isStructurallySupportedFiledReturnsStartScope(canonicalScope, now) ? canonicalScope : null;
 }
 
 function hasOnlyKeys(input: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
