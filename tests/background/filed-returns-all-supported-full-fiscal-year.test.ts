@@ -528,6 +528,33 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(step?.safeSignals).not.toContain("all-supported-full-fiscal-year-zip-downloaded");
   });
 
+  it("records a settled not-filed target, completes later targets, and exposes its period in the completed evidence", async () => {
+    const attemptedPeriods: string[] = [];
+    const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
+      attemptedPeriods.push(`${scope.returnType}:${scope.period}`);
+      return notFiledStep();
+    });
+
+    const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+    if (!("allSupportedFullFiscalYearFlowSummary" in response)) {
+      throw new Error("expected all-supported full-fiscal-year summary");
+    }
+    const summary = response.allSupportedFullFiscalYearFlowSummary;
+    if (!summary) throw new Error("expected a completed all-supported summary");
+    expect(summary).toMatchObject({ status: "complete" });
+    expect(attemptedPeriods).toHaveLength(summary.totalTargets);
+    expect(attemptedPeriods.slice(1)).not.toContain(attemptedPeriods[0]);
+    expect(summary.allSupportedFullFiscalYearRecovery).toBeUndefined();
+    expect(summary.targetEvidence[0]).toMatchObject({
+      outcome: "not-filed",
+      period: "April",
+    });
+    expect(summary.targetEvidence.slice(1).every(({ outcome }) => outcome === "not-filed")).toBe(
+      true,
+    );
+  });
+
   it("turns a child-runner failure into the persisted safe blocked summary", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => ({
       ok: false as const,

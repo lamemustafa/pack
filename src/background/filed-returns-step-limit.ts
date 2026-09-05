@@ -46,7 +46,7 @@ export function searchStepLimitReachedMessage(
   waitedMs?: number,
 ): string {
   const descriptor = filedReturnDescriptor(scope.returnType);
-  return `Pack selected the filed-return filters, but the GST Portal did not show a filed ${descriptor.label} row or download control after waiting ${waitedMs === undefined ? "its retry limit" : waitedFor(waitedMs)}. If this period is not filed, no filed-return download is available. Otherwise wait for the portal results to finish loading, then start Pack again.`;
+  return `Pack could not determine whether the GST Portal has a filed ${descriptor.label} row for the selected period after waiting ${waitedMs === undefined ? "its retry limit" : waitedFor(waitedMs)}. The results may still be loading, or this return may not be filed. Wait for the results to settle, then start Pack again.`;
 }
 
 export function detailStepLimitReachedMessage(

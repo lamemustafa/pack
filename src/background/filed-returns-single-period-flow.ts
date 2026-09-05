@@ -550,7 +550,7 @@ async function runSinglePeriodSteps(
         (deps.now?.() ?? new Date()).getTime() - stepStartedAt,
       ),
       userActionMessage:
-        "Wait for the GST Portal result page to finish loading, then click Start download again.",
+        "Pack could not determine whether the return is filed because the GST Portal results may still be loading. Wait for them to settle, then click Start download again.",
     }),
   };
   return withPersistedSinglePeriodSummary(
