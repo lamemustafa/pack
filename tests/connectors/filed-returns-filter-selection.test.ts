@@ -19,11 +19,14 @@ describe("filed-return filter selection", () => {
         </form>
       `).window.document;
       let settled = false;
-      const selection = waitForFieldSelection(documentRef, FINANCIAL_YEAR_LABEL, ["2026-27"]).then(
-        () => {
-          settled = true;
-        },
-      );
+      const selection = waitForFieldSelection(
+        documentRef,
+        FINANCIAL_YEAR_LABEL,
+        ["2026-27"],
+        Date.now() + 1_000,
+      ).then(() => {
+        settled = true;
+      });
 
       await vi.advanceTimersByTimeAsync(499);
       expect(settled).toBe(false);
@@ -58,6 +61,7 @@ describe("filed-return filter selection", () => {
           period: "April",
           returnType: "GSTR-1",
         }),
+        Date.now() + 1_000,
       ),
     ).resolves.toBe(true);
     expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe(

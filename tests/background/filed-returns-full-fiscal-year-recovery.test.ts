@@ -1,3 +1,4 @@
+import { prepareFullFiscalYearCompletion } from "../../src/background/filed-returns-full-fiscal-year-completion";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   FiledReturnsDownloadScope,
@@ -29,6 +30,7 @@ import {
 import {
   createFullFiscalYearCleanupPendingState,
   finishFullFiscalYearCleanup,
+  markFullFiscalYearCleanupPending,
   markFullFiscalYearZipDownloadIntent,
   markFullFiscalYearZipDownloadObserving,
 } from "../../src/background/filed-returns-full-fiscal-year-staging";
@@ -84,6 +86,197 @@ describe("full fiscal-year recovery", () => {
     zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue([
       "full-fiscal-year-opfs-cleared",
     ]);
+  });
+
+  it.each(["export", "reconcile", "cleanup"] as const)(
+    "%s entry point waits for required reconciliation storage before external effects",
+    async (phase) => {
+      const now = new Date("2026-07-25T00:00:00.000Z");
+      let ledger = createObservingZipLedger("2026-27", LEDGER_ID, 41, now);
+      delete ledger.connectorVersion;
+      if (phase === "export") {
+        ledger.zipPhase = "export-retry-pending";
+        delete ledger.zipDownloadAttempt;
+      } else if (phase === "cleanup") {
+        ledger = markFullFiscalYearCleanupPending(ledger, now, "downloaded-cleanup-pending");
+      }
+      expect(isFullFiscalYearLedger(ledger)).toBe(true);
+      mockLocalStorageGet({ "full-year-ledger": ledger });
+      const runSinglePeriod = vi.fn();
+      vi.mocked(browser.storage.local.set).mockRejectedValueOnce(
+        new Error("synthetic write failure"),
+      );
+      const deps = { ...recoveryDeps(), now: () => now };
+      const operation =
+        phase === "export"
+          ? startFullFiscalYearDownloadFlow(ledger.scope, deps as never, runSinglePeriod)
+          : phase === "reconcile"
+            ? reconcilePendingFullFiscalYearZipDownload(41, deps as never)
+            : finishFullFiscalYearCleanup(deps as never, ledger);
+      await expect(operation).rejects.toThrow("synthetic write failure");
+      expect(runSinglePeriod).not.toHaveBeenCalled();
+      expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+      expect(zipMocks.reconcileFullFiscalYearZipDownload).not.toHaveBeenCalled();
+      expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reconciles a retained export plan before export without adding newly eligible months", async () => {
+    const created = new Date("2026-06-24T00:00:00.000Z");
+    const now = new Date("2026-09-06T00:00:00.000Z");
+    const ledger = createObservingZipLedger("2026-27", LEDGER_ID, 41, created);
+    ledger.zipPhase = "export-retry-pending";
+    delete ledger.zipDownloadAttempt;
+    delete ledger.connectorVersion;
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    mockLocalStorageGet({ "full-year-ledger": ledger });
+    const runSinglePeriod = vi.fn();
+    zipMocks.exportFullFiscalYearZip.mockImplementationOnce(async (saved) => {
+      expect(saved.targetPlan).toEqual(ledger.targetPlan);
+      expect(saved.targets).toEqual(ledger.targets);
+      expect(saved.lastReconciledAt).toBe(now.toISOString());
+      expect(browser.storage.local.set).toHaveBeenCalledWith({ "full-year-ledger": saved });
+      throw new Error("synthetic export reached");
+    });
+    await expect(
+      startFullFiscalYearDownloadFlow(
+        ledger.scope,
+        { ...recoveryDeps(), now: () => now } as never,
+        runSinglePeriod,
+      ),
+    ).rejects.toThrow("synthetic export reached");
+    expect(runSinglePeriod).not.toHaveBeenCalled();
+    expect(zipMocks.exportFullFiscalYearZip).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "full-fiscal-year-run-needs-action",
+    "full-fiscal-year-zip-target-state-invalid",
+  ] as const)(
+    "persists a refusal with %s and overrides it for a malformed plan",
+    async (signal) => {
+      const ledger = createRecoveryLedger({ revision: 2 });
+      expect(isFullFiscalYearLedger(ledger)).toBe(true);
+      const deps = recoveryDeps();
+      const response = await prepareFullFiscalYearCompletion(
+        deps as never,
+        ledger,
+        deps.now(),
+        signal,
+      );
+      expect(response).toMatchObject({
+        ready: false,
+        response: { flowStep: { safeSignals: [signal] } },
+      });
+      expect(sessionValues.current.completion).toMatchObject({
+        flowStep: { safeSignals: [signal] },
+      });
+      const invalid = { ...ledger, targetPlan: [] };
+      const refused = await prepareFullFiscalYearCompletion(
+        deps as never,
+        invalid,
+        deps.now(),
+        signal,
+      );
+      expect(refused).toMatchObject({
+        ready: false,
+        response: {
+          flowStep: {
+            safeSignals: ["full-fiscal-year-target-plan-invalid"],
+          },
+        },
+      });
+    },
+  );
+
+  it("propagates a preflight persistence failure without publishing a successful response", async () => {
+    const now = new Date("2026-07-25T00:00:00.000Z");
+    const ledger = createObservingZipLedger("2026-27", LEDGER_ID, 41, now);
+    delete ledger.connectorVersion;
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    vi.mocked(browser.storage.local.set).mockRejectedValueOnce(
+      new Error("synthetic preflight write failure"),
+    );
+    await expect(
+      prepareFullFiscalYearCompletion(
+        recoveryDeps() as never,
+        ledger,
+        now,
+        "full-fiscal-year-run-needs-action",
+      ),
+    ).rejects.toThrow("synthetic preflight write failure");
+    expect(browser.storage.session.set).not.toHaveBeenCalled();
+  });
+
+  it("upgrades a legacy prefix using the supplied time while preserving the saved targets", async () => {
+    const now = new Date("2026-09-06T00:00:00.000Z");
+    const ledger = createObservingZipLedger(
+      "2026-27",
+      LEDGER_ID,
+      41,
+      new Date("2026-06-24T00:00:00.000Z"),
+    );
+    delete ledger.zipPhase;
+    delete ledger.zipDownloadAttempt;
+    delete ledger.planVersion;
+    delete ledger.eligibleThrough;
+    delete ledger.targetPlan;
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    const clock = vi.fn(() => new Date("2026-10-01T00:00:00.000Z"));
+    const result = await prepareFullFiscalYearCompletion(
+      { ...recoveryDeps(), now: clock } as never,
+      ledger,
+      now,
+      "full-fiscal-year-run-needs-action",
+    );
+    expect(result).toMatchObject({
+      ready: true,
+      ledger: {
+        planVersion: FULL_FISCAL_YEAR_PLAN_VERSION,
+        lastReconciledAt: now.toISOString(),
+        targets: ledger.targets,
+      },
+    });
+    expect(browser.storage.local.set).toHaveBeenCalledOnce();
+    expect(clock).not.toHaveBeenCalled();
+  });
+
+  it("does not stamp reconciliation metadata when no periods are eligible at the supplied time", async () => {
+    const ledger = createObservingZipLedger(
+      "2026-27",
+      LEDGER_ID,
+      41,
+      new Date("2026-07-25T00:00:00.000Z"),
+    );
+    delete ledger.connectorVersion;
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    const now = new Date("2026-04-01T00:00:00.000Z");
+    expect(getFiledReturnsFullFiscalYearPeriods(ledger.scope.financialYear, now)).toEqual([]);
+    await expect(
+      prepareFullFiscalYearCompletion(
+        recoveryDeps() as never,
+        ledger,
+        now,
+        "full-fiscal-year-run-needs-action",
+      ),
+    ).resolves.toEqual({ ready: true, ledger });
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  it("avoids reconciliation writes for an unchanged completed plan", async () => {
+    const now = new Date("2026-07-25T00:00:00.000Z");
+    const ledger = createObservingZipLedger("2026-27", LEDGER_ID, 41, now);
+    expect(isFullFiscalYearLedger(ledger)).toBe(true);
+    await expect(
+      prepareFullFiscalYearCompletion(
+        recoveryDeps() as never,
+        ledger,
+        now,
+        "full-fiscal-year-run-needs-action",
+      ),
+    ).resolves.toMatchObject({ ready: true, ledger });
+    expect(browser.storage.local.set).not.toHaveBeenCalled();
+    expect(browser.storage.session.set).not.toHaveBeenCalled();
   });
 
   it("keeps an offscreen-response-invalid ZIP summary persisted for recovery", async () => {

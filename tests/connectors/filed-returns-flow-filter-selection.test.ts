@@ -1,3 +1,5 @@
+import { selectCustomOptionNearLabel } from "../../src/connectors/gst/filed-returns-custom-dropdown";
+import { runDownloadStepWithRetry } from "../../src/background/filed-returns-flow-messaging";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
@@ -13,50 +15,7 @@ import {
   stubFormSubmit,
 } from "./filed-returns-flow.test-helpers";
 
-describe("filed returns flow — filter selection and API search", () => {
-  it("uses the filed-return API before slow dependent dropdown selection on the GST route", async () => {
-    const documentRef = createGstDocument(`
-      <main>
-        <h1>View Filed Returns</h1>
-        <form name="efiledReturns">
-          <label>Financial year</label>
-          <select id="finYr"><option>Select</option><option>2026-27</option></select>
-          <label>Return Filing Period</label>
-          <select id="optValue"><option>Select</option><option>Monthly</option></select>
-          <label>Month</label>
-          <select id="month"><option>Select</option></select>
-          <label>Return Type</label>
-          <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
-          <button id="lotsearch" type="button">Search</button>
-        </form>
-      </main>
-    `);
-    const scope: FiledReturnsDownloadScope = {
-      financialYear: "2026-27",
-      period: "May",
-      returnType: "GSTR-3B",
-    };
-    const submittedForms = stubFormSubmit(documentRef);
-    stubFiledReturnsApi(documentRef, {
-      roleStatus: { userPref: "M" },
-      rows: [{ rtntype: "GSTR3B", fy: "2026-27", taxp: "May", arn: "SYNTHETIC", dof: "" }],
-    });
-    let searchClicked = 0;
-    documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
-      searchClicked += 1;
-    });
-
-    const result = await runFiledReturnsDownloadStep(documentRef, scope);
-
-    expect(result.state).toBe("clicked");
-    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
-    expect(documentRef.querySelector<HTMLSelectElement>("#finYr")?.value).toBe("Select");
-    expect(documentRef.querySelector<HTMLSelectElement>("#optValue")?.value).toBe("Select");
-    expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("Select");
-    expect(searchClicked).toBe(0);
-    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
-  });
-
+describe("filed returns flow — portal filter selection", () => {
   it("requires user action rather than using the API from a different GSTR-3B detail page", async () => {
     const documentRef = createGstDocument(
       `
@@ -88,122 +47,7 @@ describe("filed returns flow — filter selection and API search", () => {
     expect(submittedForms).toEqual([]);
   });
 
-  it("uses monthly preference for pre-quarterly GSTR-3B API handoff when role status omits userPref", async () => {
-    const documentRef = createGstDocument(`
-      <main>
-        <h1>View Filed Returns</h1>
-        <form name="efiledReturns">
-          <label>Financial year</label>
-          <select id="finYr"><option>Select</option><option>2020-21</option></select>
-          <label>Return Filing Period</label>
-          <select id="optValue"><option>Select</option><option>Monthly</option></select>
-          <label>Month</label>
-          <select id="month"><option>Select</option></select>
-          <label>Return Type</label>
-          <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
-          <button id="lotsearch" type="button">Search</button>
-        </form>
-      </main>
-    `);
-    const scope: FiledReturnsDownloadScope = {
-      financialYear: "2020-21",
-      period: "December",
-      returnType: "GSTR-3B",
-    };
-    const submittedForms = stubFormSubmit(documentRef);
-    stubFiledReturnsApi(documentRef, {
-      roleStatus: {},
-      rows: [{ rtntype: "GSTR3B", fy: "2020-21", taxp: "December" }],
-    });
-
-    const result = await runFiledReturnsDownloadStep(documentRef, scope);
-
-    expect(result.state).toBe("clicked");
-    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
-    expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBe("122020");
-    expect(documentRef.defaultView?.localStorage.getItem("uPref")).toBe("M");
-    expect(documentRef.defaultView?.localStorage.getItem("gstr3bPref")).toBe("M");
-    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
-  });
-
-  it("uses the filed-return API when the GST route casing changes", async () => {
-    const documentRef = createGstDocument(
-      `
-        <main>
-          <h1>View Filed Returns</h1>
-          <form name="efiledReturns">
-            <label>Financial year</label>
-            <select id="finYr"><option>Select</option><option>2025-26</option></select>
-            <label>Return Filing Period</label>
-            <select id="optValue"><option>Select</option><option>Monthly</option></select>
-            <label>Month</label>
-            <select id="month"><option>Select</option></select>
-            <label>Return Type</label>
-            <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
-          </form>
-        </main>
-      `,
-      "https://return.gst.gov.in/returns/auth/efiledreturns",
-    );
-    const submittedForms = stubFormSubmit(documentRef);
-    stubFiledReturnsApi(documentRef, {
-      roleStatus: { userPref: "M" },
-      rows: [{ rtntype: "GSTR3B", fy: "2025-26", taxp: "March", arn: "SYNTHETIC", dof: "" }],
-    });
-
-    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
-
-    expect(result.state).toBe("clicked");
-    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
-    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
-  });
-
-  it("opens filed-return API rows when GST wraps data and varies field names", async () => {
-    const documentRef = createGstDocument(`
-      <main>
-        <h1>View Filed Returns</h1>
-        <form name="efiledReturns">
-          <label>Financial year</label>
-          <select id="finYr"><option>Select</option><option>2025-26</option></select>
-          <label>Return Filing Period</label>
-          <select id="optValue"><option>Select</option><option>Monthly</option></select>
-          <label>Month</label>
-          <select id="month"><option>Select</option></select>
-          <label>Return Type</label>
-          <select id="retTyp"><option>Select</option><option>GSTR3B</option></select>
-          <button id="lotsearch" type="button">Search</button>
-        </form>
-      </main>
-    `);
-    const submittedForms = stubFormSubmit(documentRef);
-    stubFiledReturnsApi(documentRef, {
-      roleStatus: { data: { userPref: "M" } },
-      rows: {
-        data: [
-          {
-            rtnTyp: "GSTR3B",
-            financialYear: "2025-26",
-            taxPeriod: "March",
-            ackNo: "SYNTHETIC",
-            dateOfFiling: "18/04/2025",
-          },
-        ],
-      },
-    });
-
-    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
-
-    expect(result.state).toBe("clicked");
-    expect(result.safeSignals).toEqual(expect.arrayContaining(["filed-return-api-result-posted"]));
-    expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
-    expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBe("032026");
-    const efileData = documentRef.defaultView?.localStorage.getItem("efile_data") ?? "";
-    expect(efileData).toContain("March");
-    expect(efileData).not.toContain("SYNTHETIC");
-    expect(efileData).not.toContain("18/04/2025");
-  });
-
-  it("falls back to visible filter selection when the GST API returns no matching rows", async () => {
+  it("uses visible filters without requesting API rows or constructing navigation", async () => {
     const documentRef = createGstDocument(`
       <main>
         <h1>View Filed Returns</h1>
@@ -218,8 +62,9 @@ describe("filed returns flow — filter selection and API search", () => {
     `);
     stubFiledReturnsApi(documentRef, {
       roleStatus: { userPref: "M" },
-      rows: [],
+      rows: [{ rtntype: "GSTR3B", fy: "2025-26", taxp: "March" }],
     });
+    const submittedForms = stubFormSubmit(documentRef);
     let searchClicked = 0;
     documentRef.querySelector("button")?.addEventListener("click", () => {
       searchClicked += 1;
@@ -238,6 +83,10 @@ describe("filed returns flow — filter selection and API search", () => {
     );
     expect(result.safeSignals).not.toContain("filed-return-api-result-not-found");
     expect(searchClicked).toBe(1);
+    expect(documentRef.defaultView?.fetch).not.toHaveBeenCalled();
+    expect(submittedForms).toEqual([]);
+    expect(documentRef.defaultView?.localStorage.length).toBe(0);
+    expect(documentRef.defaultView?.sessionStorage.length).toBe(0);
   });
 
   it("selects the requested filing filters and clicks search", async () => {
@@ -825,7 +674,7 @@ describe("filed returns flow — filter selection and API search", () => {
       await vi.runAllTimersAsync();
       const result = await resultPromise;
 
-      expect(result.state).toBe("clicked");
+      expect(result.state).toBe("user-action-required");
       expect(result.safeSignals).toEqual(
         expect.arrayContaining([
           "financial-year-selected",
@@ -834,7 +683,7 @@ describe("filed returns flow — filter selection and API search", () => {
         ]),
       );
       expect(result.safeSignals).not.toContain("month-selected");
-      expect(result.safeMessage).toContain("Missing: month selection still pending.");
+      expect(result.safeMessage).toContain("month selection (if shown)");
       expect(result.safeMessage).not.toContain("00XXXXX0000X0Z0");
       expect(result.safeMessage).not.toContain("Synthetic Taxpayer");
       expect(searchClicked).toBe(0);
@@ -843,7 +692,98 @@ describe("filed returns flow — filter selection and API search", () => {
     }
   }, 12_000);
 
-  it("opens the filed return through the GST API when the month dropdown stays stuck", async () => {
+  it("does not search when the selection budget expires during stability verification", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <label>Financial year</label><select id="finYr"><option>2025-26</option></select>
+          <label>Return Filing Period</label><select id="optValue"><option>Monthly</option></select>
+          <label>Month</label><select id="month"><option>Select</option></select>
+          <label>Return Type</label><select id="retTyp"><option>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      const search = vi.fn();
+      documentRef.querySelector("#lotsearch")!.addEventListener("click", search);
+      globalThis.setTimeout(
+        () =>
+          appendNativeOption(
+            documentRef,
+            documentRef.querySelector<HTMLSelectElement>("#month"),
+            "March",
+          ),
+        28_900,
+      );
+      const pending = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await pending;
+      expect(documentRef.querySelector<HTMLSelectElement>("#month")?.value).toBe("March");
+      expect(result.safeSignals).toContain("filed-return-filter-selection-in-progress");
+      expect(result.safeSignals).not.toContain("search-clicked");
+      expect(result.state).toBe("user-action-required");
+      expect(result.safeMessage).not.toContain("Not confirmed:");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(search).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    [100, false],
+    [500, true],
+  ] as const)("custom option respects a %i ms budget", async (budget, selected) => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <form name="efiledReturns">
+          <label>Financial year</label><select><option>2025-26</option></select>
+          <label>Return Filing Period</label><select><option>Monthly</option></select>
+          <div><label>Month</label><button type="button" role="combobox" aria-controls="months">Select</button></div>
+          <label>Return Type</label><select><option>GSTR3B</option></select>
+          <button type="button">Search</button>
+        </form>
+      `);
+      makeLayoutVisible(documentRef);
+      const control = documentRef.querySelector<HTMLElement>("[role='combobox']")!;
+      const optionClicked = vi.fn(() => {
+        control.textContent = "March";
+      });
+      const opened = vi.fn(() =>
+        globalThis.setTimeout(() => {
+          const list = documentRef.createElement("div");
+          list.id = "months";
+          list.setAttribute("role", "listbox");
+          const option = documentRef.createElement("button");
+          option.textContent = "March";
+          option.setAttribute("role", "option");
+          option.addEventListener("click", optionClicked);
+          list.append(option);
+          documentRef.body.append(list);
+          makeLayoutVisible(documentRef);
+        }, 100),
+      );
+      control.addEventListener("click", opened);
+      const pending = selectCustomOptionNearLabel(
+        documentRef,
+        /^month/i,
+        ["March"],
+        Date.now() + budget,
+      );
+      await vi.advanceTimersByTimeAsync(budget);
+      await expect(pending).resolves.toBe(selected);
+      expect(opened).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(optionClicked).toHaveBeenCalledTimes(selected ? 1 : 0);
+      expect(control.textContent).toBe(selected ? "March" : "Select");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves a missing month unresolved without constructing a navigation bypass", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -897,30 +837,51 @@ describe("filed returns flow — filter selection and API search", () => {
         searchClicked += 1;
       });
 
-      const resultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
-      await vi.advanceTimersByTimeAsync(45_000);
-      const result = await resultPromise;
-
-      expect(result.state).toBe("clicked");
-      expect(result.safeSignals).toEqual(
-        expect.arrayContaining([
-          "filed-return-api-searched",
-          "filed-return-api-result-found",
-          "filed-return-api-result-posted",
-          "filed-return-result-period:March",
-        ]),
+      const startedAt = Date.now();
+      let deliveredAt: number | undefined;
+      const resultPromise = runDownloadStepWithRetry(
+        {
+          storageKeys: {},
+          sendMessageToTabWithInjection: async () => {
+            const flowStep = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+            deliveredAt = Date.now();
+            return { ok: true, flowStep };
+          },
+        },
+        10,
+        {
+          type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+          payload: DEFAULT_SCOPE,
+        },
       );
+      await vi.advanceTimersByTimeAsync(60_000);
+      const response = await resultPromise;
+      expect(response).toMatchObject({
+        ok: true,
+        flowStep: {
+          safeSignals: expect.arrayContaining(["filed-return-filter-selection-in-progress"]),
+        },
+      });
+      if (!("flowStep" in response)) throw new Error("expected the unresolved field response");
+      const result = response.flowStep;
+      expect(deliveredAt! - startedAt).toBeLessThan(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(result.state).toBe("user-action-required");
+      expect(result.safeSignals).toContain("filed-return-filter-selection-in-progress");
+      expect(result.safeSignals).not.toContain("search-clicked");
+      expect(result.safeMessage).toContain("month selection (if shown)");
       expect(searchClicked).toBe(0);
-      expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
-      expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBe("032026");
-      expect(documentRef.defaultView?.localStorage.getItem("gstr3bPref")).toBe("Q");
-      expect(documentRef.defaultView?.sessionStorage.getItem("viewFiled")).toBe("true");
+      expect(documentRef.defaultView?.fetch).not.toHaveBeenCalled();
+      expect(submittedForms).toEqual([]);
+      expect(documentRef.defaultView?.localStorage.length).toBe(0);
+      expect(documentRef.defaultView?.sessionStorage.length).toBe(0);
     } finally {
       vi.useRealTimers();
     }
   }, 12_000);
 
-  it("falls back to visible GSTR-3B filters when API role status is unavailable", async () => {
+  it("selects visible GSTR-3B filters without requiring API role status", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -979,9 +940,6 @@ describe("filed returns flow — filter selection and API search", () => {
       const result = await resultPromise;
 
       expect(result.state).toBe("clicked");
-      // The fallback completes the visible selection and searches; it does not
-      // stop at an in-progress step. Asserting the signals it actually emits
-      // keeps this test proof that the fallback ran, not that it stalled.
       expect(result.safeSignals).toEqual(
         expect.arrayContaining(["filed-return-filters-selected", "search-clicked"]),
       );
@@ -991,7 +949,7 @@ describe("filed returns flow — filter selection and API search", () => {
     }
   }, 12_000);
 
-  it("falls back to visible GSTR-3B filters when a quarterly-era API role response omits preference", async () => {
+  it("uses the visible filing preference without synthesizing one from an API response", async () => {
     vi.useFakeTimers();
     try {
       const documentRef = createGstDocument(`
@@ -1021,9 +979,6 @@ describe("filed returns flow — filter selection and API search", () => {
       const result = await resultPromise;
 
       expect(result.state).toBe("clicked");
-      // The fallback completes the visible selection and searches; it does not
-      // stop at an in-progress step. Asserting the signals it actually emits
-      // keeps this test proof that the fallback ran, not that it stalled.
       expect(result.safeSignals).toEqual(
         expect.arrayContaining(["filed-return-filters-selected", "search-clicked"]),
       );

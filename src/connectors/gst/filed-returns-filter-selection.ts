@@ -117,9 +117,10 @@ export async function waitForFieldSelection(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
+  deadline: number,
 ): Promise<void> {
   const attempts = Math.ceil(FIELD_SETTLE_DELAY_MS / FIELD_SETTLE_POLL_MS);
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
+  for (let attempt = 0; attempt < attempts && Date.now() < deadline; attempt += 1) {
     if (
       filedReturnsFilterFieldMatches(
         documentRef,
@@ -130,10 +131,10 @@ export async function waitForFieldSelection(
     ) {
       // GST replaces dependent select options asynchronously after a change event.
       // Keep the established settle window before probing the next field.
-      await delay(FIELD_SETTLE_DELAY_MS);
+      await delay(Math.min(FIELD_SETTLE_DELAY_MS, Math.max(0, deadline - Date.now())));
       return;
     }
-    await delay(FIELD_SETTLE_POLL_MS);
+    await delay(Math.min(FIELD_SETTLE_POLL_MS, Math.max(0, deadline - Date.now())));
   }
 }
 
@@ -141,12 +142,13 @@ export async function selectFieldOption(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
+  deadline: number,
 ): Promise<boolean> {
-  for (let attempt = 0; attempt < FIELD_SELECTION_ATTEMPTS; attempt += 1) {
-    const result = await selectOptionNearLabel(documentRef, labelPattern, acceptedTexts);
+  for (let attempt = 0; attempt < FIELD_SELECTION_ATTEMPTS && Date.now() < deadline; attempt += 1) {
+    const result = await selectOptionNearLabel(documentRef, labelPattern, acceptedTexts, deadline);
     if (result === "selected") return true;
     if (result === "missing") return false;
-    await delay(FIELD_SETTLE_DELAY_MS);
+    await delay(Math.min(FIELD_SETTLE_DELAY_MS, Math.max(0, deadline - Date.now())));
   }
 
   return false;
@@ -156,7 +158,9 @@ async function selectOptionNearLabel(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
+  deadline: number,
 ): Promise<FieldSelectionAttempt> {
+  if (Date.now() >= deadline) return "pending";
   let hasPendingNativeControl = false;
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   const matchesText = matcherForField(labelPattern);
@@ -188,7 +192,13 @@ async function selectOptionNearLabel(
 
   if (hasPendingNativeControl) return "pending";
 
-  return (await selectCustomOptionNearLabel(documentRef, labelPattern, acceptedTexts, matchesText))
+  return (await selectCustomOptionNearLabel(
+    documentRef,
+    labelPattern,
+    acceptedTexts,
+    deadline,
+    matchesText,
+  ))
     ? "selected"
     : "missing";
 }
