@@ -26,23 +26,29 @@ import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 const FIELD_SETTLE_DELAY_MS = 500;
 const FIELD_STABILITY_DELAY_MS = 1_000;
 const FIELD_CONVERGENCE_ATTEMPTS = 4;
+// Leave room for delivery before the background content-message timeout.
+const FILTER_SELECTION_BUDGET_MS = 30_000;
 
 export async function selectFiledReturnsFiltersAndSearch(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   scopeId: string,
 ): Promise<PortalFlowStepResult> {
+  const deadline = Date.now() + FILTER_SELECTION_BUDGET_MS;
   const descriptor = filedReturnDescriptor(scope.returnType);
   const selectSignals: string[] = [];
   const leaveFilingPeriodUnselected = shouldLeaveFilingPeriodUnselected(
     documentRef,
     scope.returnType,
   );
-  let financialYearSelected = await selectFieldOption(documentRef, FINANCIAL_YEAR_LABEL, [
-    scope.financialYear,
-  ]);
+  let financialYearSelected = await selectFieldOption(
+    documentRef,
+    FINANCIAL_YEAR_LABEL,
+    [scope.financialYear],
+    deadline,
+  );
   if (financialYearSelected) {
-    await waitForFieldSelection(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear]);
+    await waitForFieldSelection(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear], deadline);
   }
 
   let periodSelected = await selectFieldOption(
@@ -51,6 +57,7 @@ export async function selectFiledReturnsFiltersAndSearch(
     leaveFilingPeriodUnselected
       ? acceptedUnselectedFilingPeriodOptions()
       : acceptedFilingPeriodOptions(scope),
+    deadline,
   );
   if (periodSelected) {
     await waitForFieldSelection(
@@ -59,6 +66,7 @@ export async function selectFiledReturnsFiltersAndSearch(
       leaveFilingPeriodUnselected
         ? acceptedUnselectedFilingPeriodOptions()
         : acceptedFilingPeriodOptions(scope),
+      deadline,
     );
     if (leaveFilingPeriodUnselected) selectSignals.push("return-filing-period-left-unselected");
   }
@@ -66,24 +74,35 @@ export async function selectFiledReturnsFiltersAndSearch(
   let monthFieldPresent = hasFieldControl(documentRef, MONTH_LABEL);
   let monthSelected = !monthFieldPresent;
   if (periodSelected && monthFieldPresent) {
-    monthSelected = await selectFieldOption(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
+    monthSelected = await selectFieldOption(
+      documentRef,
+      MONTH_LABEL,
+      acceptedMonthOptions(scope),
+      deadline,
+    );
     monthFieldPresent = monthFieldPresent || hasFieldControl(documentRef, MONTH_LABEL);
   }
   if (monthFieldPresent && monthSelected) {
-    await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
+    await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope), deadline);
   }
 
   let returnTypeSelected = await selectFieldOption(
     documentRef,
     RETURN_TYPE_LABEL,
     acceptedReturnTypeOptions(scope),
+    deadline,
   );
   if (periodSelected && returnTypeSelected && monthFieldPresent && !monthSelected) {
-    await delay(FIELD_SETTLE_DELAY_MS);
-    monthSelected = await selectFieldOption(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
+    await delay(Math.min(FIELD_SETTLE_DELAY_MS, Math.max(0, deadline - Date.now())));
+    monthSelected = await selectFieldOption(
+      documentRef,
+      MONTH_LABEL,
+      acceptedMonthOptions(scope),
+      deadline,
+    );
     monthFieldPresent = monthFieldPresent || hasFieldControl(documentRef, MONTH_LABEL);
     if (monthSelected) {
-      await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
+      await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope), deadline);
     }
   }
 
@@ -91,6 +110,7 @@ export async function selectFiledReturnsFiltersAndSearch(
     documentRef,
     scope,
     leaveFilingPeriodUnselected,
+    deadline,
   );
   financialYearSelected = settledSelection.financialYearSelected;
   periodSelected = settledSelection.periodSelected;
@@ -108,6 +128,7 @@ export async function selectFiledReturnsFiltersAndSearch(
   const search = findUniqueActionableExactSearchControl(searchRoot);
 
   if (
+    Date.now() >= deadline ||
     !financialYearSelected ||
     !periodSelected ||
     !monthSelected ||
@@ -182,11 +203,16 @@ async function settleFiledReturnsFilterSelection(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   leaveFilingPeriodUnselected: boolean,
+  deadline: number,
 ): Promise<FilterSelectionState> {
   let state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
-  for (let attempt = 0; attempt < FIELD_CONVERGENCE_ATTEMPTS; attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < FIELD_CONVERGENCE_ATTEMPTS && Date.now() < deadline;
+    attempt += 1
+  ) {
     if (isFilterSelectionComplete(state)) {
-      await delay(FIELD_STABILITY_DELAY_MS);
+      await delay(Math.min(FIELD_STABILITY_DELAY_MS, Math.max(0, deadline - Date.now())));
       const stableState = readPortalFilterSelectionState(
         documentRef,
         scope,
@@ -197,8 +223,13 @@ async function settleFiledReturnsFilterSelection(
     }
 
     if (!state.financialYearSelected) {
-      await selectFieldOption(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear]);
-      await waitForFieldSelection(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear]);
+      await selectFieldOption(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear], deadline);
+      await waitForFieldSelection(
+        documentRef,
+        FINANCIAL_YEAR_LABEL,
+        [scope.financialYear],
+        deadline,
+      );
     }
 
     state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
@@ -206,14 +237,29 @@ async function settleFiledReturnsFilterSelection(
       const acceptedPeriodOptions = leaveFilingPeriodUnselected
         ? acceptedUnselectedFilingPeriodOptions()
         : acceptedFilingPeriodOptions(scope);
-      await selectFieldOption(documentRef, FILING_PERIOD_LABEL, acceptedPeriodOptions);
-      await waitForFieldSelection(documentRef, FILING_PERIOD_LABEL, acceptedPeriodOptions);
+      await selectFieldOption(documentRef, FILING_PERIOD_LABEL, acceptedPeriodOptions, deadline);
+      await waitForFieldSelection(
+        documentRef,
+        FILING_PERIOD_LABEL,
+        acceptedPeriodOptions,
+        deadline,
+      );
     }
 
     state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
     if (state.periodSelected && !state.returnTypeSelected) {
-      await selectFieldOption(documentRef, RETURN_TYPE_LABEL, acceptedReturnTypeOptions(scope));
-      await waitForFieldSelection(documentRef, RETURN_TYPE_LABEL, acceptedReturnTypeOptions(scope));
+      await selectFieldOption(
+        documentRef,
+        RETURN_TYPE_LABEL,
+        acceptedReturnTypeOptions(scope),
+        deadline,
+      );
+      await waitForFieldSelection(
+        documentRef,
+        RETURN_TYPE_LABEL,
+        acceptedReturnTypeOptions(scope),
+        deadline,
+      );
     }
 
     state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
@@ -223,8 +269,8 @@ async function settleFiledReturnsFilterSelection(
       state.monthFieldPresent &&
       !state.monthSelected
     ) {
-      await selectFieldOption(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
-      await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope));
+      await selectFieldOption(documentRef, MONTH_LABEL, acceptedMonthOptions(scope), deadline);
+      await waitForFieldSelection(documentRef, MONTH_LABEL, acceptedMonthOptions(scope), deadline);
     }
 
     state = readPortalFilterSelectionState(documentRef, scope, leaveFilingPeriodUnselected);
