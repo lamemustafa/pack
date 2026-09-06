@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
+import { hasPendingFiledReturnsSearchForScope } from "../../src/connectors/gst/filed-returns-search-state";
 import {
   DEFAULT_SCOPE,
   createDocument,
@@ -55,6 +56,58 @@ describe("filed returns flow — filter selection and API search", () => {
     expect(documentRef.querySelector<HTMLSelectElement>("#retTyp")?.value).toBe("Select");
     expect(searchClicked).toBe(0);
     expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
+  });
+
+  it("does not click Search when the deadline expires while fingerprinting the result DOM", async () => {
+    // The deadline is read once before the Search control is located, and
+    // `markFiledReturnsSearchPending` fingerprints the result DOM synchronously between that read
+    // and the click. On a large page that gap can cross the boundary, firing a portal action
+    // against a step the background has already given up on.
+    //
+    // The seam is the pending marker: it does not exist when the first deadline check runs, and
+    // does by the time the click is about to happen. Expiring the clock exactly on that
+    // transition reproduces the gap deterministically rather than by timing.
+    const documentRef = createGstDocument(`
+      <main><h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <label>Financial year</label><select id="finYr"><option>2025-26</option></select>
+          <label>Return Filing Period</label><select id="optValue"><option>Monthly</option></select>
+          <label>Month</label><select id="month"><option>March</option></select>
+          <label>Return Type</label><select id="retTyp"><option>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      </main>
+    `);
+    stubFormSubmit(documentRef);
+    stubFiledReturnsApi(documentRef, { rows: [], roleStatus: null });
+    const search = vi.fn();
+    documentRef.querySelector("#lotsearch")?.addEventListener("click", search);
+
+    const realNow = Date.now.bind(Date);
+    let inProbe = false;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => {
+      const base = realNow();
+      if (inProbe) return base;
+      inProbe = true;
+      try {
+        return hasPendingFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)
+          ? base + 60_000
+          : base;
+      } finally {
+        inProbe = false;
+      }
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+    spy.mockRestore();
+
+    expect(result.safeSignals).toContain("filed-return-filter-selection-deadline-expired");
+    expect(result.state).toBe("blocked");
+    // The invariant that matters: no portal action fired after the boundary.
+    expect(search).not.toHaveBeenCalled();
+    // And the marker written a moment earlier is cleared, so a later read is not told a search is
+    // in flight when none was fired.
+    expect(hasPendingFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
   });
 
   it.each(["filed-return search", "role status"] as const)(

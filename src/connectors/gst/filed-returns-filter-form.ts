@@ -25,7 +25,10 @@ import {
   waitForFieldSelection,
 } from "./filed-returns-filter-selection";
 import { activateElement, findUniqueActionableExactSearchControl } from "./filed-returns-dom";
-import { markFiledReturnsSearchPending } from "./filed-returns-search-state";
+import {
+  clearFiledReturnsSearchAttemptForScope,
+  markFiledReturnsSearchPending,
+} from "./filed-returns-search-state";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 import { filedReturnsFilterActionRequiredMessage } from "./filed-returns-filter-status";
 
@@ -193,6 +196,33 @@ export async function selectFiledReturnsFiltersAndSearch(
   }
 
   markFiledReturnsSearchPending(documentRef, scope);
+  // Re-read the clock rather than trusting the snapshot above.
+  // `markFiledReturnsSearchPending` fingerprints the result DOM synchronously, so on a large or
+  // slow page it can carry execution across the deadline the earlier check passed. Clicking then
+  // fires a portal action against a step the background has already classified as timed out --
+  // the late click the shared deadline exists to prevent, in a smaller window.
+  if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
+    // The marker was written a moment ago for a search that will not happen. Leaving it would
+    // tell a later read that a search is in flight when none was fired.
+    clearFiledReturnsSearchAttemptForScope(documentRef, scope);
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "blocked",
+      safeSignals: [
+        "filed-return-filters-selected",
+        ...selectSignals,
+        "filed-return-filter-selection-deadline-expired",
+      ],
+      safeMessage:
+        "Pack selected the filed-return filters but ran out of time before it could search. Start Pack again.",
+      userAction: {
+        type: "RETRY_PORTAL_GENERATION",
+        message: "Start Pack again for this period.",
+        canResume: true,
+      },
+    };
+  }
   activateElement(search);
   return {
     connectorId: "gst",

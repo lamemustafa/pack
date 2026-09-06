@@ -186,6 +186,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-return-filter-bound-result-view-clicked",
   "filed-return-filter-bound-result-view-ready",
   "filed-return-filter-candidate-not-found",
+  "filed-return-filter-selection-deadline-expired",
   "filed-return-filter-selection-in-progress",
   "filed-return-filters-selected",
   "filed-return-offscreen-blob-url-rejected",
