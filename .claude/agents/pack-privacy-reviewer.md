@@ -60,13 +60,16 @@ pass/fail per item with file:line evidence.
    remotely fetched executable code (this is also an MV3 policy violation, not
    just a privacy one).
 4. **No expanded reach.** No `externally_connectable`, no new host permissions,
-   no broadening beyond the exact permission set in
-   `src/extension/manifest-policy.ts` (`downloads`, `offscreen`, `scripting`,
-   `storage`, and only `www.gst.gov.in`, `services.gst.gov.in`,
-   `return.gst.gov.in`, `gstr2b.gst.gov.in`). If the
-   diff touches that file, diff it against the current committed version and
-   flag every change as Critical pending explicit human sign-off — do not wave
-   through "looks fine" here.
+   no broadening beyond the reviewed permission and host sets. Read
+   `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` from
+   `src/extension/manifest-policy.ts` at the review base; do not copy the sets
+   here. Have the calling agent supply the base/head SHAs, baseline policy
+   contents, and relevant diffs (including local change layers) using the
+   scope defined in `.claude/agents/pack-security-reviewer.md`. Inspect that
+   evidence without executing Git; request missing evidence from the calling
+   agent and mark this check blocked until it is supplied. Flag every candidate
+   policy change as Critical pending explicit human sign-off under `AGENTS.md`;
+   membership in the candidate policy does not authorize a change.
 5. **Storage redaction.** Anything persisted via `chrome.storage` (or any local
    ledger/state file) must not contain raw portal URLs with query strings,
    referrer values, local filesystem paths, filenames, portal HTML, GSTIN/PAN,
