@@ -78,19 +78,23 @@ The distinction is transformation, not the data.
    GST edge layer gates `/returns/auth/api/*` on that shape. `Referer` is a forbidden
    header, so `downloads.download({headers})` cannot fix it.
 
-   The same request from a **content script on a `return.gst.gov.in` page** is genuinely
-   same-origin and works. `src/connectors/gst/filed-returns-api-search.ts` already proves
-   this in production (`POST /returns/auth/api/efiledReturns`,
-   `GET /returns/auth/api/rolestatus`, `credentials: "same-origin"`).
+   The former `filed-returns-api-search.ts` adapter was cited here as a
+   request-context precedent. It has been removed and provides no current
+   production evidence or authorization for a navigation handoff. The historical
+   request-context analysis above must not be used to reconstruct portal
+   navigation or portal storage state.
 
-   Nobody isolated request-context as a variable. That is the whole bug.
+   Current filed-return selection follows `runFiledReturnsDownloadStep` in
+   `src/connectors/gst/filed-returns-flow.ts`, the visible filter/Search controls
+   in `filed-returns-filter-form.ts`, and the rendered matching result row.
+   Missing dependent options remain an explicit unresolved selection. This
+   source change still requires authenticated validation.
 
 2. **"Armed then timeout" on the capture path.** Over-broad, suppressing instrumentation. §0.
 
-**Privacy note that must survive review:** none of this reads, stores, logs, or transmits a
-cookie, token, header, or any session material. The browser attaches credentials to a
-same-origin request exactly as it does for the page's own code. This is not session replay,
-and the `filed-returns-api-search.ts` precedent was already reviewed on that basis.
+**Current privacy boundary:** the retired adapter is not an exception to
+`AGENTS.md`. Do not collect or retain credential/session material, reconstruct
+portal navigation, or write portal state to bypass the visible controls.
 
 ---
 

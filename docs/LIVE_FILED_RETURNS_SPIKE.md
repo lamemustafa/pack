@@ -116,7 +116,7 @@ not a public launch path.
   `Search`.
 - Scheduled downtime handling: Pack treats GST's plain scheduled-downtime page
   as a blocked portal-availability state with a retry-later action. It must not
-  continue navigation, API search, dropdown selection or final download attempts
+  continue navigation, dropdown selection or final download attempts
   while that page is visible.
 
 ## Live navigation finding
@@ -273,33 +273,21 @@ not reload the portal page if the browser shows a form-resubmission warning.
 Return to a normal authenticated GST page, open Pack and click `Start download`;
 the popup should refresh through the same-tab content-script recovery path.
 
-## 2026-06-26 live filed-returns finding
+## Historical 2026-06-26 filed-returns finding
 
-Private Brave testing confirmed the filed-returns route can render the filter
-form while the Month field remains at `Select` and Return Type population is
-slow. Treat this as the main live stuck point before the detail page: Pack should
-not wait on the dependent dropdown path when a same-origin filed-return search
-API is available from `/returns/auth/efiledReturns`.
+The historical private test recorded a filter form whose Month field stayed at
+`Select` while Return Type population was slow. The API handoff proposed in
+response to that observation has been removed; its row normalization, portal
+storage writes, and constructed form submission are not current guidance.
 
-The redacted request shape observed for the filed-return search is:
-
-```json
-{
-  "fy": "YYYY-YY",
-  "rfp": "Monthly",
-  "qtr": null,
-  "mth": "MonthName",
-  "rtntp": "GSTR3B"
-}
-```
-
-The response shape has appeared as either a bare array or a `data`-wrapped
-array, and GST field names can vary across related endpoints. Pack therefore
-normalises filed-return API rows through a small alias list before matching the
-requested financial year, period and return type. The handoff still happens
-inside the active portal page with `fetch(..., { credentials: "same-origin" })`
-and portal storage/form navigation; Pack must not copy, store, log or transmit
-GST cookies, session tokens, raw headers or taxpayer-specific response bodies.
+The current `filters-required` path in
+`src/connectors/gst/filed-returns-flow.ts` delegates to
+`selectFiledReturnsFiltersAndSearch` in `filed-returns-filter-form.ts`. Follow the
+portal's visible filters and Search control, then the matching rendered result
+row. If dependent options remain unavailable, retain the explicit unresolved
+selection result; do not reconstruct navigation or portal state to bypass it.
+Synthetic regression tests cover these effects. Authenticated validation of this
+change remains pending.
 
 Historical direct-endpoint probe/replay experiments are retired. Their protected
 request paths are intentionally omitted from this document and must not be
