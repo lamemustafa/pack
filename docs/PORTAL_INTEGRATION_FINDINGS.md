@@ -370,7 +370,9 @@ loading-versus-terminal transition, and whether the claim was confirmed or falsi
 additionally require a **redacted structural record of the surrounding decoy controls** -- their
 roles, nesting and multiplicity, with every label, value and identifier stripped. Without it a
 later fixture cannot be derived from the capture and would invent the neighbouring page structure
-again, which is how two consecutive fixes shipped broken. Question 6 needs it for a concrete reason: the shipped loading check walks from the candidate container up through its ancestors, so neighbouring controls and their nesting can change whether an empty marker is accepted. A capture retaining only transitions and multiplicity cannot produce a representative fixture for that detector. Do not
+again, which is how two consecutive fixes shipped broken. Question 6 needs it for a concrete reason: the shipped loading check walks from the candidate container up through its ancestors, so neighbouring controls and their nesting can change whether an empty marker is accepted. A capture retaining only transitions and multiplicity cannot produce a representative fixture for that detector.
+
+Structure alone is also insufficient, because that check consumes **text**: it treats an ancestor as loading when `aria-busy="true"` or when its visible descendant text matches a small loading vocabulary. Stripping every label would therefore discard the evidence that decides whether an empty marker is accepted. For each retained decoy, also record a **redacted classification** -- whether its visible text matches that vocabulary, and whether `aria-busy` is set -- without retaining the raw label. That keeps the behaviourally relevant fact and still retains no portal content. Do not
 retain or publish portal HTML, routes, identifiers, names, values, files, screenshots, or network
 material. Probe the empty-result transition before changing retry behaviour; a retry is not honest
 unless a completed empty state can be distinguished from a search still in progress.
