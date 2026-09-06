@@ -57,6 +57,66 @@ describe("filed returns flow — filter selection and API search", () => {
     expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
   });
 
+  it.each(["filed-return search", "role status"] as const)(
+    "aborts %s before the shared deadline and never submits a late handoff",
+    async (slowRequest) => {
+      vi.useFakeTimers();
+      try {
+        const documentRef = createGstDocument(`
+          <main><h1>View Filed Returns</h1>
+            <form name="efiledReturns">
+              <label>Financial year</label><select id="finYr"><option>2025-26</option></select>
+              <label>Return Filing Period</label><select id="optValue"><option>Monthly</option></select>
+              <label>Month</label><select id="month"><option>March</option></select>
+              <label>Return Type</label><select id="retTyp"><option>GSTR3B</option></select>
+              <button id="lotsearch" type="button">Search</button>
+            </form>
+          </main>
+        `);
+        const submittedForms = stubFormSubmit(documentRef);
+        const search = vi.fn();
+        documentRef.querySelector("#lotsearch")?.addEventListener("click", search);
+        const aborted = vi.fn();
+        Object.defineProperty(documentRef.defaultView, "fetch", {
+          configurable: true,
+          value: vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+            const isRoleStatus = String(input).includes("rolestatus");
+            const isSlow = slowRequest === "filed-return search" ? !isRoleStatus : isRoleStatus;
+            if (!isSlow) {
+              return Promise.resolve({
+                ok: true,
+                json: async () =>
+                  isRoleStatus
+                    ? { userPref: "M" }
+                    : [{ rtntype: "GSTR3B", fy: "2025-26", taxp: "March" }],
+              });
+            }
+            return new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => {
+                aborted();
+                reject(new DOMException("aborted", "AbortError"));
+              });
+            });
+          }),
+        });
+
+        const pending = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+        await vi.advanceTimersByTimeAsync(30_000);
+        const result = await pending;
+
+        expect(aborted).toHaveBeenCalledOnce();
+        expect(result.state).toBe("user-action-required");
+        expect(submittedForms).toEqual([]);
+        expect(search).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(submittedForms).toEqual([]);
+        expect(search).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("requires user action rather than using the API from a different GSTR-3B detail page", async () => {
     const documentRef = createGstDocument(
       `
@@ -825,7 +885,7 @@ describe("filed returns flow — filter selection and API search", () => {
       await vi.runAllTimersAsync();
       const result = await resultPromise;
 
-      expect(result.state).toBe("clicked");
+      expect(result.state).toBe("user-action-required");
       expect(result.safeSignals).toEqual(
         expect.arrayContaining([
           "financial-year-selected",
@@ -834,7 +894,7 @@ describe("filed returns flow — filter selection and API search", () => {
         ]),
       );
       expect(result.safeSignals).not.toContain("month-selected");
-      expect(result.safeMessage).toContain("Missing: month selection still pending.");
+      expect(result.safeMessage).toContain("month selection (if shown)");
       expect(result.safeMessage).not.toContain("00XXXXX0000X0Z0");
       expect(result.safeMessage).not.toContain("Synthetic Taxpayer");
       expect(searchClicked).toBe(0);

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { prepareFullFiscalYearCompletion } from "../../src/background/filed-returns-full-fiscal-year-completion";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
@@ -84,6 +85,30 @@ describe("full fiscal-year recovery", () => {
     zipMocks.discardFullFiscalYearFiledReturnsZip.mockResolvedValue([
       "full-fiscal-year-opfs-cleared",
     ]);
+  });
+
+  it.each([
+    "full-fiscal-year-run-needs-action",
+    "full-fiscal-year-zip-target-state-invalid",
+  ] as const)("persists a refusal with %s and rejects malformed plans", async (signal) => {
+    const ledger = createRecoveryLedger({ revision: 2 });
+    const deps = recoveryDeps();
+    await expect(
+      prepareFullFiscalYearCompletion(deps as never, ledger, deps.now(), signal),
+    ).resolves.toMatchObject({ ready: false, response: { flowStep: { safeSignals: [signal] } } });
+    expect(sessionValues.current.completion).toMatchObject({ flowStep: { safeSignals: [signal] } });
+
+    await expect(
+      prepareFullFiscalYearCompletion(
+        deps as never,
+        { ...ledger, targetPlan: [] },
+        deps.now(),
+        signal,
+      ),
+    ).resolves.toMatchObject({
+      ready: false,
+      response: { flowStep: { safeSignals: ["full-fiscal-year-target-plan-invalid"] } },
+    });
   });
 
   it("keeps an offscreen-response-invalid ZIP summary persisted for recovery", async () => {
