@@ -1,3 +1,5 @@
+import { selectCustomOptionNearLabel } from "../../src/connectors/gst/filed-returns-custom-dropdown";
+import { runDownloadStepWithRetry } from "../../src/background/filed-returns-flow-messaging";
 import { describe, expect, it, vi } from "vitest";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
@@ -690,6 +692,95 @@ describe("filed returns flow — portal filter selection", () => {
     }
   }, 12_000);
 
+  it("does not search when the selection budget expires during stability verification", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <label>Financial year</label><select id="finYr"><option>2025-26</option></select>
+          <label>Return Filing Period</label><select id="optValue"><option>Monthly</option></select>
+          <label>Month</label><select id="month"><option>Select</option></select>
+          <label>Return Type</label><select id="retTyp"><option>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      const search = vi.fn();
+      documentRef.querySelector("#lotsearch")!.addEventListener("click", search);
+      globalThis.setTimeout(
+        () =>
+          appendNativeOption(
+            documentRef,
+            documentRef.querySelector<HTMLSelectElement>("#month"),
+            "March",
+          ),
+        28_900,
+      );
+      const pending = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await pending;
+      expect(documentRef.querySelector<HTMLSelectElement>("#month")?.value).toBe("March");
+      expect(result.safeSignals).toContain("filed-return-filter-selection-in-progress");
+      expect(result.safeSignals).not.toContain("search-clicked");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(search).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    [100, false],
+    [500, true],
+  ] as const)("custom option respects a %i ms budget", async (budget, selected) => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createDocument(`
+        <form name="efiledReturns">
+          <label>Financial year</label><select><option>2025-26</option></select>
+          <label>Return Filing Period</label><select><option>Monthly</option></select>
+          <div><label>Month</label><button type="button" role="combobox" aria-controls="months">Select</button></div>
+          <label>Return Type</label><select><option>GSTR3B</option></select>
+          <button type="button">Search</button>
+        </form>
+      `);
+      makeLayoutVisible(documentRef);
+      const control = documentRef.querySelector<HTMLElement>("[role='combobox']")!;
+      const optionClicked = vi.fn(() => {
+        control.textContent = "March";
+      });
+      const opened = vi.fn(() =>
+        globalThis.setTimeout(() => {
+          const list = documentRef.createElement("div");
+          list.id = "months";
+          list.setAttribute("role", "listbox");
+          const option = documentRef.createElement("button");
+          option.textContent = "March";
+          option.setAttribute("role", "option");
+          option.addEventListener("click", optionClicked);
+          list.append(option);
+          documentRef.body.append(list);
+          makeLayoutVisible(documentRef);
+        }, 100),
+      );
+      control.addEventListener("click", opened);
+      const pending = selectCustomOptionNearLabel(
+        documentRef,
+        /^month/i,
+        ["March"],
+        Date.now() + budget,
+      );
+      await vi.advanceTimersByTimeAsync(budget);
+      await expect(pending).resolves.toBe(selected);
+      expect(opened).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(optionClicked).toHaveBeenCalledTimes(selected ? 1 : 0);
+      expect(control.textContent).toBe(selected ? "March" : "Select");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("leaves a missing month unresolved without constructing a navigation bypass", async () => {
     vi.useFakeTimers();
     try {
@@ -744,9 +835,35 @@ describe("filed returns flow — portal filter selection", () => {
         searchClicked += 1;
       });
 
-      const resultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
-      await vi.runAllTimersAsync();
-      const result = await resultPromise;
+      const startedAt = Date.now();
+      let deliveredAt: number | undefined;
+      const resultPromise = runDownloadStepWithRetry(
+        {
+          storageKeys: {},
+          sendMessageToTabWithInjection: async () => {
+            const flowStep = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+            deliveredAt = Date.now();
+            return { ok: true, flowStep };
+          },
+        },
+        10,
+        {
+          type: "PACK_CONTENT_RUN_FILED_RETURNS_DOWNLOAD_STEP_V3",
+          payload: DEFAULT_SCOPE,
+        },
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      const response = await resultPromise;
+      expect(response).toMatchObject({
+        ok: true,
+        flowStep: {
+          safeSignals: expect.arrayContaining(["filed-return-filter-selection-in-progress"]),
+        },
+      });
+      if (!("flowStep" in response)) throw new Error("expected the unresolved field response");
+      const result = response.flowStep;
+      expect(deliveredAt! - startedAt).toBeLessThan(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
 
       expect(result.state).toBe("clicked");
       expect(result.safeSignals).toContain("filed-return-filter-selection-in-progress");
