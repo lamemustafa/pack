@@ -1,4 +1,9 @@
 import { delay } from "../../core/time";
+import {
+  createFiledReturnsAcquisitionDeadline,
+  hasFiledReturnsAcquisitionDeadlineExpired,
+  remainingFiledReturnsAcquisitionTime,
+} from "./filed-returns-acquisition-deadline";
 import { isHtmlElement, isVisible, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 
 const DROPDOWN_POLL_MS = 50;
@@ -37,10 +42,11 @@ export async function waitForVisibleCustomDropdownOption(
   acceptedTexts: readonly string[],
   openedControl: HTMLElement,
   beforeOpenElements: ReadonlySet<Element>,
+  deadline = createFiledReturnsAcquisitionDeadline(),
   matchesText: (text: string, acceptedTexts: readonly string[]) => boolean = matchesAcceptedText,
 ): Promise<HTMLElement | null> {
-  const startedAt = Date.now();
-  do {
+  const stopAt = Math.min(deadline, Date.now() + DROPDOWN_OPEN_TIMEOUT_MS);
+  while (!hasFiledReturnsAcquisitionDeadlineExpired(stopAt)) {
     const option = findVisibleOption(
       documentRef,
       acceptedTexts,
@@ -49,8 +55,8 @@ export async function waitForVisibleCustomDropdownOption(
       matchesText,
     );
     if (option) return option;
-    await delay(DROPDOWN_POLL_MS);
-  } while (Date.now() - startedAt < DROPDOWN_OPEN_TIMEOUT_MS);
+    await delay(Math.min(DROPDOWN_POLL_MS, remainingFiledReturnsAcquisitionTime(stopAt)));
+  }
   return null;
 }
 

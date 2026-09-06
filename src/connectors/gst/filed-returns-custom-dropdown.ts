@@ -1,5 +1,10 @@
 import { delay } from "../../core/time";
 import {
+  createFiledReturnsAcquisitionDeadline,
+  hasFiledReturnsAcquisitionDeadlineExpired,
+  remainingFiledReturnsAcquisitionTime,
+} from "./filed-returns-acquisition-deadline";
+import {
   CLICKABLE_CONTROL_SELECTOR,
   activateElement,
   getActionableExactSearchControls,
@@ -17,8 +22,10 @@ export async function selectCustomOptionNearLabel(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
+  deadline = createFiledReturnsAcquisitionDeadline(),
   matchesText: (text: string, acceptedTexts: readonly string[]) => boolean = matchesAcceptedText,
 ): Promise<boolean> {
+  if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) return false;
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   if (!formRoot) return false;
 
@@ -34,6 +41,7 @@ export async function selectCustomOptionNearLabel(
   if (!control) return false;
 
   const beforeOpenElements = new Set(Array.from(documentRef.body.querySelectorAll("*")));
+  if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) return false;
   activateElement(control);
 
   const option = await waitForVisibleCustomDropdownOption(
@@ -41,12 +49,13 @@ export async function selectCustomOptionNearLabel(
     acceptedTexts,
     control,
     beforeOpenElements,
+    deadline,
     matchesText,
   );
-  if (!option) return false;
+  if (!option || hasFiledReturnsAcquisitionDeadlineExpired(deadline)) return false;
 
   activateElement(option);
-  return waitForFieldTextMatch(fieldRoot, acceptedTexts, matchesText);
+  return waitForFieldTextMatch(fieldRoot, acceptedTexts, deadline, matchesText);
 }
 
 export function findFiledReturnsFilterRoot(documentRef: Document): HTMLElement | null {
@@ -148,12 +157,13 @@ function hasFiledReturnsFilterLabels(element: HTMLElement): boolean {
 async function waitForFieldTextMatch(
   fieldRoot: HTMLElement,
   acceptedTexts: readonly string[],
+  deadline: number,
   matchesText: (text: string, acceptedTexts: readonly string[]) => boolean,
 ): Promise<boolean> {
-  const startedAt = Date.now();
-  do {
+  const stopAt = Math.min(deadline, Date.now() + DROPDOWN_SELECTION_TIMEOUT_MS);
+  while (!hasFiledReturnsAcquisitionDeadlineExpired(stopAt)) {
     if (matchesText(normaliseText(fieldRoot.textContent || ""), acceptedTexts)) return true;
-    await delay(DROPDOWN_POLL_MS);
-  } while (Date.now() - startedAt < DROPDOWN_SELECTION_TIMEOUT_MS);
+    await delay(Math.min(DROPDOWN_POLL_MS, remainingFiledReturnsAcquisitionTime(stopAt)));
+  }
   return false;
 }
