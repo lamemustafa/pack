@@ -1,3 +1,7 @@
+import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
+import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-returns-durable-summary";
+import { createGstDocument } from "../connectors/filed-returns-flow.test-helpers";
+import { runFiledReturnsDownloadStep } from "../../src/connectors/gst/filed-returns-flow";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 
@@ -50,6 +54,85 @@ describe("single-period tab identity blocks", () => {
     vi.clearAllMocks();
     flowMocks.preflightSelectedArtifactsRecovery.mockResolvedValue(null);
     flowMocks.reconcileArtifactAcquisitionCheckpoint.mockResolvedValue({ state: "none" });
+  });
+
+  it("keeps the missing-month reason through the outer deadline and persisted summary", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <label>Financial year</label><select id="finYr"><option>2026-27</option></select>
+          <label>Return Filing Period</label><select id="optValue"><option>Monthly</option></select>
+          <label>Month</label><select id="month"><option>Select</option></select>
+          <label>Return Type</label><select id="retTyp"><option>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      const search = vi.fn();
+      documentRef.querySelector("#lotsearch")!.addEventListener("click", search);
+      const sendMessageToTabWithInjection = vi.fn(async () => ({
+        ok: true as const,
+        flowStep: await runFiledReturnsDownloadStep(documentRef, scope),
+      }));
+      const pending = startSinglePeriodFiledReturnsDownloadFlow(scope, {
+        ...deps(),
+        getActiveGstTab: async () => ({
+          ...(await deps().getActiveGstTab())!,
+          url: documentRef.location.href,
+        }),
+        sendMessageToTabWithInjection,
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      const response = await pending;
+      expect(response).toMatchObject({
+        flowStep: {
+          state: "user-action-required",
+          safeMessage: expect.stringContaining("month selection (if shown)"),
+          userAction: { type: "NAVIGATE_TO_SUPPORTED_PAGE", canResume: true },
+        },
+      });
+      assertImmediateAndPersistedMessagesMatch(response);
+      if (!("flowStep" in response)) throw new Error("expected a flow step");
+      const saved = browserMocks.session.completion as { flowStep: object };
+      for (const safeMessage of [
+        "Pack needs an explicit recovery action before continuing April.",
+        "Synthetic untrusted page text",
+      ]) {
+        expect(
+          parseDurableFiledReturnsFlowSummary({
+            ...saved,
+            flowStep: { ...saved.flowStep, safeMessage },
+          })?.flowStep.safeMessage,
+        ).toBe(response.flowStep?.safeMessage);
+      }
+      expect(browserMocks.session.completion).toMatchObject({
+        flowStep: {
+          safeMessage: expect.not.stringContaining("results may still be loading"),
+        },
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sendMessageToTabWithInjection).toHaveBeenCalledOnce();
+      expect(search).not.toHaveBeenCalled();
+      expect(flowMocks.triggerSelectedArtifacts).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    "portal-blocked-or-session-expired",
+    "filed-returns-target-review-required",
+    "filed-return-durable-status-rejected",
+    "filed-returns-gst-tab-focus-unavailable",
+  ])("preserves %s guidance over stale selection evidence", (signal) => {
+    const expected = canonicalDurableSummaryMessage(scope, "blocked", [signal]);
+    expect(
+      canonicalDurableSummaryMessage(scope, "blocked", [
+        signal,
+        "filed-return-filter-selection-in-progress",
+      ]),
+    ).toBe(expected);
   });
 
   it("keeps the immediate pinned-tab block equal to its persisted summary message", async () => {

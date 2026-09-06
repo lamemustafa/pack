@@ -1,5 +1,6 @@
 import {
   detectVisibleReturnLabel,
+  missingFiledReturnDownloadMessage,
   scopeIdForVisibleReturnLabel,
 } from "./filed-returns-observer-scope";
 import { detectSafeSignals } from "./filed-returns-observer-signals";
@@ -147,22 +148,6 @@ export function observeFiledReturnsPageText(
     };
   }
 
-  if (
-    !safeSignals.includes("gstr-3b") &&
-    !safeSignals.includes("gstr-1") &&
-    !safeSignals.includes("gstr-2b")
-  ) {
-    return {
-      connectorId: "gst",
-      pageKind: "gst-filed-returns",
-      scopeId: DEFAULT_SCOPE_ID,
-      state: "download-not-visible",
-      safeSignals,
-      safeMessage:
-        "The filed returns page is visible, but the requested return type is not visible yet.",
-    };
-  }
-
   const visibleReturnLabel = detectVisibleReturnLabel(safeSignals);
 
   return {
@@ -171,6 +156,6 @@ export function observeFiledReturnsPageText(
     scopeId: scopeIdForVisibleReturnLabel(visibleReturnLabel),
     state: "download-not-visible",
     safeSignals,
-    safeMessage: `${visibleReturnLabel} is visible, but a filed-return download control is not visible.`,
+    safeMessage: missingFiledReturnDownloadMessage(safeSignals),
   };
 }
