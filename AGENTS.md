@@ -135,8 +135,10 @@ body written from scratch fails the gate. Four consecutive PRs were blocked this
 - Any change to `src/extension/manifest-policy.ts`, `wxt.config.ts`, permissions, host
   permissions, or CSP. The canonical definitions are in `src/extension/manifest-policy.ts`;
   do not maintain a second permission or host list here. Review the PR's merge-base-to-head
-  delta, or the task's explicit local-base delta. Presence in a proposed policy does not
-  authorize a change.
+  delta. For local reviews, use the task's explicit base or default to `HEAD`, inspecting
+  committed, staged, unstaged, and untracked changes as defined in
+  `.claude/agents/pack-security-reviewer.md`. Presence in a proposed policy does not authorize
+  a change.
 - Any new dependency. Treat one as suspicious by default; accept only when it is smaller and safer
   than local code and license-appropriate for Apache-2.0 distribution.
 - Persisting a new field, or widening what is persisted. Scope selections (financial year, period,
