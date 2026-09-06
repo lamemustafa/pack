@@ -309,3 +309,60 @@ What remains unknown for the collapsed anchor itself: whether it fails only the 
 test, or also `isSemanticallyEnabledPortalControl`. The capture conflated the two. Only the first
 case is safe to act on, and it decides whether widening the existing single-match fallback is a
 fix or a no-op.
+
+## Filing-profile discovery — stage 1 research and probe, 2026-09-06
+
+**Status: not established; do not implement a profile lookup from these notes.** This is a
+de-fanged discovery ledger, not a portal contract. It records the questions that remain open and
+the probes that would disprove each candidate mechanism. No page contents, identifiers, routes,
+or downloads were retained.
+
+### Evidence obtained and limits
+
+- **Documented, limited:** the current planner's source comment records a 2026-09-04 consultation
+  of the official Returns FAQs for monthly and quarterly filing/generation dates. That evidence
+  supports the calendar threshold only. It does not document a signed-in filing profile, a
+  per-return filing history, registration metadata, registration status, unsupported return types,
+  or a terminal empty-result signal.
+- **Research limitation:** an official-public-source search was attempted on 2026-09-06, but the
+  available research service rejected the request. No secondary source was substituted for a
+  portal claim.
+- **Observed live, availability only:** an existing GST Portal tab was already unauthenticated.
+  No navigation, form interaction, download action, or state-changing control was used. The claim
+  that an authenticated session was available for this probe is therefore **falsified**.
+- **Consequence:** questions 1--6 below are unanswerable from this stage's evidence. Inferred
+  mechanisms are deliberately not an implementation basis.
+
+### Candidate mechanisms, all unestablished
+
+| Question                     | Falsifiable candidate claim                                                                                                                                                                        | Evidence class | What would confirm or falsify it in a future read-only authenticated probe                                                                                                                                                                  |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Filing frequency          | The portal exposes a cadence value on a reader-visible signed-in surface, and the value can be bound to a specific return type and financial-year scope.                                           | Inferred       | Confirm only if the same rendered surface names both the cadence and its scope; falsify if cadence is absent, unscoped, or conflicts across return types or earlier financial years.                                                        |
+| 2. Filed periods             | After choosing a financial year and return type, the portal renders a result set that distinguishes filed, not-filed, not-applicable, and nil outcomes without opening each period.                | Inferred       | Confirm only with surrounding decoy controls plus a completed result set exposing those distinctions; falsify if the result set is filed-only, status-less, or requires one-period-at-a-time inspection.                                    |
+| 3. Registration date         | A signed-in registration/profile surface renders a registration-effective date that can be read without using identity values.                                                                     | Inferred       | Confirm by observing a labelled date and its rendered context while retaining neither value nor identity; falsify if no such field is rendered or it is not safely scopeable.                                                               |
+| 4. Registration status       | A signed-in surface renders a current registration state that distinguishes active, cancelled, suspended, and composition treatment.                                                               | Inferred       | Confirm only if the visible state and its category are unambiguous; falsify if the surface supplies no state, collapses categories, or does not identify composition separately.                                                            |
+| 5. Inapplicable return types | The filed-returns filter or a registration surface exposes the complete return-type set for this registration.                                                                                     | Inferred       | Confirm only if the offered set is shown after the relevant financial-year dependency has settled; falsify if it is incomplete, period-dependent, or indistinguishable from a transient loading state.                                      |
+| 6. Empty-result signal       | A completed search has a mutually exclusive terminal state: either a scoped result row is rendered or a scoped empty-state indicator is rendered; while loading, neither terminal condition holds. | Inferred       | Confirm with a before-search, loading, and settled capture that preserves surrounding decoys and proves the selected scope; falsify if an empty indicator can coexist with loading, stale rows remain, or no stable terminal marker exists. |
+
+The two earlier planner failures are not evidence for any candidate above. The calendar threshold
+must remain a calendar guess until a candidate is confirmed live; a clean not-filed outcome is
+separate from profile discovery.
+
+### Required next probe
+
+Use a newly authenticated, reader-authorised session and click only the portal's own controls.
+For each candidate, retain only structural facts: surface role, visible-control multiplicity,
+loading-versus-terminal transition, and whether the claim was confirmed or falsified. Do not
+retain or publish portal HTML, routes, identifiers, names, values, files, screenshots, or network
+material. Probe the empty-result transition before changing retry behaviour; a retry is not honest
+unless a completed empty state can be distinguished from a search still in progress.
+
+### Recommendation
+
+**Do not build a filing-profile lookup now.** Its expected reader cost is at least an additional
+portal read and dependency-sensitive wait before a run, with more portal navigation and another
+state that could be stale, ambiguous, or unavailable. That cost is justified only after a
+read-only live probe confirms a stable, scope-bound source for the necessary facts across filing
+cadences and registration states. Until then, the evidence supports neither replacing the calendar
+threshold nor suppressing a reader-selected period; record a bounded, user-visible not-filed or
+unresolved outcome when the acquisition flow establishes one.
