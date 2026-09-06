@@ -24,6 +24,7 @@ describe("popup full-year recovery actions", () => {
     const pendingSummary = summaryFor("pending", "full-fiscal-year-resume-confirmation-required");
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary: { ...pendingSummary, status: "running" },
@@ -44,9 +45,39 @@ describe("popup full-year recovery actions", () => {
     expect(markup).toContain('aria-label="Filed return recovery actions"');
   });
 
+  it("withholds full-year recovery controls in a packaged component render", () => {
+    const markup = renderFullYearRecovery(
+      summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
+      false,
+    );
+
+    expect(markup).not.toContain("Resume saved run");
+    expect(markup).not.toContain("Discard saved run and start selected download");
+    expect(markup).toContain("Discard saved run");
+  });
+
+  it("requires every component caller to choose full-year availability", () => {
+    const propsWithoutFullYear = {
+      busy: null,
+      portalReady: true,
+      summary: summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
+      onAcknowledgeInterruptedRun: () => undefined,
+      onRetryFullFiscalYearTarget: () => undefined,
+      onRetryTarget: () => undefined,
+      onResolveFullFiscalYearTarget: () => undefined,
+      onResolveTarget: () => undefined,
+      onStartFresh: () => undefined,
+    };
+
+    // @ts-expect-error RecoveryActions must not silently enable the full-year flow.
+    const element = createElement(RecoveryActions, propsWithoutFullYear);
+    expect(element.type).toBe(RecoveryActions);
+  });
+
   it("shows the same-account warning only for resume confirmation", () => {
     const resumeMarkup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary: summaryFor("pending", "full-fiscal-year-resume-confirmation-required"),
@@ -65,6 +96,7 @@ describe("popup full-year recovery actions", () => {
     for (const targetStatus of ["blocked", "failed", "cancelled"] as const) {
       const markup = renderToStaticMarkup(
         createElement(RecoveryActions, {
+          fullYearFlowAvailable: true,
           busy: null,
           portalReady: true,
           summary: summaryFor(targetStatus),
@@ -87,6 +119,7 @@ describe("popup full-year recovery actions", () => {
     for (const targetStatus of ["blocked", "failed", "cancelled"] as const) {
       const markup = renderToStaticMarkup(
         createElement(RecoveryActions, {
+          fullYearFlowAvailable: true,
           busy: null,
           portalReady: true,
           summary: summaryFor(targetStatus),
@@ -106,6 +139,7 @@ describe("popup full-year recovery actions", () => {
   it("labels target cancellation as reset so users know Start download returns", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         onStartFresh: () => undefined,
@@ -139,6 +173,7 @@ describe("popup full-year recovery actions", () => {
 
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary,
@@ -168,6 +203,7 @@ describe("popup full-year recovery actions", () => {
     );
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary,
@@ -196,6 +232,7 @@ describe("popup full-year recovery actions", () => {
     summary.flowStep.safeSignals.push(signal);
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary,
@@ -223,6 +260,7 @@ describe("popup full-year recovery actions", () => {
 
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary,
@@ -247,6 +285,7 @@ describe("popup full-year recovery actions", () => {
     summary.flowStep.safeSignals.push("filed-returns-download-reconciliation-required");
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary,
@@ -276,6 +315,7 @@ describe("popup full-year recovery actions", () => {
       );
       const markup = renderToStaticMarkup(
         createElement(RecoveryActions, {
+          fullYearFlowAvailable: true,
           busy: null,
           portalReady: true,
           summary,
@@ -298,6 +338,7 @@ describe("popup full-year recovery actions", () => {
     summary.flowStep.safeSignals.push("filed-returns-target-local-cleanup-required");
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary,
@@ -320,6 +361,7 @@ describe("popup full-year recovery actions", () => {
     summary.flowStep.safeSignals.push("single-period-zip-incomplete");
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: false,
         summary,
@@ -339,6 +381,7 @@ describe("popup full-year recovery actions", () => {
   it("keeps portal-dependent destructive restart disabled without a GST tab", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: false,
         summary: targetReviewSummary(),
@@ -362,6 +405,7 @@ describe("popup full-year recovery actions", () => {
   it("renders an action-matched target-review reason without calling it a period retry", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: false,
         summary: targetReviewSummary(),
@@ -381,6 +425,7 @@ describe("popup full-year recovery actions", () => {
   it("renders one portal-disabled reason for a paused full-year run", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: false,
         summary: summaryFor("blocked"),
@@ -406,6 +451,7 @@ describe("popup full-year recovery actions", () => {
   it("uses retry-first copy for a blocked full-year period", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         onStartFresh: () => undefined,
         portalReady: true,
@@ -426,6 +472,7 @@ describe("popup full-year recovery actions", () => {
   it("shows full-year recovery controls even when the portal step carries only overlay signals", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         onStartFresh: () => undefined,
         busy: null,
         portalReady: true,
@@ -446,6 +493,7 @@ describe("popup full-year recovery actions", () => {
   it("shows an active-run control state without pretending pause is available", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary: activeRunSummary(),
@@ -649,6 +697,7 @@ describe("popup full-year recovery actions", () => {
   it("presents interrupted runs as resettable stuck work", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: true,
         summary: interruptedRunSummary(),
@@ -684,6 +733,7 @@ describe("popup full-year recovery actions", () => {
   it("keeps reset available but disables retry when the portal tab is missing", () => {
     const markup = renderToStaticMarkup(
       createElement(RecoveryActions, {
+        fullYearFlowAvailable: true,
         busy: null,
         portalReady: false,
         summary: summaryFor("blocked"),
@@ -738,9 +788,13 @@ function supportedPortalContext(): PortalContext {
   };
 }
 
-function renderFullYearRecovery(summary: FiledReturnsFlowSummary): string {
+function renderFullYearRecovery(
+  summary: FiledReturnsFlowSummary,
+  fullYearFlowAvailable = true,
+): string {
   return renderToStaticMarkup(
     createElement(RecoveryActions, {
+      fullYearFlowAvailable,
       busy: null,
       portalReady: true,
       summary,

@@ -41,6 +41,7 @@ describe("filed returns flow — search and no-record observation", () => {
       safeSignals: expect.arrayContaining(["filed-return-positively-not-filed"]),
     });
     expect(result.safeSignals).not.toContain("filed-return-result-row-not-found");
+    expect(result.userAction).toBeUndefined();
   });
 
   it("checks no-record evidence before reselecting an already matching filter form", async () => {

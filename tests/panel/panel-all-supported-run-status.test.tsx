@@ -23,7 +23,7 @@ function declaredProperty(selector: string, property: string): string | undefine
 }
 
 function summary(
-  outcomes: readonly ("saved" | "captured" | "not-filed" | "pending")[],
+  outcomes: readonly ("saved" | "captured" | "not-filed" | "pending" | "running")[],
   status: "running" | "complete" = "running",
   completedIndexes = outcomes.flatMap((outcome, index) => (outcome === "saved" ? [index] : [])),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
@@ -102,7 +102,7 @@ describe("all-supported panel progress", () => {
   });
 
   it("renders safe diagnostics for a running all-supported run without an atomic counterpart", () => {
-    const running = { ...summary(["pending"], "running", []), currentTargetId: "synthetic-0" };
+    const running = { ...summary(["running"], "running", []), currentTargetId: "synthetic-0" };
     const markup = render(running);
     const diagnosticsStart = markup.indexOf('aria-label="Run diagnostics"');
     const diagnostics = markup.slice(

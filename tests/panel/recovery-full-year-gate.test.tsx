@@ -475,6 +475,14 @@ describe("saved full-year recovery in a build that withholds the flow", () => {
     expect(hasWithheldRecoveryWording(panel.afterExpansion)).toBe(false);
   });
 
+  it("keeps an inconclusive filed-return search distinct from a settled not-filed result", () => {
+    const message = searchStepLimitReachedMessage(SAVED_FULL_YEAR.scope, 35_000);
+
+    expect(message.startsWith("Pack could not determine whether")).toBe(true);
+    expect(message).toContain("results may still be loading, or this return may not be filed");
+    expect(message.endsWith("Wait for the results to settle, then start Pack again.")).toBe(true);
+  });
+
   it("keeps the packaged panel's cancellation action wired", async () => {
     const cancel = vi.fn(async () => undefined);
     const retry = vi.fn(async () => undefined);
