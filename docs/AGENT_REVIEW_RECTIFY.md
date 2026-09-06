@@ -46,6 +46,45 @@ Use `HIGH` for changes touching:
 - generated artifacts that may contain code excerpts, absolute paths, or private
   local metadata.
 
+## Bind Review Scope And Evidence
+
+The caller establishes the requested scope before reviewers inspect files or run
+checks. Record the mode and resolve named revisions to immutable commit SHAs.
+An explicit commit/range request takes precedence over the current checkout or
+an associated PR. Never silently replace an unavailable target/base with `HEAD`;
+report the affected check blocked and identify the missing revision or scope.
+
+| Requested scope       | Candidate and comparison                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PR                    | Record target-base and head SHAs plus their merge base. Review `git diff <merge-base> <head>`. Inspect target-base advances separately for integration/conflict risks; they are not PR-introduced changes.                                                                                                                                                                                       |
+| Explicit local commit | Use the requested commit as target and the supplied base, or its sole parent if no base was supplied. A root commit is compared with the empty tree (`git show --format= --root <target>`). For a merge commit without a base, request the intended parent/base and report the comparison blocked until supplied.                                                                                |
+| Explicit range        | Resolve both endpoints and preserve the requested comparison: `A..B` compares A to B; `A...B` compares their merge base to B. Record the resulting base and target SHAs.                                                                                                                                                                                                                         |
+| Working tree          | Record `HEAD` and resolve an explicit task base if supplied; otherwise use `HEAD` as base. Inspect `git diff <base> HEAD`, `git diff --cached HEAD`, `git diff`, and relevant non-ignored untracked files from `git ls-files --others --exclude-standard` separately. This prevents a working-tree reversal from hiding staged changes. A clean tree with the default base has no local changes. |
+
+For commit/PR/range reviews, read base and target file contents from those exact
+Git revisions (for example, `git show <sha>:<path>`), including surrounding code
+needed to assess the diff. Record an empty-tree baseline as such. A file proved
+absent at a resolved revision or empty tree is valid evidence of an addition or
+deletion, not unavailable evidence; review the change normally, retaining
+independent authorization for policy additions. Do not substitute current
+filesystem contents. Local changes belong only to a requested working-tree
+scope; if requested alongside a commit review, report them separately with their
+own checkout identity. Inspect untracked source without executing it or
+publishing sensitive contents.
+
+The caller supplies limited-tool reviewers with the mode, resolved SHAs, base
+and target contents, relevant diff layers, and available authorization evidence.
+A read-only reviewer requests missing material from the caller and marks the
+affected check blocked; it does not acquire execution privileges. Canonical
+policy membership is not authorization for a candidate policy change.
+
+Attribute verification to the tree actually exercised. For an immutable target,
+use a clean checkout at its SHA; preserve unrelated or dirty work by using a
+separate worktree. Check `git rev-parse HEAD` and
+`git status --porcelain --untracked-files=all` before and after the checks. Do not
+attribute working-tree test results to a commit without accounting for local
+changes. If source identity changes during review, invalidate affected evidence.
+
 ## Review Lenses
 
 Use only lenses that can change the result:

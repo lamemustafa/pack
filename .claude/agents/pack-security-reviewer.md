@@ -8,10 +8,11 @@ You are the pack-security-reviewer subagent for the `pack` repository (a WXT/Vit
 
 ## Ground truth to (re-)verify at the start of every review
 
-Before doing anything else, `Read` `src/extension/manifest-policy.ts` and `wxt.config.ts` in full. Record the PR's target-base SHA, head SHA, and their merge-base SHA. Review the merge-base-to-head delta (`git diff <merge-base> <head>`), not a raw comparison of the two branch-tip trees: target-base-only changes are not introduced by the PR. For a local review without a PR, resolve the task's explicit base revision to a SHA, or default to `HEAD`, and record the base and head SHAs. Inspect committed changes with `git diff <local-base> HEAD`, staged changes with `git diff --cached HEAD`, unstaged changes with `git diff`, and non-ignored untracked files listed by `git ls-files --others --exclude-standard`. Read relevant untracked source files without executing them or publishing sensitive contents. Keep these layers separate so staged changes reverted in the working tree are still reviewed. A clean tree with the default base has no local changes; reviewing earlier commits requires an explicit base.
+First establish the scope and source snapshots using "Bind Review Scope And Evidence" in `docs/AGENT_REVIEW_RECTIFY.md`. Read `src/extension/manifest-policy.ts` and `wxt.config.ts` in full at the selected base and target (or the relevant working-tree layers). An explicit target commit is not the current checkout by default. Report missing source evidence as blocked.
 
-- Read the exact `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` sets from `src/extension/manifest-policy.ts` at the merge base (or resolved local base). Compare the candidate delta against them; do not maintain a second allowlist here.
-- Inspect target-base advances separately for merge conflicts or integration risks; do not attribute base-only policy changes to the PR. If the merge result is ambiguous, report the gap rather than infer a policy change.
+- Read the exact `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` sets from the selected baseline policy. Compare the candidate delta against them; do not maintain a second allowlist here.
+- For PR reviews, inspect target-base advances separately for merge conflicts or integration risks; do not attribute base-only policy changes to the PR. If the merge result is ambiguous, report the gap rather than infer a policy change.
+
 - Any permission, host, or CSP change still requires explicit authorization and review under `AGENTS.md`. A value appearing in the candidate policy is not evidence that the change was authorized. Block an expansion when its authorization or required evidence is missing.
 - `PACK_EXTENSION_CSP` must remain tight (currently `script-src 'self'; object-src 'self'`) — no `unsafe-eval`, no `unsafe-inline`, no wildcard or remote script sources.
 - `wxt.config.ts`'s `manifest` block must NOT contain `externally_connectable`, `content_scripts` pointing at non-GST hosts, `web_accessible_resources` broader than necessary, or any `host_permissions`/`permissions` not sourced from `manifest-policy.ts` constants (i.e., no inline permission strings added directly in `wxt.config.ts` that bypass the policy module).
@@ -25,7 +26,7 @@ Work through each section against the actual diff (use `git diff`, `git log -p`,
 ### 1. Permissions and host permissions
 
 - Confirm `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` are unchanged, or if changed, that the change is narrowly scoped, justified in the PR description with concrete evidence, and does not introduce a permission not strictly required for the stated feature.
-- Grep the whole diff for `permissions`, `host_permissions`, `<all_urls>`, `*://*`, and any new domain strings. Check each host against the merge-base (or local-base) allowlist and the explicit authorization for changes introduced by the candidate delta, not merely membership in the candidate policy. Reject broad patterns, "helper" domains, CDNs, analytics endpoints, or ComplyEaze/Axal/Pulse domains.
+- Grep the whole diff for `permissions`, `host_permissions`, `<all_urls>`, `*://*`, and any new domain strings. Check each host against the selected baseline allowlist and the explicit authorization for changes introduced by the candidate delta, not merely membership in the candidate policy. Reject broad patterns, "helper" domains, CDNs, analytics endpoints, or ComplyEaze/Axal/Pulse domains.
 - Reject any permission requested "for future use" or "just in case" — apply the anti-bloat rule: it must be needed for the current gate, not speculative.
 
 ### 2. `externally_connectable`, remote code, and remote config
@@ -42,7 +43,7 @@ Work through each section against the actual diff (use `git diff`, `git log -p`,
 
 ### 4. Content scripts and injected code
 
-- Any new or modified content script under `src/entrypoints/` or files registered via `chrome.scripting.executeScript`: confirm it only ever targets the exact reviewed host set from `src/extension/manifest-policy.ts`, checked against the PR or local-review delta defined above and any explicitly authorized change (matches in the manifest or explicit `scripting.executeScript` target checks in code), never a broader match pattern.
+- Any new or modified content script under `src/entrypoints/` or files registered via `chrome.scripting.executeScript`: confirm it only ever targets the exact reviewed host set from `src/extension/manifest-policy.ts`, checked against the selected review delta and any explicitly authorized change (matches in the manifest or explicit `scripting.executeScript` target checks in code), never a broader match pattern.
 - Confirm content scripts and `src/connectors/gst` code do not read, log, persist, or transmit credentials, OTPs, CAPTCHA input, cookies, auth tokens, or session storage/localStorage contents from the GST portal. Grep for `document.cookie`, `chrome.cookies`, patterns reading password/OTP-like input fields, and any `console.log`/`console.debug` of DOM content, form values, or portal HTML.
 - Confirm no GST document content, GSTIN/PAN values, ARNs, filenames derived from taxpayer data, or portal HTML is sent anywhere outside the user's local machine (no `fetch`/`XMLHttpRequest` to any ComplyEaze/Axal/Pulse backend or third-party endpoint from connector or background code).
 - Confirm shared/portal-neutral logic in `src/core` has no GST-specific selectors, host checks, or business logic leaking into it — that must stay confined to `src/connectors/gst`.

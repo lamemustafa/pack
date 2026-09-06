@@ -43,6 +43,20 @@ Before running anything, gather facts:
   policy changes have the explicit authorization and review required by
   `AGENTS.md`; source membership alone is not approval. If source provenance
   or required policy approval cannot be established, report that gate blocked.
+- Before reading version/checklist files or running source gates, follow "Bind
+  Review Scope And Evidence" in `docs/AGENT_REVIEW_RECTIFY.md`: the execution
+  checkout must be clean and its `HEAD` must equal the recorded source SHA.
+  Use a separate worktree if the current checkout differs or is dirty; never
+  reset or discard existing work. If unavailable, mark source gates blocked.
+  Run preparation, tests, build, and verifiers there using that revision's
+  lockfile and `docs/RELEASE.md`. Recheck SHA and cleanliness afterward before
+  attributing results to the source revision.
+- Keep locally rebuilt artifacts and downloaded release assets separate. Record
+  each artifact's checksum and origin; a local rebuild passing does not verify
+  published bytes. Never overwrite downloaded checksum/provenance evidence with
+  locally generated files. For an existing release, require its provenance
+  `source.tag` to match the requested tag and `source.commit` to equal the
+  resolved source SHA; missing or mismatched evidence blocks that gate.
 - Current version from `package.json`, `.release-please-manifest.json`,
   `src/extension/version.ts`, and the latest `CHANGELOG.md` entry — flag any
   disagreement between them.
@@ -90,10 +104,11 @@ still report every step you attempted or skipped.
 13. GitHub release assets upload (ZIP, checksum, provenance) — audit-only:
     confirm via `gh` (if available and authenticated) whether the target
     tag/release already has these assets, rather than uploading anything.
-14. `node scripts/verify-github-release-assets.mjs`
-    (`pnpm release:verify-assets`) — run only if a release/tag already
-    exists to check against; otherwise mark **blocked: no release to
-    verify yet**.
+14. `node scripts/verify-github-release-assets.mjs --repo <owner/repo> --tag <tag> --zip <downloaded-zip> --checksum <downloaded-checksum> --provenance <downloaded-provenance>`
+    — use the requested release and its downloaded assets, with the source
+    identity check from Step 1 as well as the verifier's byte/asset checks.
+    If the release or required assets are unavailable, mark this step blocked.
+    Do not substitute a locally rebuilt ZIP or regenerated provenance.
 15. Chrome Web Store submission via
     `node scripts/publish-chrome-web-store.mjs`
     (`pnpm release:chrome-web-store`) — this is gated on
@@ -119,7 +134,7 @@ names) so results map cleanly onto CI:
 - `pnpm run zip`
 - `pnpm run verify:zip`
 - `pnpm run release:provenance`
-- `pnpm run release:verify-assets`
+- `pnpm run release:verify-assets --repo <owner/repo> --tag <tag> --zip <downloaded-zip> --checksum <downloaded-checksum> --provenance <downloaded-provenance>`
 - `pnpm run release:chrome-web-store` (audit-only — do not execute; see above)
 
 ## Step 3 — Cross-check docs/PUBLICATION_READINESS.md

@@ -20,8 +20,8 @@ review with that stakes level, not as a routine lint pass.
 
 Your scope is read-only: inspect diffs, files, and text. Never execute code,
 never fetch URLs, never open a browser. If you need to see the exact current
-manifest policy, `Read` `src/extension/manifest-policy.ts` directly rather than
-trusting a description of it.
+manifest policy, inspect its actual source contents for the selected review
+scope as supplied below, rather than trusting a description or another checkout.
 
 ## What to review
 
@@ -63,10 +63,10 @@ pass/fail per item with file:line evidence.
    no broadening beyond the reviewed permission and host sets. Read
    `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` from
    `src/extension/manifest-policy.ts` at the review base; do not copy the sets
-   here. Have the calling agent supply the base/head SHAs, baseline policy
-   contents, and relevant diffs (including local change layers) using the
-   scope defined in `.claude/agents/pack-security-reviewer.md`. Inspect that
-   evidence without executing Git; request missing evidence from the calling
+   here. Have the calling agent supply the mode, resolved base/target SHAs,
+   their source contents, relevant diffs, and available authorization evidence
+   under "Bind Review Scope And Evidence" in `docs/AGENT_REVIEW_RECTIFY.md`.
+   Inspect that evidence without executing Git; request missing evidence from the calling
    agent and mark this check blocked until it is supplied. Flag every candidate
    policy change as Critical pending explicit human sign-off under `AGENTS.md`;
    membership in the candidate policy does not authorize a change.
