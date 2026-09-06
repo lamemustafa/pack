@@ -341,8 +341,8 @@ or downloads were retained.
 | 2. Filed periods             | After choosing a financial year and return type, the portal renders a result set that distinguishes filed, not-filed, not-applicable, and nil outcomes without opening each period.                | Inferred       | Confirm only with surrounding decoy controls plus a completed result set exposing those distinctions; falsify if the result set is filed-only, status-less, or requires one-period-at-a-time inspection. Retain a **synthetic marker shape or classification for each observed outcome** -- how filed, not-filed, not-applicable and nil are distinguished -- with taxpayer values excluded. Roles and nesting alone cannot produce a parser fixture for those statuses, so a later implementation would invent the markers instead of deriving them.                                                                                                                                                                                                                                                |
 | 3. Registration date         | A signed-in registration/profile surface renders a registration-effective date that can be read without using identity values.                                                                     | Inferred       | Confirm by observing a labelled date and its rendered context, retaining a **synthetic format-preserving template** -- ordering and separators only, with the taxpayer's actual date and identity discarded; falsify if no such field is rendered or it is not safely scopeable. Without the shape, an implementation cannot know whether the portal emits a numeric or month-name date and would invent its parser and fixture instead of deriving them.                                                                                                                                                                                                                                                                                                                                            |
 | 4. Registration status       | A signed-in surface renders a current registration state that distinguishes active, cancelled, suspended, and composition treatment.                                                               | Inferred       | Confirm only if the visible state and its category are unambiguous **and the effective interval for each state is established**; falsify if the surface supplies no state, collapses categories, does not identify composition separately, or gives no transition dates. A current reading does not govern historical periods -- the registration-effective date supplies none of the cancellation, suspension or composition transitions -- so absent intervals, limit the evidence to the current period rather than letting a planner suppress an earlier applicable target on a newer state.                                                                                                                                                                                                     |
-| 5. Inapplicable return types | The filed-returns filter or a registration surface exposes the complete return-type set for this registration.                                                                                     | Inferred       | Confirm only by comparing the offered set **across the relevant periods and registration states**, not merely after the financial-year dependency settles -- a single settled subset would otherwise satisfy this criterion while the row lists period dependence as a falsifier. Until that comparison exists, treat an absent return type as **unresolved**, never as evidence a planner may suppress it.                                                                                                                                                                                                                                                                                                                                                                                          |
-| 6. Empty-result signal       | A completed search has a mutually exclusive terminal state: either a scoped result row is rendered or a scoped empty-state indicator is rendered; while loading, neither terminal condition holds. | Inferred       | Confirm only with **both bound transitions** -- a search settling to a result row and a search settling to an empty state, each with its before-search and loading capture, preserving surrounding decoys and proving the selected scope. A single search ending empty leaves the mutual-exclusion and stale-indicator claims untested. Falsify if an old empty indicator survives a later scope that produces a row; falsify if an empty indicator can coexist with loading, stale rows remain, or no stable terminal marker exists.                                                                                                                                                                                                                                                                |
+| 5. Inapplicable return types | The filed-returns filter or a registration surface exposes the complete return-type set for this registration.                                                                                     | Inferred       | Confirm only by comparing the offered set **across the relevant periods and registration states**, not merely after the financial-year dependency settles -- a single settled subset would otherwise satisfy this criterion while the row lists period dependence as a falsifier. Comparison can reveal variation but never completeness -- the portal can omit an applicable return type in every scope inspected. So an absent return type stays **unresolved** both before and after the comparison, and only **independent positive applicability or entitlement evidence** may license a planner to suppress it. Repeated absence is not that evidence.                                                                                                                                         |
+| 6. Empty-result signal       | A completed search has a mutually exclusive terminal state: either a scoped result row is rendered or a scoped empty-state indicator is rendered; while loading, neither terminal condition holds. | Inferred       | Confirm only with **both directional transitions**, each captured before-search, loading and settled, preserving surrounding decoys and proving the selected scope: a scope change from **row to empty**, which tests whether stale rows clear, and one from **empty to row**, which tests whether an old empty indicator clears. One search of each kind is not enough -- it can only occur in one order, and either order leaves half of mutual exclusion untested. Falsify if an old empty indicator survives a later scope that produces a row; falsify if an empty indicator can coexist with loading, stale rows remain, or no stable terminal marker exists.                                                                                                                                  |
 
 The two earlier planner failures are not evidence for any candidate above. The calendar threshold
 must remain a calendar guess until a candidate is confirmed live.
@@ -365,18 +365,43 @@ before widening, relaxing or newly relying on that path.
 ### Required next probe
 
 Use a newly authenticated, reader-authorised session and click only the portal's own controls.
-For each candidate, retain only structural facts: surface role, visible-control multiplicity,
-loading-versus-terminal transition, and whether the claim was confirmed or falsified. Question 3 additionally requires the **synthetic date-format template** its row names.
-Questions 2 and 6
-additionally require a **redacted structural record of the surrounding decoy controls** -- their
-roles, nesting and multiplicity, with every label, value and identifier stripped. Without it a
-later fixture cannot be derived from the capture and would invent the neighbouring page structure
-again, which is how two consecutive fixes shipped broken. Question 6 needs it for a concrete reason: the shipped loading check walks from the candidate container up through its ancestors, so neighbouring controls and their nesting can change whether an empty marker is accepted. A capture retaining only transitions and multiplicity cannot produce a representative fixture for that detector.
 
-Structure alone is also insufficient, because that check consumes **text**: it treats an ancestor as loading when `aria-busy="true"` or when its visible descendant text matches a small loading vocabulary. Stripping every label would therefore discard the evidence that decides whether an empty marker is accepted. For each retained decoy, also record a **redacted classification** -- whether its visible text matches that vocabulary, and whether `aria-busy` is set -- without retaining the raw label. That keeps the behaviourally relevant fact and still retains no portal content. Do not
-retain or publish portal HTML, routes, identifiers, names, values, files, screenshots, or network
-material. Probe the empty-result transition before changing retry behaviour; a retry is not honest
-unless a completed empty state can be distinguished from a search still in progress.
+**The retention rule, stated once rather than per question.** A capture must retain enough to
+derive a fixture for whatever its own confirmation criterion depends on. Concretely, for every
+question retain:
+
+- the structural facts -- surface role, visible-control multiplicity, loading-versus-terminal
+  transition, and whether the claim was confirmed or falsified; **and**
+- a **synthetic or redacted representation of every value the criterion turns on** -- shape,
+  ordering, separators, and classification against any vocabulary the shipped code matches --
+  with the taxpayer's actual values and identity discarded.
+
+The second clause is the one that keeps being missed. It was added three times for one question
+at a time -- the date template for question 3, the decoy record for questions 2 and 6, the decoy
+text classification for question 6 -- while questions 1, 4 and 5 kept none of the cadence marker
+and its effective-period binding, the state and interval markers, or the return-type and scope
+matrix. A confirmation whose evidence was discarded is unauditable, and the next implementation
+invents a parser instead of deriving one. State the rule generally so no question is left out by
+enumeration.
+
+Worked examples, because two of them are non-obvious:
+
+- **Questions 2 and 6** need the surrounding decoy controls -- roles, nesting, multiplicity --
+  because the shipped loading check walks from the candidate container up through its ancestors,
+  so neighbouring structure decides whether an empty marker is accepted.
+- **Question 6** additionally needs a per-decoy classification, because that check consumes
+  **text**: it treats an ancestor as loading on `aria-busy="true"` or when its visible descendant
+  text matches a small loading vocabulary. Record whether each decoy matches and whether
+  `aria-busy` is set; never the raw label.
+- **Question 2** needs a synthetic marker shape per outcome -- how filed, not-filed,
+  not-applicable and nil are distinguished.
+- **Question 3** needs the synthetic date-format template: ordering and separators only.
+
+Do not retain or publish portal HTML, routes, identifiers, names, values, files, screenshots, or
+network material. Structure and classification yes; content no.
+
+Probe the empty-result transition before changing retry behaviour; a retry is not honest unless a
+completed empty state can be distinguished from a search still in progress.
 
 ### Recommendation
 
