@@ -674,7 +674,7 @@ describe("filed returns flow — portal filter selection", () => {
       await vi.runAllTimersAsync();
       const result = await resultPromise;
 
-      expect(result.state).toBe("clicked");
+      expect(result.state).toBe("user-action-required");
       expect(result.safeSignals).toEqual(
         expect.arrayContaining([
           "financial-year-selected",
@@ -683,7 +683,7 @@ describe("filed returns flow — portal filter selection", () => {
         ]),
       );
       expect(result.safeSignals).not.toContain("month-selected");
-      expect(result.safeMessage).toContain("Missing: month selection still pending.");
+      expect(result.safeMessage).toContain("month selection (if shown)");
       expect(result.safeMessage).not.toContain("00XXXXX0000X0Z0");
       expect(result.safeMessage).not.toContain("Synthetic Taxpayer");
       expect(searchClicked).toBe(0);
@@ -722,6 +722,8 @@ describe("filed returns flow — portal filter selection", () => {
       expect(documentRef.querySelector<HTMLSelectElement>("#month")?.value).toBe("March");
       expect(result.safeSignals).toContain("filed-return-filter-selection-in-progress");
       expect(result.safeSignals).not.toContain("search-clicked");
+      expect(result.state).toBe("user-action-required");
+      expect(result.safeMessage).not.toContain("Not confirmed:");
       await vi.advanceTimersByTimeAsync(60_000);
       expect(search).not.toHaveBeenCalled();
     } finally {
@@ -865,10 +867,10 @@ describe("filed returns flow — portal filter selection", () => {
       expect(deliveredAt! - startedAt).toBeLessThan(60_000);
       await vi.advanceTimersByTimeAsync(60_000);
 
-      expect(result.state).toBe("clicked");
+      expect(result.state).toBe("user-action-required");
       expect(result.safeSignals).toContain("filed-return-filter-selection-in-progress");
       expect(result.safeSignals).not.toContain("search-clicked");
-      expect(result.safeMessage).toContain("month selection still pending");
+      expect(result.safeMessage).toContain("month selection (if shown)");
       expect(searchClicked).toBe(0);
       expect(documentRef.defaultView?.fetch).not.toHaveBeenCalled();
       expect(submittedForms).toEqual([]);
