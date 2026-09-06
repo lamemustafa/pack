@@ -2,6 +2,8 @@ import { browser } from "wxt/browser";
 import type { PortalObservation, UserActionRequired } from "../core/contracts";
 import {
   detectVisibleReturnLabel,
+  observedReturnLabel,
+  missingFiledReturnDownloadMessage,
   scopeIdForVisibleReturnLabel,
 } from "../connectors/gst/filed-returns-observer-scope";
 import { FILED_RETURNS_OBSERVATION_SIGNALS } from "../connectors/gst/filed-returns-observer-signals";
@@ -94,7 +96,7 @@ export function parseCanonicalFiledReturnsObservation(input: unknown): PortalObs
     scopeId,
     state,
     safeSignals,
-    safeMessage: canonicalObservationMessage(state, scopeId),
+    safeMessage: canonicalObservationMessage(state, scopeId, safeSignals),
     ...(userAction ? { userAction } : {}),
   };
 }
@@ -161,10 +163,7 @@ function isConsistentObservation(
     return scopeId === gstr3bScopeId() && safeSignals.includes("filed-returns-route");
   }
   if (state === "gstr-3b-not-visible") {
-    return (
-      scopeId === gstr3bScopeId() &&
-      !safeSignals.some((signal) => ["gstr-1", "gstr-2b", "gstr-3b"].includes(signal))
-    );
+    return scopeId === gstr3bScopeId() && observedReturnLabel(safeSignals) === null;
   }
   if (state === "ready") return scopeId === readyScopeId(safeSignals);
   return scopeId === scopeIdForVisibleReturnLabel(detectVisibleReturnLabel(safeSignals));
@@ -191,6 +190,7 @@ function readyScopeId(safeSignals: readonly string[]): FiledReturnsObservation["
 function canonicalObservationMessage(
   state: FiledReturnsObservationState,
   scopeId: FiledReturnsObservation["scopeId"],
+  safeSignals: readonly string[],
 ): string {
   const messages: Record<
     Exclude<FiledReturnsObservationState, "ready" | "download-not-visible">,
@@ -202,8 +202,7 @@ function canonicalObservationMessage(
       "Filed return results are visible. Open a row with View to expose the portal's final PDF/download controls.",
     "filters-required":
       "The filed returns filter form is visible. Pack will follow the portal's visible filter instructions before searching.",
-    "gstr-3b-not-visible":
-      "The filed returns page is visible, but the requested return type is not visible yet.",
+    "gstr-3b-not-visible": missingFiledReturnDownloadMessage([]),
     "login-required": "Sign in to the GST Portal, then reopen Pack.",
     "page-settling":
       "The filed returns page route is open and Pack is waiting for the form to load.",
@@ -219,13 +218,7 @@ function canonicalObservationMessage(
     return "Filed GSTR-3B PDF controls appear ready for the private spike.";
   }
   if (state === "download-not-visible") {
-    const label =
-      scopeId === scopeIdForVisibleReturnLabel("GSTR-2B")
-        ? "GSTR-2B"
-        : scopeId === scopeIdForVisibleReturnLabel("GSTR-1")
-          ? "GSTR-1"
-          : "GSTR-3B";
-    return `${label} is visible, but a filed-return download control is not visible.`;
+    return missingFiledReturnDownloadMessage(safeSignals);
   }
   return messages[state];
 }
