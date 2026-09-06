@@ -30,8 +30,8 @@ For each release candidate:
   session tokens.
 - Confirm the production content script does not sample resource timing entries,
   send request-shape telemetry, or probe/replay authenticated GST download
-  endpoints. Navigation follows the portal's own controls inside the explicit
-  user-started flow.
+  endpoints. Reviewed same-origin filed-return search, role-status, and navigation
+  requests remain allowed only inside the explicit user-started flow.
 - Confirm live download observation remains bounded to a user-initiated run and
   does not persist or transmit raw download URLs, referrers, absolute local
   paths, filenames, portal HTML, or taxpayer identifiers.
