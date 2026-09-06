@@ -1,4 +1,3 @@
-import { filedReturnsFilterActionRequiredMessage } from "./filed-returns-filter-status";
 import type { UserActionRequired } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
@@ -177,15 +176,7 @@ export function canonicalDurableSummaryMessage(
     }
   }
   const durableMessageKey = messageKeyForSummary(scope, status, signals);
-  const filterMessage =
-    scope.period !== FULL_FISCAL_YEAR_PERIOD &&
-    status === "blocked" &&
-    durableMessageKey === "full-year-needs-action" &&
-    signals.includes("filed-return-filter-selection-in-progress")
-      ? filedReturnsFilterActionRequiredMessage(signals)
-      : null;
-  const durableMessage =
-    filterMessage ?? partialMessage ?? renderDurableMessage(durableMessageKey, scope);
+  const durableMessage = partialMessage ?? renderDurableMessage(durableMessageKey, scope);
   const summaryMessage = filedReturnsSummaryStatusMessage(
     signals,
     summaryLifecycleForDurableSignals(signals),

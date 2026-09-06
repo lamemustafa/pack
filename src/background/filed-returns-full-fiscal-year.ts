@@ -1,4 +1,3 @@
-import { prepareFullFiscalYearCompletion } from "./filed-returns-full-fiscal-year-completion";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
@@ -457,14 +456,30 @@ async function completeRun(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
-  const prepared = await prepareFullFiscalYearCompletion(
-    deps,
-    ledger,
+  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
+    ledger.scope.financialYear,
     now,
-    "full-fiscal-year-run-needs-action",
+    ledger.scope.returnType,
   );
-  if (!prepared.ready) return prepared.response;
-  const reconciledLedger = prepared.ledger;
+  const reconciledLedger =
+    plannedPeriods.length > 0
+      ? reconcileFullFiscalYearLedgerTargets(ledger, now, plannedPeriods)
+      : ledger;
+  if (shouldPersistReconciledLedger(ledger, reconciledLedger)) {
+    await persistLedger(deps, reconciledLedger);
+  }
+  if (!canCompleteFullFiscalYearLedger(reconciledLedger)) {
+    const signal = hasCanonicalFullFiscalYearTargetPlan(reconciledLedger)
+      ? "full-fiscal-year-run-needs-action"
+      : "full-fiscal-year-target-plan-invalid";
+    const step = blockedFullFiscalYearStep(signal, reconciledLedger);
+    await persistLedgerAndSummary(deps, reconciledLedger, step);
+    return {
+      ok: true,
+      flowStep: step,
+      flowSummary: toFullFiscalYearSummary(reconciledLedger, step),
+    };
+  }
 
   const readyLedger =
     reconciledLedger.zipPhase === "export-pending" ||
@@ -540,15 +555,30 @@ async function reconcilePersistedFullFiscalYearZip(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
-  const prepared = await prepareFullFiscalYearCompletion(
-    deps,
-    ledger,
+  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
+    ledger.scope.financialYear,
     now,
-    "full-fiscal-year-zip-target-state-invalid",
+    ledger.scope.returnType,
   );
-  if (!prepared.ready) return prepared.response;
-  const reconciledLedger = prepared.ledger;
-
+  const reconciledLedger =
+    plannedPeriods.length > 0
+      ? reconcileFullFiscalYearLedgerTargets(ledger, now, plannedPeriods)
+      : ledger;
+  if (shouldPersistReconciledLedger(ledger, reconciledLedger)) {
+    await persistLedger(deps, reconciledLedger);
+  }
+  if (!canCompleteFullFiscalYearLedger(reconciledLedger)) {
+    const signal = hasCanonicalFullFiscalYearTargetPlan(reconciledLedger)
+      ? "full-fiscal-year-zip-target-state-invalid"
+      : "full-fiscal-year-target-plan-invalid";
+    const step = blockedFullFiscalYearStep(signal, reconciledLedger);
+    await persistLedgerAndSummary(deps, reconciledLedger, step);
+    return {
+      ok: true,
+      flowStep: step,
+      flowSummary: toFullFiscalYearSummary(reconciledLedger, step),
+    };
+  }
   ledger = reconciledLedger;
   const completeStep = completeFullFiscalYearStep(ledger, now);
   const zipStep = await restorePersistedFullFiscalYearSummaryOutcome(

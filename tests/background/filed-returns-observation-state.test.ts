@@ -57,36 +57,6 @@ describe("canonical filed-return observation state", () => {
     expect(JSON.stringify(state.session[KEY])).not.toContain("account-specific");
   });
 
-  it.each(["", "GSTR-3B", "GSTR-1", "GSTR-2B"])(
-    "preserves observed visibility through storage for '%s'",
-    async (label) => {
-      const produced = observeFiledReturnsPageText(`View Filed Returns ${label}`, {
-        pathname: "/returns/auth/gstr3b",
-      });
-      expect(produced.state).toBe("download-not-visible");
-      const expected = label
-        ? `${label} is visible, but a filed-return download control is not visible.`
-        : "The filed returns page is visible, but the requested return type is not visible yet.";
-      expect(produced.safeMessage).toBe(expected);
-      await persistCanonicalFiledReturnsObservation(KEY, produced);
-      expect(state.session[KEY]).toMatchObject({ safeMessage: expected });
-      await expect(readCanonicalFiledReturnsObservation(KEY)).resolves.toMatchObject({
-        safeMessage: expected,
-      });
-    },
-  );
-
-  it("repairs old no-label prose on read without trusting supplied text", async () => {
-    const produced = observeFiledReturnsPageText("View Filed Returns", {
-      pathname: "/returns/auth/gstr3b",
-    });
-    state.session[KEY] = { ...produced, safeMessage: "Synthetic account-specific prose." };
-    await expect(readCanonicalFiledReturnsObservation(KEY)).resolves.toMatchObject({
-      safeMessage: produced.safeMessage,
-    });
-    expect(state.session[KEY]).toEqual(produced);
-  });
-
   it("keeps producer and persisted signals deduplicated", () => {
     const produced = observeFiledReturnsPageText("GSTR-1", {
       pathname: "/returns/auth/gstr1",

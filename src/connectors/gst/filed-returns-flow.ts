@@ -10,6 +10,7 @@ import {
   navigateToFiledReturnsPage,
   navigateToReturnDashboardPage,
 } from "./filed-returns-navigator";
+import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
@@ -224,7 +225,19 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (observation.state === "filters-required") {
-    return selectFiledReturnsFiltersAndSearch(documentRef, scope, scopeId);
+    const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
+    if (apiSearchResult && !shouldFallBackToPortalFilterSelection(apiSearchResult)) {
+      return apiSearchResult;
+    }
+
+    const selectionResult = await selectFiledReturnsFiltersAndSearch(documentRef, scope, scopeId);
+    if (shouldTryApiSearchFallback(selectionResult)) {
+      const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
+      if (apiSearchResult && !shouldFallBackToPortalFilterSelection(apiSearchResult)) {
+        return apiSearchResult;
+      }
+    }
+    return selectionResult;
   }
 
   if (observation.state === "filed-return-results-visible") {
@@ -330,6 +343,17 @@ function isFiledReturnsSearchSurface(safeSignals: readonly string[]): boolean {
       safeSignals.includes("search-action") ||
       safeSignals.includes("filed-returns-route"))
   );
+}
+
+function shouldTryApiSearchFallback(step: PortalFlowStepResult): boolean {
+  return (
+    step.safeSignals.includes("filed-return-filter-selection-in-progress") ||
+    step.safeSignals.includes("filed-return-filter-candidate-not-found")
+  );
+}
+
+function shouldFallBackToPortalFilterSelection(step: PortalFlowStepResult): boolean {
+  return step.safeSignals.includes("filed-return-api-result-role-status-unavailable");
 }
 
 function withOptionalUserAction(

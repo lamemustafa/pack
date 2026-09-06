@@ -17,10 +17,8 @@ export async function selectCustomOptionNearLabel(
   documentRef: Document,
   labelPattern: RegExp,
   acceptedTexts: readonly string[],
-  deadline: number,
   matchesText: (text: string, acceptedTexts: readonly string[]) => boolean = matchesAcceptedText,
 ): Promise<boolean> {
-  if (Date.now() >= deadline) return false;
   const formRoot = findFiledReturnsFilterRoot(documentRef);
   if (!formRoot) return false;
 
@@ -36,7 +34,6 @@ export async function selectCustomOptionNearLabel(
   if (!control) return false;
 
   const beforeOpenElements = new Set(Array.from(documentRef.body.querySelectorAll("*")));
-  if (Date.now() >= deadline) return false;
   activateElement(control);
 
   const option = await waitForVisibleCustomDropdownOption(
@@ -44,13 +41,12 @@ export async function selectCustomOptionNearLabel(
     acceptedTexts,
     control,
     beforeOpenElements,
-    deadline,
     matchesText,
   );
-  if (!option || Date.now() >= deadline) return false;
+  if (!option) return false;
 
   activateElement(option);
-  return waitForFieldTextMatch(fieldRoot, acceptedTexts, matchesText, deadline);
+  return waitForFieldTextMatch(fieldRoot, acceptedTexts, matchesText);
 }
 
 export function findFiledReturnsFilterRoot(documentRef: Document): HTMLElement | null {
@@ -153,12 +149,11 @@ async function waitForFieldTextMatch(
   fieldRoot: HTMLElement,
   acceptedTexts: readonly string[],
   matchesText: (text: string, acceptedTexts: readonly string[]) => boolean,
-  deadline: number,
 ): Promise<boolean> {
-  const stopAt = Math.min(deadline, Date.now() + DROPDOWN_SELECTION_TIMEOUT_MS);
-  while (Date.now() < stopAt) {
+  const startedAt = Date.now();
+  do {
     if (matchesText(normaliseText(fieldRoot.textContent || ""), acceptedTexts)) return true;
-    await delay(Math.min(DROPDOWN_POLL_MS, Math.max(0, stopAt - Date.now())));
-  }
+    await delay(DROPDOWN_POLL_MS);
+  } while (Date.now() - startedAt < DROPDOWN_SELECTION_TIMEOUT_MS);
   return false;
 }

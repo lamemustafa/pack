@@ -127,11 +127,6 @@ must be followed by a live re-run of the six verified paths, not a suite run alo
 
 ## 4. Single-consumer modules — consolidation candidates
 
-Historical inventory from the audit above, not a current consolidation list.
-The API-search candidate below and its row adapter were subsequently deleted;
-filed-return selection now uses the existing visible-control flow. Recheck
-current importers before applying any remaining candidate.
-
 Modules over 80 lines with exactly one src importer and no direct test importer are internal
 helpers that were split into files: `-full-fiscal-year-validation.ts` (396),
 `gstr2b-dashboard-selectors.ts` (317), `-full-fiscal-year-cleanup.ts` (311),
