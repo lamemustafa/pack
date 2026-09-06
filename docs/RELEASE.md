@@ -95,8 +95,11 @@ scheduled sweep or push a no-op commit before tagging.
 Before submitting a ZIP to a browser store:
 
 1. Load `.output/chrome-mv3` in a clean Chrome profile.
-2. Confirm the permission prompt lists only GST Portal host access plus
-   downloads/storage.
+2. Compare the generated manifest's permission and host sets with
+   `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` in
+   `src/extension/manifest-policy.ts` at the artifact's source revision, bound
+   under "Bind Review Scope And Evidence" in `docs/AGENT_REVIEW_RECTIFY.md`.
+   Confirm any policy change has the authorization required by `AGENTS.md`.
 3. Open the popup outside GST domains and confirm the extension stays dormant.
 4. Open Pack Options, run the synthetic demo, then click
    `Download synthetic demo files` and confirm files are downloaded under
