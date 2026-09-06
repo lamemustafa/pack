@@ -11,6 +11,7 @@ import {
   navigateToReturnDashboardPage,
 } from "./filed-returns-navigator";
 import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
+import { createFiledReturnsAcquisitionDeadline } from "./filed-returns-acquisition-deadline";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
 import { observeFiledReturnsPageText } from "./filed-returns-observer";
@@ -225,14 +226,30 @@ export async function runFiledReturnsDownloadStep(
   }
 
   if (observation.state === "filters-required") {
-    const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
+    const deadline = createFiledReturnsAcquisitionDeadline();
+    const apiSearchResult = await openFiledReturnFromApiSearch(
+      documentRef,
+      scope,
+      scopeId,
+      deadline,
+    );
     if (apiSearchResult && !shouldFallBackToPortalFilterSelection(apiSearchResult)) {
       return apiSearchResult;
     }
 
-    const selectionResult = await selectFiledReturnsFiltersAndSearch(documentRef, scope, scopeId);
+    const selectionResult = await selectFiledReturnsFiltersAndSearch(
+      documentRef,
+      scope,
+      scopeId,
+      deadline,
+    );
     if (shouldTryApiSearchFallback(selectionResult)) {
-      const apiSearchResult = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
+      const apiSearchResult = await openFiledReturnFromApiSearch(
+        documentRef,
+        scope,
+        scopeId,
+        deadline,
+      );
       if (apiSearchResult && !shouldFallBackToPortalFilterSelection(apiSearchResult)) {
         return apiSearchResult;
       }

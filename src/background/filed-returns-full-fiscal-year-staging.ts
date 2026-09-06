@@ -1,3 +1,4 @@
+import { prepareFullFiscalYearCompletion } from "./filed-returns-full-fiscal-year-completion";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
@@ -6,23 +7,14 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
-import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import {
-  canCompleteFullFiscalYearLedger,
   completeFullFiscalYearLedger,
-  hasCanonicalFullFiscalYearTargetPlan,
-  reconcileFullFiscalYearLedgerTargets,
   sameFiledReturnsScope,
 } from "./filed-returns-full-fiscal-year-ledger";
-import {
-  persistLedger,
-  persistLedgerAndSummary,
-  shouldPersistReconciledLedger,
-} from "./filed-returns-full-fiscal-year-run-state";
+import { persistLedgerAndSummary } from "./filed-returns-full-fiscal-year-run-state";
 import { filedReturnsSummaryStatusMessage } from "../connectors/gst/filed-returns-summary-status";
 import {
-  blockedFullFiscalYearStep,
   completeFullFiscalYearStep,
   toFullFiscalYearSummary,
 } from "./filed-returns-full-fiscal-year-summary";
@@ -317,30 +309,14 @@ export async function finishFullFiscalYearCleanup(
     priorStep,
   );
   const now = deps.now?.() ?? new Date();
-  const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
-    cleanupPendingLedger.scope.financialYear,
+  const prepared = await prepareFullFiscalYearCompletion(
+    deps,
+    cleanupPendingLedger,
     now,
-    cleanupPendingLedger.scope.returnType,
+    "full-fiscal-year-run-needs-action",
   );
-  const reconciledLedger =
-    plannedPeriods.length > 0
-      ? reconcileFullFiscalYearLedgerTargets(cleanupPendingLedger, now, plannedPeriods)
-      : cleanupPendingLedger;
-  if (shouldPersistReconciledLedger(cleanupPendingLedger, reconciledLedger)) {
-    await persistLedger(deps, reconciledLedger);
-  }
-  if (!canCompleteFullFiscalYearLedger(reconciledLedger)) {
-    const signal = hasCanonicalFullFiscalYearTargetPlan(reconciledLedger)
-      ? "full-fiscal-year-run-needs-action"
-      : "full-fiscal-year-target-plan-invalid";
-    const step = blockedFullFiscalYearStep(signal, reconciledLedger);
-    await persistLedgerAndSummary(deps, reconciledLedger, step);
-    return {
-      ok: true,
-      flowStep: step,
-      flowSummary: toFullFiscalYearSummary(reconciledLedger, step),
-    };
-  }
+  if (!prepared.ready) return prepared.response;
+  const reconciledLedger = prepared.ledger;
   cleanupPendingLedger = reconciledLedger;
 
   const clearSignals = await discardFullFiscalYearFiledReturnsZip(cleanupPendingLedger.ledgerId);

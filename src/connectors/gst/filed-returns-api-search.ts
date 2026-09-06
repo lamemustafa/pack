@@ -7,23 +7,37 @@ import {
 } from "./filed-returns-api-rows";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 import { toPortalReturnPeriod } from "./filed-returns-return-period";
+import {
+  createFiledReturnsAcquisitionDeadline,
+  hasFiledReturnsAcquisitionDeadlineExpired,
+  remainingFiledReturnsAcquisitionTime,
+} from "./filed-returns-acquisition-deadline";
 
 const EFILED_RETURNS_API_PATH = "/returns/auth/api/efiledReturns";
 const ROLE_STATUS_API_PATH = "/returns/auth/api/rolestatus";
 const GSTR3B_QUARTERLY_ENABLE_PERIOD = "012021";
 
 type OpenResultResponse =
-  { ok: true } | { ok: false; reason: "role-status-unavailable" | "portal-storage-unavailable" };
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "deadline-expired" | "role-status-unavailable" | "portal-storage-unavailable";
+    };
+
+type RoleStatusResponse =
+  { ok: true; userPref: string } | { ok: false; reason?: "deadline-expired" };
 
 export async function openFiledReturnFromApiSearch(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   scopeId: string,
+  deadline = createFiledReturnsAcquisitionDeadline(),
 ): Promise<PortalFlowStepResult | null> {
   if (scope.returnType !== "GSTR-3B") return null;
   if (!canUseFiledReturnsApi(documentRef)) return null;
+  if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) return null;
 
-  const rows = await queryFiledReturnsApi(documentRef, scope);
+  const rows = await queryFiledReturnsApi(documentRef, scope, deadline);
   if (!rows) return null;
 
   const descriptor = filedReturnDescriptor(scope.returnType);
@@ -50,7 +64,12 @@ export async function openFiledReturnFromApiSearch(
   const matchingRow = matchingRows[0];
   if (!matchingRow) return null;
 
-  const openResponse = await openApiRowWithPortalNavigation(documentRef, matchingRow, scope);
+  const openResponse = await openApiRowWithPortalNavigation(
+    documentRef,
+    matchingRow,
+    scope,
+    deadline,
+  );
   if (openResponse.ok) {
     return {
       connectorId: "gst",
@@ -92,29 +111,33 @@ function canUseFiledReturnsApi(documentRef: Document): boolean {
 async function queryFiledReturnsApi(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
+  deadline: number,
 ): Promise<FiledReturnsApiRow[] | null> {
-  const fetchFn = documentRef.defaultView?.fetch;
-  if (!fetchFn) return null;
-
   try {
-    const response = await fetchFn(EFILED_RETURNS_API_PATH, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        Accept: "application/json, text/plain, */*",
-        "Content-Type": "application/json;charset=UTF-8",
+    const response = await fetchBeforeDeadline(
+      documentRef,
+      EFILED_RETURNS_API_PATH,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "Content-Type": "application/json;charset=UTF-8",
+        },
+        body: JSON.stringify({
+          fy: scope.financialYear,
+          rfp: "Monthly",
+          qtr: null,
+          mth: scope.period,
+          rtntp: normaliseReturnTypeForApi(scope.returnType),
+        }),
       },
-      body: JSON.stringify({
-        fy: scope.financialYear,
-        rfp: "Monthly",
-        qtr: null,
-        mth: scope.period,
-        rtntp: normaliseReturnTypeForApi(scope.returnType),
-      }),
-    });
+      deadline,
+    );
     if (!response.ok) return null;
 
     const payload: unknown = await response.json();
+    if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) return null;
     return extractFiledReturnsApiRows(payload);
   } catch {
     return null;
@@ -125,7 +148,11 @@ async function openApiRowWithPortalNavigation(
   documentRef: Document,
   row: FiledReturnsApiRow,
   scope: FiledReturnsDownloadScope,
+  deadline: number,
 ): Promise<OpenResultResponse> {
+  if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
+    return { ok: false, reason: "deadline-expired" };
+  }
   const view = documentRef.defaultView;
   if (!view) return { ok: false, reason: "portal-storage-unavailable" };
 
@@ -134,11 +161,21 @@ async function openApiRowWithPortalNavigation(
     readFiledReturnRowValue(row, ["fy", "finYear", "financialYear"]),
   );
   if (!rtnPrd) return { ok: false, reason: "portal-storage-unavailable" };
-  const roleStatus = await queryRoleStatus(documentRef, rtnPrd);
-  if (!roleStatus.ok) return { ok: false, reason: "role-status-unavailable" };
+  const roleStatus = await queryRoleStatus(documentRef, rtnPrd, deadline);
+  if (!roleStatus.ok) {
+    return roleStatus.reason === "deadline-expired"
+      ? { ok: false, reason: "deadline-expired" }
+      : { ok: false, reason: "role-status-unavailable" };
+  }
 
   try {
+    if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
+      return { ok: false, reason: "deadline-expired" };
+    }
     writePortalFiledReturnState(view, scope, rtnPrd, roleStatus.userPref);
+    if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
+      return { ok: false, reason: "deadline-expired" };
+    }
     submitPortalGstr3bForm(documentRef, rtnPrd);
     return { ok: true };
   } catch {
@@ -149,12 +186,15 @@ async function openApiRowWithPortalNavigation(
 async function queryRoleStatus(
   documentRef: Document,
   rtnPrd: string,
-): Promise<{ ok: true; userPref: string } | { ok: false }> {
-  const fetchFn = documentRef.defaultView?.fetch;
-  if (!fetchFn) return { ok: false };
+  deadline: number,
+): Promise<RoleStatusResponse> {
+  if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
+    return { ok: false, reason: "deadline-expired" };
+  }
 
   try {
-    const response = await fetchFn(
+    const response = await fetchBeforeDeadline(
+      documentRef,
       `${ROLE_STATUS_API_PATH}?rtn_prd=${encodeURIComponent(rtnPrd)}`,
       {
         credentials: "same-origin",
@@ -162,10 +202,14 @@ async function queryRoleStatus(
           Accept: "application/json, text/plain, */*",
         },
       },
+      deadline,
     );
     if (!response.ok) return { ok: false };
 
     const payload: unknown = await response.json();
+    if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
+      return { ok: false, reason: "deadline-expired" };
+    }
     const userPref = readUserPreference(payload);
     if (!userPref) {
       if (!isGstr3bQuarterlyEnabled(rtnPrd)) return { ok: true, userPref: "M" };
@@ -174,6 +218,34 @@ async function queryRoleStatus(
     return { ok: true, userPref };
   } catch {
     return { ok: false };
+  }
+}
+
+async function fetchBeforeDeadline(
+  documentRef: Document,
+  input: RequestInfo | URL,
+  init: RequestInit,
+  deadline: number,
+): Promise<Response> {
+  const view = documentRef.defaultView;
+  const fetchFn = view?.fetch;
+  if (!fetchFn || hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
+    throw new Error("filed-returns-acquisition-deadline-expired");
+  }
+  const Controller = view?.AbortController ?? AbortController;
+  const controller = new Controller();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    remainingFiledReturnsAcquisitionTime(deadline),
+  );
+  try {
+    const response = await fetchFn(input, { ...init, signal: controller.signal });
+    if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
+      throw new Error("filed-returns-acquisition-deadline-expired");
+    }
+    return response;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
