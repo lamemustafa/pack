@@ -20,8 +20,8 @@ review with that stakes level, not as a routine lint pass.
 
 Your scope is read-only: inspect diffs, files, and text. Never execute code,
 never fetch URLs, never open a browser. If you need to see the exact current
-manifest policy, `Read` `src/extension/manifest-policy.ts` directly rather than
-trusting a description of it.
+manifest policy, inspect its actual source contents for the selected review
+scope as supplied below, rather than trusting a description or another checkout.
 
 ## What to review
 
@@ -60,13 +60,16 @@ pass/fail per item with file:line evidence.
    remotely fetched executable code (this is also an MV3 policy violation, not
    just a privacy one).
 4. **No expanded reach.** No `externally_connectable`, no new host permissions,
-   no broadening beyond the exact permission set in
-   `src/extension/manifest-policy.ts` (`downloads`, `offscreen`, `scripting`,
-   `storage`, and only `www.gst.gov.in`, `services.gst.gov.in`,
-   `return.gst.gov.in`, `gstr2b.gst.gov.in`). If the
-   diff touches that file, diff it against the current committed version and
-   flag every change as Critical pending explicit human sign-off — do not wave
-   through "looks fine" here.
+   no broadening beyond the reviewed permission and host sets. Read
+   `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` from
+   `src/extension/manifest-policy.ts` at the review base; do not copy the sets
+   here. Have the calling agent supply the mode, resolved base/target SHAs,
+   their source contents, relevant diffs, and available authorization evidence
+   under "Bind Review Scope And Evidence" in `docs/AGENT_REVIEW_RECTIFY.md`.
+   Inspect that evidence without executing Git; request missing evidence from the calling
+   agent and mark this check blocked until it is supplied. Flag every candidate
+   policy change as Critical pending explicit human sign-off under `AGENTS.md`;
+   membership in the candidate policy does not authorize a change.
 5. **Storage redaction.** Anything persisted via `chrome.storage` (or any local
    ledger/state file) must not contain raw portal URLs with query strings,
    referrer values, local filesystem paths, filenames, portal HTML, GSTIN/PAN,

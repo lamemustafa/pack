@@ -98,8 +98,9 @@ From `AGENTS.md`. These are not style preferences; several were written after a 
 **Ask-first — propose, flag clearly, do not implement:**
 
 - any change to `src/extension/manifest-policy.ts`, `wxt.config.ts`, permissions, host permissions
-  or CSP. The reviewed set is `downloads`, `offscreen`, `scripting`, `storage`, plus exactly four
-  GST hosts;
+  or CSP. Read the permission and host sets from `src/extension/manifest-policy.ts` at the
+  review base selected under `docs/AGENT_REVIEW_RECTIFY.md`; source membership does not
+  authorize a change;
 - any new runtime dependency;
 - persisting a new field or widening what is persisted;
 - weakening a target-binding or identity guard;

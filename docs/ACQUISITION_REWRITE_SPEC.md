@@ -491,8 +491,9 @@ Delete tests for deleted modules. Add:
   or browser/service-worker restart recovery; those require the separate live-evidence gate.
 - **`chrome.debugger`.** Premise falsified (§0). The staged deletion of
   `gstr1-debugger-view.ts` was correct; do not reinstate it.
-- **Any new permission.** Net delta must be zero: `downloads`, `offscreen`, `scripting`,
-  `storage`, and exactly the four GST hosts.
+- **Any new permission.** Net permission and host delta must be zero against
+  `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` in
+  `src/extension/manifest-policy.ts` at this spec's recorded base commit.
 
 ---
 
