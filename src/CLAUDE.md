@@ -57,7 +57,7 @@ adding a new one — check the anti-bloat checklist in root `AGENTS.md` first.
   `PACK_SESSION_STORAGE_KEYS`) and content-script injection/ping logic
   (`ensureContentScript`, `pingContentScript`). Local storage is restricted to
   `TRUSTED_CONTEXTS` on startup.
-- `entrypoints/content.ts` — injected only on the four GST host patterns
+- `entrypoints/content.ts` — injected only on the reviewed GST host patterns
   (kept in sync with `connectors/gst/hosts.ts` and `manifest-policy.ts`).
   Detects portal context, observes filed-returns page text, and answers the
   `PACK_CONTENT_*` message types by delegating straight into
@@ -71,11 +71,10 @@ adding a new one — check the anti-bloat checklist in root `AGENTS.md` first.
 
 ## Manifest policy is the single source of truth
 
-`src/extension/manifest-policy.ts` defines `PACK_EXTENSION_PERMISSIONS`
-(`["downloads", "offscreen", "scripting", "storage"]`),
-`PACK_GST_HOST_PERMISSIONS` (exactly `www.gst.gov.in`,
-`services.gst.gov.in`, `return.gst.gov.in`, `gstr2b.gst.gov.in`), the CSP,
-name, description, and icons. `wxt.config.ts` imports these constants directly into
+`src/extension/manifest-policy.ts` defines `PACK_EXTENSION_PERMISSIONS`,
+`PACK_GST_HOST_PERMISSIONS`, the CSP, name, description, and icons. Read the
+sets from the source revision selected under `docs/AGENT_REVIEW_RECTIFY.md`'s
+"Bind Review Scope And Evidence" section; do not copy them into this guidance. `wxt.config.ts` imports these constants directly into
 `manifest.permissions` / `manifest.host_permissions` — there is no static
 `manifest.json` to hand-edit. **Never** add a permission or host anywhere else
 (not in `wxt.config.ts`, not in a content-script `matches` array) without

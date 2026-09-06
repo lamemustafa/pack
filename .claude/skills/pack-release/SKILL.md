@@ -14,9 +14,9 @@ Read `docs/RELEASE.md` in full before doing anything else in this skill.
 
 ## Before you start
 
-- Confirm you are on the branch/worktree the user intends to release from, and
-  that `git status` is clean or the user has explicitly accepted an unclean
-  state.
+- Confirm the source revision the user intends to release. Bind the execution
+  checkout and check results to it under "Bind Review Scope And Evidence" in
+  `docs/AGENT_REVIEW_RECTIFY.md`; release verification requires a clean tree.
 - Confirm Node 24.20.0 and pnpm 11.1.2 are active (`node -v`, `pnpm -v`) —
   these are the exact pinned versions used in CI; do not substitute others.
 - This skill performs real, externally visible actions once you reach the
@@ -141,7 +141,9 @@ skip ahead or "fix forward" past a failing gate without the user's input.
 Before treating a ZIP as store-ready, do the manual smoke test described in
 `docs/RELEASE.md`'s "Manual clean-profile QA" section: load
 `.output/chrome-mv3` in a clean Chrome profile, confirm the generated manifest
-lists only the 4 reviewed GST hosts plus downloads/offscreen/scripting/storage, confirm the popup stays
+matches `PACK_EXTENSION_PERMISSIONS` and `PACK_GST_HOST_PERMISSIONS` from
+`src/extension/manifest-policy.ts` at that source revision, with any policy
+change explicitly authorized under `AGENTS.md`. Confirm the popup stays
 dormant off GST domains, run the synthetic demo from Pack Options, confirm
 downloaded files land under `Pack-Demo/`, confirm the generated manifest and
 exceptions file look obviously synthetic, clear local Pack data from Options,
