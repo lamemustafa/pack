@@ -1,3 +1,4 @@
+import { filedReturnsFilterActionRequiredMessage } from "./filed-returns-filter-status";
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
 import { delay } from "../../core/time";
 import { findFiledReturnsFilterRoot } from "./filed-returns-custom-dropdown";
@@ -127,8 +128,9 @@ export async function selectFiledReturnsFiltersAndSearch(
   const searchRoot = formRoot ?? documentRef;
   const search = findUniqueActionableExactSearchControl(searchRoot);
 
+  const selectionExpired = Date.now() >= deadline;
   if (
-    Date.now() >= deadline ||
+    selectionExpired ||
     !financialYearSelected ||
     !periodSelected ||
     !monthSelected ||
@@ -136,6 +138,7 @@ export async function selectFiledReturnsFiltersAndSearch(
     !search
   ) {
     if (
+      selectionExpired ||
       financialYearSelected ||
       periodSelected ||
       (monthFieldPresent && monthSelected) ||
@@ -154,9 +157,20 @@ export async function selectFiledReturnsFiltersAndSearch(
       return {
         connectorId: "gst",
         scopeId,
-        state: "clicked",
+        state: selectionExpired ? "user-action-required" : "clicked",
         safeSignals: ["filed-return-filter-selection-in-progress", ...selectSignals],
-        safeMessage: `Pack selected part of the filed-return filter form and is waiting for the GST portal to finish updating it.${missingContext}`,
+        safeMessage: selectionExpired
+          ? filedReturnsFilterActionRequiredMessage(selectSignals)
+          : `Pack selected part of the filed-return filter form and is waiting for the GST portal to finish updating it.${missingContext}`,
+        ...(selectionExpired
+          ? {
+              userAction: {
+                type: "NAVIGATE_TO_SUPPORTED_PAGE" as const,
+                message: `Select the filed ${descriptor.label} filters in the GST portal, then start Pack again.`,
+                canResume: true,
+              },
+            }
+          : {}),
       };
     }
 
