@@ -90,6 +90,33 @@ describe("extension package verifier", () => {
     expect(result.status).toBe(0);
   });
 
+  it("ignores inert noscript bundle-shaped markup", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><noscript><base href="/nested/"><script src="/chunks/noscript.js"></script><link rel="stylesheet" href="/assets/noscript.css"></noscript><script type="module" src="/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("resolves parent-segment bundle references with browser URL semantics", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><head><link rel="stylesheet" href="../assets/parser.css"></head><body><script type="module" src="../chunks/panel.js"></script></body></html>',
+    );
+    await writePackageFile(outputDir, "assets/parser.css", "body {}\n");
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
   it.each([
     [
       "a single-quoted script source",
