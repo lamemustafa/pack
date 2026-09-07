@@ -22,11 +22,6 @@ const DURABLE_DISPOSITIONS = new Set([
 ]);
 const TRUSTED_DISPOSITION_ASSOCIATIONS = new Set(["MEMBER", "OWNER", "COLLABORATOR"]);
 const DURABLE_DISPOSITION_MARKER = "<!-- review-gate-disposition:";
-const CONTINUITY_OVERRIDE_MARKER = "<!-- review-gate-continuity-override:";
-// The visible status must say this exact word. `hasNonEmptyVisibleEvidenceField` accepted any
-// non-empty value, so `Continuity override: rejected` read as authorization -- a maintainer's
-// visible refusal seeding empty durable state across an unverifiable rewrite.
-const CONTINUITY_OVERRIDE_APPROVAL = "approved";
 const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 const CODEX_SEVERITY_BADGE_PATTERN =
   /!\[P[0-3] Badge\]\(https:\/\/img\.shields\.io\/badge\/P[0-3]-[^)\s]+\)/u;
@@ -34,6 +29,7 @@ const CODEX_CLEAN_TOP_LEVEL_REVIEW_PATTERN =
   /^Codex Review: Didn't find any major issues\.[^\r\n]*(?:\r?\n)+[\s\S]*?\*\*Reviewed commit:\*\*\s*`([0-9a-f]{10,64})`/u;
 
 const rawArgs = process.argv.slice(2);
+const evaluationErrorPath = readArgValue("--write-evaluation-error");
 const args = new Set(rawArgs);
 const strictHeadReview = args.has("--strict-head-review");
 const allowMissingHeadReview = args.has("--allow-missing-head-review");
@@ -48,13 +44,10 @@ const requiredReviewAuthor = strictHeadReview
   : requestedReviewAuthor;
 const prFindingAuthor = requestedReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR;
 const expectedHeadOid = readArgValue("--expected-head-oid");
-const requiredCurrentHeadReviewAfter = readTimestampArg("--required-current-head-review-after");
-const requiredContinuityOverrideAfter = readTimestampArg("--required-continuity-override-after");
 const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
 const reviewStatePath = readArgValue("--review-state");
 const nextReviewStatePath = readArgValue("--write-review-state");
-const evaluationErrorPath = readArgValue("--write-evaluation-error");
 let fixtureIndex = 0;
 
 const repo =
@@ -65,12 +58,6 @@ if (!repo || !repo.includes("/"))
   failEvaluation("Could not determine GitHub repo. Pass --repo owner/name.");
 if (!Number.isInteger(prNumber) || prNumber < 1)
   failEvaluation("Could not determine PR number. Pass --pr <number>.");
-if (requiredContinuityOverrideAfter && !requiredCurrentHeadReviewAfter) {
-  failEvaluation(
-    "A required continuity override must be paired with a required current-head review timestamp.",
-  );
-}
-
 const { pr, unresolvedThreads, blockingReviews, blockingComments, headReviews } =
   await fetchEvaluatedPr();
 const durableReviewState = readDurableReviewState(reviewStatePath, prNumber);
@@ -80,9 +67,6 @@ const durablyObservedBlockingComments = findDurablyObservedBlockingComments(
   pr.comments.nodes,
 );
 const bodyIssues = evaluatePullRequestBody(pr);
-const trustedContinuityOverride = requiredContinuityOverrideAfter
-  ? readTrustedContinuityOverride(pr.comments.nodes, requiredContinuityOverrideAfter)
-  : null;
 writeDurableReviewState(nextReviewStatePath, reconciledDurableReviewState);
 reportBlockingState({
   unresolvedThreads,
@@ -93,24 +77,13 @@ reportBlockingState({
 
 const missingHeadReview = strictHeadReview && headReviews.length === 0;
 if (missingHeadReview) {
-  const message = requiredCurrentHeadReviewAfter
-    ? `No qualifying review was found for current head ${pr.headRefOid} after ${requiredCurrentHeadReviewAfter}.`
-    : `No review was found for current head ${pr.headRefOid}.`;
-  if (requiredCurrentHeadReviewAfter) {
-    failEvaluation(message);
-  }
+  const message = `No review was found for current head ${pr.headRefOid}.`;
   if (allowMissingHeadReview) {
     console.log(ALLOWED_MISSING_HEAD_REVIEW_MARKER);
     console.warn(`${message} Continuing because --allow-missing-head-review was set.`);
   } else {
     console.error(message);
   }
-}
-
-if (requiredContinuityOverrideAfter && !trustedContinuityOverride) {
-  failEvaluation(
-    `No trusted continuity override was found for an unverifiable rewrite after ${requiredContinuityOverrideAfter}.`,
-  );
 }
 
 if (
@@ -212,22 +185,12 @@ function evaluatePullRequestReviewState(pr) {
         !requiredReviewAuthor ||
         normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
     );
-  const eligibleHeadReviews = requiredCurrentHeadReviewAfter
-    ? [...headReviews, ...cleanTopLevelReviews].filter((review) =>
-        wasSubmittedAfter(review, requiredCurrentHeadReviewAfter),
-      )
-    : [...headReviews, ...cleanTopLevelReviews];
   return {
     unresolvedThreads,
     blockingReviews,
     blockingComments,
-    headReviews: eligibleHeadReviews,
+    headReviews: [...headReviews, ...cleanTopLevelReviews],
   };
-}
-
-function wasSubmittedAfter(review, timestamp) {
-  const submittedAt = Date.parse(review.submittedAt ?? review.updatedAt ?? review.createdAt ?? "");
-  return Number.isFinite(submittedAt) && submittedAt > Date.parse(timestamp);
 }
 
 function isTrustedCurrentHeadCodexTopLevelReview(comment, headRefOid) {
@@ -392,13 +355,30 @@ function validatePersistedDurableDispositions(reviewState, pr) {
 }
 
 function readTrustedDurableDisposition(comment, prBody) {
-  const marker = readTrustedEvidenceMarker(
-    comment,
-    DURABLE_DISPOSITION_MARKER,
-    "durable disposition",
+  if (
+    !TRUSTED_DISPOSITION_ASSOCIATIONS.has(comment.authorAssociation) ||
+    !String(comment.body ?? "").includes(DURABLE_DISPOSITION_MARKER)
+  ) {
+    return null;
+  }
+  const markerPattern = new RegExp(
+    DURABLE_DISPOSITION_MARKER.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&") + "([\\s\\S]*?)-->",
+    "gu",
   );
-  if (!marker) return null;
-  const { evidence, value } = marker;
+  const markers = [...String(comment.body).matchAll(markerPattern)];
+  if (markers.length !== 1) {
+    failEvaluation("A trusted durable disposition marker is malformed.");
+  }
+  const evidence = String(comment.body).replace(markers[0][0], "").trim();
+  if (!evidence) {
+    failEvaluation("A trusted durable disposition must include visible evidence.");
+  }
+  let value;
+  try {
+    value = JSON.parse(markers[0][1]);
+  } catch (error) {
+    failEvaluation("A trusted durable disposition marker is malformed.", error);
+  }
   if (
     !value ||
     typeof value.findingId !== "string" ||
@@ -423,68 +403,6 @@ function readTrustedDurableDisposition(comment, prBody) {
     failEvaluation("A linked follow-up disposition must name its follow-up in the PR body.");
   }
   return value;
-}
-
-function readTrustedContinuityOverride(comments, requiredAfter) {
-  for (const comment of comments) {
-    const body = String(comment.body ?? "");
-    if (!body.includes(CONTINUITY_OVERRIDE_MARKER)) continue;
-    const marker = readTrustedEvidenceMarker(
-      comment,
-      CONTINUITY_OVERRIDE_MARKER,
-      "continuity override",
-    );
-    if (!marker) continue;
-    const { evidence, value } = marker;
-    if (
-      !value ||
-      Object.keys(value).length !== 1 ||
-      !isValidTimestamp(value.requiredCurrentHeadReviewAfter)
-    ) {
-      failEvaluation("A trusted continuity override marker has an unsupported shape.");
-    }
-    const markerAfter = new Date(value.requiredCurrentHeadReviewAfter).toISOString();
-    if (
-      !includesVisibleEvidenceField(
-        evidence,
-        "Continuity override",
-        CONTINUITY_OVERRIDE_APPROVAL,
-      ) ||
-      !includesVisibleEvidenceField(evidence, "Required current-head review after", markerAfter) ||
-      !hasNonEmptyVisibleEvidenceField(evidence, "Evidence")
-    ) {
-      failEvaluation("A trusted continuity override must include rewrite-bound visible evidence.");
-    }
-    if (markerAfter !== requiredAfter) continue;
-    return value;
-  }
-  return null;
-}
-
-function readTrustedEvidenceMarker(comment, markerPrefix, label) {
-  if (
-    !TRUSTED_DISPOSITION_ASSOCIATIONS.has(comment.authorAssociation) ||
-    !String(comment.body ?? "").includes(markerPrefix)
-  ) {
-    return null;
-  }
-  const markerPattern = new RegExp(
-    markerPrefix.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&") + "([\\s\\S]*?)-->",
-    "gu",
-  );
-  const markers = [...String(comment.body).matchAll(markerPattern)];
-  if (markers.length !== 1) {
-    failEvaluation(`A trusted ${label} marker is malformed.`);
-  }
-  const evidence = String(comment.body).replace(markers[0][0], "").trim();
-  if (!evidence) {
-    failEvaluation(`A trusted ${label} must include visible evidence.`);
-  }
-  try {
-    return { evidence, value: JSON.parse(markers[0][1]) };
-  } catch (error) {
-    failEvaluation(`A trusted ${label} marker is malformed.`, error);
-  }
 }
 
 function hasFindingLinkedDispositionEvidence(evidence, disposition) {
@@ -860,13 +778,6 @@ function readFixturePaths() {
 function readArgValue(name) {
   const index = rawArgs.indexOf(name);
   return index >= 0 ? rawArgs[index + 1] : null;
-}
-
-function readTimestampArg(name) {
-  const value = readArgValue(name);
-  if (!value) return null;
-  if (!Number.isFinite(Date.parse(value))) failEvaluation(`${name} must be a valid timestamp.`);
-  return new Date(Date.parse(value)).toISOString();
 }
 
 function readNonNegativeIntegerArg(name, defaultValue) {

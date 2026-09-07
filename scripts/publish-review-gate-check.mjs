@@ -127,14 +127,7 @@ function evaluatePullRequest(pr) {
           reviewWaitMs,
           "--poll-interval-ms",
           "10000",
-          ...(durableState.requiredCurrentHeadReviewAfter
-            ? [
-                "--required-current-head-review-after",
-                durableState.requiredCurrentHeadReviewAfter,
-                "--required-continuity-override-after",
-                durableState.requiredCurrentHeadReviewAfter,
-              ]
-            : ["--allow-missing-head-review"]),
+          "--allow-missing-head-review",
           "--expected-head-oid",
           pr.head.sha,
           "--review-state",
@@ -223,8 +216,9 @@ function readTerminalEvaluationError(path) {
 }
 
 function loadLatestDurableReviewState(pr) {
-  const { priorHeads: forcePushedPriorShas, requiredCurrentHeadReviewAfter } =
-    loadForcePushedPriorShas(pr.number);
+  const { priorHeads: forcePushedPriorShas, hasUntraceableRewrite } = loadForcePushedPriorShas(
+    pr.number,
+  );
   const currentPrShas = loadCurrentPrCommitShas(pr);
   const currentPrShaSet = new Set(currentPrShas);
   const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
@@ -261,7 +255,7 @@ function loadLatestDurableReviewState(pr) {
           check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) &&
           durableReviewStateBelongsToPr(check.output.text, pr.number)
         ) {
-          return { reviewState: check.output.text, requiredCurrentHeadReviewAfter };
+          return { reviewState: check.output.text };
         }
       }
     }
@@ -288,9 +282,14 @@ function loadLatestDurableReviewState(pr) {
   if (forcePushedPriorShas.length > 0) {
     throw new Error("force-push discontinuity left no reachable durable review state");
   }
+  if (hasUntraceableRewrite) {
+    throw new EvaluationOperationError(
+      "GitHub did not record the prior head, so review continuity cannot be verified across that rewrite. Re-create the branch as described in #299 before running the review gate",
+      new Error("untraceable force-push discontinuity left no reachable durable review state"),
+    );
+  }
   return {
     reviewState: JSON.stringify({ version: 1, prNumber: pr.number, findings: [] }),
-    requiredCurrentHeadReviewAfter,
   };
 }
 
@@ -343,8 +342,7 @@ function loadForcePushedPriorShas(prNumber) {
     ),
   );
   const priorHeads = new Map();
-  let requiredCurrentHeadReviewAfter = null;
-  const untraceableRewriteTimestamps = new Set();
+  let hasUntraceableRewrite = false;
 
   for (const event of flattenPages(timelinePages)) {
     if (event?.event !== "head_ref_force_pushed") continue;
@@ -353,16 +351,7 @@ function loadForcePushedPriorShas(prNumber) {
       throw new Error("force-push event has no valid creation timestamp");
     }
     if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
-      if (untraceableRewriteTimestamps.has(createdAt)) {
-        throw new EvaluationOperationError(
-          "cannot determine force-push continuity because untraceable rewrites share a timestamp",
-          new Error("untraceable force-push events have ambiguous chronological ordering"),
-        );
-      }
-      untraceableRewriteTimestamps.add(createdAt);
-      if (requiredCurrentHeadReviewAfter === null || createdAt > requiredCurrentHeadReviewAfter) {
-        requiredCurrentHeadReviewAfter = createdAt;
-      }
+      hasUntraceableRewrite = true;
       continue;
     }
     const existing = priorHeads.get(event.before_commit_id);
@@ -381,10 +370,7 @@ function loadForcePushedPriorShas(prNumber) {
   }
   return {
     priorHeads: orderedPriorHeads.map(({ sha }) => sha),
-    requiredCurrentHeadReviewAfter:
-      requiredCurrentHeadReviewAfter === null
-        ? null
-        : new Date(requiredCurrentHeadReviewAfter).toISOString(),
+    hasUntraceableRewrite,
   };
 }
 

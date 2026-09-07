@@ -131,6 +131,24 @@ describe("PR review gate", () => {
     });
   });
 
+  it("writes a safe terminal error for an invalid wait option", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-invalid-option-"));
+    const evaluationErrorPath = path.join(directory, "evaluation-error.json");
+    const result = spawnSync(
+      process.execPath,
+      [scriptPath, "--wait-head-review-ms", "-1", "--write-evaluation-error", evaluationErrorPath],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("--wait-head-review-ms must be a non-negative integer.");
+    expect(result.stderr).not.toContain("ReferenceError");
+    expect(JSON.parse(readFileSync(evaluationErrorPath, "utf8"))).toEqual({
+      version: 1,
+      message: "--wait-head-review-ms must be a non-negative integer.",
+    });
+  });
+
   it("keeps Hide → Resolved durable after the source comment is deleted", () => {
     const resolvedFixture = writeFixture(
       "resolved-durable-finding",
@@ -796,98 +814,6 @@ Evidence: noted.`;
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("PR review gate passed");
-  });
-
-  it("accepts a clean top-level report updated after an unverifiable rewrite", () => {
-    const headRefOid = "0123456789abcdef0123456789abcdef01234567";
-    const rewriteAfter = "2026-08-18T00:00:00.000Z";
-    const fixturePath = writeFixture(
-      "updated-current-head-clean-codex-top-level-report",
-      reviewFixture({
-        headRefOid,
-        body: packPrBody(),
-        comments: [
-          prFindingComment({
-            author: "chatgpt-codex-connector",
-            createdAt: "2026-08-17T12:00:00Z",
-            updatedAt: "2026-08-19T12:00:00Z",
-            body: "Codex Review: Didn't find any major issues. Swish!\n\n**Reviewed commit:** `0123456789`",
-          }),
-          continuityOverrideComment(rewriteAfter),
-        ],
-        reviews: [],
-      }),
-    );
-
-    const result = spawnSync(
-      process.execPath,
-      [
-        scriptPath,
-        "--repo",
-        "lamemustafa/pack",
-        "--pr",
-        "14",
-        "--fixture",
-        fixturePath,
-        "--strict-head-review",
-        "--required-review-author",
-        "chatgpt-codex-connector",
-        "--required-current-head-review-after",
-        rewriteAfter,
-        "--required-continuity-override-after",
-        rewriteAfter,
-      ],
-      { cwd: rootDir, encoding: "utf8" },
-    );
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("PR review gate passed");
-  });
-
-  it("rejects a top-level report whose reviewed content predates an unverifiable rewrite", () => {
-    const headRefOid = "0123456789abcdef0123456789abcdef01234567";
-    const rewriteAfter = "2026-08-18T00:00:00.000Z";
-    const fixturePath = writeFixture(
-      "updated-stale-clean-codex-top-level-report",
-      reviewFixture({
-        headRefOid,
-        body: packPrBody(),
-        comments: [
-          prFindingComment({
-            author: "chatgpt-codex-connector",
-            createdAt: "2026-08-17T12:00:00Z",
-            updatedAt: "2026-08-19T12:00:00Z",
-            body: "Codex Review: Didn't find any major issues. Swish!\n\n**Reviewed commit:** `abcdef0123`",
-          }),
-          continuityOverrideComment(rewriteAfter),
-        ],
-        reviews: [],
-      }),
-    );
-
-    const result = spawnSync(
-      process.execPath,
-      [
-        scriptPath,
-        "--repo",
-        "lamemustafa/pack",
-        "--pr",
-        "14",
-        "--fixture",
-        fixturePath,
-        "--strict-head-review",
-        "--required-review-author",
-        "chatgpt-codex-connector",
-        "--required-current-head-review-after",
-        rewriteAfter,
-        "--required-continuity-override-after",
-        rewriteAfter,
-      ],
-      { cwd: rootDir, encoding: "utf8" },
-    );
-
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain("No qualifying review was found for current head");
   });
 
   it("clears a same-author stale requested-changes review with a trusted clean Codex report", () => {
@@ -1714,75 +1640,6 @@ Evidence: noted.`;
     expect(output).toContain("review-gate:allowed-missing-head-review");
   });
 
-  it("waits for a qualifying post-rewrite review instead of treating the first snapshot as final", () => {
-    const rewriteAfter = "2026-08-17T00:00:00.000Z";
-    const override = continuityOverrideComment(rewriteAfter);
-    const firstFixture = writeFixture(
-      "no-head-review",
-      reviewFixture({
-        headRefOid: "head-sha",
-        comments: [override],
-        reviews: [
-          review({
-            state: "COMMENTED",
-            commit: "old-sha",
-            submittedAt: "2026-08-18T00:00:00Z",
-          }),
-        ],
-      }),
-    );
-    const secondFixture = writeFixture(
-      "head-review",
-      reviewFixture({
-        headRefOid: "head-sha",
-        comments: [override],
-        reviews: [
-          review({
-            state: "COMMENTED",
-            commit: "old-sha",
-            submittedAt: "2026-08-18T00:00:00Z",
-          }),
-          review({
-            state: "COMMENTED",
-            commit: "head-sha",
-            submittedAt: "2026-08-18T00:00:00Z",
-          }),
-        ],
-      }),
-    );
-
-    const output = execFileSync(
-      process.execPath,
-      [
-        scriptPath,
-        "--repo",
-        "lamemustafa/pack",
-        "--pr",
-        "14",
-        "--fixture-sequence",
-        `${firstFixture},${secondFixture}`,
-        "--strict-head-review",
-        "--wait-head-review-ms",
-        // Real process scheduling and fixture reads can consume a 5ms deadline (#200).
-        "1000",
-        "--poll-interval-ms",
-        "1",
-        "--required-current-head-review-after",
-        rewriteAfter,
-        "--required-continuity-override-after",
-        rewriteAfter,
-        "--required-review-author",
-        "chatgpt-codex-connector",
-      ],
-      {
-        cwd: rootDir,
-        encoding: "utf8",
-      },
-    );
-
-    expect(output).toContain("PR review gate passed");
-  });
-
   it("fails closed when no current-head review arrives before the wait expires", () => {
     const firstFixture = writeFixture(
       "no-current-head-review-first",
@@ -1944,26 +1801,6 @@ Finding: ${findingId}
 Disposition: ${disposition}
 Source revision: 2026-08-17T12:00:00Z
 Evidence: reviewed against the source and current behaviour.${disposition === "rejected" ? "\nReasoning: source evidence disproves the finding." : ""}${followUp ? `\nFollow-up: ${followUp}` : ""}`,
-  };
-}
-
-function continuityOverrideComment(requiredCurrentHeadReviewAfter: string) {
-  return {
-    id: "continuity-override-comment",
-    url: "https://github.com/lamemustafa/pack/pull/14#issuecomment-continuity-override",
-    createdAt: "2026-08-17T12:30:00Z",
-    updatedAt: "2026-08-17T12:30:00Z",
-    isMinimized: false,
-    minimizedReason: null,
-    author: { login: "maintainer" },
-    authorAssociation: "MEMBER",
-    body: `<!-- review-gate-continuity-override:${JSON.stringify({
-      requiredCurrentHeadReviewAfter,
-    })} -->
-
-Continuity override: approved
-Required current-head review after: ${requiredCurrentHeadReviewAfter}
-Evidence: the rewrite history cannot be verified and this explicit override authorizes only this recovery.`,
   };
 }
 

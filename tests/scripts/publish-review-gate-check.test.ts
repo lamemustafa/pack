@@ -429,7 +429,7 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain(rawUrl);
   });
 
-  it("keeps an unreachable deleted finding from being replaced by an empty durable state", () => {
+  it("publishes a re-creation remedy instead of seeding state across an untraceable rewrite", () => {
     const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
@@ -449,120 +449,18 @@ describe("PR-head Review gate check publisher", () => {
       calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
     ).toBe(false);
     expect(publicationText).toContain("conclusion=action_required");
-    expect(publicationText).toContain("trusted continuity override");
+    expect(publicationText).toContain("GitHub did not record the prior head");
+    expect(publicationText).toContain("Re-create the branch as described in #299");
     expect(publicationText).not.toContain("output[text]");
   });
 
-  it("seeds an empty durable state only after a qualifying review and bound trusted override", () => {
+  it("never discards an unreachable deleted finding across an untraceable rewrite", () => {
     const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
       cleanReviewFixture({
-        comments: [continuityOverrideComment("2026-08-17T12:00:00.000Z")],
-      }),
-      [{ status: 0 }],
-      null,
-      [{ status: 0 }],
-      { [orphanedSha]: reviewStateWithDeletedFinding() },
-      [forcePushEvent(null)],
-    );
-    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
-    const publicationText = publication?.join(" ") ?? "";
-
-    expect(result.status).toBe(0);
-    expect(publicationText).toContain("conclusion=success");
-    expect(publicationText).toContain("output[text]=review-gate-state/v1");
-  });
-
-  it.each(["rejected", "revoked", "denied"])(
-    "does not treat a visible %s status as continuity authorization",
-    (visibleStatus) => {
-      // The status field is the maintainer's visible decision. A non-empty check accepted any
-      // word here, so a written refusal authorized the rewrite it refused.
-      const orphanedSha = "b".repeat(40);
-      const { result, calls } = runScript(
-        ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
-        [pull(1)],
-        cleanReviewFixture({
-          comments: [
-            continuityOverrideComment("2026-08-17T12:00:00.000Z", "MEMBER", visibleStatus),
-          ],
-        }),
-        [{ status: 0 }],
-        null,
-        [{ status: 0 }],
-        { [orphanedSha]: reviewStateWithDeletedFinding() },
-        [forcePushEvent(null)],
-      );
-      const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
-      const publicationText = publication?.join(" ") ?? "";
-
-      expect(result.status).toBe(0);
-      expect(publicationText).not.toContain("conclusion=success");
-      // The deleted finding must not have been replaced by an empty durable state.
-      expect(publicationText).not.toContain("output[text]=review-gate-state/v1");
-    },
-  );
-
-  it("fails closed when untraceable rewrites share a timestamp", () => {
-    const rewriteAt = "2026-08-17T12:00:00Z";
-    const { result, calls } = runScript(
-      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
-      [pull(1)],
-      cleanReviewFixture({
-        comments: [continuityOverrideComment("2026-08-17T12:00:00.000Z")],
-      }),
-      [{ status: 0 }],
-      null,
-      [{ status: 0 }],
-      null,
-      [forcePushEvent(null, rewriteAt), forcePushEvent(null, rewriteAt)],
-    );
-    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
-    const publicationText = publication?.join(" ") ?? "";
-
-    expect(result.status).toBe(0);
-    expect(result.stderr).toContain(
-      "untraceable force-push events have ambiguous chronological ordering",
-    );
-    expect(publicationText).toContain("conclusion=action_required");
-    expect(publicationText).toContain(
-      "cannot determine force-push continuity because untraceable rewrites share a timestamp",
-    );
-    expect(publicationText).not.toContain("output[text]");
-  });
-
-  it("does not let an override for an earlier rewrite clear a later unverifiable rewrite", () => {
-    const orphanedSha = "b".repeat(40);
-    const { result, calls } = runScript(
-      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
-      [pull(1)],
-      cleanReviewFixture({
-        comments: [continuityOverrideComment("2026-08-17T12:00:00.000Z")],
-      }),
-      [{ status: 0 }],
-      null,
-      [{ status: 0 }],
-      { [orphanedSha]: reviewStateWithDeletedFinding() },
-      [forcePushEvent(null, "2026-08-17T12:00:00Z"), forcePushEvent(null, "2026-08-17T12:30:00Z")],
-    );
-    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
-    const publicationText = publication?.join(" ") ?? "";
-
-    expect(result.status).toBe(0);
-    expect(publicationText).toContain("conclusion=action_required");
-    expect(publicationText).toContain("No trusted continuity override");
-    expect(publicationText).not.toContain("output[text]");
-  });
-
-  it("does not honour an untrusted override on its own", () => {
-    const orphanedSha = "b".repeat(40);
-    const { result, calls } = runScript(
-      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
-      [pull(1)],
-      cleanReviewFixture({
-        comments: [untrustedContinuityMarker()],
+        comments: [retiredContinuityMarker()],
       }),
       [{ status: 0 }],
       null,
@@ -575,78 +473,9 @@ describe("PR-head Review gate check publisher", () => {
 
     expect(result.status).toBe(0);
     expect(publicationText).toContain("conclusion=action_required");
-    expect(publicationText).toContain("No trusted continuity override");
-    expect(publicationText).not.toContain("output[text]");
-  });
-
-  it("honours a trusted override despite an untrusted continuity marker", () => {
-    const orphanedSha = "b".repeat(40);
-    const { result, calls } = runScript(
-      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
-      [pull(1)],
-      cleanReviewFixture({
-        comments: [
-          untrustedContinuityMarker(),
-          continuityOverrideComment("2026-08-17T12:00:00.000Z"),
-        ],
-      }),
-      [{ status: 0 }],
-      null,
-      [{ status: 0 }],
-      { [orphanedSha]: reviewStateWithDeletedFinding() },
-      [forcePushEvent(null)],
-    );
-    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
-    const publicationText = publication?.join(" ") ?? "";
-
-    expect(result.status).toBe(0);
-    expect(publicationText).toContain("conclusion=success");
-    expect(publicationText).toContain("output[text]=review-gate-state/v1");
-  });
-
-  it("ignores a minimized untrusted continuity marker", () => {
-    const orphanedSha = "b".repeat(40);
-    const { result, calls } = runScript(
-      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
-      [pull(1)],
-      cleanReviewFixture({
-        comments: [
-          untrustedContinuityMarker({ isMinimized: true }),
-          continuityOverrideComment("2026-08-17T12:00:00.000Z"),
-        ],
-      }),
-      [{ status: 0 }],
-      null,
-      [{ status: 0 }],
-      { [orphanedSha]: reviewStateWithDeletedFinding() },
-      [forcePushEvent(null)],
-    );
-    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
-    const publicationText = publication?.join(" ") ?? "";
-
-    expect(result.status).toBe(0);
-    expect(publicationText).toContain("conclusion=success");
-    expect(publicationText).toContain("output[text]=review-gate-state/v1");
-  });
-
-  it("publishes the structured terminating failure after an earlier diagnostic", () => {
-    const { result, calls } = runScript(
-      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
-      [pull(1)],
-      cleanReviewFixture({ comments: [blockingFindingComment()] }),
-      [{ status: 0 }],
-      null,
-      [{ status: 0 }],
-      null,
-      [forcePushEvent(null)],
-    );
-    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
-    const publicationText = publication?.join(" ") ?? "";
-
-    expect(result.status).toBe(0);
-    expect(publicationText).toContain("conclusion=action_required");
-    expect(publicationText).toContain("No trusted continuity override");
-    expect(publicationText).not.toContain("Unresolved PR-level review findings");
+    expect(publicationText).toContain("review continuity cannot be verified");
+    expect(publicationText).not.toContain("output[text]=review-gate-state/v1");
+    expect(publicationText).not.toContain("comment-deleted-after-observation");
   });
 
   it("ignores a durable check state written for another pull request", () => {
@@ -733,7 +562,6 @@ describe("PR-head Review gate check publisher", () => {
     const script = readFileSync(scriptPath, "utf8");
     expect(script).toMatch(/const REVIEW_WAIT_MS = "180000"/u);
     expect(script).toMatch(/"--wait-head-review-ms",\s*reviewWaitMs/u);
-    expect(script).toMatch(/"--required-current-head-review-after"/u);
     expect(script).toMatch(/"--poll-interval-ms",\s*"10000"/u);
   });
 });
@@ -904,68 +732,21 @@ function forcePushEvent(beforeCommitId: string | null, createdAt = "2026-08-17T1
   };
 }
 
-function continuityOverrideComment(
-  requiredCurrentHeadReviewAfter: string,
-  authorAssociation = "MEMBER",
-  visibleStatus = "approved",
-) {
+function retiredContinuityMarker() {
   return {
-    id: "continuity-override-comment",
-    url: "https://github.com/lamemustafa/pack/pull/1#issuecomment-continuity-override",
+    id: "retired-continuity-marker",
+    url: "https://github.com/lamemustafa/pack/pull/1#issuecomment-retired-continuity-marker",
     createdAt: "2026-08-17T12:30:00Z",
     updatedAt: "2026-08-17T12:30:00Z",
     isMinimized: false,
     minimizedReason: null,
     author: { login: "maintainer" },
-    authorAssociation,
-    body: `<!-- review-gate-continuity-override:${JSON.stringify({
-      requiredCurrentHeadReviewAfter,
-    })} -->
-
-Continuity override: ${visibleStatus}
-Required current-head review after: ${requiredCurrentHeadReviewAfter}
-Evidence: the rewrite history cannot be verified and this explicit override authorizes only this recovery.`,
+    authorAssociation: "MEMBER",
+    body: "<!-- review-gate-continuity-override:retired -->",
   };
 }
 
-function untrustedContinuityMarker({ isMinimized = false } = {}) {
-  return {
-    id: "untrusted-continuity-marker",
-    url: "https://github.com/lamemustafa/pack/pull/1#issuecomment-untrusted-continuity-marker",
-    createdAt: "2026-08-17T12:30:00Z",
-    updatedAt: "2026-08-17T12:30:00Z",
-    isMinimized,
-    minimizedReason: isMinimized ? "resolved" : null,
-    author: { login: "external-reviewer" },
-    authorAssociation: "NONE",
-    body: `<!-- review-gate-continuity-override:${JSON.stringify({
-      requiredCurrentHeadReviewAfter: "2026-08-17T12:00:00.000Z",
-    })} -->
-
-Continuity override: hostile
-Required current-head review after: 2026-08-17T12:00:00.000Z
-Evidence: an untrusted commenter must not control the review gate.`,
-  };
-}
-
-function blockingFindingComment() {
-  return {
-    id: "blocking-finding-comment",
-    url: "https://github.com/lamemustafa/pack/pull/1#issuecomment-blocking-finding",
-    createdAt: "2026-08-17T12:00:00Z",
-    updatedAt: "2026-08-17T12:00:00Z",
-    isMinimized: false,
-    minimizedReason: null,
-    author: { login: "chatgpt-codex-connector" },
-    authorAssociation: "NONE",
-    body: "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Blocking finding.",
-  };
-}
-
-type ReviewCommentFixture =
-  | ReturnType<typeof continuityOverrideComment>
-  | ReturnType<typeof untrustedContinuityMarker>
-  | ReturnType<typeof blockingFindingComment>;
+type ReviewCommentFixture = ReturnType<typeof retiredContinuityMarker>;
 
 const cleanReviewFixture = ({ comments = [] as ReviewCommentFixture[] } = {}) => ({
   data: {
