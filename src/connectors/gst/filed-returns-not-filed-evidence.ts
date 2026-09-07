@@ -1,5 +1,6 @@
 import type { FiledReturnsDownloadScope, PortalFlowStepResult } from "./filed-returns-contracts";
-import { normaliseText } from "./filed-returns-dom";
+import { isHidden, ownVisibleText, visibleText } from "./filed-returns-dom";
+import { hasFiledReturnsLoadingText } from "./filed-returns-loading-signal";
 import { acceptedFiledReturnsPeriodTexts } from "./filed-returns-months";
 import { findMatchingFiledReturnRows } from "./filed-returns-result-rows";
 import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
@@ -93,36 +94,9 @@ function hasLoadingEvidenceForResultSurface(noRecordElement: Element, container:
 
 function hasLoadingEvidence(container: Element): boolean {
   if (container.getAttribute("aria-busy") === "true") return true;
-  const text = visibleText(container);
-  return /\bloading\b|\bplease\s+wait\b|\bsearching\b|\bprocessing\b/.test(normaliseText(text));
+  return hasFiledReturnsLoadingText(visibleText(container));
 }
 
 function hasMatchingResultRow(root: ParentNode, scope: FiledReturnsDownloadScope): boolean {
   return findMatchingFiledReturnRows(root, scope).length > 0;
-}
-
-function visibleText(root: Element): string {
-  return Array.from(root.querySelectorAll("*"))
-    .filter((element) => !isHidden(element))
-    .map(ownVisibleText)
-    .concat(ownVisibleText(root))
-    .filter(Boolean)
-    .join(" ");
-}
-
-function ownVisibleText(element: Element): string {
-  if (isHidden(element)) return "";
-  return Array.from(element.childNodes)
-    .filter((node) => node.nodeType === node.TEXT_NODE)
-    .map((node) => node.textContent ?? "")
-    .join(" ");
-}
-
-function isHidden(element: Element): boolean {
-  const htmlElement = element as HTMLElement;
-  if (element.getAttribute("aria-hidden") === "true") return true;
-  if (htmlElement.hidden) return true;
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (style && (style.display === "none" || style.visibility === "hidden")) return true;
-  return Boolean(element.parentElement && isHidden(element.parentElement));
 }
