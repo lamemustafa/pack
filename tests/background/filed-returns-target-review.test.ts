@@ -15,6 +15,7 @@ import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-
 import { persistArtifactAcquisitionCompletion } from "../../src/background/filed-returns-artifact-acquisition-completion";
 import { readPersistedArtifactProgress } from "../../src/background/filed-returns-artifact-progress";
 import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
+import { FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE } from "../../src/connectors/gst/filed-returns-filter-status";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import type {
   FiledReturnsDownloadDiagnostic,
@@ -2052,6 +2053,49 @@ describe("filed returns target review", () => {
     );
     expect(message).not.toContain("prepared the artifact ZIP");
     expect(message).not.toContain("saved the artifact files");
+  });
+
+  it("retains the pre-search timeout reason in the persisted summary", () => {
+    const message = canonicalDurableSummaryMessage(
+      {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      "blocked",
+      [
+        "filed-return-filters-selected",
+        "financial-year-selected",
+        "period-selected",
+        "month-selected",
+        "return-type-selected",
+        "filed-return-filter-selection-deadline-expired",
+      ],
+    );
+
+    expect(message).toBe(FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE);
+    // Not the generic recovery guidance this reason used to be replaced by.
+    expect(message).not.toContain("needs an explicit recovery action");
+    // And not the opposite reason: these filters demonstrably finished selecting.
+    expect(message).not.toContain("could not confirm that the filed-return filters");
+  });
+
+  it("still reports unfinished filter selection when only the in-progress signal is present", () => {
+    const message = canonicalDurableSummaryMessage(
+      {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      "blocked",
+      ["filed-return-filter-selection-in-progress", "financial-year-selected"],
+    );
+
+    expect(message).toContain("could not confirm that the filed-return filters");
+    expect(message).toContain("Not confirmed: filing period");
+    expect(message).not.toBe(FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE);
   });
 
   it.each([
