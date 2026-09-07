@@ -1584,21 +1584,39 @@ Evidence: noted.`;
     expect(output).toContain("review-gate:allowed-missing-head-review");
   });
 
-  it("waits for a current-head review instead of treating the first snapshot as final", () => {
+  it("waits for a qualifying post-rewrite review instead of treating the first snapshot as final", () => {
+    const rewriteAfter = "2026-08-17T00:00:00.000Z";
+    const override = continuityOverrideComment(rewriteAfter);
     const firstFixture = writeFixture(
       "no-head-review",
       reviewFixture({
         headRefOid: "head-sha",
-        reviews: [review({ state: "COMMENTED", commit: "old-sha" })],
+        comments: [override],
+        reviews: [
+          review({
+            state: "COMMENTED",
+            commit: "old-sha",
+            submittedAt: "2026-08-18T00:00:00Z",
+          }),
+        ],
       }),
     );
     const secondFixture = writeFixture(
       "head-review",
       reviewFixture({
         headRefOid: "head-sha",
+        comments: [override],
         reviews: [
-          review({ state: "COMMENTED", commit: "old-sha" }),
-          review({ state: "COMMENTED", commit: "head-sha" }),
+          review({
+            state: "COMMENTED",
+            commit: "old-sha",
+            submittedAt: "2026-08-18T00:00:00Z",
+          }),
+          review({
+            state: "COMMENTED",
+            commit: "head-sha",
+            submittedAt: "2026-08-18T00:00:00Z",
+          }),
         ],
       }),
     );
@@ -1619,6 +1637,10 @@ Evidence: noted.`;
         "1000",
         "--poll-interval-ms",
         "1",
+        "--required-current-head-review-after",
+        rewriteAfter,
+        "--required-continuity-override-after",
+        rewriteAfter,
         "--required-review-author",
         "chatgpt-codex-connector",
       ],
@@ -1790,6 +1812,26 @@ Finding: ${findingId}
 Disposition: ${disposition}
 Source revision: 2026-08-17T12:00:00Z
 Evidence: reviewed against the source and current behaviour.${disposition === "rejected" ? "\nReasoning: source evidence disproves the finding." : ""}${followUp ? `\nFollow-up: ${followUp}` : ""}`,
+  };
+}
+
+function continuityOverrideComment(requiredCurrentHeadReviewAfter: string) {
+  return {
+    id: "continuity-override-comment",
+    url: "https://github.com/lamemustafa/pack/pull/14#issuecomment-continuity-override",
+    createdAt: "2026-08-17T12:30:00Z",
+    updatedAt: "2026-08-17T12:30:00Z",
+    isMinimized: false,
+    minimizedReason: null,
+    author: { login: "maintainer" },
+    authorAssociation: "MEMBER",
+    body: `<!-- review-gate-continuity-override:${JSON.stringify({
+      requiredCurrentHeadReviewAfter,
+    })} -->
+
+Continuity override: approved
+Required current-head review after: ${requiredCurrentHeadReviewAfter}
+Evidence: the rewrite history cannot be verified and this explicit override authorizes only this recovery.`,
   };
 }
 

@@ -15,8 +15,9 @@ const CHECK_RUN_NAME = "Review gate (scheduled)";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
-const UNVERIFIABLE_FORCE_PUSH_SAFE_MESSAGE =
-  "GitHub did not record the prior head for a force-push. Durable review state cannot be verified across that rewrite. A qualifying review of the current head submitted after the force-push is required; request it and let the scheduled Review gate run again.";
+const REVIEW_WAIT_MS = "180000";
+const UNVERIFIABLE_FORCE_PUSH_MISSING_REVIEW_SAFE_MESSAGE =
+  "GitHub did not record the prior head for a force-push. Durable review state cannot be verified across that rewrite. A qualifying review of the current head submitted after the force-push is required; after that, a trusted continuity override bound to this rewrite is also required before an empty durable state can be seeded.";
 const EXIT_VERDICTS = new Map([
   [0, { conclusion: "success", title: "Scheduled review gate passed" }],
   [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
@@ -93,7 +94,7 @@ function evaluatePullRequest(pr) {
   const evaluator = fileURLToPath(new URL("./check-pr-review-gate.mjs", import.meta.url));
   try {
     const durableState = loadLatestDurableReviewState(pr);
-    const reviewWaitMs = durableState.requiredCurrentHeadReviewAfter ? "0" : "180000";
+    const reviewWaitMs = REVIEW_WAIT_MS;
     writeFileSync(previousStatePath, durableState.reviewState, "utf8");
     const result = spawnSync(
       process.execPath,
@@ -111,7 +112,12 @@ function evaluatePullRequest(pr) {
         "--poll-interval-ms",
         "10000",
         ...(durableState.requiredCurrentHeadReviewAfter
-          ? ["--required-current-head-review-after", durableState.requiredCurrentHeadReviewAfter]
+          ? [
+              "--required-current-head-review-after",
+              durableState.requiredCurrentHeadReviewAfter,
+              "--required-continuity-override-after",
+              durableState.requiredCurrentHeadReviewAfter,
+            ]
           : ["--allow-missing-head-review"]),
         "--expected-head-oid",
         pr.head.sha,
@@ -129,17 +135,34 @@ function evaluatePullRequest(pr) {
     return {
       exitCode,
       reviewState,
-      safeMessage: durableState.requiredCurrentHeadReviewAfter
-        ? UNVERIFIABLE_FORCE_PUSH_SAFE_MESSAGE
-        : null,
+      safeMessage: evaluationFailureSafeMessage(result.stderr, durableState),
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error(`Review gate durable state could not evaluate: ${detail}`);
-    return { exitCode: 2, reviewState: null, safeMessage: null };
+    return {
+      exitCode: 2,
+      reviewState: null,
+      safeMessage: `Review gate durable state could not evaluate: ${detail}`,
+    };
   } finally {
     rmSync(stateDirectory, { force: true, recursive: true });
   }
+}
+
+function evaluationFailureSafeMessage(stderr, durableState) {
+  const message = String(stderr ?? "")
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!message) return null;
+  if (
+    durableState.requiredCurrentHeadReviewAfter &&
+    message.startsWith("No qualifying review was found for current head")
+  ) {
+    return UNVERIFIABLE_FORCE_PUSH_MISSING_REVIEW_SAFE_MESSAGE;
+  }
+  return message;
 }
 
 function loadLatestDurableReviewState(pr) {

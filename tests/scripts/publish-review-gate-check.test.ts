@@ -374,11 +374,15 @@ describe("PR-head Review gate check publisher", () => {
     const publicationText = publication?.join(" ") ?? "";
 
     expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(true);
     expect(publicationText).toContain("conclusion=action_required");
     expect(publicationText).not.toContain("output[text]");
   });
 
-  it("requires a newly reviewed current head when GitHub omitted a force-push prior head", () => {
+  it("keeps an unreachable deleted finding from being replaced by an empty durable state", () => {
+    const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
@@ -386,28 +390,33 @@ describe("PR-head Review gate check publisher", () => {
       [{ status: 0 }],
       null,
       [{ status: 0 }],
-      null,
-      [forcePushEvent(null, "2026-08-19T00:00:00Z")],
+      { [orphanedSha]: reviewStateWithDeletedFinding() },
+      [forcePushEvent(null, "2026-08-17T00:00:00Z")],
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
     const publicationText = publication?.join(" ") ?? "";
 
     expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(false);
     expect(publicationText).toContain("conclusion=action_required");
-    expect(publicationText).toContain("GitHub did not record the prior head for a force-push");
-    expect(publicationText).toContain("qualifying review of the current head");
+    expect(publicationText).toContain("trusted continuity override");
     expect(publicationText).not.toContain("output[text]");
   });
 
-  it("passes after a qualifying current-head review follows a force-push with no prior head", () => {
+  it("seeds an empty durable state only after a qualifying review and bound trusted override", () => {
+    const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
-      cleanReviewFixture(),
+      cleanReviewFixture({
+        comments: [continuityOverrideComment("2026-08-17T12:00:00.000Z")],
+      }),
       [{ status: 0 }],
       null,
       [{ status: 0 }],
-      null,
+      { [orphanedSha]: reviewStateWithDeletedFinding() },
       [forcePushEvent(null)],
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
@@ -416,6 +425,52 @@ describe("PR-head Review gate check publisher", () => {
     expect(result.status).toBe(0);
     expect(publicationText).toContain("conclusion=success");
     expect(publicationText).toContain("output[text]=review-gate-state/v1");
+  });
+
+  it("does not let an override for an earlier rewrite clear a later unverifiable rewrite", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture({
+        comments: [continuityOverrideComment("2026-08-17T12:00:00.000Z")],
+      }),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: reviewStateWithDeletedFinding() },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z"), forcePushEvent(null, "2026-08-17T12:30:00Z")],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("No trusted continuity override");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("rejects an override that is not authored by a trusted association", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture({
+        comments: [continuityOverrideComment("2026-08-17T12:00:00.000Z", "NONE")],
+      }),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: reviewStateWithDeletedFinding() },
+      [forcePushEvent(null)],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("must be authored by a trusted association");
+    expect(publicationText).not.toContain("output[text]");
   });
 
   it("ignores a durable check state written for another pull request", () => {
@@ -457,19 +512,24 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
-  it("publishes action required for malformed durable state", () => {
+  it("publishes the malformed-state reason instead of recovery guidance", () => {
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
       cleanReviewFixture(),
       [{ status: 0 }],
       "review-gate-state/v1\nnot-json",
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null)],
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
     const publicationText = publication?.join(" ") ?? "";
 
     expect(result.status).toBe(0);
     expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("durable review state is malformed");
+    expect(publicationText).not.toContain("qualifying review of the current head");
     expect(publicationText).not.toContain("output[text]");
   });
 
@@ -493,9 +553,9 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).not.toContain("output[text]");
   });
 
-  it("preserves the event gate's current-head review wait for scheduled evaluation", () => {
+  it("preserves the event gate's 180-second current-head review wait for scheduled evaluation", () => {
     const script = readFileSync(scriptPath, "utf8");
-    expect(script).toMatch(/const reviewWaitMs = durableState\.requiredCurrentHeadReviewAfter/u);
+    expect(script).toMatch(/const REVIEW_WAIT_MS = "180000"/u);
     expect(script).toMatch(/"--wait-head-review-ms",\s*reviewWaitMs/u);
     expect(script).toMatch(/"--required-current-head-review-after"/u);
     expect(script).toMatch(/"--poll-interval-ms",\s*"10000"/u);
@@ -666,7 +726,32 @@ function forcePushEvent(beforeCommitId: string | null, createdAt = "2026-08-17T1
   };
 }
 
-const cleanReviewFixture = () => ({
+function continuityOverrideComment(
+  requiredCurrentHeadReviewAfter: string,
+  authorAssociation = "MEMBER",
+) {
+  return {
+    id: "continuity-override-comment",
+    url: "https://github.com/lamemustafa/pack/pull/1#issuecomment-continuity-override",
+    createdAt: "2026-08-17T12:30:00Z",
+    updatedAt: "2026-08-17T12:30:00Z",
+    isMinimized: false,
+    minimizedReason: null,
+    author: { login: "maintainer" },
+    authorAssociation,
+    body: `<!-- review-gate-continuity-override:${JSON.stringify({
+      requiredCurrentHeadReviewAfter,
+    })} -->
+
+Continuity override: approved
+Required current-head review after: ${requiredCurrentHeadReviewAfter}
+Evidence: the rewrite history cannot be verified and this explicit override authorizes only this recovery.`,
+  };
+}
+
+const cleanReviewFixture = ({
+  comments = [] as ReturnType<typeof continuityOverrideComment>[],
+} = {}) => ({
   data: {
     repository: {
       pullRequest: {
@@ -675,7 +760,7 @@ const cleanReviewFixture = () => ({
         headRepository: { nameWithOwner: "lamemustafa/pack" },
         headRefOid: headSha,
         comments: {
-          nodes: [],
+          nodes: comments,
           pageInfo: { hasNextPage: false, endCursor: null },
         },
         reviewThreads: {
