@@ -760,6 +760,98 @@ Evidence: noted.`;
     expect(result.stdout).toContain("PR review gate passed");
   });
 
+  it("accepts a clean top-level report updated after an unverifiable rewrite", () => {
+    const headRefOid = "0123456789abcdef0123456789abcdef01234567";
+    const rewriteAfter = "2026-08-18T00:00:00.000Z";
+    const fixturePath = writeFixture(
+      "updated-current-head-clean-codex-top-level-report",
+      reviewFixture({
+        headRefOid,
+        body: packPrBody(),
+        comments: [
+          prFindingComment({
+            author: "chatgpt-codex-connector",
+            createdAt: "2026-08-17T12:00:00Z",
+            updatedAt: "2026-08-19T12:00:00Z",
+            body: "Codex Review: Didn't find any major issues. Swish!\n\n**Reviewed commit:** `0123456789`",
+          }),
+          continuityOverrideComment(rewriteAfter),
+        ],
+        reviews: [],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+        "--required-current-head-review-after",
+        rewriteAfter,
+        "--required-continuity-override-after",
+        rewriteAfter,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("PR review gate passed");
+  });
+
+  it("rejects a top-level report whose reviewed content predates an unverifiable rewrite", () => {
+    const headRefOid = "0123456789abcdef0123456789abcdef01234567";
+    const rewriteAfter = "2026-08-18T00:00:00.000Z";
+    const fixturePath = writeFixture(
+      "updated-stale-clean-codex-top-level-report",
+      reviewFixture({
+        headRefOid,
+        body: packPrBody(),
+        comments: [
+          prFindingComment({
+            author: "chatgpt-codex-connector",
+            createdAt: "2026-08-17T12:00:00Z",
+            updatedAt: "2026-08-19T12:00:00Z",
+            body: "Codex Review: Didn't find any major issues. Swish!\n\n**Reviewed commit:** `abcdef0123`",
+          }),
+          continuityOverrideComment(rewriteAfter),
+        ],
+        reviews: [],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixturePath,
+        "--strict-head-review",
+        "--required-review-author",
+        "chatgpt-codex-connector",
+        "--required-current-head-review-after",
+        rewriteAfter,
+        "--required-continuity-override-after",
+        rewriteAfter,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("No qualifying review was found for current head");
+  });
+
   it("clears a same-author stale requested-changes review with a trusted clean Codex report", () => {
     const headRefOid = "0123456789abcdef0123456789abcdef01234567";
     const fixturePath = writeFixture(
@@ -1764,6 +1856,7 @@ function prFindingComment(
     minimizedReason?: string | null;
     author?: string;
     body?: string;
+    createdAt?: string;
     updatedAt?: string;
   } = {},
 ) {
@@ -1773,12 +1866,13 @@ function prFindingComment(
     minimizedReason = null,
     author = "chatgpt-codex-connector[bot]",
     body = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Fix this.",
+    createdAt = "2026-08-17T12:00:00Z",
     updatedAt = "2026-08-17T12:00:00Z",
   } = options;
   return {
     id,
     url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-${id}`,
-    createdAt: "2026-08-17T12:00:00Z",
+    createdAt,
     updatedAt,
     isMinimized,
     minimizedReason,

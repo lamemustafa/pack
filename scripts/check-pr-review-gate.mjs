@@ -50,6 +50,7 @@ const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
 const reviewStatePath = readArgValue("--review-state");
 const nextReviewStatePath = readArgValue("--write-review-state");
+const evaluationErrorPath = readArgValue("--write-evaluation-error");
 let fixtureIndex = 0;
 
 const repo =
@@ -92,8 +93,7 @@ if (missingHeadReview) {
     ? `No qualifying review was found for current head ${pr.headRefOid} after ${requiredCurrentHeadReviewAfter}.`
     : `No review was found for current head ${pr.headRefOid}.`;
   if (requiredCurrentHeadReviewAfter) {
-    console.error(message);
-    process.exit(EVALUATION_FAILURE_EXIT_CODE);
+    failEvaluation(message);
   }
   if (allowMissingHeadReview) {
     console.log(ALLOWED_MISSING_HEAD_REVIEW_MARKER);
@@ -104,10 +104,9 @@ if (missingHeadReview) {
 }
 
 if (requiredContinuityOverrideAfter && !trustedContinuityOverride) {
-  console.error(
+  failEvaluation(
     `No trusted continuity override was found for an unverifiable rewrite after ${requiredContinuityOverrideAfter}.`,
   );
-  process.exit(EVALUATION_FAILURE_EXIT_CODE);
 }
 
 if (
@@ -223,7 +222,7 @@ function evaluatePullRequestReviewState(pr) {
 }
 
 function wasSubmittedAfter(review, timestamp) {
-  const submittedAt = Date.parse(review.submittedAt ?? review.createdAt ?? review.updatedAt ?? "");
+  const submittedAt = Date.parse(review.submittedAt ?? review.updatedAt ?? review.createdAt ?? "");
   return Number.isFinite(submittedAt) && submittedAt > Date.parse(timestamp);
 }
 
@@ -426,9 +425,6 @@ function readTrustedContinuityOverride(comments, requiredAfter) {
   for (const comment of comments) {
     const body = String(comment.body ?? "");
     if (!body.includes(CONTINUITY_OVERRIDE_MARKER)) continue;
-    if (!TRUSTED_DISPOSITION_ASSOCIATIONS.has(comment.authorAssociation)) {
-      failEvaluation("A continuity override must be authored by a trusted association.");
-    }
     const marker = readTrustedEvidenceMarker(
       comment,
       CONTINUITY_OVERRIDE_MARKER,
@@ -910,8 +906,18 @@ function formatErrorMessage(error) {
 }
 
 function failEvaluation(message) {
+  writeEvaluationError(message);
   console.error(`Review gate could not evaluate: ${message}`);
   process.exit(EVALUATION_FAILURE_EXIT_CODE);
+}
+
+function writeEvaluationError(message) {
+  if (!evaluationErrorPath) return;
+  try {
+    writeFileSync(evaluationErrorPath, JSON.stringify({ version: 1, message }), "utf8");
+  } catch {
+    // The stderr terminal reason remains available if the optional handoff file cannot be written.
+  }
 }
 
 function sleep(ms) {

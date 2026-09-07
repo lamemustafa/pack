@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
@@ -16,8 +16,6 @@ const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
 const REVIEW_WAIT_MS = "180000";
-const UNVERIFIABLE_FORCE_PUSH_MISSING_REVIEW_SAFE_MESSAGE =
-  "GitHub did not record the prior head for a force-push. Durable review state cannot be verified across that rewrite. A qualifying review of the current head submitted after the force-push is required; after that, a trusted continuity override bound to this rewrite is also required before an empty durable state can be seeded.";
 const EXIT_VERDICTS = new Map([
   [0, { conclusion: "success", title: "Scheduled review gate passed" }],
   [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
@@ -91,6 +89,7 @@ function evaluatePullRequest(pr) {
   const stateDirectory = mkdtempSync(join(tmpdir(), "pack-review-gate-state-"));
   const previousStatePath = join(stateDirectory, "previous.json");
   const nextStatePath = join(stateDirectory, "next.json");
+  const evaluationErrorPath = join(stateDirectory, "evaluation-error.json");
   const evaluator = fileURLToPath(new URL("./check-pr-review-gate.mjs", import.meta.url));
   try {
     const durableState = loadLatestDurableReviewState(pr);
@@ -125,6 +124,8 @@ function evaluatePullRequest(pr) {
         previousStatePath,
         "--write-review-state",
         nextStatePath,
+        "--write-evaluation-error",
+        evaluationErrorPath,
       ],
       { encoding: "utf8", env: process.env },
     );
@@ -135,7 +136,7 @@ function evaluatePullRequest(pr) {
     return {
       exitCode,
       reviewState,
-      safeMessage: evaluationFailureSafeMessage(result.stderr, durableState),
+      safeMessage: exitCode === 2 ? readTerminalEvaluationError(evaluationErrorPath) : null,
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -150,19 +151,19 @@ function evaluatePullRequest(pr) {
   }
 }
 
-function evaluationFailureSafeMessage(stderr, durableState) {
-  const message = String(stderr ?? "")
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find(Boolean);
-  if (!message) return null;
-  if (
-    durableState.requiredCurrentHeadReviewAfter &&
-    message.startsWith("No qualifying review was found for current head")
-  ) {
-    return UNVERIFIABLE_FORCE_PUSH_MISSING_REVIEW_SAFE_MESSAGE;
+function readTerminalEvaluationError(path) {
+  if (!existsSync(path)) {
+    return "Review evaluator exited without publishing a structured terminal error.";
   }
-  return message;
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8"));
+    if (value?.version === 1 && typeof value.message === "string" && value.message.trim()) {
+      return value.message;
+    }
+  } catch {
+    // Publish the bounded generic reason below rather than an arbitrary file-read error.
+  }
+  return "Review evaluator published an invalid structured terminal error.";
 }
 
 function loadLatestDurableReviewState(pr) {
