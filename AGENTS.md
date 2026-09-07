@@ -87,7 +87,9 @@ exists before deleting it — tested-but-never-called is a live defect wearing t
 Branch per lane from the current protected base; never commit to `master` directly. One worktree
 per lane — two agents sharing one produced ten phantom test failures. Conventional Commits titles
 (`type(scope): imperative summary`), CI-enforced. Commit in logical lanes: runtime, tests, docs,
-and release metadata separately. Open PRs as draft. Never amend or rebase a pushed commit.
+and release metadata separately. Open PRs as draft. Never amend or rebase a pushed commit: this is
+a hard CI dependency because the review gate structurally depends on head continuity, and GitHub
+can omit the prior head for a rewrite.
 
 Before claiming readiness, run `pnpm review:gate` and disposition every ask in every automated
 finding as fixed with evidence, stale with evidence, rejected with evidence and reasoning, or a

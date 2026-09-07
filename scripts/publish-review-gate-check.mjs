@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
@@ -15,11 +15,21 @@ const CHECK_RUN_NAME = "Review gate (scheduled)";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
+const REVIEW_WAIT_MS = "180000";
 const EXIT_VERDICTS = new Map([
   [0, { conclusion: "success", title: "Scheduled review gate passed" }],
   [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
   [2, { conclusion: "action_required", title: "Scheduled review gate could not evaluate" }],
 ]);
+
+class EvaluationOperationError extends Error {
+  constructor(operation, error) {
+    super(operation);
+    this.operation = operation;
+    this.detail = formatErrorMessage(error);
+  }
+}
+
 const rawArgs = process.argv.slice(2);
 const repo = readArg("--repo", true);
 const detailsUrl = readArg("--details-url", true);
@@ -78,60 +88,149 @@ function reconcileOpenPullRequests() {
 
   for (const pr of selected) {
     const evaluation = evaluatePullRequest(pr);
-    publishCheck(pr.head.sha, evaluation.exitCode, evaluation.reviewState);
+    publishCheck(pr.head.sha, evaluation.exitCode, evaluation.reviewState, evaluation.safeMessage);
   }
 
   console.log(`Scheduled Review gate evaluated ${selected.length} pull request(s).`);
 }
 
 function evaluatePullRequest(pr) {
-  const stateDirectory = mkdtempSync(join(tmpdir(), "pack-review-gate-state-"));
-  const previousStatePath = join(stateDirectory, "previous.json");
-  const nextStatePath = join(stateDirectory, "next.json");
+  let stateDirectory = null;
   const evaluator = fileURLToPath(new URL("./check-pr-review-gate.mjs", import.meta.url));
   try {
-    writeFileSync(previousStatePath, loadLatestDurableReviewState(pr), "utf8");
-    const result = spawnSync(
-      process.execPath,
-      [
-        evaluator,
-        "--repo",
-        repo,
-        "--pr",
-        String(pr.number),
-        "--strict-head-review",
-        "--required-review-author",
-        "chatgpt-codex-connector",
-        "--wait-head-review-ms",
-        "180000",
-        "--poll-interval-ms",
-        "10000",
-        "--allow-missing-head-review",
-        "--expected-head-oid",
-        pr.head.sha,
-        "--review-state",
-        previousStatePath,
-        "--write-review-state",
-        nextStatePath,
-      ],
-      { encoding: "utf8", env: process.env },
+    stateDirectory = runEvaluationOperation("could not create temporary durable review state", () =>
+      mkdtempSync(join(tmpdir(), "pack-review-gate-state-")),
+    );
+    const previousStatePath = join(stateDirectory, "previous.json");
+    const nextStatePath = join(stateDirectory, "next.json");
+    const evaluationErrorPath = join(stateDirectory, "evaluation-error.json");
+    const durableState = runEvaluationOperation("could not retrieve durable review state", () =>
+      loadLatestDurableReviewState(pr),
+    );
+    const reviewWaitMs = REVIEW_WAIT_MS;
+    runEvaluationOperation("could not write durable review state", () =>
+      writeFileSync(previousStatePath, durableState.reviewState, "utf8"),
+    );
+    const result = runEvaluationOperation("could not run the review evaluator", () =>
+      runReviewEvaluator(
+        process.execPath,
+        [
+          evaluator,
+          "--repo",
+          repo,
+          "--pr",
+          String(pr.number),
+          "--strict-head-review",
+          "--required-review-author",
+          "chatgpt-codex-connector",
+          "--wait-head-review-ms",
+          reviewWaitMs,
+          "--poll-interval-ms",
+          "10000",
+          "--allow-missing-head-review",
+          "--expected-head-oid",
+          pr.head.sha,
+          "--review-state",
+          previousStatePath,
+          "--write-review-state",
+          nextStatePath,
+          "--write-evaluation-error",
+          evaluationErrorPath,
+        ],
+        { encoding: "utf8", env: process.env },
+      ),
     );
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
     const exitCode = [0, 1, 2].includes(result.status) ? result.status : 2;
-    const reviewState = exitCode === 2 ? null : serialiseNextReviewState(nextStatePath);
-    return { exitCode, reviewState };
+    const reviewState =
+      exitCode === 2
+        ? null
+        : runEvaluationOperation("could not read evaluator durable review state", () =>
+            serialiseNextReviewState(nextStatePath),
+          );
+    return {
+      exitCode,
+      reviewState,
+      safeMessage: exitCode === 2 ? readTerminalEvaluationError(evaluationErrorPath) : null,
+    };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    console.error(`Review gate durable state could not evaluate: ${detail}`);
-    return { exitCode: 2, reviewState: null };
+    const safeMessage = evaluationSafeMessage(error);
+    console.error(`Review gate ${safeMessage}: ${evaluationErrorDetail(error)}`);
+    return {
+      exitCode: 2,
+      reviewState: null,
+      safeMessage: `Review gate ${safeMessage}.`,
+    };
   } finally {
-    rmSync(stateDirectory, { force: true, recursive: true });
+    if (stateDirectory) {
+      try {
+        rmSync(stateDirectory, { force: true, recursive: true });
+      } catch (error) {
+        console.error(
+          `Review gate could not remove temporary durable review state: ${formatErrorMessage(error)}`,
+        );
+      }
+    }
   }
 }
 
+function runReviewEvaluator(command, args, options) {
+  const result = spawnSync(command, args, options);
+  if (result.error) throw result.error;
+  return result;
+}
+
+function runEvaluationOperation(operation, callback) {
+  try {
+    return callback();
+  } catch (error) {
+    if (error instanceof EvaluationOperationError) throw error;
+    throw new EvaluationOperationError(operation, error);
+  }
+}
+
+function evaluationSafeMessage(error) {
+  return error instanceof EvaluationOperationError
+    ? error.operation
+    : "could not complete durable review-state evaluation";
+}
+
+function evaluationErrorDetail(error) {
+  return error instanceof EvaluationOperationError ? error.detail : formatErrorMessage(error);
+}
+
+function readTerminalEvaluationError(path) {
+  if (!existsSync(path)) {
+    return "Review evaluator exited without publishing a structured terminal error.";
+  }
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8"));
+    if (value?.version === 1 && typeof value.message === "string" && value.message.trim()) {
+      return value.message;
+    }
+  } catch {
+    // Publish the bounded generic reason below rather than an arbitrary file-read error.
+  }
+  return "Review evaluator published an invalid structured terminal error.";
+}
+
+function untraceableRewriteError() {
+  return new EvaluationOperationError(
+    "GitHub did not record the prior head, so review continuity cannot be verified across that rewrite. Re-create the branch as described in #299 before running the review gate",
+    new Error("untraceable force-push discontinuity cannot be verified"),
+  );
+}
+
 function loadLatestDurableReviewState(pr) {
-  const forcePushedPriorShas = loadForcePushedPriorShas(pr.number);
+  const { priorHeads: forcePushedPriorShas, hasUntraceableRewrite } = loadForcePushedPriorShas(
+    pr.number,
+  );
+  // Reject before consulting any reachable state, not after. A state surviving on a current-line
+  // commit cannot contain a finding that was observed and then deleted only on the head this
+  // rewrite discarded, so returning it would publish success while losing that ask. Continuity
+  // across a null `before_commit_id` cannot be proved, so no reachable state is trustworthy here.
+  if (hasUntraceableRewrite) throw untraceableRewriteError();
   const currentPrShas = loadCurrentPrCommitShas(pr);
   const currentPrShaSet = new Set(currentPrShas);
   const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
@@ -168,7 +267,7 @@ function loadLatestDurableReviewState(pr) {
           check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) &&
           durableReviewStateBelongsToPr(check.output.text, pr.number)
         ) {
-          return check.output.text;
+          return { reviewState: check.output.text };
         }
       }
     }
@@ -195,7 +294,9 @@ function loadLatestDurableReviewState(pr) {
   if (forcePushedPriorShas.length > 0) {
     throw new Error("force-push discontinuity left no reachable durable review state");
   }
-  return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
+  return {
+    reviewState: JSON.stringify({ version: 1, prNumber: pr.number, findings: [] }),
+  };
 }
 
 function loadCurrentPrCommitShas(pr) {
@@ -227,8 +328,7 @@ function durableReviewStateBelongsToPr(state, expectedPrNumber) {
   try {
     parsed = JSON.parse(state.slice(DURABLE_REVIEW_STATE_PREFIX.length));
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error("durable review state is malformed: " + detail);
+    throw new EvaluationOperationError("durable review state is malformed", error);
   }
   return parsed?.version === 1 && parsed.prNumber === expectedPrNumber;
 }
@@ -248,15 +348,17 @@ function loadForcePushedPriorShas(prNumber) {
     ),
   );
   const priorHeads = new Map();
+  let hasUntraceableRewrite = false;
 
   for (const event of flattenPages(timelinePages)) {
     if (event?.event !== "head_ref_force_pushed") continue;
-    if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
-      throw new Error("force-push event has no valid prior head SHA");
-    }
     const createdAt = Date.parse(event.created_at ?? "");
     if (!Number.isFinite(createdAt)) {
       throw new Error("force-push event has no valid creation timestamp");
+    }
+    if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
+      hasUntraceableRewrite = true;
+      continue;
     }
     const existing = priorHeads.get(event.before_commit_id);
     if (!existing || createdAt > existing.createdAt) {
@@ -272,7 +374,10 @@ function loadForcePushedPriorShas(prNumber) {
       throw new Error("force-push events have ambiguous chronological ordering");
     }
   }
-  return orderedPriorHeads.map(({ sha }) => sha);
+  return {
+    priorHeads: orderedPriorHeads.map(({ sha }) => sha),
+    hasUntraceableRewrite,
+  };
 }
 
 function flattenPages(value) {
@@ -290,7 +395,7 @@ function serialiseNextReviewState(path) {
   return serialised;
 }
 
-function publishCheck(headSha, exitCode, reviewState = null) {
+function publishCheck(headSha, exitCode, reviewState = null, safeMessage = null) {
   const verdict = EXIT_VERDICTS.get(exitCode);
   if (!/^[0-9a-f]{40}$/iu.test(headSha)) fail("--head-sha must be a full commit SHA.");
   if (!verdict) fail("--exit-code must be 0, 1, or 2.");
@@ -299,7 +404,8 @@ function publishCheck(headSha, exitCode, reviewState = null) {
       ? "The review gate evaluated the pull request head and found no blocking state."
       : exitCode === 1
         ? "The review gate evaluated the pull request head and found a blocking state."
-        : "The review gate could not evaluate the complete pull request review state.";
+        : (safeMessage ??
+          "The review gate could not evaluate the complete pull request review state.");
   const fields = {
     name: CHECK_RUN_NAME,
     head_sha: headSha,
@@ -347,6 +453,10 @@ function readIntegerArg(name, defaultValue, minimum) {
   const value = Number(rawValue);
   if (!Number.isInteger(value) || value < minimum) fail(`${name} must be at least ${minimum}.`);
   return value;
+}
+
+function formatErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function fail(message, exitCode = 1) {

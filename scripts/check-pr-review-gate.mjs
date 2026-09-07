@@ -29,6 +29,7 @@ const CODEX_CLEAN_TOP_LEVEL_REVIEW_PATTERN =
   /^Codex Review: Didn't find any major issues\.[^\r\n]*(?:\r?\n)+[\s\S]*?\*\*Reviewed commit:\*\*\s*`([0-9a-f]{10,64})`/u;
 
 const rawArgs = process.argv.slice(2);
+const evaluationErrorPath = readArgValue("--write-evaluation-error");
 const args = new Set(rawArgs);
 const strictHeadReview = args.has("--strict-head-review");
 const allowMissingHeadReview = args.has("--allow-missing-head-review");
@@ -57,7 +58,6 @@ if (!repo || !repo.includes("/"))
   failEvaluation("Could not determine GitHub repo. Pass --repo owner/name.");
 if (!Number.isInteger(prNumber) || prNumber < 1)
   failEvaluation("Could not determine PR number. Pass --pr <number>.");
-
 const { pr, unresolvedThreads, blockingReviews, blockingComments, headReviews } =
   await fetchEvaluatedPr();
 const durableReviewState = readDurableReviewState(reviewStatePath, prNumber);
@@ -215,7 +215,7 @@ function readDurableReviewState(filePath, expectedPrNumber) {
         : raw,
     );
   } catch (error) {
-    failEvaluation(`Could not read durable review state: ${formatErrorMessage(error)}`);
+    failEvaluation("Could not read durable review state.", error);
   }
 
   if (
@@ -361,9 +361,11 @@ function readTrustedDurableDisposition(comment, prBody) {
   ) {
     return null;
   }
-  const markers = [
-    ...String(comment.body).matchAll(/<!-- review-gate-disposition:([\s\S]*?)-->/gu),
-  ];
+  const markerPattern = new RegExp(
+    DURABLE_DISPOSITION_MARKER.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&") + "([\\s\\S]*?)-->",
+    "gu",
+  );
+  const markers = [...String(comment.body).matchAll(markerPattern)];
   if (markers.length !== 1) {
     failEvaluation("A trusted durable disposition marker is malformed.");
   }
@@ -371,14 +373,11 @@ function readTrustedDurableDisposition(comment, prBody) {
   if (!evidence) {
     failEvaluation("A trusted durable disposition must include visible evidence.");
   }
-
   let value;
   try {
     value = JSON.parse(markers[0][1]);
   } catch (error) {
-    failEvaluation(
-      `A trusted durable disposition marker is malformed: ${formatErrorMessage(error)}`,
-    );
+    failEvaluation("A trusted durable disposition marker is malformed.", error);
   }
   if (
     !value ||
@@ -441,7 +440,7 @@ function writeDurableReviewState(filePath, reviewState) {
   try {
     writeFileSync(filePath, JSON.stringify(reviewState), "utf8");
   } catch (error) {
-    failEvaluation(`Could not write durable review state: ${formatErrorMessage(error)}`);
+    failEvaluation("Could not write durable review state.", error);
   }
 }
 
@@ -808,7 +807,7 @@ function runText(commandArgs) {
       operation: "evaluation",
     });
   } catch (error) {
-    failEvaluation(formatErrorMessage(error));
+    failEvaluation("GitHub CLI evaluation request failed.", error);
   }
 }
 
@@ -817,7 +816,7 @@ function runJson(commandArgs) {
   try {
     return JSON.parse(output);
   } catch (error) {
-    failEvaluation(`GitHub CLI returned malformed JSON: ${formatErrorMessage(error)}`);
+    failEvaluation("GitHub CLI returned malformed JSON.", error);
   }
 }
 
@@ -825,9 +824,21 @@ function formatErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function failEvaluation(message) {
-  console.error(`Review gate could not evaluate: ${message}`);
+function failEvaluation(message, detail = null) {
+  writeEvaluationError(message);
+  console.error(
+    `Review gate could not evaluate: ${message}${detail === null ? "" : ` ${formatErrorMessage(detail)}`}`,
+  );
   process.exit(EVALUATION_FAILURE_EXIT_CODE);
+}
+
+function writeEvaluationError(message) {
+  if (!evaluationErrorPath) return;
+  try {
+    writeFileSync(evaluationErrorPath, JSON.stringify({ version: 1, message }), "utf8");
+  } catch {
+    // The stderr terminal reason remains available if the optional handoff file cannot be written.
+  }
 }
 
 function sleep(ms) {

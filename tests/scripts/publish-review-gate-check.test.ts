@@ -374,8 +374,133 @@ describe("PR-head Review gate check publisher", () => {
     const publicationText = publication?.join(" ") ?? "";
 
     expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(true);
     expect(publicationText).toContain("conclusion=action_required");
     expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("publishes a durable-state workspace failure without its local path", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-private-path-"));
+    const privatePath = path.join(directory, "not-a-directory");
+    writeFileSync(privatePath, "not a directory", "utf8");
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      null,
+      [],
+      {},
+      0,
+      null,
+      { TMPDIR: privatePath },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain(privatePath);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("could not create temporary durable review state");
+    expect(publicationText).not.toContain(privatePath);
+  });
+
+  it("publishes a durable-state API failure without its raw URL", () => {
+    const rawUrl = "https://api.github.example/internal-review-state";
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 1, stderr: `GitHub API request failed: ${rawUrl}` }],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain(rawUrl);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("could not retrieve durable review state");
+    expect(publicationText).not.toContain(rawUrl);
+  });
+
+  it("publishes a re-creation remedy instead of seeding state across an untraceable rewrite", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: reviewStateWithDeletedFinding() },
+      [forcePushEvent(null, "2026-08-17T00:00:00Z")],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(false);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("GitHub did not record the prior head");
+    expect(publicationText).toContain("Re-create the branch as described in #299");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("never discards an unreachable deleted finding across an untraceable rewrite", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture({
+        comments: [retiredContinuityMarker()],
+      }),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: reviewStateWithDeletedFinding() },
+      [forcePushEvent(null)],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("review continuity cannot be verified");
+    expect(publicationText).not.toContain("output[text]=review-gate-state/v1");
+    expect(publicationText).not.toContain("comment-deleted-after-observation");
+  });
+
+  it("refuses a reachable durable state when an untraceable rewrite disconnected history", () => {
+    // The state below is reachable on the current line and looks clean. It cannot contain a
+    // finding that was observed and then deleted only on the head the rewrite discarded, so
+    // accepting it would publish success while losing that ask. The guard must therefore run
+    // before any state lookup, not after the loop that returns one.
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      cleanDurableState(),
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null)],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("review continuity cannot be verified");
+    expect(publicationText).not.toContain("conclusion=success");
+    expect(publicationText).not.toContain("output[text]=review-gate-state/v1");
   });
 
   it("ignores a durable check state written for another pull request", () => {
@@ -417,19 +542,51 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
-  it("publishes action required for malformed durable state", () => {
+  it("publishes the malformed-state reason instead of recovery guidance", () => {
+    // No untraceable rewrite here: with one present the rewrite is itself the terminal reason,
+    // so this fixture would not exercise an unrelated exit-2 at all. Precedence is pinned by
+    // the test below.
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
       cleanReviewFixture(),
       [{ status: 0 }],
       "review-gate-state/v1\nnot-json",
+      [{ status: 0 }],
+      null,
+      [],
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
     const publicationText = publication?.join(" ") ?? "";
 
     expect(result.status).toBe(0);
     expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("durable review state is malformed");
+    expect(publicationText).not.toContain("qualifying review of the current head");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("reports the untraceable rewrite ahead of a malformed durable state", () => {
+    // Precedence introduced by hoisting the rewrite guard above the state lookup: when history
+    // cannot be verified, no state is read, so the rewrite is the reason regardless of what the
+    // state would have said.
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      "review-gate-state/v1\nnot-json",
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null)],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("review continuity cannot be verified");
+    expect(publicationText).not.toContain("durable review state is malformed");
     expect(publicationText).not.toContain("output[text]");
   });
 
@@ -453,9 +610,10 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).not.toContain("output[text]");
   });
 
-  it("preserves the event gate's current-head review wait for scheduled evaluation", () => {
+  it("preserves the event gate's 180-second current-head review wait for scheduled evaluation", () => {
     const script = readFileSync(scriptPath, "utf8");
-    expect(script).toMatch(/"--wait-head-review-ms",\s*"180000"/u);
+    expect(script).toMatch(/const REVIEW_WAIT_MS = "180000"/u);
+    expect(script).toMatch(/"--wait-head-review-ms",\s*reviewWaitMs/u);
     expect(script).toMatch(/"--poll-interval-ms",\s*"10000"/u);
   });
 });
@@ -476,6 +634,7 @@ function runScript(
   parents: Record<string, string[]> = {},
   syntheticFindingCount = 0,
   prCommits: Record<number, string[]> | null = null,
+  environment: Record<string, string> = {},
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -501,6 +660,7 @@ function runScript(
       encoding: "utf8",
       env: {
         ...process.env,
+        ...environment,
         PATH: `${directory}${path.delimiter}${process.env.PATH ?? ""}`,
         FAKE_CALLS: callsPath,
         FAKE_FIXTURE: JSON.stringify(fixture),
@@ -595,6 +755,10 @@ function pull(
   };
 }
 
+function cleanDurableState(prNumber = 1) {
+  return "review-gate-state/v1\n" + JSON.stringify({ version: 1, prNumber, findings: [] });
+}
+
 function reviewStateWithDeletedFinding(
   prNumber = 1,
   commentId = "comment-deleted-after-observation",
@@ -616,7 +780,7 @@ function reviewStateWithDeletedFinding(
   );
 }
 
-function forcePushEvent(beforeCommitId: string, createdAt = "2026-08-17T12:00:00Z") {
+function forcePushEvent(beforeCommitId: string | null, createdAt = "2026-08-17T12:00:00Z") {
   return {
     event: "head_ref_force_pushed",
     before_commit_id: beforeCommitId,
@@ -624,7 +788,23 @@ function forcePushEvent(beforeCommitId: string, createdAt = "2026-08-17T12:00:00
   };
 }
 
-const cleanReviewFixture = () => ({
+function retiredContinuityMarker() {
+  return {
+    id: "retired-continuity-marker",
+    url: "https://github.com/lamemustafa/pack/pull/1#issuecomment-retired-continuity-marker",
+    createdAt: "2026-08-17T12:30:00Z",
+    updatedAt: "2026-08-17T12:30:00Z",
+    isMinimized: false,
+    minimizedReason: null,
+    author: { login: "maintainer" },
+    authorAssociation: "MEMBER",
+    body: "<!-- review-gate-continuity-override:retired -->",
+  };
+}
+
+type ReviewCommentFixture = ReturnType<typeof retiredContinuityMarker>;
+
+const cleanReviewFixture = ({ comments = [] as ReviewCommentFixture[] } = {}) => ({
   data: {
     repository: {
       pullRequest: {
@@ -633,7 +813,7 @@ const cleanReviewFixture = () => ({
         headRepository: { nameWithOwner: "lamemustafa/pack" },
         headRefOid: headSha,
         comments: {
-          nodes: [],
+          nodes: comments,
           pageInfo: { hasNextPage: false, endCursor: null },
         },
         reviewThreads: {

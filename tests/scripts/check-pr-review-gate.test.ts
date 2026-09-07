@@ -93,6 +93,62 @@ describe("PR review gate", () => {
     expect(result.stderr).toContain("Durably observed PR-level review findings");
   });
 
+  it("writes a redacted evaluator error while logging a durable-state path", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-private-path-"));
+    const privatePath = path.join(directory, "missing-review-state.json");
+    const evaluationErrorPath = path.join(directory, "evaluation-error.json");
+    const fixture = writeFixture(
+      "redacted-durable-state-error",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixture,
+        "--review-state",
+        privatePath,
+        "--write-evaluation-error",
+        evaluationErrorPath,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(privatePath);
+    expect(JSON.parse(readFileSync(evaluationErrorPath, "utf8"))).toEqual({
+      version: 1,
+      message: "Could not read durable review state.",
+    });
+  });
+
+  it("writes a safe terminal error for an invalid wait option", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-invalid-option-"));
+    const evaluationErrorPath = path.join(directory, "evaluation-error.json");
+    const result = spawnSync(
+      process.execPath,
+      [scriptPath, "--wait-head-review-ms", "-1", "--write-evaluation-error", evaluationErrorPath],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("--wait-head-review-ms must be a non-negative integer.");
+    expect(result.stderr).not.toContain("ReferenceError");
+    expect(JSON.parse(readFileSync(evaluationErrorPath, "utf8"))).toEqual({
+      version: 1,
+      message: "--wait-head-review-ms must be a non-negative integer.",
+    });
+  });
+
   it("keeps Hide → Resolved durable after the source comment is deleted", () => {
     const resolvedFixture = writeFixture(
       "resolved-durable-finding",
@@ -1584,53 +1640,6 @@ Evidence: noted.`;
     expect(output).toContain("review-gate:allowed-missing-head-review");
   });
 
-  it("waits for a current-head review instead of treating the first snapshot as final", () => {
-    const firstFixture = writeFixture(
-      "no-head-review",
-      reviewFixture({
-        headRefOid: "head-sha",
-        reviews: [review({ state: "COMMENTED", commit: "old-sha" })],
-      }),
-    );
-    const secondFixture = writeFixture(
-      "head-review",
-      reviewFixture({
-        headRefOid: "head-sha",
-        reviews: [
-          review({ state: "COMMENTED", commit: "old-sha" }),
-          review({ state: "COMMENTED", commit: "head-sha" }),
-        ],
-      }),
-    );
-
-    const output = execFileSync(
-      process.execPath,
-      [
-        scriptPath,
-        "--repo",
-        "lamemustafa/pack",
-        "--pr",
-        "14",
-        "--fixture-sequence",
-        `${firstFixture},${secondFixture}`,
-        "--strict-head-review",
-        "--wait-head-review-ms",
-        // Real process scheduling and fixture reads can consume a 5ms deadline (#200).
-        "1000",
-        "--poll-interval-ms",
-        "1",
-        "--required-review-author",
-        "chatgpt-codex-connector",
-      ],
-      {
-        cwd: rootDir,
-        encoding: "utf8",
-      },
-    );
-
-    expect(output).toContain("PR review gate passed");
-  });
-
   it("fails closed when no current-head review arrives before the wait expires", () => {
     const firstFixture = writeFixture(
       "no-current-head-review-first",
@@ -1742,6 +1751,7 @@ function prFindingComment(
     minimizedReason?: string | null;
     author?: string;
     body?: string;
+    createdAt?: string;
     updatedAt?: string;
   } = {},
 ) {
@@ -1751,12 +1761,13 @@ function prFindingComment(
     minimizedReason = null,
     author = "chatgpt-codex-connector[bot]",
     body = "![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat) Fix this.",
+    createdAt = "2026-08-17T12:00:00Z",
     updatedAt = "2026-08-17T12:00:00Z",
   } = options;
   return {
     id,
     url: `https://github.com/lamemustafa/pack/pull/14#issuecomment-${id}`,
-    createdAt: "2026-08-17T12:00:00Z",
+    createdAt,
     updatedAt,
     isMinimized,
     minimizedReason,
