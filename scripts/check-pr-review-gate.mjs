@@ -43,6 +43,7 @@ const requiredReviewAuthor = strictHeadReview
   : requestedReviewAuthor;
 const prFindingAuthor = requestedReviewAuthor ?? DEFAULT_PR_FINDING_AUTHOR;
 const expectedHeadOid = readArgValue("--expected-head-oid");
+const requiredCurrentHeadReviewAfter = readTimestampArg("--required-current-head-review-after");
 const explicitRepo = readArgValue("--repo");
 const explicitPr = readArgValue("--pr");
 const reviewStatePath = readArgValue("--review-state");
@@ -77,7 +78,13 @@ reportBlockingState({
 
 const missingHeadReview = strictHeadReview && headReviews.length === 0;
 if (missingHeadReview) {
-  const message = `No review was found for current head ${pr.headRefOid}.`;
+  const message = requiredCurrentHeadReviewAfter
+    ? `No qualifying review was found for current head ${pr.headRefOid} after ${requiredCurrentHeadReviewAfter}.`
+    : `No review was found for current head ${pr.headRefOid}.`;
+  if (requiredCurrentHeadReviewAfter) {
+    console.error(message);
+    process.exit(EVALUATION_FAILURE_EXIT_CODE);
+  }
   if (allowMissingHeadReview) {
     console.log(ALLOWED_MISSING_HEAD_REVIEW_MARKER);
     console.warn(`${message} Continuing because --allow-missing-head-review was set.`);
@@ -185,12 +192,22 @@ function evaluatePullRequestReviewState(pr) {
         !requiredReviewAuthor ||
         normaliseAuthorLogin(review.author?.login) === normaliseAuthorLogin(requiredReviewAuthor),
     );
+  const eligibleHeadReviews = requiredCurrentHeadReviewAfter
+    ? [...headReviews, ...cleanTopLevelReviews].filter((review) =>
+        wasSubmittedAfter(review, requiredCurrentHeadReviewAfter),
+      )
+    : [...headReviews, ...cleanTopLevelReviews];
   return {
     unresolvedThreads,
     blockingReviews,
     blockingComments,
-    headReviews: [...headReviews, ...cleanTopLevelReviews],
+    headReviews: eligibleHeadReviews,
   };
+}
+
+function wasSubmittedAfter(review, timestamp) {
+  const submittedAt = Date.parse(review.submittedAt ?? review.createdAt ?? review.updatedAt ?? "");
+  return Number.isFinite(submittedAt) && submittedAt > Date.parse(timestamp);
 }
 
 function isTrustedCurrentHeadCodexTopLevelReview(comment, headRefOid) {
@@ -779,6 +796,13 @@ function readFixturePaths() {
 function readArgValue(name) {
   const index = rawArgs.indexOf(name);
   return index >= 0 ? rawArgs[index + 1] : null;
+}
+
+function readTimestampArg(name) {
+  const value = readArgValue(name);
+  if (!value) return null;
+  if (!Number.isFinite(Date.parse(value))) failEvaluation(`${name} must be a valid timestamp.`);
+  return new Date(Date.parse(value)).toISOString();
 }
 
 function readNonNegativeIntegerArg(name, defaultValue) {

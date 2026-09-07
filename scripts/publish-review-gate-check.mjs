@@ -15,6 +15,8 @@ const CHECK_RUN_NAME = "Review gate (scheduled)";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
+const UNVERIFIABLE_FORCE_PUSH_SAFE_MESSAGE =
+  "GitHub did not record the prior head for a force-push. Durable review state cannot be verified across that rewrite. A qualifying review of the current head submitted after the force-push is required; request it and let the scheduled Review gate run again.";
 const EXIT_VERDICTS = new Map([
   [0, { conclusion: "success", title: "Scheduled review gate passed" }],
   [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
@@ -78,7 +80,7 @@ function reconcileOpenPullRequests() {
 
   for (const pr of selected) {
     const evaluation = evaluatePullRequest(pr);
-    publishCheck(pr.head.sha, evaluation.exitCode, evaluation.reviewState);
+    publishCheck(pr.head.sha, evaluation.exitCode, evaluation.reviewState, evaluation.safeMessage);
   }
 
   console.log(`Scheduled Review gate evaluated ${selected.length} pull request(s).`);
@@ -90,7 +92,9 @@ function evaluatePullRequest(pr) {
   const nextStatePath = join(stateDirectory, "next.json");
   const evaluator = fileURLToPath(new URL("./check-pr-review-gate.mjs", import.meta.url));
   try {
-    writeFileSync(previousStatePath, loadLatestDurableReviewState(pr), "utf8");
+    const durableState = loadLatestDurableReviewState(pr);
+    const reviewWaitMs = durableState.requiredCurrentHeadReviewAfter ? "0" : "180000";
+    writeFileSync(previousStatePath, durableState.reviewState, "utf8");
     const result = spawnSync(
       process.execPath,
       [
@@ -103,10 +107,12 @@ function evaluatePullRequest(pr) {
         "--required-review-author",
         "chatgpt-codex-connector",
         "--wait-head-review-ms",
-        "180000",
+        reviewWaitMs,
         "--poll-interval-ms",
         "10000",
-        "--allow-missing-head-review",
+        ...(durableState.requiredCurrentHeadReviewAfter
+          ? ["--required-current-head-review-after", durableState.requiredCurrentHeadReviewAfter]
+          : ["--allow-missing-head-review"]),
         "--expected-head-oid",
         pr.head.sha,
         "--review-state",
@@ -120,18 +126,25 @@ function evaluatePullRequest(pr) {
     if (result.stderr) process.stderr.write(result.stderr);
     const exitCode = [0, 1, 2].includes(result.status) ? result.status : 2;
     const reviewState = exitCode === 2 ? null : serialiseNextReviewState(nextStatePath);
-    return { exitCode, reviewState };
+    return {
+      exitCode,
+      reviewState,
+      safeMessage: durableState.requiredCurrentHeadReviewAfter
+        ? UNVERIFIABLE_FORCE_PUSH_SAFE_MESSAGE
+        : null,
+    };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error(`Review gate durable state could not evaluate: ${detail}`);
-    return { exitCode: 2, reviewState: null };
+    return { exitCode: 2, reviewState: null, safeMessage: null };
   } finally {
     rmSync(stateDirectory, { force: true, recursive: true });
   }
 }
 
 function loadLatestDurableReviewState(pr) {
-  const forcePushedPriorShas = loadForcePushedPriorShas(pr.number);
+  const { priorHeads: forcePushedPriorShas, requiredCurrentHeadReviewAfter } =
+    loadForcePushedPriorShas(pr.number);
   const currentPrShas = loadCurrentPrCommitShas(pr);
   const currentPrShaSet = new Set(currentPrShas);
   const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
@@ -168,7 +181,7 @@ function loadLatestDurableReviewState(pr) {
           check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) &&
           durableReviewStateBelongsToPr(check.output.text, pr.number)
         ) {
-          return check.output.text;
+          return { reviewState: check.output.text, requiredCurrentHeadReviewAfter };
         }
       }
     }
@@ -195,7 +208,10 @@ function loadLatestDurableReviewState(pr) {
   if (forcePushedPriorShas.length > 0) {
     throw new Error("force-push discontinuity left no reachable durable review state");
   }
-  return JSON.stringify({ version: 1, prNumber: pr.number, findings: [] });
+  return {
+    reviewState: JSON.stringify({ version: 1, prNumber: pr.number, findings: [] }),
+    requiredCurrentHeadReviewAfter,
+  };
 }
 
 function loadCurrentPrCommitShas(pr) {
@@ -248,15 +264,19 @@ function loadForcePushedPriorShas(prNumber) {
     ),
   );
   const priorHeads = new Map();
+  let requiredCurrentHeadReviewAfter = null;
 
   for (const event of flattenPages(timelinePages)) {
     if (event?.event !== "head_ref_force_pushed") continue;
-    if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
-      throw new Error("force-push event has no valid prior head SHA");
-    }
     const createdAt = Date.parse(event.created_at ?? "");
     if (!Number.isFinite(createdAt)) {
       throw new Error("force-push event has no valid creation timestamp");
+    }
+    if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
+      if (requiredCurrentHeadReviewAfter === null || createdAt > requiredCurrentHeadReviewAfter) {
+        requiredCurrentHeadReviewAfter = createdAt;
+      }
+      continue;
     }
     const existing = priorHeads.get(event.before_commit_id);
     if (!existing || createdAt > existing.createdAt) {
@@ -272,7 +292,13 @@ function loadForcePushedPriorShas(prNumber) {
       throw new Error("force-push events have ambiguous chronological ordering");
     }
   }
-  return orderedPriorHeads.map(({ sha }) => sha);
+  return {
+    priorHeads: orderedPriorHeads.map(({ sha }) => sha),
+    requiredCurrentHeadReviewAfter:
+      requiredCurrentHeadReviewAfter === null
+        ? null
+        : new Date(requiredCurrentHeadReviewAfter).toISOString(),
+  };
 }
 
 function flattenPages(value) {
@@ -290,7 +316,7 @@ function serialiseNextReviewState(path) {
   return serialised;
 }
 
-function publishCheck(headSha, exitCode, reviewState = null) {
+function publishCheck(headSha, exitCode, reviewState = null, safeMessage = null) {
   const verdict = EXIT_VERDICTS.get(exitCode);
   if (!/^[0-9a-f]{40}$/iu.test(headSha)) fail("--head-sha must be a full commit SHA.");
   if (!verdict) fail("--exit-code must be 0, 1, or 2.");
@@ -299,7 +325,8 @@ function publishCheck(headSha, exitCode, reviewState = null) {
       ? "The review gate evaluated the pull request head and found no blocking state."
       : exitCode === 1
         ? "The review gate evaluated the pull request head and found a blocking state."
-        : "The review gate could not evaluate the complete pull request review state.";
+        : (safeMessage ??
+          "The review gate could not evaluate the complete pull request review state.");
   const fields = {
     name: CHECK_RUN_NAME,
     head_sha: headSha,
