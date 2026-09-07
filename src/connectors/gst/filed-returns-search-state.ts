@@ -1,6 +1,7 @@
 import type { FiledReturnsDownloadScope } from "./filed-returns-contracts";
 import { normaliseFiledReturnsArtifactType } from "./filed-returns-artifacts";
-import { normaliseText } from "./filed-returns-dom";
+import { isHidden, normaliseText, visibleText } from "./filed-returns-dom";
+import { countFiledReturnsLoadingTextOccurrences } from "./filed-returns-loading-signal";
 
 interface FiledReturnsSearchAttempt {
   signature: string;
@@ -274,40 +275,11 @@ function loadingFingerprint(root: ParentNode): string | null {
       (element) => element.getAttribute("aria-busy") === "true" && !isHidden(element),
     ),
   );
-  const text = normaliseText(roots.map((resultRoot) => visibleText(resultRoot)).join(" "));
-  const loadingTextCount = (
-    text.match(/\bloading\b|\bplease\s+wait\b|\bsearching\b|\bprocessing\b/g) ?? []
-  ).length;
+  const text = roots.map((resultRoot) => visibleText(resultRoot)).join(" ");
+  const loadingTextCount = countFiledReturnsLoadingTextOccurrences(text);
   if (busyElements.length === 0 && loadingTextCount === 0) return null;
   return JSON.stringify({
     busyCount: busyElements.length,
     loadingTextCount,
   });
-}
-
-function visibleText(root: Element | null): string {
-  if (!root) return "";
-  return Array.from(root.querySelectorAll("*"))
-    .filter((element) => !isHidden(element))
-    .map(ownVisibleText)
-    .concat(ownVisibleText(root))
-    .filter(Boolean)
-    .join(" ");
-}
-
-function ownVisibleText(element: Element): string {
-  if (isHidden(element)) return "";
-  return Array.from(element.childNodes)
-    .filter((node) => node.nodeType === node.TEXT_NODE)
-    .map((node) => node.textContent ?? "")
-    .join(" ");
-}
-
-function isHidden(element: Element): boolean {
-  const htmlElement = element as HTMLElement;
-  if (element.getAttribute("aria-hidden") === "true") return true;
-  if (htmlElement.hidden) return true;
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (style && (style.display === "none" || style.visibility === "hidden")) return true;
-  return Boolean(element.parentElement && isHidden(element.parentElement));
 }

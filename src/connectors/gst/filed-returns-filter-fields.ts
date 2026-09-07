@@ -3,7 +3,7 @@ import {
   findFiledReturnsFilterRoot,
   getCustomDropdownControls,
 } from "./filed-returns-custom-dropdown";
-import { matchesAcceptedText, normaliseText } from "./filed-returns-dom";
+import { isHidden, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
 
 export interface FiledReturnsFilterFieldState {
   present: boolean;
@@ -284,13 +284,4 @@ function readElementText(element: Element | null | undefined): string {
   ]
     .filter(Boolean)
     .join(" ");
-}
-
-function isHidden(element: Element): boolean {
-  const htmlElement = element as HTMLElement;
-  if (element.getAttribute("aria-hidden") === "true") return true;
-  if (htmlElement.hidden) return true;
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
-  if (style && (style.display === "none" || style.visibility === "hidden")) return true;
-  return Boolean(element.parentElement && isHidden(element.parentElement));
 }

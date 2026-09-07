@@ -114,6 +114,38 @@ export function normaliseText(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+/**
+ * Uses the filed-returns result-surface visibility contract. This is intentionally
+ * distinct from isVisible: it includes aria-hidden and ancestor traversal, but does
+ * not require a rendered box.
+ */
+export function isHidden(element: Element): boolean {
+  const htmlElement = element as HTMLElement;
+  if (element.getAttribute("aria-hidden") === "true") return true;
+  if (htmlElement.hidden) return true;
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style && (style.display === "none" || style.visibility === "hidden")) return true;
+  return Boolean(element.parentElement && isHidden(element.parentElement));
+}
+
+export function visibleText(root: Element | null): string {
+  if (!root) return "";
+  return Array.from(root.querySelectorAll("*"))
+    .filter((element) => !isHidden(element))
+    .map(ownVisibleText)
+    .concat(ownVisibleText(root))
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function ownVisibleText(element: Element): string {
+  if (isHidden(element)) return "";
+  return Array.from(element.childNodes)
+    .filter((node) => node.nodeType === node.TEXT_NODE)
+    .map((node) => node.textContent ?? "")
+    .join(" ");
+}
+
 export function matchesAcceptedText(text: string, acceptedTexts: readonly string[]): boolean {
   const comparableText = normaliseComparable(text);
   return acceptedTexts.some((accepted) => {
