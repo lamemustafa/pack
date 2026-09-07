@@ -1,4 +1,7 @@
-import { filedReturnsFilterActionRequiredMessage } from "./filed-returns-filter-status";
+import {
+  FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
+  filedReturnsFilterActionRequiredMessage,
+} from "./filed-returns-filter-status";
 import type { UserActionRequired } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
@@ -177,13 +180,21 @@ export function canonicalDurableSummaryMessage(
     }
   }
   const durableMessageKey = messageKeyForSummary(scope, status, signals);
-  const filterMessage =
+  // Two distinct filter terminal states reach this key. The deadline-expired one is checked
+  // first because it is the more specific: the filters demonstrably finished selecting, so
+  // reporting "could not confirm the filters had finished updating" would name the wrong reason.
+  const filterStatusApplies =
     scope.period !== FULL_FISCAL_YEAR_PERIOD &&
     status === "blocked" &&
-    durableMessageKey === "full-year-needs-action" &&
-    signals.includes("filed-return-filter-selection-in-progress")
-      ? filedReturnsFilterActionRequiredMessage(signals)
-      : null;
+    durableMessageKey === "full-year-needs-action";
+  let filterMessage: string | null = null;
+  if (filterStatusApplies) {
+    if (signals.includes("filed-return-filter-selection-deadline-expired")) {
+      filterMessage = FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE;
+    } else if (signals.includes("filed-return-filter-selection-in-progress")) {
+      filterMessage = filedReturnsFilterActionRequiredMessage(signals);
+    }
+  }
   const durableMessage =
     filterMessage ?? partialMessage ?? renderDurableMessage(durableMessageKey, scope);
   const summaryMessage = filedReturnsSummaryStatusMessage(

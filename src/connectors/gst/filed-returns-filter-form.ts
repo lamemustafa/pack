@@ -30,7 +30,10 @@ import {
   markFiledReturnsSearchPending,
 } from "./filed-returns-search-state";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
-import { filedReturnsFilterActionRequiredMessage } from "./filed-returns-filter-status";
+import {
+  FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
+  filedReturnsFilterActionRequiredMessage,
+} from "./filed-returns-filter-status";
 
 const FIELD_SETTLE_DELAY_MS = 500;
 const FIELD_STABILITY_DELAY_MS = 1_000;
@@ -214,8 +217,7 @@ export async function selectFiledReturnsFiltersAndSearch(
         ...selectSignals,
         "filed-return-filter-selection-deadline-expired",
       ],
-      safeMessage:
-        "Pack selected the filed-return filters but ran out of time before it could search. Start Pack again.",
+      safeMessage: FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
       userAction: {
         type: "RETRY_PORTAL_GENERATION",
         message: "Start Pack again for this period.",
