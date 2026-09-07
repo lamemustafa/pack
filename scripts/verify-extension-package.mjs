@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { URL } from "node:url";
 // Packaged-page verification now parses every extension page, not just the
 // source-surfaces reachability path, so JSDOM must load for every invocation.
 import { JSDOM } from "jsdom";
