@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { JSDOM } from "jsdom";
 import ts from "typescript";
 
 const args = process.argv.slice(2);
@@ -18,10 +19,6 @@ if (flags.some((flag) => flag !== "--source-surfaces") || outputDirectories.leng
   );
 }
 const sourceSurfacesMode = flags.includes("--source-surfaces");
-// JSDOM is only evidence machinery for the source-surface panel reachability
-// graph. Loading it for ordinary packaged-build verification makes every
-// short-lived verifier invocation pay its initialization cost.
-const JSDOM = sourceSurfacesMode ? (await import("jsdom")).JSDOM : null;
 const outputDir = path.resolve(outputDirectories[0]);
 let sawSourceSurfaceMarker = false;
 
@@ -68,7 +65,6 @@ async function reachableFromPanelHtml(dir) {
 }
 
 function panelModuleScriptSpecifiers(markup) {
-  if (JSDOM === null) return [];
   const dom = new JSDOM(markup, { runScripts: "outside-only" });
   try {
     // Package pages never need a document base. Its presence makes the raw
@@ -562,10 +558,7 @@ console.log(
 // stylesheet it references must also be present and non-empty. Without this, a
 // build that emitted the HTML but dropped its chunk passed verification.
 async function requireReferencedBundles(page, html) {
-  const references = [
-    ...html.matchAll(/<script[^>]+src="([^"]+)"/g),
-    ...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g),
-  ].map((match) => match[1]);
+  const references = referencedBundleSpecifiers(html);
 
   for (const reference of references) {
     if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
@@ -577,6 +570,32 @@ async function requireReferencedBundles(page, html) {
     if (bytes.byteLength === 0) {
       throw new Error(`Asset referenced by ${page} is empty: ${relative}`);
     }
+  }
+}
+
+function referencedBundleSpecifiers(markup) {
+  // JSDOM neither executes scripts with outside-only nor loads subresources
+  // unless a resource loader is opted in. This offline verifier does neither.
+  const dom = new JSDOM(markup, { runScripts: "outside-only" });
+  try {
+    const { document } = dom.window;
+    const scriptReferences = [...document.querySelectorAll("script[src]")].flatMap((script) => {
+      const source = script.getAttribute("src");
+      return source === null ? [] : [source];
+    });
+    const stylesheetReferences = [...document.querySelectorAll("link[rel][href]")].flatMap(
+      (link) => {
+        const isStylesheet = link
+          .getAttribute("rel")
+          ?.split(/[\t\n\f\r ]+/)
+          .some((token) => token.toLowerCase() === "stylesheet");
+        const source = link.getAttribute("href");
+        return isStylesheet && source !== null ? [source] : [];
+      },
+    );
+    return [...scriptReferences, ...stylesheetReferences];
+  } finally {
+    dom.window.close();
   }
 }
 
