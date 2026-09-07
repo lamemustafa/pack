@@ -63,6 +63,107 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Asset referenced by panel.html is empty");
   });
 
+  it.each([
+    [
+      "a single-quoted script source",
+      (reference: string) => `<script type='module' src='/${reference}'></script>`,
+    ],
+    [
+      "an unquoted script source",
+      (reference: string) => `<script type=module src=/${reference}></script>`,
+    ],
+    [
+      "a stylesheet link whose rel follows href and contains multiple tokens",
+      (reference: string) => `<link href=/${reference} rel="preload stylesheet">`,
+    ],
+    [
+      "a greater-than sign in a quoted attribute before a script source",
+      (reference: string) => `<script data-example=">" src="/${reference}"></script>`,
+    ],
+    [
+      "a conventional comment containing script-shaped markup",
+      (reference: string) =>
+        `<!-- <script src="/chunks/comment-decoy.js"></script> --><script src="/${reference}"></script>`,
+    ],
+    [
+      "script raw text containing script-shaped markup",
+      (reference: string) =>
+        `<script>const example = '<script src="/chunks/raw-script-decoy.js">';</script><script src="/${reference}"></script>`,
+    ],
+    [
+      "style raw text containing script-shaped markup",
+      (reference: string) =>
+        `<style>example <script src="/chunks/raw-style-decoy.js"></style><script src="/${reference}"></script>`,
+    ],
+    [
+      "a comment opener and greater-than sign inside a quoted attribute",
+      (reference: string) =>
+        `<script data-example="<!-- > not a comment -->" src="/${reference}"></script>`,
+    ],
+    [
+      "textarea RCDATA containing script-shaped markup",
+      (reference: string) =>
+        `<textarea><script src="/chunks/textarea-decoy.js"></script></textarea><script src="/${reference}"></script>`,
+    ],
+    [
+      "title RCDATA containing script-shaped markup",
+      (reference: string) =>
+        `<title><script src="/chunks/title-decoy.js"></script></title><script src="/${reference}"></script>`,
+    ],
+    [
+      "a Chrome-compatible --!> comment close containing script-shaped markup",
+      (reference: string) =>
+        `<!-- <script src="/chunks/chrome-comment-decoy.js"></script> --!><script src="/${reference}"></script>`,
+    ],
+    [
+      "a custom element whose name starts with script",
+      (reference: string) =>
+        `<script-widget src="/chunks/custom-element-decoy.js"></script-widget><script src="/${reference}"></script>`,
+    ],
+    [
+      "case-insensitive HTML tag and attribute names",
+      (reference: string) => `<SCRIPT SRC=/${reference}></SCRIPT>`,
+    ],
+    [
+      "a non-stylesheet link next to an unquoted script bundle",
+      (reference: string) =>
+        `<link rel="icon" href="/chunks/ignored-icon.js"><script src=/${reference}></script>`,
+    ],
+    [
+      "template content containing inert bundle-shaped markup",
+      (reference: string) =>
+        `<template><script src="/chunks/template-decoy.js"></script><link rel="stylesheet" href="/chunks/template.css"></template><script src="/${reference}"></script>`,
+    ],
+  ])("parses %s as a bundle reference", async (_label, markupForReference) => {
+    const referencedBundle = "chunks/parser-reference.js";
+    const missingBundle = "chunks/parser-missing.js";
+
+    const validOutputDir = await createValidPackage();
+    await writePackageFile(
+      validOutputDir,
+      "panel.html",
+      pageWithBundleMarkup(markupForReference(referencedBundle)),
+    );
+    await writePackageFile(validOutputDir, referencedBundle, "export {};\n");
+
+    const validResult = await runVerifier(validOutputDir);
+    expect(validResult.status).toBe(0);
+    expect(validResult.output).toContain("Pack WXT extension package verification passed.");
+
+    const invalidOutputDir = await createValidPackage();
+    await writePackageFile(
+      invalidOutputDir,
+      "panel.html",
+      pageWithBundleMarkup(markupForReference(missingBundle)),
+    );
+
+    const invalidResult = await runVerifier(invalidOutputDir);
+    expect(invalidResult.status).toBe(1);
+    expect(invalidResult.output).toContain(
+      `Missing asset referenced by panel.html: ${missingBundle}`,
+    );
+  });
+
   it("accepts packaged HTML without module preload hints", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
@@ -1034,6 +1135,10 @@ async function writePackageFile(outputDir: string, relativePath: string, content
   const filePath = path.join(outputDir, relativePath);
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, contents);
+}
+
+function pageWithBundleMarkup(markup: string) {
+  return `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script>${markup}</body></html>`;
 }
 
 async function runVerifier(
