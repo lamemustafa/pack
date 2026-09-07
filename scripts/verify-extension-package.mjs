@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+// Packaged-page verification now parses every extension page, not just the
+// source-surfaces reachability path, so JSDOM must load for every invocation.
 import { JSDOM } from "jsdom";
 import ts from "typescript";
 
@@ -558,7 +560,7 @@ console.log(
 // stylesheet it references must also be present and non-empty. Without this, a
 // build that emitted the HTML but dropped its chunk passed verification.
 async function requireReferencedBundles(page, html) {
-  const references = referencedBundleSpecifiers(html);
+  const references = referencedBundleSpecifiers(page, html);
 
   for (const reference of references) {
     if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
@@ -573,12 +575,17 @@ async function requireReferencedBundles(page, html) {
   }
 }
 
-function referencedBundleSpecifiers(markup) {
+function referencedBundleSpecifiers(page, markup) {
   // JSDOM neither executes scripts with outside-only nor loads subresources
   // unless a resource loader is opted in. This offline verifier does neither.
   const dom = new JSDOM(markup, { runScripts: "outside-only" });
   try {
     const { document } = dom.window;
+    // Raw attributes are no longer package-root evidence when a document base
+    // can resolve them elsewhere. Package pages never need one, so reject it.
+    if (document.querySelector("base")) {
+      throw new Error(`Extension page declares a base element: ${page}`);
+    }
     const scriptReferences = [...document.querySelectorAll("script[src]")].flatMap((script) => {
       const source = script.getAttribute("src");
       return source === null ? [] : [source];
