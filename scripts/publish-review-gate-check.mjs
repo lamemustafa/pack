@@ -215,10 +215,22 @@ function readTerminalEvaluationError(path) {
   return "Review evaluator published an invalid structured terminal error.";
 }
 
+function untraceableRewriteError() {
+  return new EvaluationOperationError(
+    "GitHub did not record the prior head, so review continuity cannot be verified across that rewrite. Re-create the branch as described in #299 before running the review gate",
+    new Error("untraceable force-push discontinuity cannot be verified"),
+  );
+}
+
 function loadLatestDurableReviewState(pr) {
   const { priorHeads: forcePushedPriorShas, hasUntraceableRewrite } = loadForcePushedPriorShas(
     pr.number,
   );
+  // Reject before consulting any reachable state, not after. A state surviving on a current-line
+  // commit cannot contain a finding that was observed and then deleted only on the head this
+  // rewrite discarded, so returning it would publish success while losing that ask. Continuity
+  // across a null `before_commit_id` cannot be proved, so no reachable state is trustworthy here.
+  if (hasUntraceableRewrite) throw untraceableRewriteError();
   const currentPrShas = loadCurrentPrCommitShas(pr);
   const currentPrShaSet = new Set(currentPrShas);
   const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
@@ -281,12 +293,6 @@ function loadLatestDurableReviewState(pr) {
 
   if (forcePushedPriorShas.length > 0) {
     throw new Error("force-push discontinuity left no reachable durable review state");
-  }
-  if (hasUntraceableRewrite) {
-    throw new EvaluationOperationError(
-      "GitHub did not record the prior head, so review continuity cannot be verified across that rewrite. Re-create the branch as described in #299 before running the review gate",
-      new Error("untraceable force-push discontinuity left no reachable durable review state"),
-    );
   }
   return {
     reviewState: JSON.stringify({ version: 1, prNumber: pr.number, findings: [] }),

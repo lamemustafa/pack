@@ -478,6 +478,31 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("comment-deleted-after-observation");
   });
 
+  it("refuses a reachable durable state when an untraceable rewrite disconnected history", () => {
+    // The state below is reachable on the current line and looks clean. It cannot contain a
+    // finding that was observed and then deleted only on the head the rewrite discarded, so
+    // accepting it would publish success while losing that ask. The guard must therefore run
+    // before any state lookup, not after the loop that returns one.
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      cleanDurableState(),
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null)],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("review continuity cannot be verified");
+    expect(publicationText).not.toContain("conclusion=success");
+    expect(publicationText).not.toContain("output[text]=review-gate-state/v1");
+  });
+
   it("ignores a durable check state written for another pull request", () => {
     const foreignState = reviewStateWithDeletedFinding(2);
     const { result, calls } = runScript(
@@ -518,6 +543,33 @@ describe("PR-head Review gate check publisher", () => {
   });
 
   it("publishes the malformed-state reason instead of recovery guidance", () => {
+    // No untraceable rewrite here: with one present the rewrite is itself the terminal reason,
+    // so this fixture would not exercise an unrelated exit-2 at all. Precedence is pinned by
+    // the test below.
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      "review-gate-state/v1\nnot-json",
+      [{ status: 0 }],
+      null,
+      [],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("durable review state is malformed");
+    expect(publicationText).not.toContain("qualifying review of the current head");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("reports the untraceable rewrite ahead of a malformed durable state", () => {
+    // Precedence introduced by hoisting the rewrite guard above the state lookup: when history
+    // cannot be verified, no state is read, so the rewrite is the reason regardless of what the
+    // state would have said.
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
       [pull(1)],
@@ -533,8 +585,8 @@ describe("PR-head Review gate check publisher", () => {
 
     expect(result.status).toBe(0);
     expect(publicationText).toContain("conclusion=action_required");
-    expect(publicationText).toContain("durable review state is malformed");
-    expect(publicationText).not.toContain("qualifying review of the current head");
+    expect(publicationText).toContain("review continuity cannot be verified");
+    expect(publicationText).not.toContain("durable review state is malformed");
     expect(publicationText).not.toContain("output[text]");
   });
 
@@ -701,6 +753,10 @@ function pull(
     draft,
     head: { sha, repo: { full_name: headRepo } },
   };
+}
+
+function cleanDurableState(prNumber = 1) {
+  return "review-gate-state/v1\n" + JSON.stringify({ version: 1, prNumber, findings: [] });
 }
 
 function reviewStateWithDeletedFinding(
