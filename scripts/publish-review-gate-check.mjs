@@ -21,6 +21,15 @@ const EXIT_VERDICTS = new Map([
   [1, { conclusion: "failure", title: "Scheduled review gate found blocking review state" }],
   [2, { conclusion: "action_required", title: "Scheduled review gate could not evaluate" }],
 ]);
+
+class EvaluationOperationError extends Error {
+  constructor(operation, error) {
+    super(operation);
+    this.operation = operation;
+    this.detail = formatErrorMessage(error);
+  }
+}
+
 const rawArgs = process.argv.slice(2);
 const repo = readArg("--repo", true);
 const detailsUrl = readArg("--details-url", true);
@@ -86,69 +95,116 @@ function reconcileOpenPullRequests() {
 }
 
 function evaluatePullRequest(pr) {
-  const stateDirectory = mkdtempSync(join(tmpdir(), "pack-review-gate-state-"));
-  const previousStatePath = join(stateDirectory, "previous.json");
-  const nextStatePath = join(stateDirectory, "next.json");
-  const evaluationErrorPath = join(stateDirectory, "evaluation-error.json");
+  let stateDirectory = null;
   const evaluator = fileURLToPath(new URL("./check-pr-review-gate.mjs", import.meta.url));
   try {
-    const durableState = loadLatestDurableReviewState(pr);
+    stateDirectory = runEvaluationOperation("could not create temporary durable review state", () =>
+      mkdtempSync(join(tmpdir(), "pack-review-gate-state-")),
+    );
+    const previousStatePath = join(stateDirectory, "previous.json");
+    const nextStatePath = join(stateDirectory, "next.json");
+    const evaluationErrorPath = join(stateDirectory, "evaluation-error.json");
+    const durableState = runEvaluationOperation("could not retrieve durable review state", () =>
+      loadLatestDurableReviewState(pr),
+    );
     const reviewWaitMs = REVIEW_WAIT_MS;
-    writeFileSync(previousStatePath, durableState.reviewState, "utf8");
-    const result = spawnSync(
-      process.execPath,
-      [
-        evaluator,
-        "--repo",
-        repo,
-        "--pr",
-        String(pr.number),
-        "--strict-head-review",
-        "--required-review-author",
-        "chatgpt-codex-connector",
-        "--wait-head-review-ms",
-        reviewWaitMs,
-        "--poll-interval-ms",
-        "10000",
-        ...(durableState.requiredCurrentHeadReviewAfter
-          ? [
-              "--required-current-head-review-after",
-              durableState.requiredCurrentHeadReviewAfter,
-              "--required-continuity-override-after",
-              durableState.requiredCurrentHeadReviewAfter,
-            ]
-          : ["--allow-missing-head-review"]),
-        "--expected-head-oid",
-        pr.head.sha,
-        "--review-state",
-        previousStatePath,
-        "--write-review-state",
-        nextStatePath,
-        "--write-evaluation-error",
-        evaluationErrorPath,
-      ],
-      { encoding: "utf8", env: process.env },
+    runEvaluationOperation("could not write durable review state", () =>
+      writeFileSync(previousStatePath, durableState.reviewState, "utf8"),
+    );
+    const result = runEvaluationOperation("could not run the review evaluator", () =>
+      runReviewEvaluator(
+        process.execPath,
+        [
+          evaluator,
+          "--repo",
+          repo,
+          "--pr",
+          String(pr.number),
+          "--strict-head-review",
+          "--required-review-author",
+          "chatgpt-codex-connector",
+          "--wait-head-review-ms",
+          reviewWaitMs,
+          "--poll-interval-ms",
+          "10000",
+          ...(durableState.requiredCurrentHeadReviewAfter
+            ? [
+                "--required-current-head-review-after",
+                durableState.requiredCurrentHeadReviewAfter,
+                "--required-continuity-override-after",
+                durableState.requiredCurrentHeadReviewAfter,
+              ]
+            : ["--allow-missing-head-review"]),
+          "--expected-head-oid",
+          pr.head.sha,
+          "--review-state",
+          previousStatePath,
+          "--write-review-state",
+          nextStatePath,
+          "--write-evaluation-error",
+          evaluationErrorPath,
+        ],
+        { encoding: "utf8", env: process.env },
+      ),
     );
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
     const exitCode = [0, 1, 2].includes(result.status) ? result.status : 2;
-    const reviewState = exitCode === 2 ? null : serialiseNextReviewState(nextStatePath);
+    const reviewState =
+      exitCode === 2
+        ? null
+        : runEvaluationOperation("could not read evaluator durable review state", () =>
+            serialiseNextReviewState(nextStatePath),
+          );
     return {
       exitCode,
       reviewState,
       safeMessage: exitCode === 2 ? readTerminalEvaluationError(evaluationErrorPath) : null,
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    console.error(`Review gate durable state could not evaluate: ${detail}`);
+    const safeMessage = evaluationSafeMessage(error);
+    console.error(`Review gate ${safeMessage}: ${evaluationErrorDetail(error)}`);
     return {
       exitCode: 2,
       reviewState: null,
-      safeMessage: `Review gate durable state could not evaluate: ${detail}`,
+      safeMessage: `Review gate ${safeMessage}.`,
     };
   } finally {
-    rmSync(stateDirectory, { force: true, recursive: true });
+    if (stateDirectory) {
+      try {
+        rmSync(stateDirectory, { force: true, recursive: true });
+      } catch (error) {
+        console.error(
+          `Review gate could not remove temporary durable review state: ${formatErrorMessage(error)}`,
+        );
+      }
+    }
   }
+}
+
+function runReviewEvaluator(command, args, options) {
+  const result = spawnSync(command, args, options);
+  if (result.error) throw result.error;
+  return result;
+}
+
+function runEvaluationOperation(operation, callback) {
+  try {
+    return callback();
+  } catch (error) {
+    if (error instanceof EvaluationOperationError) throw error;
+    throw new EvaluationOperationError(operation, error);
+  }
+}
+
+function evaluationSafeMessage(error) {
+  return error instanceof EvaluationOperationError
+    ? error.operation
+    : "could not complete durable review-state evaluation";
+}
+
+function evaluationErrorDetail(error) {
+  return error instanceof EvaluationOperationError ? error.detail : formatErrorMessage(error);
 }
 
 function readTerminalEvaluationError(path) {
@@ -267,8 +323,7 @@ function durableReviewStateBelongsToPr(state, expectedPrNumber) {
   try {
     parsed = JSON.parse(state.slice(DURABLE_REVIEW_STATE_PREFIX.length));
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error("durable review state is malformed: " + detail);
+    throw new EvaluationOperationError("durable review state is malformed", error);
   }
   return parsed?.version === 1 && parsed.prNumber === expectedPrNumber;
 }
@@ -289,6 +344,7 @@ function loadForcePushedPriorShas(prNumber) {
   );
   const priorHeads = new Map();
   let requiredCurrentHeadReviewAfter = null;
+  const untraceableRewriteTimestamps = new Set();
 
   for (const event of flattenPages(timelinePages)) {
     if (event?.event !== "head_ref_force_pushed") continue;
@@ -297,6 +353,13 @@ function loadForcePushedPriorShas(prNumber) {
       throw new Error("force-push event has no valid creation timestamp");
     }
     if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
+      if (untraceableRewriteTimestamps.has(createdAt)) {
+        throw new EvaluationOperationError(
+          "cannot determine force-push continuity because untraceable rewrites share a timestamp",
+          new Error("untraceable force-push events have ambiguous chronological ordering"),
+        );
+      }
+      untraceableRewriteTimestamps.add(createdAt);
       if (requiredCurrentHeadReviewAfter === null || createdAt > requiredCurrentHeadReviewAfter) {
         requiredCurrentHeadReviewAfter = createdAt;
       }
@@ -398,6 +461,10 @@ function readIntegerArg(name, defaultValue, minimum) {
   const value = Number(rawValue);
   if (!Number.isInteger(value) || value < minimum) fail(`${name} must be at least ${minimum}.`);
   return value;
+}
+
+function formatErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function fail(message, exitCode = 1) {

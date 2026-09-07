@@ -381,6 +381,54 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
+  it("publishes a durable-state workspace failure without its local path", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-private-path-"));
+    const privatePath = path.join(directory, "not-a-directory");
+    writeFileSync(privatePath, "not a directory", "utf8");
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      null,
+      [],
+      {},
+      0,
+      null,
+      { TMPDIR: privatePath },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain(privatePath);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("could not create temporary durable review state");
+    expect(publicationText).not.toContain(privatePath);
+  });
+
+  it("publishes a durable-state API failure without its raw URL", () => {
+    const rawUrl = "https://api.github.example/internal-review-state";
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 1, stderr: `GitHub API request failed: ${rawUrl}` }],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain(rawUrl);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("could not retrieve durable review state");
+    expect(publicationText).not.toContain(rawUrl);
+  });
+
   it("keeps an unreachable deleted finding from being replaced by an empty durable state", () => {
     const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
@@ -425,6 +473,34 @@ describe("PR-head Review gate check publisher", () => {
     expect(result.status).toBe(0);
     expect(publicationText).toContain("conclusion=success");
     expect(publicationText).toContain("output[text]=review-gate-state/v1");
+  });
+
+  it("fails closed when untraceable rewrites share a timestamp", () => {
+    const rewriteAt = "2026-08-17T12:00:00Z";
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture({
+        comments: [continuityOverrideComment("2026-08-17T12:00:00.000Z")],
+      }),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null, rewriteAt), forcePushEvent(null, rewriteAt)],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain(
+      "untraceable force-push events have ambiguous chronological ordering",
+    );
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain(
+      "cannot determine force-push continuity because untraceable rewrites share a timestamp",
+    );
+    expect(publicationText).not.toContain("output[text]");
   });
 
   it("does not let an override for an earlier rewrite clear a later unverifiable rewrite", () => {
@@ -648,6 +724,7 @@ function runScript(
   parents: Record<string, string[]> = {},
   syntheticFindingCount = 0,
   prCommits: Record<number, string[]> | null = null,
+  environment: Record<string, string> = {},
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -673,6 +750,7 @@ function runScript(
       encoding: "utf8",
       env: {
         ...process.env,
+        ...environment,
         PATH: `${directory}${path.delimiter}${process.env.PATH ?? ""}`,
         FAKE_CALLS: callsPath,
         FAKE_FIXTURE: JSON.stringify(fixture),
