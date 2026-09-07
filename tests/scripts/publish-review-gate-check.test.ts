@@ -475,6 +475,36 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).toContain("output[text]=review-gate-state/v1");
   });
 
+  it.each(["rejected", "revoked", "denied"])(
+    "does not treat a visible %s status as continuity authorization",
+    (visibleStatus) => {
+      // The status field is the maintainer's visible decision. A non-empty check accepted any
+      // word here, so a written refusal authorized the rewrite it refused.
+      const orphanedSha = "b".repeat(40);
+      const { result, calls } = runScript(
+        ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+        [pull(1)],
+        cleanReviewFixture({
+          comments: [
+            continuityOverrideComment("2026-08-17T12:00:00.000Z", "MEMBER", visibleStatus),
+          ],
+        }),
+        [{ status: 0 }],
+        null,
+        [{ status: 0 }],
+        { [orphanedSha]: reviewStateWithDeletedFinding() },
+        [forcePushEvent(null)],
+      );
+      const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+      const publicationText = publication?.join(" ") ?? "";
+
+      expect(result.status).toBe(0);
+      expect(publicationText).not.toContain("conclusion=success");
+      // The deleted finding must not have been replaced by an empty durable state.
+      expect(publicationText).not.toContain("output[text]=review-gate-state/v1");
+    },
+  );
+
   it("fails closed when untraceable rewrites share a timestamp", () => {
     const rewriteAt = "2026-08-17T12:00:00Z";
     const { result, calls } = runScript(
@@ -877,6 +907,7 @@ function forcePushEvent(beforeCommitId: string | null, createdAt = "2026-08-17T1
 function continuityOverrideComment(
   requiredCurrentHeadReviewAfter: string,
   authorAssociation = "MEMBER",
+  visibleStatus = "approved",
 ) {
   return {
     id: "continuity-override-comment",
@@ -891,7 +922,7 @@ function continuityOverrideComment(
       requiredCurrentHeadReviewAfter,
     })} -->
 
-Continuity override: approved
+Continuity override: ${visibleStatus}
 Required current-head review after: ${requiredCurrentHeadReviewAfter}
 Evidence: the rewrite history cannot be verified and this explicit override authorizes only this recovery.`,
   };

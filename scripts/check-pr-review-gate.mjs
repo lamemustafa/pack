@@ -23,6 +23,10 @@ const DURABLE_DISPOSITIONS = new Set([
 const TRUSTED_DISPOSITION_ASSOCIATIONS = new Set(["MEMBER", "OWNER", "COLLABORATOR"]);
 const DURABLE_DISPOSITION_MARKER = "<!-- review-gate-disposition:";
 const CONTINUITY_OVERRIDE_MARKER = "<!-- review-gate-continuity-override:";
+// The visible status must say this exact word. `hasNonEmptyVisibleEvidenceField` accepted any
+// non-empty value, so `Continuity override: rejected` read as authorization -- a maintainer's
+// visible refusal seeding empty durable state across an unverifiable rewrite.
+const CONTINUITY_OVERRIDE_APPROVAL = "approved";
 const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 const CODEX_SEVERITY_BADGE_PATTERN =
   /!\[P[0-3] Badge\]\(https:\/\/img\.shields\.io\/badge\/P[0-3]-[^)\s]+\)/u;
@@ -441,7 +445,11 @@ function readTrustedContinuityOverride(comments, requiredAfter) {
     }
     const markerAfter = new Date(value.requiredCurrentHeadReviewAfter).toISOString();
     if (
-      !hasNonEmptyVisibleEvidenceField(evidence, "Continuity override") ||
+      !includesVisibleEvidenceField(
+        evidence,
+        "Continuity override",
+        CONTINUITY_OVERRIDE_APPROVAL,
+      ) ||
       !includesVisibleEvidenceField(evidence, "Required current-head review after", markerAfter) ||
       !hasNonEmptyVisibleEvidenceField(evidence, "Evidence")
     ) {
