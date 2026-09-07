@@ -63,6 +63,33 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Asset referenced by panel.html is empty");
   });
 
+  it("rejects a page with a base element before raw bundle references can mislead it", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><head><base href="/nested/"></head><body><script type="module" src="chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page declares a base element: panel.html");
+  });
+
+  it("does not reject an inert base inside template content", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><template><base href="/nested/"></template><script type="module" src="/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
   it.each([
     [
       "a single-quoted script source",
@@ -839,16 +866,19 @@ describe("source-surfaces builds", () => {
     [
       "a noscript panel tag",
       '<noscript><script type="module" src="/chunks/source-surface.js"></script></noscript>',
+      "reachable from the panel",
     ],
     [
       "an SVG script element",
       '<svg><script type="module" src="/chunks/source-surface.js"></script></svg>',
+      "reachable from the panel",
     ],
     [
       "a document base",
       '<base href="https://example.invalid/"><script type="module" src="/chunks/source-surface.js"></script>',
+      "Extension page declares a base element: panel.html",
     ],
-  ])("does not use %s as a panel module entry", async (_label, inertMarkup) => {
+  ])("does not use %s as a panel module entry", async (_label, inertMarkup, expectedMessage) => {
     const outputDir = await createValidPackage();
     await writePackageFile(
       outputDir,
@@ -864,7 +894,7 @@ describe("source-surfaces builds", () => {
     const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("reachable from the panel");
+    expect(result.output).toContain(expectedMessage);
   });
 
   it("does not treat protocol-relative imports as packaged module dependencies", async () => {
