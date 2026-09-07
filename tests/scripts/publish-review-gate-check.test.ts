@@ -378,6 +378,46 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
+  it("requires a newly reviewed current head when GitHub omitted a force-push prior head", () => {
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null, "2026-08-19T00:00:00Z")],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("GitHub did not record the prior head for a force-push");
+    expect(publicationText).toContain("qualifying review of the current head");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("passes after a qualifying current-head review follows a force-push with no prior head", () => {
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null)],
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+    const publicationText = publication?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=success");
+    expect(publicationText).toContain("output[text]=review-gate-state/v1");
+  });
+
   it("ignores a durable check state written for another pull request", () => {
     const foreignState = reviewStateWithDeletedFinding(2);
     const { result, calls } = runScript(
@@ -455,7 +495,9 @@ describe("PR-head Review gate check publisher", () => {
 
   it("preserves the event gate's current-head review wait for scheduled evaluation", () => {
     const script = readFileSync(scriptPath, "utf8");
-    expect(script).toMatch(/"--wait-head-review-ms",\s*"180000"/u);
+    expect(script).toMatch(/const reviewWaitMs = durableState\.requiredCurrentHeadReviewAfter/u);
+    expect(script).toMatch(/"--wait-head-review-ms",\s*reviewWaitMs/u);
+    expect(script).toMatch(/"--required-current-head-review-after"/u);
     expect(script).toMatch(/"--poll-interval-ms",\s*"10000"/u);
   });
 });
@@ -616,7 +658,7 @@ function reviewStateWithDeletedFinding(
   );
 }
 
-function forcePushEvent(beforeCommitId: string, createdAt = "2026-08-17T12:00:00Z") {
+function forcePushEvent(beforeCommitId: string | null, createdAt = "2026-08-17T12:00:00Z") {
   return {
     event: "head_ref_force_pushed",
     before_commit_id: beforeCommitId,
