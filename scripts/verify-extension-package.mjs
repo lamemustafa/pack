@@ -566,7 +566,7 @@ async function requireReferencedBundles(page, html) {
     if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
       throw new Error(`Extension page references a remote asset: ${page} -> ${reference}`);
     }
-    const relative = reference.replace(/^\//, "").split(/[?#]/)[0];
+    const relative = packagedReferencePath(page, reference);
     if (!relative) continue;
     const bytes = await requirePackagedFile(relative, `asset referenced by ${page}`);
     if (bytes.byteLength === 0) {
@@ -583,15 +583,18 @@ function referencedBundleSpecifiers(page, markup) {
     const { document } = dom.window;
     // Raw attributes are no longer package-root evidence when a document base
     // can resolve them elsewhere. Package pages never need one, so reject it.
-    if (document.querySelector("base")) {
+    if ([...document.querySelectorAll("base")].some(isActiveHtmlPageElement)) {
       throw new Error(`Extension page declares a base element: ${page}`);
     }
-    const scriptReferences = [...document.querySelectorAll("script[src]")].flatMap((script) => {
-      const source = script.getAttribute("src");
-      return source === null ? [] : [source];
-    });
+    const scriptReferences = [...document.querySelectorAll("script[src]")]
+      .filter(isActiveHtmlPageElement)
+      .flatMap((script) => {
+        const source = script.getAttribute("src");
+        return source === null ? [] : [source];
+      });
     const stylesheetReferences = [...document.querySelectorAll("link[rel][href]")].flatMap(
       (link) => {
+        if (!isActiveHtmlPageElement(link)) return [];
         const isStylesheet = link
           .getAttribute("rel")
           ?.split(/[\t\n\f\r ]+/)
@@ -604,6 +607,19 @@ function referencedBundleSpecifiers(page, markup) {
   } finally {
     dom.window.close();
   }
+}
+
+function isActiveHtmlPageElement(element) {
+  return (
+    element.namespaceURI === "http://www.w3.org/1999/xhtml" && element.closest("noscript") === null
+  );
+}
+
+function packagedReferencePath(page, reference) {
+  const pathReference = reference.split(/[?#]/)[0];
+  if (!pathReference) return "";
+  const pageUrl = new URL(page, "chrome-extension://pack/");
+  return decodeURIComponent(new URL(pathReference, pageUrl).pathname).replace(/^\//, "");
 }
 
 async function requirePackagedFile(relativePath, reason) {
