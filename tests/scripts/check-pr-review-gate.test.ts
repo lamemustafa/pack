@@ -93,6 +93,44 @@ describe("PR review gate", () => {
     expect(result.stderr).toContain("Durably observed PR-level review findings");
   });
 
+  it("writes a redacted evaluator error while logging a durable-state path", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-private-path-"));
+    const privatePath = path.join(directory, "missing-review-state.json");
+    const evaluationErrorPath = path.join(directory, "evaluation-error.json");
+    const fixture = writeFixture(
+      "redacted-durable-state-error",
+      reviewFixture({
+        headRefOid: "head-sha",
+        reviews: [review({ state: "COMMENTED", commit: "head-sha" })],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--repo",
+        "lamemustafa/pack",
+        "--pr",
+        "14",
+        "--fixture",
+        fixture,
+        "--review-state",
+        privatePath,
+        "--write-evaluation-error",
+        evaluationErrorPath,
+      ],
+      { cwd: rootDir, encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(privatePath);
+    expect(JSON.parse(readFileSync(evaluationErrorPath, "utf8"))).toEqual({
+      version: 1,
+      message: "Could not read durable review state.",
+    });
+  });
+
   it("keeps Hide → Resolved durable after the source comment is deleted", () => {
     const resolvedFixture = writeFixture(
       "resolved-durable-finding",

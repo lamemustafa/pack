@@ -248,7 +248,7 @@ function readDurableReviewState(filePath, expectedPrNumber) {
         : raw,
     );
   } catch (error) {
-    failEvaluation(`Could not read durable review state: ${formatErrorMessage(error)}`);
+    failEvaluation("Could not read durable review state.", error);
   }
 
   if (
@@ -475,7 +475,7 @@ function readTrustedEvidenceMarker(comment, markerPrefix, label) {
   try {
     return { evidence, value: JSON.parse(markers[0][1]) };
   } catch (error) {
-    failEvaluation(`A trusted ${label} marker is malformed: ${formatErrorMessage(error)}`);
+    failEvaluation(`A trusted ${label} marker is malformed.`, error);
   }
 }
 
@@ -514,7 +514,7 @@ function writeDurableReviewState(filePath, reviewState) {
   try {
     writeFileSync(filePath, JSON.stringify(reviewState), "utf8");
   } catch (error) {
-    failEvaluation(`Could not write durable review state: ${formatErrorMessage(error)}`);
+    failEvaluation("Could not write durable review state.", error);
   }
 }
 
@@ -888,7 +888,7 @@ function runText(commandArgs) {
       operation: "evaluation",
     });
   } catch (error) {
-    failEvaluation(formatErrorMessage(error));
+    failEvaluation("GitHub CLI evaluation request failed.", error);
   }
 }
 
@@ -897,7 +897,7 @@ function runJson(commandArgs) {
   try {
     return JSON.parse(output);
   } catch (error) {
-    failEvaluation(`GitHub CLI returned malformed JSON: ${formatErrorMessage(error)}`);
+    failEvaluation("GitHub CLI returned malformed JSON.", error);
   }
 }
 
@@ -905,9 +905,11 @@ function formatErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function failEvaluation(message) {
+function failEvaluation(message, detail = null) {
   writeEvaluationError(message);
-  console.error(`Review gate could not evaluate: ${message}`);
+  console.error(
+    `Review gate could not evaluate: ${message}${detail === null ? "" : ` ${formatErrorMessage(detail)}`}`,
+  );
   process.exit(EVALUATION_FAILURE_EXIT_CODE);
 }
 
