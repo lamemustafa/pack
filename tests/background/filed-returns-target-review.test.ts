@@ -15,6 +15,12 @@ import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-
 import { persistArtifactAcquisitionCompletion } from "../../src/background/filed-returns-artifact-acquisition-completion";
 import { readPersistedArtifactProgress } from "../../src/background/filed-returns-artifact-progress";
 import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
+import { FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE } from "../../src/connectors/gst/filed-returns-filter-status";
+import {
+  persistCanonicalFiledReturnsFlowSummary,
+  readCanonicalFiledReturnsFlowSummary,
+} from "../../src/background/filed-returns-session-summary";
+import { filedReturnsScopeId } from "../../src/connectors/gst/filed-returns-return-types";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import type {
   FiledReturnsDownloadDiagnostic,
@@ -2052,6 +2058,114 @@ describe("filed returns target review", () => {
     );
     expect(message).not.toContain("prepared the artifact ZIP");
     expect(message).not.toContain("saved the artifact files");
+  });
+
+  it("retains the pre-search timeout reason across the persist and reload boundary", async () => {
+    // #313 is a reload regression, so this crosses the storage write/read path rather than
+    // calling the formatter. A signal dropped by `parseDurableFiledReturnsSignals` -- the
+    // allowlist rejects the whole array on one unregistered entry -- would restore the bug
+    // while a formatter-only assertion stayed green.
+    const scope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-3B",
+    } as const;
+    const saved = await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: "2026-09-07T06:00:00.000Z",
+      completedPeriods: [],
+      currentPeriod: scope.period,
+      totalPeriods: 1,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnsScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: [
+          "filed-return-filters-selected",
+          "financial-year-selected",
+          "period-selected",
+          "month-selected",
+          "return-type-selected",
+          "filed-return-filter-selection-deadline-expired",
+        ],
+        safeMessage: FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
+      },
+    });
+
+    expect(saved).not.toBeNull();
+    // What the panel renders after a reload: the summary read back out of storage.
+    const reloaded = await readCanonicalFiledReturnsFlowSummary("completion");
+    expect(reloaded?.flowStep.safeMessage).toBe(FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE);
+    // The deadline signal survived the allowlist rather than being silently dropped.
+    expect(reloaded?.flowStep.safeSignals).toContain(
+      "filed-return-filter-selection-deadline-expired",
+    );
+    // Not the generic recovery guidance this reason used to be replaced by.
+    expect(reloaded?.flowStep.safeMessage).not.toContain("needs an explicit recovery action");
+    // And not the opposite reason: these filters demonstrably finished selecting.
+    expect(reloaded?.flowStep.safeMessage).not.toContain(
+      "could not confirm that the filed-return filters",
+    );
+  });
+
+  it("retains the pre-search timeout reason for a full-year run after reload", async () => {
+    // The flow #313 was reported against. `toFullFiscalYearSummary` persists the timed-out
+    // target under the ledger's FULL_FISCAL_YEAR scope with the month only as `currentPeriod`,
+    // and `parseDurableFlowStep` reconstructs the message from that scope -- so a single-period
+    // assertion alone leaves the "Everything this year" run on generic recovery copy.
+    const scope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    } as const;
+    const saved = await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: "2026-09-07T06:00:00.000Z",
+      completedPeriods: [],
+      currentPeriod: "April",
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnsScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: [
+          "filed-return-filters-selected",
+          "financial-year-selected",
+          "period-selected",
+          "month-selected",
+          "return-type-selected",
+          "filed-return-filter-selection-deadline-expired",
+        ],
+        safeMessage: FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
+      },
+    });
+
+    expect(saved).not.toBeNull();
+    const reloaded = await readCanonicalFiledReturnsFlowSummary("completion");
+    expect(reloaded?.flowStep.safeMessage).toBe(FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE);
+    expect(reloaded?.flowStep.safeMessage).not.toContain("needs an explicit recovery action");
+    expect(reloaded?.flowStep.safeMessage).not.toContain("saved fiscal-year run");
+  });
+
+  it("still reports unfinished filter selection when only the in-progress signal is present", () => {
+    const message = canonicalDurableSummaryMessage(
+      {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      "blocked",
+      ["filed-return-filter-selection-in-progress", "financial-year-selected"],
+    );
+
+    expect(message).toContain("could not confirm that the filed-return filters");
+    expect(message).toContain("Not confirmed: filing period");
+    expect(message).not.toBe(FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE);
   });
 
   it.each([

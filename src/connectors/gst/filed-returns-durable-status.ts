@@ -1,4 +1,7 @@
-import { filedReturnsFilterActionRequiredMessage } from "./filed-returns-filter-status";
+import {
+  FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
+  filedReturnsFilterActionRequiredMessage,
+} from "./filed-returns-filter-status";
 import type { UserActionRequired } from "../../core/contracts";
 import type {
   FiledReturnsDownloadScope,
@@ -177,13 +180,28 @@ export function canonicalDurableSummaryMessage(
     }
   }
   const durableMessageKey = messageKeyForSummary(scope, status, signals);
-  const filterMessage =
-    scope.period !== FULL_FISCAL_YEAR_PERIOD &&
-    status === "blocked" &&
-    durableMessageKey === "full-year-needs-action" &&
-    signals.includes("filed-return-filter-selection-in-progress")
-      ? filedReturnsFilterActionRequiredMessage(signals)
-      : null;
+  // Two distinct filter terminal states reach this key. The deadline-expired one is checked
+  // first because it is the more specific: the filters demonstrably finished selecting, so
+  // reporting "could not confirm the filters had finished updating" would name the wrong reason.
+  const filterStatusApplies =
+    status === "blocked" && durableMessageKey === "full-year-needs-action";
+  let filterMessage: string | null = null;
+  if (filterStatusApplies) {
+    if (signals.includes("filed-return-filter-selection-deadline-expired")) {
+      // Applies to a full-year scope too. `toFullFiscalYearSummary` persists the timed-out
+      // target under the ledger's FULL_FISCAL_YEAR scope, carrying the month only as
+      // `currentPeriod`, so excluding that scope here would hand the "Everything this year"
+      // run the generic recovery copy this branch exists to replace -- which is the flow
+      // #313 was reported against. The message names no period, so it reads correctly for
+      // either scope.
+      filterMessage = FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE;
+    } else if (
+      scope.period !== FULL_FISCAL_YEAR_PERIOD &&
+      signals.includes("filed-return-filter-selection-in-progress")
+    ) {
+      filterMessage = filedReturnsFilterActionRequiredMessage(signals);
+    }
+  }
   const durableMessage =
     filterMessage ?? partialMessage ?? renderDurableMessage(durableMessageKey, scope);
   const summaryMessage = filedReturnsSummaryStatusMessage(
