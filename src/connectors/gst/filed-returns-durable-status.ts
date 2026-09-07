@@ -184,14 +184,21 @@ export function canonicalDurableSummaryMessage(
   // first because it is the more specific: the filters demonstrably finished selecting, so
   // reporting "could not confirm the filters had finished updating" would name the wrong reason.
   const filterStatusApplies =
-    scope.period !== FULL_FISCAL_YEAR_PERIOD &&
-    status === "blocked" &&
-    durableMessageKey === "full-year-needs-action";
+    status === "blocked" && durableMessageKey === "full-year-needs-action";
   let filterMessage: string | null = null;
   if (filterStatusApplies) {
     if (signals.includes("filed-return-filter-selection-deadline-expired")) {
+      // Applies to a full-year scope too. `toFullFiscalYearSummary` persists the timed-out
+      // target under the ledger's FULL_FISCAL_YEAR scope, carrying the month only as
+      // `currentPeriod`, so excluding that scope here would hand the "Everything this year"
+      // run the generic recovery copy this branch exists to replace -- which is the flow
+      // #313 was reported against. The message names no period, so it reads correctly for
+      // either scope.
       filterMessage = FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE;
-    } else if (signals.includes("filed-return-filter-selection-in-progress")) {
+    } else if (
+      scope.period !== FULL_FISCAL_YEAR_PERIOD &&
+      signals.includes("filed-return-filter-selection-in-progress")
+    ) {
       filterMessage = filedReturnsFilterActionRequiredMessage(signals);
     }
   }

@@ -2110,6 +2110,47 @@ describe("filed returns target review", () => {
     );
   });
 
+  it("retains the pre-search timeout reason for a full-year run after reload", async () => {
+    // The flow #313 was reported against. `toFullFiscalYearSummary` persists the timed-out
+    // target under the ledger's FULL_FISCAL_YEAR scope with the month only as `currentPeriod`,
+    // and `parseDurableFlowStep` reconstructs the message from that scope -- so a single-period
+    // assertion alone leaves the "Everything this year" run on generic recovery copy.
+    const scope = {
+      artifactType: "PDF",
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    } as const;
+    const saved = await persistCanonicalFiledReturnsFlowSummary("completion", {
+      scope,
+      status: "blocked",
+      updatedAt: "2026-09-07T06:00:00.000Z",
+      completedPeriods: [],
+      currentPeriod: "April",
+      totalPeriods: 12,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnsScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: [
+          "filed-return-filters-selected",
+          "financial-year-selected",
+          "period-selected",
+          "month-selected",
+          "return-type-selected",
+          "filed-return-filter-selection-deadline-expired",
+        ],
+        safeMessage: FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
+      },
+    });
+
+    expect(saved).not.toBeNull();
+    const reloaded = await readCanonicalFiledReturnsFlowSummary("completion");
+    expect(reloaded?.flowStep.safeMessage).toBe(FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE);
+    expect(reloaded?.flowStep.safeMessage).not.toContain("needs an explicit recovery action");
+    expect(reloaded?.flowStep.safeMessage).not.toContain("saved fiscal-year run");
+  });
+
   it("still reports unfinished filter selection when only the in-progress signal is present", () => {
     const message = canonicalDurableSummaryMessage(
       {
