@@ -14,6 +14,25 @@ import { PACK_EXTENSION_DESCRIPTION } from "../../src/extension/manifest-policy"
 const rootDir = process.cwd();
 const read = (relativePath: string) => readFile(path.join(rootDir, relativePath), "utf8");
 
+// release-please rewrites this line's version on every release of this package.
+const RELEASE_BOUND_MARKER = "<!-- x-release-please-version -->";
+// This line records some other distribution's version, which release-please must
+// not rewrite -- the Chrome Web Store publication moves only on a new submission.
+const FIXED_DISTRIBUTION_MARKER = "<!-- pack-fixed-distribution-version -->";
+
+// 1-based line numbers naming `version` without declaring how they stay current.
+function unmaintainedVersionLines(text: string, version: string): number[] {
+  return text
+    .split("\n")
+    .map((line, index) => ({ line, number: index + 1 }))
+    .filter(({ line }) => line.includes(`v${version}`))
+    .filter(
+      ({ line }) =>
+        !line.includes(RELEASE_BOUND_MARKER) && !line.includes(FIXED_DISTRIBUTION_MARKER),
+    )
+    .map(({ number }) => number);
+}
+
 /**
  * One claim about what Pack supports lives in eleven files. Correcting it took
  * seven review rounds, and every round found the same defect: another copy that
@@ -322,27 +341,41 @@ describe("public scope copy", () => {
   // by hand is the defect; the annotation is the fix. This fails at the moment
   // someone writes the current version unannotated, rather than one release later
   // when it has quietly become false.
+  //
+  // A line may instead be marked fixed. Not every mention of today's version
+  // tracks *this* release: `docs/PUBLICATION_READINESS.md` records the Chrome Web
+  // Store publication, which moves only when a submission is recorded. When the
+  // Store catches up to the source version that record legitimately names the
+  // same number, and annotating it would make release-please rewrite it on the
+  // next source release even though no new submission happened -- rewriting a
+  // historical fact. The marker states which of the two a line is.
   it.each(["README.md", "SECURITY.md", "docs/PUBLICATION_READINESS.md"])(
-    "never states the current version in %s without binding it to the release",
+    "never states the current version in %s without saying how it is maintained",
     async (file) => {
       const version = JSON.parse(await read("package.json")).version as string;
 
-      const unbound = (await read(file))
-        .split("\n")
-        .map((line, index) => ({ line, number: index + 1 }))
-        .filter(({ line }) => line.includes(`v${version}`))
-        .filter(({ line }) => !line.includes("x-release-please-version"))
-        .map(({ number }) => `${file}:${number}`);
-
-      // An older version may be named deliberately -- the Store publication record
-      // is one -- because it does not move when this package does. Only the current
-      // one is guaranteed to go stale.
       expect(
-        unbound,
-        `${file} hard-codes v${version}; add <!-- x-release-please-version --> to that line, or name a version that does not move with the release.`,
+        unmaintainedVersionLines(await read(file), version).map((line) => `${file}:${line}`),
+        `${file} names v${version} on a line that says nothing about how it is kept current. Add ${RELEASE_BOUND_MARKER} if the line tracks this package's release, or ${FIXED_DISTRIBUTION_MARKER} if it records another distribution's version that must not be rewritten.`,
       ).toEqual([]);
     },
   );
+
+  // The marker above is an escape hatch, and an untested escape hatch is where a
+  // guard rots. No file needs it today -- the Store publication is v0.5.0 while
+  // the package is on 0.5.1 -- so it is exercised directly instead of waiting for
+  // the collision that makes it load-bearing.
+  it("classifies each version mention by how the line says it is maintained", () => {
+    const text = [
+      "bare mention of v1.2.3",
+      `tracks the release v1.2.3 ${RELEASE_BOUND_MARKER}`,
+      `Store publication v1.2.3 ${FIXED_DISTRIBUTION_MARKER}`,
+      "an older v1.2.2 needs no marker",
+      "no version here at all",
+    ].join("\n");
+
+    expect(unmaintainedVersionLines(text, "1.2.3")).toEqual([1]);
+  });
 
   it("bumps the security policy as part of the release rather than by hand", async () => {
     const config = JSON.parse(await read("release-please-config.json")) as {
