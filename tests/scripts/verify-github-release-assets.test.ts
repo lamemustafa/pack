@@ -89,7 +89,7 @@ describe("GitHub release asset verifier", () => {
   // so the verifier must dereference. Without that, this case fails.
   it("dereferences an annotated tag to its commit rather than comparing the tag object", async () => {
     const fixture = await createReleaseFixture({
-      annotatedTag: true,
+      tagChain: ANNOTATED_TO_COMMIT,
       provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
     });
 
@@ -100,6 +100,61 @@ describe("GitHub release asset verifier", () => {
       output: expect.stringContaining("Verified GitHub release assets"),
     });
   });
+
+  // Git permits a tag to point at a tree or a blob. Taking that SHA as "the source
+  // commit" establishes nothing, and provenance naming the same SHA would then verify --
+  // the could-not-determine-treated-as-matches shape guards here must not have.
+  it.each([
+    { label: "blob", type: "blob" },
+    { label: "tree", type: "tree" },
+  ])("rejects a tag that resolves to a $label rather than a commit", async ({ type }) => {
+    const fixture = await createReleaseFixture({
+      provenanceSourceCommit: TREE_OBJECT,
+      provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
+      tagChain: [{ sha: TREE_OBJECT, type }],
+    });
+
+    const result = await runVerifier(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain(`a ${type} object`);
+    expect(result.output).toContain("not a commit");
+  });
+
+  // A tag object may point at another tag object, so one dereference is not enough.
+  it("dereferences a chain of annotated tags to the commit at its end", async () => {
+    const fixture = await createReleaseFixture({
+      provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
+      tagChain: [
+        { sha: ANNOTATED_TAG_OBJECT, type: "tag" },
+        { sha: NESTED_TAG_OBJECT, type: "tag" },
+        { sha: TAG_COMMIT, type: "commit" },
+      ],
+    });
+
+    const result = await runVerifier(fixture);
+
+    expect({ status: result.status, output: result.output }).toEqual({
+      status: 0,
+      output: expect.stringContaining("Verified GitHub release assets"),
+    });
+  });
+
+  // A chain that never terminates in a commit must fail rather than loop forever.
+  it("refuses to dereference a tag chain without end", async () => {
+    const fixture = await createReleaseFixture({
+      provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
+      tagChain: Array.from({ length: 12 }, (_unused, index) => ({
+        sha: `${index}`.padStart(40, "f"),
+        type: "tag",
+      })),
+    });
+
+    const result = await runVerifier(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("did not resolve to a commit within");
+  });
 });
 
 const REQUESTED_TAG = "v0.3.0";
@@ -109,17 +164,29 @@ const SYNTHETIC_ZIP_CONTENT = "synthetic zip";
 const SYNTHETIC_ZIP_SHA256 = createHash("sha256").update(SYNTHETIC_ZIP_CONTENT).digest("hex");
 const TAG_COMMIT = "a".repeat(40);
 const ANNOTATED_TAG_OBJECT = "b".repeat(40);
+const NESTED_TAG_OBJECT = "c".repeat(40);
+const TREE_OBJECT = "e".repeat(40);
+
+// A git ref points at a commit, a tag object, a tree, or a blob, and a tag object points
+// at any of those in turn. Fixtures describe that chain directly: entry 0 is what the ref
+// names, and each subsequent entry is what the previous tag object dereferences to.
+type GitObject = { sha: string; type: string };
+const LIGHTWEIGHT_TO_COMMIT: GitObject[] = [{ sha: TAG_COMMIT, type: "commit" }];
+const ANNOTATED_TO_COMMIT: GitObject[] = [
+  { sha: ANNOTATED_TAG_OBJECT, type: "tag" },
+  { sha: TAG_COMMIT, type: "commit" },
+];
 
 async function createReleaseFixture({
   provenanceZipSha256,
   provenanceSourceTag = REQUESTED_TAG,
   provenanceSourceCommit = TAG_COMMIT,
-  annotatedTag = false,
+  tagChain = LIGHTWEIGHT_TO_COMMIT,
 }: {
   provenanceZipSha256: string;
   provenanceSourceTag?: string | null;
   provenanceSourceCommit?: string | null;
-  annotatedTag?: boolean;
+  tagChain?: GitObject[];
 }) {
   const cwd = await mkdtemp(path.join(tmpdir(), "pack-release-assets-"));
   createdDirs.push(cwd);
@@ -166,53 +233,51 @@ async function createReleaseFixture({
       prerelease: true,
     })}\n`,
   );
-  // A lightweight tag ref points straight at the commit. An annotated one points at a
-  // tag *object* that must be dereferenced -- the trap the verifier exists to avoid, so
-  // both shapes are exercised.
+  // The ref names the first object; every tag object in the chain gets a file named by
+  // its own SHA, so the fake `gh` resolves a real chain instead of replaying one hop.
+  const objectsDir = path.join(cwd, "objects");
+  await mkdir(objectsDir, { recursive: true });
   const tagRefPath = path.join(cwd, "tag-ref.json");
-  const tagObjectPath = path.join(cwd, "tag-object.json");
-  await writeFile(
-    tagRefPath,
-    `${JSON.stringify({
-      object: annotatedTag
-        ? { sha: ANNOTATED_TAG_OBJECT, type: "tag" }
-        : { sha: TAG_COMMIT, type: "commit" },
-    })}\n`,
-  );
-  await writeFile(tagObjectPath, `${JSON.stringify({ object: { sha: TAG_COMMIT } })}\n`);
+  await writeFile(tagRefPath, `${JSON.stringify({ object: tagChain[0] })}\n`);
+  for (let i = 0; i < tagChain.length - 1; i += 1) {
+    await writeFile(
+      path.join(objectsDir, `${tagChain[i]?.sha}.json`),
+      `${JSON.stringify({ object: tagChain[i + 1] })}\n`,
+    );
+  }
 
   const ghPath = path.join(binDir, "gh");
   await writeFile(
     ghPath,
     [
       "#!/bin/sh",
-      'case "$*" in',
-      '  *git/ref/tags/*) cat "$PACK_TEST_TAG_REF_JSON" ;;',
-      '  *git/tags/*)     cat "$PACK_TEST_TAG_OBJECT_JSON" ;;',
-      '  *)               cat "$PACK_TEST_RELEASE_JSON" ;;',
+      'case "$2" in',
+      '  */git/ref/tags/*) cat "$PACK_TEST_TAG_REF_JSON" ;;',
+      '  */git/tags/*)     cat "$PACK_TEST_OBJECTS_DIR/$(basename "$2").json" ;;',
+      '  *)                cat "$PACK_TEST_RELEASE_JSON" ;;',
       "esac",
       "",
     ].join("\n"),
   );
   await chmod(ghPath, 0o755);
 
-  return { binDir, checksumPath, provenancePath, releasePath, tagObjectPath, tagRefPath, zipPath };
+  return { binDir, checksumPath, objectsDir, provenancePath, releasePath, tagRefPath, zipPath };
 }
 
 async function runVerifier({
   binDir,
   checksumPath,
   provenancePath,
+  objectsDir,
   releasePath,
-  tagObjectPath,
   tagRefPath,
   zipPath,
 }: {
   binDir: string;
   checksumPath: string;
+  objectsDir: string;
   provenancePath: string;
   releasePath: string;
-  tagObjectPath: string;
   tagRefPath: string;
   zipPath: string;
 }): Promise<{ output: string; status: number }> {
@@ -237,7 +302,7 @@ async function runVerifier({
         env: {
           ...process.env,
           PACK_TEST_RELEASE_JSON: releasePath,
-          PACK_TEST_TAG_OBJECT_JSON: tagObjectPath,
+          PACK_TEST_OBJECTS_DIR: objectsDir,
           PACK_TEST_TAG_REF_JSON: tagRefPath,
           PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
         },
