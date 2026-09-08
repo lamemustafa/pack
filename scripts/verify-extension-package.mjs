@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { URL } from "node:url";
+import {
+  isPackagedReferenceUrl,
+  packagedReferencePath,
+  packagedReferenceUrl,
+} from "./lib/packaged-reference-path.mjs";
 // Packaged-page verification now parses every extension page, not just the
 // source-surfaces reachability path, so JSDOM must load for every invocation.
 import { JSDOM } from "jsdom";
@@ -564,11 +568,14 @@ async function requireReferencedBundles(page, html) {
   const references = referencedBundleSpecifiers(page, html);
 
   for (const reference of references) {
-    if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
-      throw new Error(`Extension page references a remote asset: ${page} -> ${reference}`);
+    const referenceUrl = packagedReferenceUrl(page, reference);
+    if (referenceUrl === null) continue;
+    if (!isPackagedReferenceUrl(referenceUrl)) {
+      throw new Error(
+        `Extension page reference resolves outside the extension origin: ${page} -> ${reference}`,
+      );
     }
-    const relative = packagedReferencePath(page, reference);
-    if (!relative) continue;
+    const relative = packagedReferencePath(referenceUrl);
     const bytes = await requirePackagedFile(relative, `asset referenced by ${page}`);
     if (bytes.byteLength === 0) {
       throw new Error(`Asset referenced by ${page} is empty: ${relative}`);
@@ -586,6 +593,12 @@ function referencedBundleSpecifiers(page, markup) {
     // can resolve them elsewhere. Package pages never need one, so reject it.
     if ([...document.querySelectorAll("base")].some(isActiveHtmlPageElement)) {
       throw new Error(`Extension page declares a base element: ${page}`);
+    }
+    // Pack's static extension pages do not embed nested documents. Rejecting
+    // srcdoc keeps every load-bearing page in the verifier's explicit scope;
+    // an iframe with a normal src remains valid and is not this nested markup.
+    if ([...document.querySelectorAll("iframe[srcdoc]")].some(isActiveHtmlPageElement)) {
+      throw new Error(`Extension page declares an iframe srcdoc: ${page}`);
     }
     const scriptReferences = [...document.querySelectorAll("script[src]")]
       .filter(isActiveHtmlPageElement)
@@ -616,16 +629,14 @@ function isActiveHtmlPageElement(element) {
   );
 }
 
-function packagedReferencePath(page, reference) {
-  const pathReference = reference.split(/[?#]/)[0];
-  if (!pathReference) return "";
-  const pageUrl = new URL(page, "chrome-extension://pack/");
-  return decodeURIComponent(new URL(pathReference, pageUrl).pathname).replace(/^\//, "");
-}
-
 async function requirePackagedFile(relativePath, reason) {
+  const packageDirectory = path.resolve(outputDir);
+  const packagedFile = path.resolve(packageDirectory, relativePath);
+  if (!packagedFile.startsWith(`${packageDirectory}${path.sep}`)) {
+    throw new Error(`Packaged file escapes extension output directory: ${relativePath}`);
+  }
   try {
-    return await readFile(path.join(outputDir, relativePath));
+    return await readFile(packagedFile);
   } catch (error) {
     throw new Error(`Missing ${reason}: ${relativePath} (${error?.code ?? error?.message})`);
   }
