@@ -4,9 +4,9 @@ import path from "node:path";
 import {
   isPackagedReferenceUrl,
   isPageRelativeReference,
+  isSelfReference,
   packagedReferencePath,
   packagedReferenceUrl,
-  referencePathPortion,
 } from "./lib/packaged-reference-path.mjs";
 // Packaged-page verification now parses every extension page, not just the
 // source-surfaces reachability path, so JSDOM must load for every invocation.
@@ -571,13 +571,17 @@ async function requireReferencedBundles(page, html) {
   const references = referencedBundleSpecifiers(page, html);
 
   for (const reference of references) {
-    // Distinguish an empty reference, which has nothing to check, from one that
-    // cannot be parsed at all. Collapsing them would let `http://[` be skipped
-    // silently instead of rejected.
-    if (!referencePathPortion(reference)) continue;
     const referenceUrl = packagedReferenceUrl(page, reference);
     if (referenceUrl === null) {
       throw new Error(`Extension page reference is not a valid URL: ${page} -> ${reference}`);
+    }
+    // Nothing is skipped here any more. An empty, whitespace-only, query-only or
+    // fragment-only reference resolves to the page itself, and skipping those let a
+    // package pass while Chrome could not load the HTML response as a bundle.
+    if (isSelfReference(page, referenceUrl)) {
+      throw new Error(
+        `Extension page reference resolves to the page itself: ${page} -> ${JSON.stringify(reference)}`,
+      );
     }
     if (!isPackagedReferenceUrl(referenceUrl)) {
       throw new Error(

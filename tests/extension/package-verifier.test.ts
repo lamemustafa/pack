@@ -294,6 +294,42 @@ describe("extension package verifier", () => {
     expect(result.output).not.toContain("ERR_INVALID_URL");
   });
 
+  it.each([
+    ["an empty reference", ""],
+    ["a whitespace-only reference", "   "],
+    ["a query-only reference", "?v=1"],
+    ["a fragment-only reference", "#top"],
+  ])("rejects %s that resolves to the page itself", async (_label, reference) => {
+    // All four resolve to the containing page, so the verifier would read the HTML
+    // as its own asset and pass, while Chrome cannot load that response as a script.
+    // The raw scanner this replaced rejected them as missing.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="${reference}"></script></body></html>`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference resolves to the page itself");
+  });
+
+  it("still accepts a legitimate reference carrying a query and fragment", async () => {
+    // The self-reference rule must not catch a real bundle that merely has a query.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js?v=1#top"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
   it("accepts a whitespace-normalized local reference", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(
