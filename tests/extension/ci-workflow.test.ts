@@ -195,6 +195,18 @@ describe("Pack CI workflow", () => {
     // with nothing uploaded -- indistinguishable from a completed submission.
     expect(submitWorkflow).not.toContain("\n    if:");
 
+    // The guard must live OUTSIDE the protected environment. GitHub evaluates
+    // `environment:` at the job level, before any step runs, so a guard inside the gated
+    // job cannot report until a maintainer has already approved the deployment -- the
+    // refusal would arrive after the human cost it exists to avoid.
+    const enablementJob = workflowJobBlock(submitWorkflow, "enablement");
+    const submitJob = workflowJobBlock(submitWorkflow, "submit");
+    expect(enablementJob).toContain("Require explicit enablement for a real upload");
+    expect(enablementJob).not.toContain("environment:");
+    expect(submitJob).toContain("environment: chrome-web-store");
+    expect(submitJob).not.toContain("CWS_SUBMIT_ENABLED");
+    expect(submitJob).toContain("needs: enablement");
+
     // Run the guard rather than grep it: the contract is an exit code and a stated reason.
     const guard = extractNamedWorkflowRunScript(
       submitWorkflow,
@@ -361,6 +373,17 @@ function extractLastWorkflowRunScript(workflow: string): string {
   const start = workflow.lastIndexOf(RUN_BLOCK_MARKER);
   expect(start).toBeGreaterThanOrEqual(0);
   return readIndentedRunBlock(workflow.slice(start + RUN_BLOCK_MARKER.length));
+}
+
+// Slices one job's block out of a workflow: from its 2-space-indented key to the next
+// key at that indent. Used to assert which job a step or key belongs to, which string
+// matching over the whole file cannot distinguish.
+function workflowJobBlock(workflow: string, jobName: string): string {
+  const start = workflow.indexOf(`\n  ${jobName}:\n`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const rest = workflow.slice(start + 1);
+  const next = rest.slice(1).search(/\n {2}[A-Za-z0-9_-]+:\n/u);
+  return next === -1 ? rest : rest.slice(0, next + 1);
 }
 
 // Reads the `run:` block of one named step. Anchoring on the step name means a rename

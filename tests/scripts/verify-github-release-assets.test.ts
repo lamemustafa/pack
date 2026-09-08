@@ -25,9 +25,51 @@ describe("GitHub release asset verifier", () => {
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("Release provenance ZIP SHA-256");
   });
+
+  // `Chrome Web Store Submit` is the only submission path and takes the tag as an
+  // operator-supplied input, so the tag is load-bearing. Every other check in the
+  // verifier is internally consistent: a release carrying another version's ZIP,
+  // checksum, and provenance satisfies all of them while describing a different build
+  // than the one requested.
+  it("rejects provenance that describes a different tag than the one requested", async () => {
+    const fixture = await createReleaseFixture({
+      provenanceSourceTag: "v0.9.9",
+      provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
+    });
+
+    const result = await runVerifier(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("describes v0.9.9");
+    expect(result.output).toContain(`${REQUESTED_TAG} was requested`);
+  });
+
+  it("rejects provenance with no recorded source tag", async () => {
+    const fixture = await createReleaseFixture({
+      provenanceSourceTag: null,
+      provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
+    });
+
+    const result = await runVerifier(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("an unknown tag");
+  });
 });
 
-async function createReleaseFixture({ provenanceZipSha256 }: { provenanceZipSha256: string }) {
+const REQUESTED_TAG = "v0.3.0";
+const SYNTHETIC_ZIP_CONTENT = "synthetic zip";
+// A matching checksum, so a failure in the tests below is unambiguously the tag binding
+// and not the checksum guard that runs alongside it.
+const SYNTHETIC_ZIP_SHA256 = createHash("sha256").update(SYNTHETIC_ZIP_CONTENT).digest("hex");
+
+async function createReleaseFixture({
+  provenanceZipSha256,
+  provenanceSourceTag = REQUESTED_TAG,
+}: {
+  provenanceZipSha256: string;
+  provenanceSourceTag?: string | null;
+}) {
   const cwd = await mkdtemp(path.join(tmpdir(), "pack-release-assets-"));
   createdDirs.push(cwd);
   const binDir = path.join(cwd, "bin");
@@ -37,8 +79,8 @@ async function createReleaseFixture({ provenanceZipSha256 }: { provenanceZipSha2
   const releasePath = path.join(cwd, "release.json");
 
   await mkdir(binDir, { recursive: true });
-  await writeFile(zipPath, "synthetic zip");
-  const zipSha256 = createHash("sha256").update("synthetic zip").digest("hex");
+  await writeFile(zipPath, SYNTHETIC_ZIP_CONTENT);
+  const zipSha256 = SYNTHETIC_ZIP_SHA256;
   await writeFile(checksumPath, `${zipSha256}  ${path.basename(zipPath)}\n`);
   await writeFile(
     provenancePath,
@@ -48,6 +90,7 @@ async function createReleaseFixture({ provenanceZipSha256 }: { provenanceZipSha2
           zipAssetName: path.basename(zipPath),
           zipSha256: provenanceZipSha256,
         },
+        ...(provenanceSourceTag === null ? {} : { source: { tag: provenanceSourceTag } }),
       },
       null,
       2,
@@ -91,7 +134,7 @@ async function runVerifier({
       [
         "scripts/verify-github-release-assets.mjs",
         "--tag",
-        "v0.3.0",
+        REQUESTED_TAG,
         "--checksum",
         checksumPath,
         "--provenance",
