@@ -24,13 +24,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     environment: chrome-web-store
-    # Dry runs validate a package and upload nothing, so they stay available. A real
-    # upload additionally requires the explicit repository variable, which is the
-    # invariant `release.yml` used to carry before store submission was decoupled
-    # from the release pipeline.
-    if: ${{ inputs.dry_run == 'true' || vars.CWS_SUBMIT_ENABLED == 'true' }}
 
     steps:
+      # A real upload requires the explicit repository variable, which is the invariant
+      # `release.yml` carried before store submission was decoupled from the release
+      # pipeline. This is a failing step rather than a job-level `if:` on purpose: a
+      # skipped job reports success, so a maintainer who dispatches with dry_run=false
+      # while the variable is unset would see a green run and no upload, and could read
+      # that as a completed submission. Guards fail closed and name their own reason.
+      #
+      # Runs before checkout so a refused upload costs nothing and explains itself.
+      - name: Require explicit enablement for a real upload
+        if: ${{ inputs.dry_run != 'true' }}
+        env:
+          CWS_SUBMIT_ENABLED: ${{ vars.CWS_SUBMIT_ENABLED }}
+        run: |
+          if [ "$CWS_SUBMIT_ENABLED" != "true" ]; then
+            echo "::error title=Chrome Web Store upload refused::dry_run=false was requested but the repository or organization variable CWS_SUBMIT_ENABLED is not exactly 'true'. Nothing was uploaded. Re-run with dry_run=true to validate the package without uploading, or set the variable deliberately before retrying."
+            exit 1
+          fi
+          echo "CWS_SUBMIT_ENABLED is set; proceeding with a real upload."
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
