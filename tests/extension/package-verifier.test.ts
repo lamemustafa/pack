@@ -316,6 +316,54 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Extension page reference resolves to the page itself");
   });
 
+  it("rejects an encoded spelling of the containing page", async () => {
+    // `/pan%65l.html` stays encoded in `pathname` but decodes to `panel.html` for the
+    // file lookup, so comparing raw pathnames let the HTML page through as a script.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="/pan%65l.html"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference resolves to the page itself");
+  });
+
+  it("names the outside-origin reason for a remote asset sharing the page pathname", async () => {
+    // Without the origin in the comparison this reported a self-reference, which
+    // sends a maintainer looking at the wrong thing.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="https://evil.example/panel.html"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("resolves outside the extension origin");
+    expect(result.output).not.toContain("resolves to the page itself");
+  });
+
+  it("accepts a bundle whose own name is percent-encoded", async () => {
+    // The canonicalisation must not reject a legitimate encoded filename.
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "chunks/pan el.js", "export default 1;\n");
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/pan%20el.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
   it("still accepts a legitimate reference carrying a query and fragment", async () => {
     // The self-reference rule must not catch a real bundle that merely has a query.
     const outputDir = await createValidPackage();
