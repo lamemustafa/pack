@@ -205,6 +205,45 @@ describe("extension package verifier", () => {
     );
   });
 
+  it.each([
+    ["an explicit sentinel host", "chrome-extension://pack/chunks/panel.js"],
+    ["a scheme-relative sentinel host", "//pack/chunks/panel.js"],
+  ])("rejects %s that only resolves locally by coincidence", async (_label, reference) => {
+    // `chrome-extension://pack/` is a sentinel this verifier invents so relative
+    // references have something to resolve against. Markup naming it outright is
+    // indistinguishable after resolution, but the shipped package carries an
+    // extension ID that Chrome will not substitute into an absolute URL -- so the
+    // referenced chunk exists locally while the page cannot load it.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="${reference}"></script></body></html>`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference is not page-relative");
+  });
+
+  it("names a malformed percent escape instead of throwing a raw URIError", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="/chunks/%ZZ.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference is not a decodable path");
+    expect(result.output).toContain("panel.html");
+    // The operator must not be handed a bare decoder failure with no target.
+    expect(result.output).not.toContain("URI malformed");
+  });
+
   it("accepts a whitespace-normalized local reference", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(

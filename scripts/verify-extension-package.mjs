@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
   isPackagedReferenceUrl,
+  isPageRelativeReference,
   packagedReferencePath,
   packagedReferenceUrl,
 } from "./lib/packaged-reference-path.mjs";
@@ -575,7 +576,17 @@ async function requireReferencedBundles(page, html) {
         `Extension page reference resolves outside the extension origin: ${page} -> ${reference}`,
       );
     }
+    // Runs after the origin test, which already rejects a foreign host. What is left
+    // is a reference naming the sentinel outright -- indistinguishable from a relative
+    // one after resolution, but the real package carries an extension ID Chrome will
+    // not substitute into an already-absolute URL.
+    if (!isPageRelativeReference(page, reference)) {
+      throw new Error(`Extension page reference is not page-relative: ${page} -> ${reference}`);
+    }
     const relative = packagedReferencePath(referenceUrl);
+    if (relative === null) {
+      throw new Error(`Extension page reference is not a decodable path: ${page} -> ${reference}`);
+    }
     const bytes = await requirePackagedFile(relative, `asset referenced by ${page}`);
     if (bytes.byteLength === 0) {
       throw new Error(`Asset referenced by ${page} is empty: ${relative}`);
