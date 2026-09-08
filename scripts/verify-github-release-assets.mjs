@@ -50,6 +50,29 @@ if (zipFile) {
     );
   }
 }
+// Bind the provenance to the commit the tag actually points at, not just to the tag
+// string. A provenance file naming the right tag but built from a different commit
+// satisfies every other check here, because they all compare the package with the
+// provenance rather than either with the repository.
+//
+// `git/ref/tags/<tag>` returns the **tag object** for an annotated tag, not the commit,
+// so comparing against `.object.sha` directly manufactures a false mismatch on every
+// annotated tag. Dereference it when the ref says so.
+const tagRef = ghApi(`repos/${repo}/git/ref/tags/${tag}`);
+let tagCommit = tagRef.object?.sha;
+if (tagRef.object?.type === "tag") {
+  tagCommit = ghApi(`repos/${repo}/git/tags/${tagRef.object.sha}`).object?.sha;
+}
+if (!tagCommit) {
+  throw new Error(`Could not resolve ${tag} to a commit; refusing to verify against it.`);
+}
+if (provenance.source?.commit !== tagCommit) {
+  throw new Error(
+    `Release provenance was built from ${
+      provenance.source?.commit ?? "an unrecorded commit"
+    }, but ${tag} points at ${tagCommit}. Refusing to publish a package that does not match the tag.`,
+  );
+}
 const release = JSON.parse(
   execFileSync("gh", ["api", `repos/${repo}/releases/tags/${tag}`], {
     encoding: "utf8",
@@ -100,6 +123,10 @@ function parseArgs(values) {
 function required(value, label) {
   if (!value) throw new Error(`Missing ${label}.`);
   return value;
+}
+
+function ghApi(endpoint) {
+  return JSON.parse(execFileSync("gh", ["api", endpoint], { encoding: "utf8" }));
 }
 
 async function sha256File(filePath) {
