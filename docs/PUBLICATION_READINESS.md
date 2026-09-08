@@ -63,9 +63,20 @@ summary` sheet stating the portal's own availability totals and the GSTR-3B
   spreadsheet unchanged, the run keeps the tidy CSV instead and reports the
   absence rather than emitting a blank or mislabelled workbook.
 
-  **Not in a released binary.** This builder postdates `v0.5.1`. A user of the
-  published package cannot produce a GSTR-2B workbook, and public copy must not
-  imply otherwise until a release carries it. The source-controlled Store listing draft
+  **Not in the Chrome Web Store package.** The Store publication predates this
+  builder, so a user who installed from the Store cannot produce a GSTR-2B
+  workbook and public copy must not imply otherwise.
+
+  For the GitHub release, read `CHANGELOG.md` for the release that first carried
+  the builder and compare it against the release recorded above. This paragraph
+  deliberately does not restate the answer. A restatement is wrong on one side of
+  the release that changes it, and this paragraph has now been wrong on both:
+  it denied every distribution while the source already carried the builder, and
+  a correction then asserted the release binary carried it while the published
+  release still predated the builder and its tree had no
+  `buildFiledReturnsGstr2bWorkbook` import. Say which distribution a claim
+  describes, and derive the release side rather than duplicating it.
+  The source-controlled Store listing draft
   names GSTR-2B as supported beta scope and a test binds it to the capability
   table, but the live dashboard fields still carry superseded wording: they are
   corrected only once `docs/chrome-web-store/dashboard-closeout.md` records the

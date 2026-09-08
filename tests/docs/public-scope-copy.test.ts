@@ -14,6 +14,25 @@ import { PACK_EXTENSION_DESCRIPTION } from "../../src/extension/manifest-policy"
 const rootDir = process.cwd();
 const read = (relativePath: string) => readFile(path.join(rootDir, relativePath), "utf8");
 
+// release-please rewrites this line's version on every release of this package.
+const RELEASE_BOUND_MARKER = "<!-- x-release-please-version -->";
+// This line records some other distribution's version, which release-please must
+// not rewrite -- the Chrome Web Store publication moves only on a new submission.
+const FIXED_DISTRIBUTION_MARKER = "<!-- pack-fixed-distribution-version -->";
+
+// 1-based line numbers naming `version` without declaring how they stay current.
+function unmaintainedVersionLines(text: string, version: string): number[] {
+  return text
+    .split("\n")
+    .map((line, index) => ({ line, number: index + 1 }))
+    .filter(({ line }) => line.includes(`v${version}`))
+    .filter(
+      ({ line }) =>
+        !line.includes(RELEASE_BOUND_MARKER) && !line.includes(FIXED_DISTRIBUTION_MARKER),
+    )
+    .map(({ number }) => number);
+}
+
 /**
  * One claim about what Pack supports lives in eleven files. Correcting it took
  * seven review rounds, and every round found the same defect: another copy that
@@ -291,17 +310,82 @@ describe("public scope copy", () => {
   // it had drifted two minor versions -- it named 0.3.x while 0.5.1 shipped, so
   // the file telling users which version receives security fixes named a version
   // that no longer exists.
+  //
+  // It named a `0.N.x` series until the 0.6.0 release, which was a second problem:
+  // release-please could not bump a series token, so the file could only be kept
+  // current by someone remembering, and this test failed the release rather than
+  // preventing the drift. Worse, the series form contradicted the row below it --
+  // `0.5.x` reads as covering 0.5.0, which "Previous releases | Not supported"
+  // denies. It now names the exact current release and is bumped by the release.
   it("keeps the security policy's supported version bound to the package", async () => {
     const version = JSON.parse(await read("package.json")).version as string;
-    const [major, minor] = version.split(".");
     const security = await read("SECURITY.md");
-    const declared = [...security.matchAll(/`(\d+)\.(\d+)\.x`/g)].map((m) => `${m[1]}.${m[2]}`);
+    const declared = [...security.matchAll(/`v(\d+\.\d+\.\d+)`/g)].map((match) => match[1]);
 
-    expect(declared.length, "SECURITY.md declares no supported version series").toBeGreaterThan(0);
+    expect(declared.length, "SECURITY.md declares no supported version").toBeGreaterThan(0);
     expect(
-      declared.filter((series) => series !== `${major}.${minor}`),
-      `SECURITY.md names a version series the package is not on (package.json is ${version}).`,
+      declared.filter((candidate) => candidate !== version),
+      `SECURITY.md names a version the package is not on (package.json is ${version}).`,
     ).toEqual([]);
+  });
+
+  // The assertion above states the invariant; this one states that nobody has to
+  // remember it. Without the extra-file entry and the annotation, a release bumps
+  // package.json, leaves SECURITY.md behind, and fails the suite *inside* the
+  // release workflow -- before `Run Release Please` reaches the tag, so the release
+  // does not happen at all. That is how v0.6.0 was blocked.
+  // Three separate files hard-coded `v0.5.1` next to lines that release-please
+  // already bumps, and each was wrong the moment a release landed: SECURITY.md
+  // blocked the 0.6.0 release outright, while README and PUBLICATION_READINESS
+  // told readers a shipped feature was not in any binary. Naming today's version
+  // by hand is the defect; the annotation is the fix. This fails at the moment
+  // someone writes the current version unannotated, rather than one release later
+  // when it has quietly become false.
+  //
+  // A line may instead be marked fixed. Not every mention of today's version
+  // tracks *this* release: `docs/PUBLICATION_READINESS.md` records the Chrome Web
+  // Store publication, which moves only when a submission is recorded. When the
+  // Store catches up to the source version that record legitimately names the
+  // same number, and annotating it would make release-please rewrite it on the
+  // next source release even though no new submission happened -- rewriting a
+  // historical fact. The marker states which of the two a line is.
+  it.each(["README.md", "SECURITY.md", "docs/PUBLICATION_READINESS.md"])(
+    "never states the current version in %s without saying how it is maintained",
+    async (file) => {
+      const version = JSON.parse(await read("package.json")).version as string;
+
+      expect(
+        unmaintainedVersionLines(await read(file), version).map((line) => `${file}:${line}`),
+        `${file} names v${version} on a line that says nothing about how it is kept current. Add ${RELEASE_BOUND_MARKER} if the line tracks this package's release, or ${FIXED_DISTRIBUTION_MARKER} if it records another distribution's version that must not be rewritten.`,
+      ).toEqual([]);
+    },
+  );
+
+  // The marker above is an escape hatch, and an untested escape hatch is where a
+  // guard rots. No file needs it today -- the Store publication is v0.5.0 while
+  // the package is on 0.5.1 -- so it is exercised directly instead of waiting for
+  // the collision that makes it load-bearing.
+  it("classifies each version mention by how the line says it is maintained", () => {
+    const text = [
+      "bare mention of v1.2.3",
+      `tracks the release v1.2.3 ${RELEASE_BOUND_MARKER}`,
+      `Store publication v1.2.3 ${FIXED_DISTRIBUTION_MARKER}`,
+      "an older v1.2.2 needs no marker",
+      "no version here at all",
+    ].join("\n");
+
+    expect(unmaintainedVersionLines(text, "1.2.3")).toEqual([1]);
+  });
+
+  it("bumps the security policy as part of the release rather than by hand", async () => {
+    const config = JSON.parse(await read("release-please-config.json")) as {
+      packages: Record<string, { "extra-files": { path: string }[] }>;
+    };
+
+    expect(config.packages["."]?.["extra-files"]?.map((file) => file.path)).toContain(
+      "SECURITY.md",
+    );
+    expect(await read("SECURITY.md")).toContain("<!-- x-release-please-version -->");
   });
 
   // Return-level advertising is too coarse. Every return is advertised, yet
