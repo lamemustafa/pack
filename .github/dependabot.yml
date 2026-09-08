@@ -8,6 +8,20 @@ updates:
     labels:
       - "dependencies"
       - "triage"
+    groups:
+      # Grouped by risk, not convenience. react, react-dom and @wxt-dev/module-react are
+      # the only dependencies that reach a taxpayer's browser; they are deliberately not
+      # grouped, so each runtime update still arrives as its own PR with its own
+      # disposition. Everything below is build- or test-time and cannot ship.
+      dev-tooling:
+        dependency-type: "development"
+        # Majors are excluded deliberately. A grouped PR is reviewed as one unit, and a
+        # breaking change to vitest or wxt deserves its own diff, its own test run and its
+        # own disposition rather than being carried along with six patch bumps.
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -16,3 +30,12 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      # Action pins are CI-only and never packaged, but a major can change runner
+      # behaviour under the release gates, so majors stay individual here too.
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
