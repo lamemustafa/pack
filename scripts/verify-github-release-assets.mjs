@@ -14,6 +14,20 @@ if (!/^[a-f0-9]{64}$/.test(checksum ?? "")) {
   throw new Error(`Invalid SHA-256 checksum in ${checksumFile}`);
 }
 const provenance = JSON.parse(await readFile(provenanceFile, "utf8"));
+// Bind the provenance to the tag the caller asked for. Every other check here is
+// internally consistent -- the checksum matches the ZIP, the ZIP name matches the
+// provenance, the assets exist on the release -- so a release carrying another
+// version's assets and provenance passes all of them while describing a different
+// build than the one requested. Since `Chrome Web Store Submit` is now the only
+// submission path and takes the tag as an operator-supplied input, that input is
+// load-bearing and must be checked rather than trusted.
+if (provenance.source?.tag !== tag) {
+  throw new Error(
+    `Release provenance describes ${
+      provenance.source?.tag ?? "an unknown tag"
+    }, but ${tag} was requested. Refusing to treat one release's package as another's.`,
+  );
+}
 if (provenance.package?.zipSha256 !== checksum) {
   throw new Error(
     `Release provenance ZIP SHA-256 ${
