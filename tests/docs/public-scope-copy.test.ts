@@ -291,17 +291,68 @@ describe("public scope copy", () => {
   // it had drifted two minor versions -- it named 0.3.x while 0.5.1 shipped, so
   // the file telling users which version receives security fixes named a version
   // that no longer exists.
+  //
+  // It named a `0.N.x` series until the 0.6.0 release, which was a second problem:
+  // release-please could not bump a series token, so the file could only be kept
+  // current by someone remembering, and this test failed the release rather than
+  // preventing the drift. Worse, the series form contradicted the row below it --
+  // `0.5.x` reads as covering 0.5.0, which "Previous releases | Not supported"
+  // denies. It now names the exact current release and is bumped by the release.
   it("keeps the security policy's supported version bound to the package", async () => {
     const version = JSON.parse(await read("package.json")).version as string;
-    const [major, minor] = version.split(".");
     const security = await read("SECURITY.md");
-    const declared = [...security.matchAll(/`(\d+)\.(\d+)\.x`/g)].map((m) => `${m[1]}.${m[2]}`);
+    const declared = [...security.matchAll(/`v(\d+\.\d+\.\d+)`/g)].map((match) => match[1]);
 
-    expect(declared.length, "SECURITY.md declares no supported version series").toBeGreaterThan(0);
+    expect(declared.length, "SECURITY.md declares no supported version").toBeGreaterThan(0);
     expect(
-      declared.filter((series) => series !== `${major}.${minor}`),
-      `SECURITY.md names a version series the package is not on (package.json is ${version}).`,
+      declared.filter((candidate) => candidate !== version),
+      `SECURITY.md names a version the package is not on (package.json is ${version}).`,
     ).toEqual([]);
+  });
+
+  // The assertion above states the invariant; this one states that nobody has to
+  // remember it. Without the extra-file entry and the annotation, a release bumps
+  // package.json, leaves SECURITY.md behind, and fails the suite *inside* the
+  // release workflow -- before `Run Release Please` reaches the tag, so the release
+  // does not happen at all. That is how v0.6.0 was blocked.
+  // Three separate files hard-coded `v0.5.1` next to lines that release-please
+  // already bumps, and each was wrong the moment a release landed: SECURITY.md
+  // blocked the 0.6.0 release outright, while README and PUBLICATION_READINESS
+  // told readers a shipped feature was not in any binary. Naming today's version
+  // by hand is the defect; the annotation is the fix. This fails at the moment
+  // someone writes the current version unannotated, rather than one release later
+  // when it has quietly become false.
+  it.each(["README.md", "SECURITY.md", "docs/PUBLICATION_READINESS.md"])(
+    "never states the current version in %s without binding it to the release",
+    async (file) => {
+      const version = JSON.parse(await read("package.json")).version as string;
+
+      const unbound = (await read(file))
+        .split("\n")
+        .map((line, index) => ({ line, number: index + 1 }))
+        .filter(({ line }) => line.includes(`v${version}`))
+        .filter(({ line }) => !line.includes("x-release-please-version"))
+        .map(({ number }) => `${file}:${number}`);
+
+      // An older version may be named deliberately -- the Store publication record
+      // is one -- because it does not move when this package does. Only the current
+      // one is guaranteed to go stale.
+      expect(
+        unbound,
+        `${file} hard-codes v${version}; add <!-- x-release-please-version --> to that line, or name a version that does not move with the release.`,
+      ).toEqual([]);
+    },
+  );
+
+  it("bumps the security policy as part of the release rather than by hand", async () => {
+    const config = JSON.parse(await read("release-please-config.json")) as {
+      packages: Record<string, { "extra-files": { path: string }[] }>;
+    };
+
+    expect(config.packages["."]?.["extra-files"]?.map((file) => file.path)).toContain(
+      "SECURITY.md",
+    );
+    expect(await read("SECURITY.md")).toContain("<!-- x-release-please-version -->");
   });
 
   // Return-level advertising is too coarse. Every return is advertised, yet
