@@ -147,6 +147,11 @@ A real upload additionally requires the repository or organization variable
 `CWS_SUBMIT_ENABLED` to be exactly `true`. Dry runs do not require it, so a
 package can always be validated without any store interaction.
 
+If the variable is unset when `dry_run=false` is dispatched, the run **fails**
+with the reason rather than skipping. A skipped job reports success, so gating
+the job itself would let a deliberate submission finish green with nothing
+uploaded — indistinguishable from a completed one.
+
 Required GitHub Environment configuration:
 
 - Repository or organization variable: `CWS_SUBMIT_ENABLED=true`.

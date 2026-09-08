@@ -124,7 +124,8 @@ skip ahead or "fix forward" past a failing gate without the user's input.
    - `dry_run` defaults to `true`. A real upload requires dispatching with
      `dry_run=false`, approving the protected `chrome-web-store` environment,
      AND the repository/organization variable `CWS_SUBMIT_ENABLED` being
-     exactly `true`.
+     exactly `true`. With the variable unset, the run fails with that reason;
+     it does not skip, because a skipped job reports success.
    - The separation exists because a run waiting on a deployment gate stays
      active and holds its workflow's concurrency group. While this job lived in
      `release.yml`, one unapproved submission blocked every release for 22 days
