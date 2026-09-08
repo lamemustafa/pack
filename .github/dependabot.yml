@@ -8,6 +8,17 @@ updates:
     labels:
       - "dependencies"
       - "triage"
+    ignore:
+      # `@types/node` majors track the Node major, and this repo's types are global:
+      # tsconfig sets `types: ["chrome","node","vitest/globals"]`, so the declared Node
+      # API surface applies across every file. CI pins node-version 24.20.0 and
+      # `engines` requires >=24.20.0, so accepting @types/node 26 would let tsc approve
+      # APIs that do not exist at runtime -- a failure that appears in production, not
+      # at build time. Lift this when the runtime moves, and move both together.
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
+
     groups:
       # Grouped by risk, not convenience. react, react-dom and @wxt-dev/module-react are
       # the only dependencies that reach a taxpayer's browser; they are deliberately not
