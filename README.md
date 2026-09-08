@@ -82,9 +82,10 @@ files derived from the staged portal JSON already in that run:
 GSTR-3B working-paper output and contains exactly one sheet, `GSTR-3B Consolidated`.
 
 A GSTR-2B full-year run produces its own `full-year-workbook.xlsx` when the
-staged JSON carries invoice-level records. This is **source-build output**: it
-postdates the published `v0.5.1` package, so a user of the released extension
-cannot produce it yet. In a source build it contains: a first `ITC summary` sheet stating
+staged JSON carries invoice-level records. This is **not in the Chrome Web Store
+package**: the Store publication predates this builder, so a user who installed
+from the Store cannot produce it. It is present in the GitHub release binary and
+in a source build, where it contains: a first `ITC summary` sheet stating
 the portal's own availability totals alongside the GSTR-3B table each heading
 feeds -- as prescribed by FORM GSTR-2B under rule 60(7), not asserted by Pack --
 then one sheet per present section (B2B, B2BA, CDNR, IMPG). Each invoice row begins with a reconciliation key of the

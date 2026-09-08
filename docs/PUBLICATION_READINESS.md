@@ -63,9 +63,19 @@ summary` sheet stating the portal's own availability totals and the GSTR-3B
   spreadsheet unchanged, the run keeps the tidy CSV instead and reports the
   absence rather than emitting a blank or mislabelled workbook.
 
-  **Not in a released binary.** This builder postdates `v0.5.1`. A user of the
-  published package cannot produce a GSTR-2B workbook, and public copy must not
-  imply otherwise until a release carries it. The source-controlled Store listing draft
+  **Not in the Store-published package.** The Chrome Web Store publication is
+  `v0.5.0`, recorded above, and predates this builder, so a user who installed
+  from the Store cannot produce a GSTR-2B workbook and public copy must not imply
+  otherwise. The GitHub release binary is a separate distribution and does carry
+  it: `src/entrypoints/offscreen/main.ts` imports and invokes the builder in the
+  production offscreen entrypoint, and `CHANGELOG.md` lists it from the release
+  that first shipped it. State which distribution a claim describes -- "released"
+  alone is ambiguous between the two, and this paragraph previously read as
+  denying both while only one was true. Note also that this sentence names the
+  Store publication rather than the source version on purpose: the Store version
+  moves only when a submission is recorded, so it does not drift with every
+  release the way an unannotated source version does.
+  The source-controlled Store listing draft
   names GSTR-2B as supported beta scope and a test binds it to the capability
   table, but the live dashboard fields still carry superseded wording: they are
   corrected only once `docs/chrome-web-store/dashboard-closeout.md` records the
