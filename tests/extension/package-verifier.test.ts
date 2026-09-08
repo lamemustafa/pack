@@ -3,6 +3,10 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  packagedReferencePath,
+  packagedReferenceUrl,
+} from "../../scripts/lib/packaged-reference-path.mjs";
 
 const rootDir = process.cwd();
 const createdDirs: string[] = [];
@@ -111,6 +115,132 @@ describe("extension package verifier", () => {
       '<!doctype html><html><head><link rel="stylesheet" href="../assets/parser.css"></head><body><script type="module" src="../chunks/panel.js"></script></body></html>',
     );
     await writePackageFile(outputDir, "assets/parser.css", "body {}\n");
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("keeps browser URL resolution for clamped and nested-page references", () => {
+    const clamped = packagedReferenceUrl("panel.html", "../../../chunks/panel.js");
+    const nestedPage = packagedReferenceUrl("pages/panel.html", "../chunks/panel.js");
+
+    expect(clamped).not.toBeNull();
+    expect(nestedPage).not.toBeNull();
+    expect(packagedReferencePath(clamped!)).toBe("chunks/panel.js");
+    expect(packagedReferencePath(nestedPage!)).toBe("chunks/panel.js");
+  });
+
+  it("rejects an encoded-slash reference that would otherwise read outside the package", async () => {
+    const outputDir = await createValidPackage();
+    const escapedFilename = `escaped-${path.basename(outputDir)}.js`;
+    const escapedFile = path.join(path.dirname(outputDir), escapedFilename);
+    await writeFile(escapedFile, "export const outsidePackage = true;\n");
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="%2e%2e%2f${escapedFilename}"></script></body></html>`,
+    );
+
+    try {
+      const result = await runVerifier(outputDir);
+
+      // Without containment, path.join reads the non-empty sibling and this passes.
+      expect(result.status).toBe(1);
+      expect(result.output).toContain("Packaged file escapes extension output directory");
+      expect(result.output).toContain(`../${escapedFilename}`);
+      expect(result.output).not.toContain("Missing asset referenced by panel.html");
+    } finally {
+      await rm(escapedFile, { force: true });
+    }
+  });
+
+  it("rejects a whitespace-prefixed remote reference from its parsed URL", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "chunks/panel.css", "body {}\n");
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><head><link rel="stylesheet" href=" https://evil.example/chunks/panel.css"></head><body><script type="module" src="/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    // The previous raw-string scheme guard misses leading ASCII whitespace.
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      "Extension page reference resolves outside the extension origin",
+    );
+  });
+
+  it("rejects a well-formed remote reference from its parsed URL", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><head><link rel="stylesheet" href="https://evil.example/chunks/panel.css"></head><body><script type="module" src="/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      "Extension page reference resolves outside the extension origin",
+    );
+  });
+
+  it("rejects a different extension host from its parsed URL", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="chrome-extension://other-extension/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      "Extension page reference resolves outside the extension origin",
+    );
+  });
+
+  it("accepts a whitespace-normalized local reference", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src=" /chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("rejects an active srcdoc iframe before its nested bundle reference is missed", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><iframe srcdoc=\'&lt;script src="/chunks/missing.js"&gt;&lt;/script&gt;\'></iframe></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    // Without the srcdoc guard, JSDOM only sees the outer script and passes.
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page declares an iframe srcdoc: panel.html");
+  });
+
+  it("does not reject an ordinary iframe src", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "frames/help.html", "<!doctype html><title>Help</title>");
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><iframe src="/frames/help.html" title="Help"></iframe></body></html>',
+    );
 
     const result = await runVerifier(outputDir);
 
