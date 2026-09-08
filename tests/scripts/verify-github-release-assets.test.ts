@@ -55,6 +55,51 @@ describe("GitHub release asset verifier", () => {
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("an unknown tag");
   });
+
+  // Codex reproduced this with source.commit=deadbeef verifying successfully: the tag
+  // string can be right while the build came from a different commit, and every other
+  // check compares the package with the provenance rather than either with the repo.
+  it("rejects provenance built from a commit the tag does not point at", async () => {
+    const fixture = await createReleaseFixture({
+      provenanceSourceCommit: "d".repeat(40),
+      provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
+    });
+
+    const result = await runVerifier(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("was built from");
+    expect(result.output).toContain(TAG_COMMIT);
+  });
+
+  it("rejects provenance with no recorded source commit", async () => {
+    const fixture = await createReleaseFixture({
+      provenanceSourceCommit: null,
+      provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
+    });
+
+    const result = await runVerifier(fixture);
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("an unrecorded commit");
+  });
+
+  // `git/ref/tags/<tag>` returns the tag *object* for an annotated tag, not the commit.
+  // Comparing against it directly manufactures a false mismatch on every annotated tag,
+  // so the verifier must dereference. Without that, this case fails.
+  it("dereferences an annotated tag to its commit rather than comparing the tag object", async () => {
+    const fixture = await createReleaseFixture({
+      annotatedTag: true,
+      provenanceZipSha256: SYNTHETIC_ZIP_SHA256,
+    });
+
+    const result = await runVerifier(fixture);
+
+    expect({ status: result.status, output: result.output }).toEqual({
+      status: 0,
+      output: expect.stringContaining("Verified GitHub release assets"),
+    });
+  });
 });
 
 const REQUESTED_TAG = "v0.3.0";
@@ -62,13 +107,19 @@ const SYNTHETIC_ZIP_CONTENT = "synthetic zip";
 // A matching checksum, so a failure in the tests below is unambiguously the tag binding
 // and not the checksum guard that runs alongside it.
 const SYNTHETIC_ZIP_SHA256 = createHash("sha256").update(SYNTHETIC_ZIP_CONTENT).digest("hex");
+const TAG_COMMIT = "a".repeat(40);
+const ANNOTATED_TAG_OBJECT = "b".repeat(40);
 
 async function createReleaseFixture({
   provenanceZipSha256,
   provenanceSourceTag = REQUESTED_TAG,
+  provenanceSourceCommit = TAG_COMMIT,
+  annotatedTag = false,
 }: {
   provenanceZipSha256: string;
   provenanceSourceTag?: string | null;
+  provenanceSourceCommit?: string | null;
+  annotatedTag?: boolean;
 }) {
   const cwd = await mkdtemp(path.join(tmpdir(), "pack-release-assets-"));
   createdDirs.push(cwd);
@@ -90,7 +141,14 @@ async function createReleaseFixture({
           zipAssetName: path.basename(zipPath),
           zipSha256: provenanceZipSha256,
         },
-        ...(provenanceSourceTag === null ? {} : { source: { tag: provenanceSourceTag } }),
+        ...(provenanceSourceTag === null && provenanceSourceCommit === null
+          ? {}
+          : {
+              source: {
+                ...(provenanceSourceTag === null ? {} : { tag: provenanceSourceTag }),
+                ...(provenanceSourceCommit === null ? {} : { commit: provenanceSourceCommit }),
+              },
+            }),
       },
       null,
       2,
@@ -108,11 +166,37 @@ async function createReleaseFixture({
       prerelease: true,
     })}\n`,
   );
+  // A lightweight tag ref points straight at the commit. An annotated one points at a
+  // tag *object* that must be dereferenced -- the trap the verifier exists to avoid, so
+  // both shapes are exercised.
+  const tagRefPath = path.join(cwd, "tag-ref.json");
+  const tagObjectPath = path.join(cwd, "tag-object.json");
+  await writeFile(
+    tagRefPath,
+    `${JSON.stringify({
+      object: annotatedTag
+        ? { sha: ANNOTATED_TAG_OBJECT, type: "tag" }
+        : { sha: TAG_COMMIT, type: "commit" },
+    })}\n`,
+  );
+  await writeFile(tagObjectPath, `${JSON.stringify({ object: { sha: TAG_COMMIT } })}\n`);
+
   const ghPath = path.join(binDir, "gh");
-  await writeFile(ghPath, '#!/bin/sh\ncat "$PACK_TEST_RELEASE_JSON"\n');
+  await writeFile(
+    ghPath,
+    [
+      "#!/bin/sh",
+      'case "$*" in',
+      '  *git/ref/tags/*) cat "$PACK_TEST_TAG_REF_JSON" ;;',
+      '  *git/tags/*)     cat "$PACK_TEST_TAG_OBJECT_JSON" ;;',
+      '  *)               cat "$PACK_TEST_RELEASE_JSON" ;;',
+      "esac",
+      "",
+    ].join("\n"),
+  );
   await chmod(ghPath, 0o755);
 
-  return { binDir, checksumPath, provenancePath, releasePath, zipPath };
+  return { binDir, checksumPath, provenancePath, releasePath, tagObjectPath, tagRefPath, zipPath };
 }
 
 async function runVerifier({
@@ -120,12 +204,16 @@ async function runVerifier({
   checksumPath,
   provenancePath,
   releasePath,
+  tagObjectPath,
+  tagRefPath,
   zipPath,
 }: {
   binDir: string;
   checksumPath: string;
   provenancePath: string;
   releasePath: string;
+  tagObjectPath: string;
+  tagRefPath: string;
   zipPath: string;
 }): Promise<{ output: string; status: number }> {
   return new Promise((resolve) => {
@@ -149,6 +237,8 @@ async function runVerifier({
         env: {
           ...process.env,
           PACK_TEST_RELEASE_JSON: releasePath,
+          PACK_TEST_TAG_OBJECT_JSON: tagObjectPath,
+          PACK_TEST_TAG_REF_JSON: tagRefPath,
           PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
         },
       },

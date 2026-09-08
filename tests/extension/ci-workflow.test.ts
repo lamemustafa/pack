@@ -187,46 +187,34 @@ describe("Pack CI workflow", () => {
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED=true");
   });
 
-  it("refuses a real upload loudly, rather than skipping, when enablement is unset", async () => {
+  it("gates a real upload both before and after the deployment approval", async () => {
     const submitWorkflow = await readFile(path.join(workflowsDir, "chrome-web-store.yml"), "utf8");
+    const enablementJob = workflowJobBlock(submitWorkflow, "enablement");
+    const submitJob = workflowJobBlock(submitWorkflow, "submit");
 
-    // No job-level condition (4-space key). A skipped job reports *success*, so gating the
-    // whole job on the variable would let a deliberate `dry_run=false` dispatch finish green
+    // No job-level condition (4-space key). A skipped job reports *success*, so gating a
+    // job on the variable would let a deliberate `dry_run=false` dispatch finish green
     // with nothing uploaded -- indistinguishable from a completed submission.
     expect(submitWorkflow).not.toContain("\n    if:");
 
-    // The guard must live OUTSIDE the protected environment. GitHub evaluates
-    // `environment:` at the job level, before any step runs, so a guard inside the gated
-    // job cannot report until a maintainer has already approved the deployment -- the
-    // refusal would arrive after the human cost it exists to avoid.
-    const enablementJob = workflowJobBlock(submitWorkflow, "enablement");
-    const submitJob = workflowJobBlock(submitWorkflow, "submit");
-    expect(enablementJob).toContain("Require explicit enablement for a real upload");
+    // Check time: outside the protected environment. GitHub evaluates `environment:` at
+    // the job level, before any step runs, so a guard inside the gated job cannot report
+    // until a maintainer has already approved the deployment.
     expect(enablementJob).not.toContain("environment:");
+    expect(enablementJob).toContain("scripts/require-store-upload-enabled.mjs");
+
+    // Use time: again inside the gated job, because an approval can sit pending for days
+    // (#336) and revoking the variable during that wait must revoke the upload. Nothing
+    // else re-reads repository variables.
     expect(submitJob).toContain("environment: chrome-web-store");
-    expect(submitJob).not.toContain("CWS_SUBMIT_ENABLED");
     expect(submitJob).toContain("needs: enablement");
+    expect(submitJob).toContain("scripts/require-store-upload-enabled.mjs");
 
-    // Run the guard rather than grep it: the contract is an exit code and a stated reason.
-    const guard = extractNamedWorkflowRunScript(
-      submitWorkflow,
-      "Require explicit enablement for a real upload",
-    );
-    expect(guard).toContain("CWS_SUBMIT_ENABLED");
-
-    const fixtureDir = await mkdtemp(path.join(tmpdir(), "pack-cws-guard-"));
-    try {
-      for (const value of ["", "false", "TRUE", "true "]) {
-        const refused = runWorkflowShell(guard, fixtureDir, { CWS_SUBMIT_ENABLED: value });
-        expect({ value, status: refused.status }).toEqual({ value, status: 1 });
-        expect(`${refused.stdout}${refused.stderr}`).toContain("Nothing was uploaded");
-      }
-
-      const allowed = runWorkflowShell(guard, fixtureDir, { CWS_SUBMIT_ENABLED: "true" });
-      expect(allowed.status).toBe(0);
-    } finally {
-      await rm(fixtureDir, { force: true, recursive: true });
-    }
+    // ...and it must run *before* the publisher, not merely somewhere in the job.
+    const recheckAt = submitJob.indexOf("scripts/require-store-upload-enabled.mjs");
+    const publishAt = submitJob.indexOf("scripts/publish-chrome-web-store.mjs");
+    expect(publishAt).toBeGreaterThanOrEqual(0);
+    expect(recheckAt).toBeLessThan(publishAt);
   });
 
   it("monitors Chrome Web Store review status without publishing side effects", async () => {
@@ -384,16 +372,6 @@ function workflowJobBlock(workflow: string, jobName: string): string {
   const rest = workflow.slice(start + 1);
   const next = rest.slice(1).search(/\n {2}[A-Za-z0-9_-]+:\n/u);
   return next === -1 ? rest : rest.slice(0, next + 1);
-}
-
-// Reads the `run:` block of one named step. Anchoring on the step name means a rename
-// fails the extraction loudly instead of silently reading a different step's script.
-function extractNamedWorkflowRunScript(workflow: string, stepName: string): string {
-  const anchor = workflow.indexOf(`- name: ${stepName}`);
-  expect(anchor).toBeGreaterThanOrEqual(0);
-  const start = workflow.indexOf(RUN_BLOCK_MARKER, anchor);
-  expect(start).toBeGreaterThanOrEqual(0);
-  return readIndentedRunBlock(workflow.slice(start + RUN_BLOCK_MARKER.length));
 }
 
 function runWorkflowShell(
