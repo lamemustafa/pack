@@ -152,18 +152,38 @@ describe("Pack CI workflow", () => {
     }
   });
 
-  it("requires an explicit repository variable before automatic Chrome Web Store submission", async () => {
+  it("keeps store submission out of the release pipeline entirely", async () => {
     const releaseWorkflow = await readFile(
       path.join(rootDir, ".github", "workflows", "release.yml"),
       "utf8",
     );
+
+    // A protected environment inside `release.yml` parks the whole run while it waits
+    // for approval, and a waiting run still holds the workflow's concurrency group. One
+    // unattended approval on 2026-08-17 blocked every release for 22 days and cancelled
+    // 59 consecutive runs (#336). Releasing and publishing must not share a pipeline.
+    expect(releaseWorkflow).not.toContain("environment:");
+    expect(releaseWorkflow).not.toContain("publish-chrome-web-store");
+  });
+
+  it("requires an explicit repository variable before a real Chrome Web Store upload", async () => {
+    const submitWorkflow = await readFile(
+      path.join(rootDir, ".github", "workflows", "chrome-web-store.yml"),
+      "utf8",
+    );
     const releaseRunbook = await readFile(path.join(rootDir, "docs", "RELEASE.md"), "utf8");
 
-    expect(releaseWorkflow).toContain("vars.CWS_SUBMIT_ENABLED == 'true'");
-    expect(releaseWorkflow).toContain("environment: chrome-web-store");
-    expect(releaseWorkflow).toContain("node scripts/publish-chrome-web-store.mjs");
-    expect(releaseWorkflow).toContain("--zip .release/*chrome.zip");
-    expect(releaseWorkflow).toContain("--provenance .release/pack-release-provenance.v1.json");
+    // Submission is dispatch-only and cannot be reached by merging a release PR.
+    expect(submitWorkflow).toContain("workflow_dispatch:");
+    expect(submitWorkflow).not.toContain("on:\n  push:");
+    expect(submitWorkflow).toContain("environment: chrome-web-store");
+    expect(submitWorkflow).toContain("node scripts/publish-chrome-web-store.mjs");
+    expect(submitWorkflow).toContain("--zip .release/*chrome.zip");
+    expect(submitWorkflow).toContain("--provenance .release/pack-release-provenance.v1.json");
+
+    // The variable still gates real uploads; dry runs validate without it.
+    expect(submitWorkflow).toContain("vars.CWS_SUBMIT_ENABLED == 'true'");
+    expect(submitWorkflow).toContain('--dry-run "${{ inputs.dry_run }}"');
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED");
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED=true");
   });
