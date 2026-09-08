@@ -967,7 +967,12 @@ describe("extension package verifier", () => {
     expect(packageJson.scripts["verify:browser"]).toBe(
       "node scripts/verify-extension-browser.mjs .output/chrome-mv3",
     );
-    expect(packageJson.devDependencies["@playwright/test"]).toBe("1.62.1");
+    // Browser release verification drives a real browser, so the Playwright version
+    // has to be exact rather than a range -- a floating minor would change the
+    // browser under a release check that exists to be reproducible. Asserting the
+    // exact pin, not a particular version: the literal `1.62.1` this replaced failed
+    // every routine Playwright bump and made the upgrade look like the breakage.
+    expect(packageJson.devDependencies["@playwright/test"]).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 
   it("keeps browser release verification fail-closed around the panel, scripts, network, and runtime errors", async () => {
