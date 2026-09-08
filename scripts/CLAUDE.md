@@ -19,7 +19,8 @@ Verified against actual file contents and `.github/workflows/*.yml` on 2026-07-0
 - `verify-github-release-assets.mjs` — re-downloads/checks a tagged GitHub release's
   ZIP + checksum + provenance for consistency before Chrome Web Store submission.
 - `publish-chrome-web-store.mjs` — uploads and publishes the verified ZIP via the
-  Chrome Web Store API (only runs when `release_created` and `CWS_SUBMIT_ENABLED`).
+  Chrome Web Store API (dispatch-only via `Chrome Web Store Submit`; a real upload
+  also requires `CWS_SUBMIT_ENABLED`).
 
 ### CI-invoked (other workflows)
 

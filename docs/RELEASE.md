@@ -126,12 +126,31 @@ The official V0 listing is:
 
 https://chromewebstore.google.com/detail/complyeaze-pack-gst-gstr/nfnbhekccajjfgkppolomflaeledoccb
 
-The release workflow has a protected `chrome-web-store` environment job. The
-automatic submission job runs only when the repository or organization variable
-`CWS_SUBMIT_ENABLED` is exactly `true`. Keep the environment restricted to
-maintainers and require approval while Pack is pre-1.0. The job downloads the
-exact GitHub release ZIP instead of rebuilding it, then runs
-`scripts/publish-chrome-web-store.mjs`.
+Store submission is **not** part of the release pipeline. `Pack Release` versions,
+packages, and publishes GitHub release assets; it never talks to the Chrome Web
+Store. Submission happens only through the separate `Chrome Web Store Submit`
+workflow, which is `workflow_dispatch`-only and takes an explicit release tag.
+
+This separation is load-bearing, not stylistic. `Chrome Web Store Submit` uses a
+protected `chrome-web-store` environment that waits for maintainer approval, and a
+GitHub run waiting on a deployment gate stays **active** — so it holds its
+workflow's concurrency group. While that job lived inside `release.yml`, one
+unapproved submission on 2026-08-17 held `pack-release-${{ github.ref }}` for 22
+days, cancelled 59 consecutive release runs, and stopped every release after
+v0.5.1. Nothing surfaced it: each blocked run reported only `cancelled`. See #336.
+
+Keep the environment restricted to maintainers and require approval while Pack is
+pre-1.0. The submit job downloads the exact GitHub release ZIP instead of
+rebuilding it, then runs `scripts/publish-chrome-web-store.mjs`.
+
+A real upload additionally requires the repository or organization variable
+`CWS_SUBMIT_ENABLED` to be exactly `true`. Dry runs do not require it, so a
+package can always be validated without any store interaction.
+
+If the variable is unset when `dry_run=false` is dispatched, the run **fails**
+with the reason rather than skipping. A skipped job reports success, so gating
+the job itself would let a deliberate submission finish green with nothing
+uploaded — indistinguishable from a completed one.
 
 Required GitHub Environment configuration:
 
@@ -142,7 +161,9 @@ Required GitHub Environment configuration:
   `CWS_REFRESH_TOKEN`.
 
 Use `Chrome Web Store Submit` with `dry_run=true` to validate an existing
-release package without uploading. The workflow verifies the downloaded release
+release package without uploading. `dry_run` defaults to `true`; an upload is
+only ever the result of someone dispatching the workflow, choosing `false`, and
+approving the environment. The workflow verifies the downloaded release
 ZIP, checksum, provenance file, and GitHub asset digest before the publish
 script runs. The publish script must receive the matching
 `pack-release-provenance.v1.json` file so dry-runs and uploads validate the

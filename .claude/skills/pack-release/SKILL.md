@@ -117,10 +117,19 @@ skip ahead or "fix forward" past a failing gate without the user's input.
      (`verify-github-release-assets.mjs`).
 
 9. **Chrome Web Store submission (gated, do not force)**
-   - This only runs automatically as a follow-on GitHub Actions job, and only
-     when both conditions hold: the release job's `release_created` output is
-     `true`, AND the repository/organization variable `CWS_SUBMIT_ENABLED` is
-     exactly `true`.
+   - This never runs automatically. It is not part of `Pack Release`; store
+     submission lives only in the `Chrome Web Store Submit` workflow, which is
+     `workflow_dispatch`-only and takes an explicit release tag. Merging a
+     release PR cannot reach it.
+   - `dry_run` defaults to `true`. A real upload requires dispatching with
+     `dry_run=false`, approving the protected `chrome-web-store` environment,
+     AND the repository/organization variable `CWS_SUBMIT_ENABLED` being
+     exactly `true`. With the variable unset, the run fails with that reason;
+     it does not skip, because a skipped job reports success.
+   - The separation exists because a run waiting on a deployment gate stays
+     active and holds its workflow's concurrency group. While this job lived in
+     `release.yml`, one unapproved submission blocked every release for 22 days
+     (#336).
    - It downloads the exact GitHub release ZIP (never rebuilds it) and runs
      `scripts/publish-chrome-web-store.mjs` with the matching provenance file.
    - For a local dry run against an already-built release package:

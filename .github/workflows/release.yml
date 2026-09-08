@@ -20,9 +20,6 @@ jobs:
     name: Version, package, and release
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
 
     steps:
       - name: Checkout
@@ -123,56 +120,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-
-  chrome-web-store:
-    name: Submit Chrome Web Store package
-    needs: release
-    if: ${{ needs.release.outputs.release_created == 'true' && vars.CWS_SUBMIT_ENABLED == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-    environment: chrome-web-store
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 24.20.0
-
-      - name: Download verified release package
-        run: >-
-          gh release download "${{ needs.release.outputs.tag_name }}"
-          --pattern "*chrome.zip"
-          --pattern "*.sha256"
-          --pattern "pack-release-provenance.v1.json"
-          --dir .release
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Verify downloaded release package
-        run: >-
-          node scripts/verify-github-release-assets.mjs
-          --tag "${{ needs.release.outputs.tag_name }}"
-          --zip .release/*chrome.zip
-          --checksum .release/*.sha256
-          --provenance .release/pack-release-provenance.v1.json
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-
-      - name: Submit to Chrome Web Store
-        run: >-
-          node scripts/publish-chrome-web-store.mjs
-          --zip .release/*chrome.zip
-          --provenance .release/pack-release-provenance.v1.json
-        env:
-          CWS_EXTENSION_ID: nfnbhekccajjfgkppolomflaeledoccb
-          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
-          CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
-          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
-          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
-          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}

@@ -111,11 +111,14 @@ still report every step you attempted or skipped.
     Do not substitute a locally rebuilt ZIP or regenerated provenance.
 15. Chrome Web Store submission via
     `node scripts/publish-chrome-web-store.mjs`
-    (`pnpm release:chrome-web-store`) — this is gated on
-    `release_created == true` AND repo var `CWS_SUBMIT_ENABLED == true` in
-    CI. Never invoke this script yourself. Audit-only: confirm from
-    `.github/workflows/release.yml` that the gating conditions are wired
-    correctly, and note current CWS submission status only from evidence
+    (`pnpm release:chrome-web-store`) — this runs only from the
+    dispatch-only `Chrome Web Store Submit` workflow, gated on the protected
+    `chrome-web-store` environment plus repo var `CWS_SUBMIT_ENABLED == true`
+    for a real upload. It is deliberately absent from `release.yml`. Never
+    invoke this script yourself. Audit-only: confirm from
+    `.github/workflows/chrome-web-store.yml` that the gating conditions are
+    wired correctly, confirm `release.yml` contains no `environment:` job, and
+    note current CWS submission status only from evidence
     already recorded in `docs/PUBLICATION_READINESS.md` or prior workflow
     runs (via `gh run list` / `gh api` if available) — do not trigger a
     submission.

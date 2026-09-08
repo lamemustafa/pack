@@ -152,20 +152,69 @@ describe("Pack CI workflow", () => {
     }
   });
 
-  it("requires an explicit repository variable before automatic Chrome Web Store submission", async () => {
+  it("keeps store submission out of the release pipeline entirely", async () => {
     const releaseWorkflow = await readFile(
       path.join(rootDir, ".github", "workflows", "release.yml"),
       "utf8",
     );
+
+    // A protected environment inside `release.yml` parks the whole run while it waits
+    // for approval, and a waiting run still holds the workflow's concurrency group. One
+    // unattended approval on 2026-08-17 blocked every release for 22 days and cancelled
+    // 59 consecutive runs (#336). Releasing and publishing must not share a pipeline.
+    expect(releaseWorkflow).not.toContain("environment:");
+    expect(releaseWorkflow).not.toContain("publish-chrome-web-store");
+  });
+
+  it("requires an explicit repository variable before a real Chrome Web Store upload", async () => {
+    const submitWorkflow = await readFile(
+      path.join(rootDir, ".github", "workflows", "chrome-web-store.yml"),
+      "utf8",
+    );
     const releaseRunbook = await readFile(path.join(rootDir, "docs", "RELEASE.md"), "utf8");
 
-    expect(releaseWorkflow).toContain("vars.CWS_SUBMIT_ENABLED == 'true'");
-    expect(releaseWorkflow).toContain("environment: chrome-web-store");
-    expect(releaseWorkflow).toContain("node scripts/publish-chrome-web-store.mjs");
-    expect(releaseWorkflow).toContain("--zip .release/*chrome.zip");
-    expect(releaseWorkflow).toContain("--provenance .release/pack-release-provenance.v1.json");
+    // Submission is dispatch-only and cannot be reached by merging a release PR.
+    expect(submitWorkflow).toContain("workflow_dispatch:");
+    expect(submitWorkflow).not.toContain("on:\n  push:");
+    expect(submitWorkflow).toContain("environment: chrome-web-store");
+    expect(submitWorkflow).toContain("node scripts/publish-chrome-web-store.mjs");
+    expect(submitWorkflow).toContain("--zip .release/*chrome.zip");
+    expect(submitWorkflow).toContain("--provenance .release/pack-release-provenance.v1.json");
+
+    // The variable still gates real uploads; dry runs validate without it.
+    expect(submitWorkflow).toContain('--dry-run "${{ inputs.dry_run }}"');
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED");
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED=true");
+  });
+
+  it("gates a real upload both before and after the deployment approval", async () => {
+    const submitWorkflow = await readFile(path.join(workflowsDir, "chrome-web-store.yml"), "utf8");
+    const enablementJob = workflowJobBlock(submitWorkflow, "enablement");
+    const submitJob = workflowJobBlock(submitWorkflow, "submit");
+
+    // No job-level condition (4-space key). A skipped job reports *success*, so gating a
+    // job on the variable would let a deliberate `dry_run=false` dispatch finish green
+    // with nothing uploaded -- indistinguishable from a completed submission.
+    expect(submitWorkflow).not.toContain("\n    if:");
+
+    // Check time: outside the protected environment. GitHub evaluates `environment:` at
+    // the job level, before any step runs, so a guard inside the gated job cannot report
+    // until a maintainer has already approved the deployment.
+    expect(enablementJob).not.toContain("environment:");
+    expect(enablementJob).toContain("scripts/require-store-upload-enabled.mjs");
+
+    // Use time: again inside the gated job, because an approval can sit pending for days
+    // (#336) and revoking the variable during that wait must revoke the upload. Nothing
+    // else re-reads repository variables.
+    expect(submitJob).toContain("environment: chrome-web-store");
+    expect(submitJob).toContain("needs: enablement");
+    expect(submitJob).toContain("scripts/require-store-upload-enabled.mjs");
+
+    // ...and it must run *before* the publisher, not merely somewhere in the job.
+    const recheckAt = submitJob.indexOf("scripts/require-store-upload-enabled.mjs");
+    const publishAt = submitJob.indexOf("scripts/publish-chrome-web-store.mjs");
+    expect(publishAt).toBeGreaterThanOrEqual(0);
+    expect(recheckAt).toBeLessThan(publishAt);
   });
 
   it("monitors Chrome Web Store review status without publishing side effects", async () => {
@@ -288,14 +337,12 @@ exit "$FAKE_NODE_EXIT"
   });
 });
 
-function extractLastWorkflowRunScript(workflow: string): string {
-  const marker = "        run: |\n";
-  const start = workflow.lastIndexOf(marker);
-  expect(start).toBeGreaterThanOrEqual(0);
-  const lines = workflow.slice(start + marker.length).split("\n");
+const RUN_BLOCK_MARKER = "        run: |\n";
+
+function readIndentedRunBlock(rest: string): string {
   const script: string[] = [];
 
-  for (const line of lines) {
+  for (const line of rest.split("\n")) {
     if (line.startsWith("          ")) {
       script.push(line.slice(10));
       continue;
@@ -308,6 +355,23 @@ function extractLastWorkflowRunScript(workflow: string): string {
   }
 
   return script.join("\n");
+}
+
+function extractLastWorkflowRunScript(workflow: string): string {
+  const start = workflow.lastIndexOf(RUN_BLOCK_MARKER);
+  expect(start).toBeGreaterThanOrEqual(0);
+  return readIndentedRunBlock(workflow.slice(start + RUN_BLOCK_MARKER.length));
+}
+
+// Slices one job's block out of a workflow: from its 2-space-indented key to the next
+// key at that indent. Used to assert which job a step or key belongs to, which string
+// matching over the whole file cannot distinguish.
+function workflowJobBlock(workflow: string, jobName: string): string {
+  const start = workflow.indexOf(`\n  ${jobName}:\n`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const rest = workflow.slice(start + 1);
+  const next = rest.slice(1).search(/\n {2}[A-Za-z0-9_-]+:\n/u);
+  return next === -1 ? rest : rest.slice(0, next + 1);
 }
 
 function runWorkflowShell(
