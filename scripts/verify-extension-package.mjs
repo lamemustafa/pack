@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import {
+  isPackagedReferenceUrl,
+  isPageRelativeReference,
+  packagedReferencePath,
+  packagedReferenceUrl,
+} from "./lib/packaged-reference-path.mjs";
+// Packaged-page verification now parses every extension page, not just the
+// source-surfaces reachability path, so JSDOM must load for every invocation.
+import { JSDOM } from "jsdom";
 import ts from "typescript";
 
 const args = process.argv.slice(2);
@@ -18,10 +27,7 @@ if (flags.some((flag) => flag !== "--source-surfaces") || outputDirectories.leng
   );
 }
 const sourceSurfacesMode = flags.includes("--source-surfaces");
-// JSDOM is only evidence machinery for the source-surface panel reachability
-// graph. Loading it for ordinary packaged-build verification makes every
-// short-lived verifier invocation pay its initialization cost.
-const JSDOM = sourceSurfacesMode ? (await import("jsdom")).JSDOM : null;
+const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const outputDir = path.resolve(outputDirectories[0]);
 let sawSourceSurfaceMarker = false;
 
@@ -68,7 +74,6 @@ async function reachableFromPanelHtml(dir) {
 }
 
 function panelModuleScriptSpecifiers(markup) {
-  if (JSDOM === null) return [];
   const dom = new JSDOM(markup, { runScripts: "outside-only" });
   try {
     // Package pages never need a document base. Its presence makes the raw
@@ -562,17 +567,38 @@ console.log(
 // stylesheet it references must also be present and non-empty. Without this, a
 // build that emitted the HTML but dropped its chunk passed verification.
 async function requireReferencedBundles(page, html) {
-  const references = [
-    ...html.matchAll(/<script[^>]+src="([^"]+)"/g),
-    ...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g),
-  ].map((match) => match[1]);
+  const references = referencedBundleSpecifiers(page, html);
 
   for (const reference of references) {
-    if (/^[a-z]+:/i.test(reference) || reference.startsWith("//")) {
-      throw new Error(`Extension page references a remote asset: ${page} -> ${reference}`);
+    const referenceUrl = packagedReferenceUrl(page, reference);
+    if (referenceUrl === null) {
+      throw new Error(`Extension page reference is not a valid URL: ${page} -> ${reference}`);
     }
-    const relative = reference.replace(/^\//, "").split(/[?#]/)[0];
-    if (!relative) continue;
+    if (!isPackagedReferenceUrl(referenceUrl)) {
+      throw new Error(
+        `Extension page reference resolves outside the extension origin: ${page} -> ${reference}`,
+      );
+    }
+    // Runs after the origin test, which already rejects a foreign host. What is left
+    // is a reference naming the sentinel outright -- indistinguishable from a relative
+    // one after resolution, but the real package carries an extension ID Chrome will
+    // not substitute into an already-absolute URL.
+    if (!isPageRelativeReference(page, reference)) {
+      throw new Error(`Extension page reference is not page-relative: ${page} -> ${reference}`);
+    }
+    const relative = packagedReferencePath(referenceUrl);
+    if (relative === null) {
+      throw new Error(`Extension page reference is not a decodable path: ${page} -> ${reference}`);
+    }
+    // Compared as resolved files rather than as paths. Empty, whitespace-only,
+    // query-only and fragment-only references all resolve to the page, and so do
+    // encoded spellings and dot segments -- but only after the same normalisation
+    // the read performs, so the comparison has to happen on that value.
+    if (resolvePackagedFile(relative) === resolvePackagedFile(page)) {
+      throw new Error(
+        `Extension page reference resolves to the page itself: ${page} -> ${JSON.stringify(reference)}`,
+      );
+    }
     const bytes = await requirePackagedFile(relative, `asset referenced by ${page}`);
     if (bytes.byteLength === 0) {
       throw new Error(`Asset referenced by ${page} is empty: ${relative}`);
@@ -580,9 +606,85 @@ async function requireReferencedBundles(page, html) {
   }
 }
 
-async function requirePackagedFile(relativePath, reason) {
+function referencedBundleSpecifiers(page, markup) {
+  // JSDOM neither executes scripts with outside-only nor loads subresources
+  // unless a resource loader is opted in. This offline verifier does neither.
+  const dom = new JSDOM(markup, { runScripts: "outside-only" });
   try {
-    return await readFile(path.join(outputDir, relativePath));
+    const { document } = dom.window;
+    // Raw attributes are no longer package-root evidence when a document base
+    // can resolve them elsewhere. Package pages never need one, so reject it.
+    if ([...document.querySelectorAll("base")].some(isActiveHtmlPageElement)) {
+      throw new Error(`Extension page declares a base element: ${page}`);
+    }
+    // Pack's static extension pages do not embed nested documents. Rejecting
+    // srcdoc keeps every load-bearing page in the verifier's explicit scope;
+    // an iframe with a normal src remains valid and is not this nested markup.
+    if ([...document.querySelectorAll("iframe[srcdoc]")].some(isActiveHtmlPageElement)) {
+      throw new Error(`Extension page declares an iframe srcdoc: ${page}`);
+    }
+    // A template is inert only until it declares a shadow root: Chrome turns
+    // `shadowrootmode` contents into an active shadow root and loads what they
+    // reference, while `querySelectorAll` enters neither template contents nor
+    // shadow roots. Reject rather than descend, matching the srcdoc decision.
+    if ([...document.querySelectorAll("template[shadowrootmode]")].some(isActiveHtmlPageElement)) {
+      throw new Error(`Extension page declares a declarative shadow root: ${page}`);
+    }
+    const scriptReferences = [...document.querySelectorAll("script[src]")]
+      .filter(isActiveHtmlPageElement)
+      .flatMap((script) => {
+        const source = script.getAttribute("src");
+        return source === null ? [] : [source];
+      });
+    const stylesheetReferences = [...document.querySelectorAll("link[rel][href]")].flatMap(
+      (link) => {
+        if (!isActiveHtmlPageElement(link)) return [];
+        const isStylesheet = link
+          .getAttribute("rel")
+          ?.split(/[\t\n\f\r ]+/)
+          .some((token) => token.toLowerCase() === "stylesheet");
+        const source = link.getAttribute("href");
+        return isStylesheet && source !== null ? [source] : [];
+      },
+    );
+    return [...scriptReferences, ...stylesheetReferences];
+  } finally {
+    dom.window.close();
+  }
+}
+
+function isActiveHtmlPageElement(element) {
+  return element.namespaceURI === HTML_NAMESPACE && !hasInertHtmlNoscriptAncestor(element);
+}
+
+// `closest` matches on tag name regardless of namespace, so an SVG `<noscript>` --
+// which is an ordinary foreign element, not HTML's scripting fallback -- would
+// otherwise mark active HTML content beneath it inert and drop it from
+// verification. Walk the ancestors and require the HTML namespace.
+function hasInertHtmlNoscriptAncestor(element) {
+  for (let ancestor = element.parentElement; ancestor !== null; ancestor = ancestor.parentElement) {
+    if (ancestor.localName === "noscript" && ancestor.namespaceURI === HTML_NAMESPACE) return true;
+  }
+  return false;
+}
+
+// The single place a packaged relative path becomes a file. Anything that needs to
+// reason about which file a reference names must go through this, or it will be
+// comparing a value the lookup does not use -- which produced three separate
+// self-reference defects: a raw pathname, a percent-encoded name, and dot segments
+// that only `path.resolve` collapses.
+function resolvePackagedFile(relativePath) {
+  return path.resolve(path.resolve(outputDir), relativePath);
+}
+
+async function requirePackagedFile(relativePath, reason) {
+  const packageDirectory = path.resolve(outputDir);
+  const packagedFile = resolvePackagedFile(relativePath);
+  if (!packagedFile.startsWith(`${packageDirectory}${path.sep}`)) {
+    throw new Error(`Packaged file escapes extension output directory: ${relativePath}`);
+  }
+  try {
+    return await readFile(packagedFile);
   } catch (error) {
     throw new Error(`Missing ${reason}: ${relativePath} (${error?.code ?? error?.message})`);
   }

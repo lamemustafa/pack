@@ -3,6 +3,10 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  packagedReferencePath,
+  packagedReferenceUrl,
+} from "../../scripts/lib/packaged-reference-path.mjs";
 
 const rootDir = process.cwd();
 const createdDirs: string[] = [];
@@ -61,6 +65,479 @@ describe("extension package verifier", () => {
     const result = await runVerifier(outputDir);
     expect(result.status).toBe(1);
     expect(result.output).toContain("Asset referenced by panel.html is empty");
+  });
+
+  it("rejects a page with a base element before raw bundle references can mislead it", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><head><base href="/nested/"></head><body><script type="module" src="chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page declares a base element: panel.html");
+  });
+
+  it("does not reject an inert base inside template content", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><template><base href="/nested/"></template><script type="module" src="/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("ignores inert noscript bundle-shaped markup", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><noscript><base href="/nested/"><script src="/chunks/noscript.js"></script><link rel="stylesheet" href="/assets/noscript.css"></noscript><script type="module" src="/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("resolves parent-segment bundle references with browser URL semantics", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><head><link rel="stylesheet" href="../assets/parser.css"></head><body><script type="module" src="../chunks/panel.js"></script></body></html>',
+    );
+    await writePackageFile(outputDir, "assets/parser.css", "body {}\n");
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("keeps browser URL resolution for clamped and nested-page references", () => {
+    const clamped = packagedReferenceUrl("panel.html", "../../../chunks/panel.js");
+    const nestedPage = packagedReferenceUrl("pages/panel.html", "../chunks/panel.js");
+
+    expect(clamped).not.toBeNull();
+    expect(nestedPage).not.toBeNull();
+    expect(packagedReferencePath(clamped!)).toBe("chunks/panel.js");
+    expect(packagedReferencePath(nestedPage!)).toBe("chunks/panel.js");
+  });
+
+  it("rejects an encoded-slash reference that would otherwise read outside the package", async () => {
+    const outputDir = await createValidPackage();
+    const escapedFilename = `escaped-${path.basename(outputDir)}.js`;
+    const escapedFile = path.join(path.dirname(outputDir), escapedFilename);
+    await writeFile(escapedFile, "export const outsidePackage = true;\n");
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="%2e%2e%2f${escapedFilename}"></script></body></html>`,
+    );
+
+    try {
+      const result = await runVerifier(outputDir);
+
+      // Without containment, path.join reads the non-empty sibling and this passes.
+      expect(result.status).toBe(1);
+      expect(result.output).toContain("Packaged file escapes extension output directory");
+      expect(result.output).toContain(`../${escapedFilename}`);
+      expect(result.output).not.toContain("Missing asset referenced by panel.html");
+    } finally {
+      await rm(escapedFile, { force: true });
+    }
+  });
+
+  it("rejects a whitespace-prefixed remote reference from its parsed URL", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "chunks/panel.css", "body {}\n");
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><head><link rel="stylesheet" href=" https://evil.example/chunks/panel.css"></head><body><script type="module" src="/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    // The previous raw-string scheme guard misses leading ASCII whitespace.
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      "Extension page reference resolves outside the extension origin",
+    );
+  });
+
+  it("rejects a well-formed remote reference from its parsed URL", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><head><link rel="stylesheet" href="https://evil.example/chunks/panel.css"></head><body><script type="module" src="/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      "Extension page reference resolves outside the extension origin",
+    );
+  });
+
+  it("rejects a different extension host from its parsed URL", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="chrome-extension://other-extension/chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      "Extension page reference resolves outside the extension origin",
+    );
+  });
+
+  it.each([
+    ["an explicit sentinel host", "chrome-extension://pack/chunks/panel.js"],
+    ["a scheme-relative sentinel host", "//pack/chunks/panel.js"],
+  ])("rejects %s that only resolves locally by coincidence", async (_label, reference) => {
+    // `chrome-extension://pack/` is a sentinel this verifier invents so relative
+    // references have something to resolve against. Markup naming it outright is
+    // indistinguishable after resolution, but the shipped package carries an
+    // extension ID that Chrome will not substitute into an absolute URL -- so the
+    // referenced chunk exists locally while the page cannot load it.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="${reference}"></script></body></html>`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference is not page-relative");
+  });
+
+  it("names a malformed percent escape instead of throwing a raw URIError", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="/chunks/%ZZ.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference is not a decodable path");
+    expect(result.output).toContain("panel.html");
+    // The operator must not be handed a bare decoder failure with no target.
+    expect(result.output).not.toContain("URI malformed");
+  });
+
+  it("rejects a declarative shadow root whose contents it cannot inspect", async () => {
+    // A template is inert only until it declares a shadow root. Chrome turns
+    // `shadowrootmode` contents into an active shadow root and loads what they
+    // reference, while querySelectorAll enters neither templates nor shadow roots.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><div><template shadowrootmode="open"><link rel="stylesheet" href="/chunks/missing.css"></template></div></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page declares a declarative shadow root");
+  });
+
+  it("still verifies active HTML beneath a foreign-namespace noscript", async () => {
+    // `closest` matches on tag name across namespaces, so an SVG <noscript> is not
+    // HTML's scripting fallback and must not mark the script beneath it inert.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><svg><noscript><foreignObject><script src="/chunks/missing.js"></script></foreignObject></noscript></svg></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("chunks/missing.js");
+  });
+
+  it("names a syntactically invalid reference instead of skipping it", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="http://["></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference is not a valid URL");
+    expect(result.output).toContain("panel.html");
+    // An unparseable reference must not be silently skipped the way an empty one is.
+    expect(result.output).not.toContain("ERR_INVALID_URL");
+  });
+
+  it.each([
+    ["an empty reference", ""],
+    ["a whitespace-only reference", "   "],
+    ["a query-only reference", "?v=1"],
+    ["a fragment-only reference", "#top"],
+  ])("rejects %s that resolves to the page itself", async (_label, reference) => {
+    // All four resolve to the containing page, so the verifier would read the HTML
+    // as its own asset and pass, while Chrome cannot load that response as a script.
+    // The raw scanner this replaced rejected them as missing.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="${reference}"></script></body></html>`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference resolves to the page itself");
+  });
+
+  it("rejects an encoded spelling of the containing page", async () => {
+    // `/pan%65l.html` stays encoded in `pathname` but decodes to `panel.html` for the
+    // file lookup, so comparing raw pathnames let the HTML page through as a script.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="/pan%65l.html"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference resolves to the page itself");
+  });
+
+  it.each([
+    ["dot segments from an encoded separator", "/chunks/%2e%2e%2fpanel.html"],
+    ["plain dot segments", "/chunks/../panel.html"],
+  ])("rejects %s that resolve to the page file", async (_label, reference) => {
+    // Only `path.resolve` collapses these, so any comparison performed before the
+    // lookup normalises sees a different path than the read does.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="${reference}"></script></body></html>`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference resolves to the page itself");
+  });
+
+  it("names the outside-origin reason for a remote asset sharing the page pathname", async () => {
+    // Without the origin in the comparison this reported a self-reference, which
+    // sends a maintainer looking at the wrong thing.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="https://evil.example/panel.html"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("resolves outside the extension origin");
+    expect(result.output).not.toContain("resolves to the page itself");
+  });
+
+  it("accepts a bundle whose own name is percent-encoded", async () => {
+    // The canonicalisation must not reject a legitimate encoded filename.
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "chunks/pan el.js", "export default 1;\n");
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/pan%20el.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("still accepts a legitimate reference carrying a query and fragment", async () => {
+    // The self-reference rule must not catch a real bundle that merely has a query.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js?v=1#top"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("accepts a whitespace-normalized local reference", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src=" /chunks/panel.js"></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it("rejects an active srcdoc iframe before its nested bundle reference is missed", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><iframe srcdoc=\'&lt;script src="/chunks/missing.js"&gt;&lt;/script&gt;\'></iframe></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    // Without the srcdoc guard, JSDOM only sees the outer script and passes.
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page declares an iframe srcdoc: panel.html");
+  });
+
+  it("does not reject an ordinary iframe src", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(outputDir, "frames/help.html", "<!doctype html><title>Help</title>");
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><iframe src="/frames/help.html" title="Help"></iframe></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(0);
+  });
+
+  it.each([
+    [
+      "a single-quoted script source",
+      (reference: string) => `<script type='module' src='/${reference}'></script>`,
+    ],
+    [
+      "an unquoted script source",
+      (reference: string) => `<script type=module src=/${reference}></script>`,
+    ],
+    [
+      "a stylesheet link whose rel follows href and contains multiple tokens",
+      (reference: string) => `<link href=/${reference} rel="preload stylesheet">`,
+    ],
+    [
+      "a greater-than sign in a quoted attribute before a script source",
+      (reference: string) => `<script data-example=">" src="/${reference}"></script>`,
+    ],
+    [
+      "a conventional comment containing script-shaped markup",
+      (reference: string) =>
+        `<!-- <script src="/chunks/comment-decoy.js"></script> --><script src="/${reference}"></script>`,
+    ],
+    [
+      "script raw text containing script-shaped markup",
+      (reference: string) =>
+        `<script>const example = '<script src="/chunks/raw-script-decoy.js">';</script><script src="/${reference}"></script>`,
+    ],
+    [
+      "style raw text containing script-shaped markup",
+      (reference: string) =>
+        `<style>example <script src="/chunks/raw-style-decoy.js"></style><script src="/${reference}"></script>`,
+    ],
+    [
+      "a comment opener and greater-than sign inside a quoted attribute",
+      (reference: string) =>
+        `<script data-example="<!-- > not a comment -->" src="/${reference}"></script>`,
+    ],
+    [
+      "textarea RCDATA containing script-shaped markup",
+      (reference: string) =>
+        `<textarea><script src="/chunks/textarea-decoy.js"></script></textarea><script src="/${reference}"></script>`,
+    ],
+    [
+      "title RCDATA containing script-shaped markup",
+      (reference: string) =>
+        `<title><script src="/chunks/title-decoy.js"></script></title><script src="/${reference}"></script>`,
+    ],
+    [
+      "a Chrome-compatible --!> comment close containing script-shaped markup",
+      (reference: string) =>
+        `<!-- <script src="/chunks/chrome-comment-decoy.js"></script> --!><script src="/${reference}"></script>`,
+    ],
+    [
+      "a custom element whose name starts with script",
+      (reference: string) =>
+        `<script-widget src="/chunks/custom-element-decoy.js"></script-widget><script src="/${reference}"></script>`,
+    ],
+    [
+      "case-insensitive HTML tag and attribute names",
+      (reference: string) => `<SCRIPT SRC=/${reference}></SCRIPT>`,
+    ],
+    [
+      "a non-stylesheet link next to an unquoted script bundle",
+      (reference: string) =>
+        `<link rel="icon" href="/chunks/ignored-icon.js"><script src=/${reference}></script>`,
+    ],
+    [
+      "template content containing inert bundle-shaped markup",
+      (reference: string) =>
+        `<template><script src="/chunks/template-decoy.js"></script><link rel="stylesheet" href="/chunks/template.css"></template><script src="/${reference}"></script>`,
+    ],
+  ])("parses %s as a bundle reference", async (_label, markupForReference) => {
+    const referencedBundle = "chunks/parser-reference.js";
+    const missingBundle = "chunks/parser-missing.js";
+
+    const validOutputDir = await createValidPackage();
+    await writePackageFile(
+      validOutputDir,
+      "panel.html",
+      pageWithBundleMarkup(markupForReference(referencedBundle)),
+    );
+    await writePackageFile(validOutputDir, referencedBundle, "export {};\n");
+
+    const validResult = await runVerifier(validOutputDir);
+    expect(validResult.status).toBe(0);
+    expect(validResult.output).toContain("Pack WXT extension package verification passed.");
+
+    const invalidOutputDir = await createValidPackage();
+    await writePackageFile(
+      invalidOutputDir,
+      "panel.html",
+      pageWithBundleMarkup(markupForReference(missingBundle)),
+    );
+
+    const invalidResult = await runVerifier(invalidOutputDir);
+    expect(invalidResult.status).toBe(1);
+    expect(invalidResult.output).toContain(
+      `Missing asset referenced by panel.html: ${missingBundle}`,
+    );
   });
 
   it("accepts packaged HTML without module preload hints", async () => {
@@ -738,16 +1215,19 @@ describe("source-surfaces builds", () => {
     [
       "a noscript panel tag",
       '<noscript><script type="module" src="/chunks/source-surface.js"></script></noscript>',
+      "reachable from the panel",
     ],
     [
       "an SVG script element",
       '<svg><script type="module" src="/chunks/source-surface.js"></script></svg>',
+      "reachable from the panel",
     ],
     [
       "a document base",
       '<base href="https://example.invalid/"><script type="module" src="/chunks/source-surface.js"></script>',
+      "Extension page declares a base element: panel.html",
     ],
-  ])("does not use %s as a panel module entry", async (_label, inertMarkup) => {
+  ])("does not use %s as a panel module entry", async (_label, inertMarkup, expectedMessage) => {
     const outputDir = await createValidPackage();
     await writePackageFile(
       outputDir,
@@ -763,7 +1243,7 @@ describe("source-surfaces builds", () => {
     const result = await runVerifier(outputDir, {}, ["--source-surfaces"]);
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("reachable from the panel");
+    expect(result.output).toContain(expectedMessage);
   });
 
   it("does not treat protocol-relative imports as packaged module dependencies", async () => {
@@ -1034,6 +1514,10 @@ async function writePackageFile(outputDir: string, relativePath: string, content
   const filePath = path.join(outputDir, relativePath);
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, contents);
+}
+
+function pageWithBundleMarkup(markup: string) {
+  return `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script>${markup}</body></html>`;
 }
 
 async function runVerifier(
