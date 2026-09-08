@@ -19,32 +19,45 @@ permissions:
   contents: read
 
 jobs:
-  submit:
-    name: Submit release package
+  # Deliberately a separate, environment-free job. GitHub evaluates `environment:` at the
+  # job level, before any step runs, so a guard living inside the protected job cannot
+  # report anything until a maintainer has already approved the deployment -- the refusal
+  # would arrive after the human cost it exists to avoid, and an unapproved run would sit
+  # waiting having never stated its reason. Keeping this ungated means a disabled upload
+  # fails immediately, loudly, and without consuming an approval.
+  #
+  # It must never carry `environment:`; `ci-workflow.test.ts` asserts that.
+  enablement:
+    name: Check upload enablement
     runs-on: ubuntu-latest
-    timeout-minutes: 12
-    environment: chrome-web-store
+    timeout-minutes: 5
 
     steps:
       # A real upload requires the explicit repository variable, which is the invariant
       # `release.yml` carried before store submission was decoupled from the release
-      # pipeline. This is a failing step rather than a job-level `if:` on purpose: a
-      # skipped job reports success, so a maintainer who dispatches with dry_run=false
-      # while the variable is unset would see a green run and no upload, and could read
-      # that as a completed submission. Guards fail closed and name their own reason.
-      #
-      # Runs before checkout so a refused upload costs nothing and explains itself.
+      # pipeline. A failing step rather than a job-level `if:`: a skipped job reports
+      # success, so a dry_run=false dispatch with the variable unset would show a green
+      # run and no upload, readable as a completed submission. Guards fail closed and
+      # name their own reason.
       - name: Require explicit enablement for a real upload
         if: ${{ inputs.dry_run != 'true' }}
         env:
           CWS_SUBMIT_ENABLED: ${{ vars.CWS_SUBMIT_ENABLED }}
         run: |
           if [ "$CWS_SUBMIT_ENABLED" != "true" ]; then
-            echo "::error title=Chrome Web Store upload refused::dry_run=false was requested but the repository or organization variable CWS_SUBMIT_ENABLED is not exactly 'true'. Nothing was uploaded. Re-run with dry_run=true to validate the package without uploading, or set the variable deliberately before retrying."
+            echo "::error title=Chrome Web Store upload refused::dry_run=false was requested but the repository or organization variable CWS_SUBMIT_ENABLED is not exactly 'true'. Nothing was uploaded, and no deployment approval was requested. Re-run with dry_run=true to validate the package without uploading, or set the variable deliberately before retrying."
             exit 1
           fi
-          echo "CWS_SUBMIT_ENABLED is set; proceeding with a real upload."
+          echo "CWS_SUBMIT_ENABLED is set; proceeding to request deployment approval."
 
+  submit:
+    name: Submit release package
+    needs: enablement
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: chrome-web-store
+
+    steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
