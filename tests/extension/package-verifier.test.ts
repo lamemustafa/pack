@@ -244,6 +244,56 @@ describe("extension package verifier", () => {
     expect(result.output).not.toContain("URI malformed");
   });
 
+  it("rejects a declarative shadow root whose contents it cannot inspect", async () => {
+    // A template is inert only until it declares a shadow root. Chrome turns
+    // `shadowrootmode` contents into an active shadow root and loads what they
+    // reference, while querySelectorAll enters neither templates nor shadow roots.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><div><template shadowrootmode="open"><link rel="stylesheet" href="/chunks/missing.css"></template></div></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page declares a declarative shadow root");
+  });
+
+  it("still verifies active HTML beneath a foreign-namespace noscript", async () => {
+    // `closest` matches on tag name across namespaces, so an SVG <noscript> is not
+    // HTML's scripting fallback and must not mark the script beneath it inert.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><svg><noscript><foreignObject><script src="/chunks/missing.js"></script></foreignObject></noscript></svg></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("chunks/missing.js");
+  });
+
+  it("names a syntactically invalid reference instead of skipping it", async () => {
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      '<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="http://["></script></body></html>',
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference is not a valid URL");
+    expect(result.output).toContain("panel.html");
+    // An unparseable reference must not be silently skipped the way an empty one is.
+    expect(result.output).not.toContain("ERR_INVALID_URL");
+  });
+
   it("accepts a whitespace-normalized local reference", async () => {
     const outputDir = await createValidPackage();
     await writePackageFile(

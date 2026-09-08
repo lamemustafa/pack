@@ -6,6 +6,7 @@ import {
   isPageRelativeReference,
   packagedReferencePath,
   packagedReferenceUrl,
+  referencePathPortion,
 } from "./lib/packaged-reference-path.mjs";
 // Packaged-page verification now parses every extension page, not just the
 // source-surfaces reachability path, so JSDOM must load for every invocation.
@@ -27,6 +28,7 @@ if (flags.some((flag) => flag !== "--source-surfaces") || outputDirectories.leng
   );
 }
 const sourceSurfacesMode = flags.includes("--source-surfaces");
+const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 const outputDir = path.resolve(outputDirectories[0]);
 let sawSourceSurfaceMarker = false;
 
@@ -569,8 +571,14 @@ async function requireReferencedBundles(page, html) {
   const references = referencedBundleSpecifiers(page, html);
 
   for (const reference of references) {
+    // Distinguish an empty reference, which has nothing to check, from one that
+    // cannot be parsed at all. Collapsing them would let `http://[` be skipped
+    // silently instead of rejected.
+    if (!referencePathPortion(reference)) continue;
     const referenceUrl = packagedReferenceUrl(page, reference);
-    if (referenceUrl === null) continue;
+    if (referenceUrl === null) {
+      throw new Error(`Extension page reference is not a valid URL: ${page} -> ${reference}`);
+    }
     if (!isPackagedReferenceUrl(referenceUrl)) {
       throw new Error(
         `Extension page reference resolves outside the extension origin: ${page} -> ${reference}`,
@@ -611,6 +619,13 @@ function referencedBundleSpecifiers(page, markup) {
     if ([...document.querySelectorAll("iframe[srcdoc]")].some(isActiveHtmlPageElement)) {
       throw new Error(`Extension page declares an iframe srcdoc: ${page}`);
     }
+    // A template is inert only until it declares a shadow root: Chrome turns
+    // `shadowrootmode` contents into an active shadow root and loads what they
+    // reference, while `querySelectorAll` enters neither template contents nor
+    // shadow roots. Reject rather than descend, matching the srcdoc decision.
+    if ([...document.querySelectorAll("template[shadowrootmode]")].some(isActiveHtmlPageElement)) {
+      throw new Error(`Extension page declares a declarative shadow root: ${page}`);
+    }
     const scriptReferences = [...document.querySelectorAll("script[src]")]
       .filter(isActiveHtmlPageElement)
       .flatMap((script) => {
@@ -635,9 +650,18 @@ function referencedBundleSpecifiers(page, markup) {
 }
 
 function isActiveHtmlPageElement(element) {
-  return (
-    element.namespaceURI === "http://www.w3.org/1999/xhtml" && element.closest("noscript") === null
-  );
+  return element.namespaceURI === HTML_NAMESPACE && !hasInertHtmlNoscriptAncestor(element);
+}
+
+// `closest` matches on tag name regardless of namespace, so an SVG `<noscript>` --
+// which is an ordinary foreign element, not HTML's scripting fallback -- would
+// otherwise mark active HTML content beneath it inert and drop it from
+// verification. Walk the ancestors and require the HTML namespace.
+function hasInertHtmlNoscriptAncestor(element) {
+  for (let ancestor = element.parentElement; ancestor !== null; ancestor = ancestor.parentElement) {
+    if (ancestor.localName === "noscript" && ancestor.namespaceURI === HTML_NAMESPACE) return true;
+  }
+  return false;
 }
 
 async function requirePackagedFile(relativePath, reason) {

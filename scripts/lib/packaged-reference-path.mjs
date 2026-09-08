@@ -5,10 +5,21 @@ const packagedOrigin = "chrome-extension://pack/";
 // that carries its own. Never the resolution result.
 const probeOrigin = "chrome-extension://probe/";
 
+// Returns null on a syntactically invalid reference such as `http://[` as well as
+// an empty one. `new URL` throws `ERR_INVALID_URL`, which names neither the page
+// nor the reference; the caller holds both.
+export function referencePathPortion(reference) {
+  return reference.split(/[?#]/)[0];
+}
+
 export function packagedReferenceUrl(page, reference) {
-  const pathReference = reference.split(/[?#]/)[0];
+  const pathReference = referencePathPortion(reference);
   if (!pathReference) return null;
-  return new URL(pathReference, new URL(page, packagedOrigin));
+  try {
+    return new URL(pathReference, new URL(page, packagedOrigin));
+  } catch {
+    return null;
+  }
 }
 
 // `packagedOrigin` is a sentinel this verifier invents so relative references have
@@ -21,11 +32,15 @@ export function packagedReferenceUrl(page, reference) {
 // lands on the same host both times. Scheme-relative `//pack/...` behaves the same
 // way and is caught here too.
 export function isPageRelativeReference(page, reference) {
-  const pathReference = reference.split(/[?#]/)[0];
+  const pathReference = referencePathPortion(reference);
   if (!pathReference) return false;
-  const packagedResolution = new URL(pathReference, new URL(page, packagedOrigin));
-  const probeResolution = new URL(pathReference, new URL(page, probeOrigin));
-  return packagedResolution.host !== probeResolution.host;
+  try {
+    const packagedResolution = new URL(pathReference, new URL(page, packagedOrigin));
+    const probeResolution = new URL(pathReference, new URL(page, probeOrigin));
+    return packagedResolution.host !== probeResolution.host;
+  } catch {
+    return false;
+  }
 }
 
 export function isPackagedReferenceUrl(referenceUrl) {
