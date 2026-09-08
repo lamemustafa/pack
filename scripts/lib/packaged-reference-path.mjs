@@ -22,29 +22,6 @@ export function packagedReferenceUrl(page, reference) {
   }
 }
 
-// A script or stylesheet whose reference resolves to the containing page is never a
-// bundle reference. `""`, whitespace, `?v=1` and `#top` all resolve this way, and
-// the verifier would otherwise read the HTML page as its own asset and pass, while
-// Chrome cannot load that response as a script or stylesheet.
-//
-// Compares through `packagedReferencePath`, the same canonicalisation the file
-// lookup uses. Comparing `pathname` directly let `/pan%65l.html` past -- encoded on
-// one side, decoded on the other -- which is the decode-ordering mistake this file
-// has now produced twice.
-//
-// The origin is part of the comparison so a remote asset that merely shares the
-// page's pathname is not mislabelled; it belongs to the outside-origin check, which
-// names the reason a maintainer needs.
-export function isSelfReference(page, referenceUrl) {
-  const pageResolved = pageUrl(page, packagedOrigin);
-  if (referenceUrl.protocol !== pageResolved.protocol || referenceUrl.host !== pageResolved.host) {
-    return false;
-  }
-  const referencePath = packagedReferencePath(referenceUrl);
-  const pagePath = packagedReferencePath(pageResolved);
-  return referencePath !== null && referencePath === pagePath;
-}
-
 // `packagedOrigin` is a sentinel this verifier invents so relative references have
 // something to resolve against. Markup can also name it outright, and after
 // resolution the two are indistinguishable -- so an explicit

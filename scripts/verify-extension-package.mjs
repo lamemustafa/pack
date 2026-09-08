@@ -4,7 +4,6 @@ import path from "node:path";
 import {
   isPackagedReferenceUrl,
   isPageRelativeReference,
-  isSelfReference,
   packagedReferencePath,
   packagedReferenceUrl,
 } from "./lib/packaged-reference-path.mjs";
@@ -575,14 +574,6 @@ async function requireReferencedBundles(page, html) {
     if (referenceUrl === null) {
       throw new Error(`Extension page reference is not a valid URL: ${page} -> ${reference}`);
     }
-    // Nothing is skipped here any more. An empty, whitespace-only, query-only or
-    // fragment-only reference resolves to the page itself, and skipping those let a
-    // package pass while Chrome could not load the HTML response as a bundle.
-    if (isSelfReference(page, referenceUrl)) {
-      throw new Error(
-        `Extension page reference resolves to the page itself: ${page} -> ${JSON.stringify(reference)}`,
-      );
-    }
     if (!isPackagedReferenceUrl(referenceUrl)) {
       throw new Error(
         `Extension page reference resolves outside the extension origin: ${page} -> ${reference}`,
@@ -598,6 +589,15 @@ async function requireReferencedBundles(page, html) {
     const relative = packagedReferencePath(referenceUrl);
     if (relative === null) {
       throw new Error(`Extension page reference is not a decodable path: ${page} -> ${reference}`);
+    }
+    // Compared as resolved files rather than as paths. Empty, whitespace-only,
+    // query-only and fragment-only references all resolve to the page, and so do
+    // encoded spellings and dot segments -- but only after the same normalisation
+    // the read performs, so the comparison has to happen on that value.
+    if (resolvePackagedFile(relative) === resolvePackagedFile(page)) {
+      throw new Error(
+        `Extension page reference resolves to the page itself: ${page} -> ${JSON.stringify(reference)}`,
+      );
     }
     const bytes = await requirePackagedFile(relative, `asset referenced by ${page}`);
     if (bytes.byteLength === 0) {
@@ -668,9 +668,18 @@ function hasInertHtmlNoscriptAncestor(element) {
   return false;
 }
 
+// The single place a packaged relative path becomes a file. Anything that needs to
+// reason about which file a reference names must go through this, or it will be
+// comparing a value the lookup does not use -- which produced three separate
+// self-reference defects: a raw pathname, a percent-encoded name, and dot segments
+// that only `path.resolve` collapses.
+function resolvePackagedFile(relativePath) {
+  return path.resolve(path.resolve(outputDir), relativePath);
+}
+
 async function requirePackagedFile(relativePath, reason) {
   const packageDirectory = path.resolve(outputDir);
-  const packagedFile = path.resolve(packageDirectory, relativePath);
+  const packagedFile = resolvePackagedFile(relativePath);
   if (!packagedFile.startsWith(`${packageDirectory}${path.sep}`)) {
     throw new Error(`Packaged file escapes extension output directory: ${relativePath}`);
   }

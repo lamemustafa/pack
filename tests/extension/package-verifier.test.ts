@@ -332,6 +332,25 @@ describe("extension package verifier", () => {
     expect(result.output).toContain("Extension page reference resolves to the page itself");
   });
 
+  it.each([
+    ["dot segments from an encoded separator", "/chunks/%2e%2e%2fpanel.html"],
+    ["plain dot segments", "/chunks/../panel.html"],
+  ])("rejects %s that resolve to the page file", async (_label, reference) => {
+    // Only `path.resolve` collapses these, so any comparison performed before the
+    // lookup normalises sees a different path than the read does.
+    const outputDir = await createValidPackage();
+    await writePackageFile(
+      outputDir,
+      "panel.html",
+      `<!doctype html><html><body><script type="module" src="/chunks/panel.js"></script><script type="module" src="${reference}"></script></body></html>`,
+    );
+
+    const result = await runVerifier(outputDir);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Extension page reference resolves to the page itself");
+  });
+
   it("names the outside-origin reason for a remote asset sharing the page pathname", async () => {
     // Without the origin in the comparison this reported a self-reference, which
     // sends a maintainer looking at the wrong thing.
