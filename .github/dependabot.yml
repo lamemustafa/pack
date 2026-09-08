@@ -11,10 +11,14 @@ updates:
     ignore:
       # `@types/node` majors track the Node major, and this repo's types are global:
       # tsconfig sets `types: ["chrome","node","vitest/globals"]`, so the declared Node
-      # API surface applies across every file. CI pins node-version 24.20.0 and
-      # `engines` requires >=24.20.0, so accepting @types/node 26 would let tsc approve
-      # APIs that do not exist at runtime -- a failure that appears in production, not
-      # at build time. Lift this when the runtime moves, and move both together.
+      # API surface applies across every file. Accepting a major ahead of the runtime
+      # would let tsc approve APIs that do not exist at execution -- a failure that does
+      # not appear at build time.
+      #
+      # This rule does not rely on being remembered.
+      # `tests/repo/node-runtime-types-alignment.test.ts` fails when `engines.node` and
+      # `@types/node` majors diverge, in either direction, so moving the runtime breaks
+      # the suite until the types move with it and this entry is revisited.
       - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"
