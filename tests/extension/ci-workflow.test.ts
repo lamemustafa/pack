@@ -182,10 +182,39 @@ describe("Pack CI workflow", () => {
     expect(submitWorkflow).toContain("--provenance .release/pack-release-provenance.v1.json");
 
     // The variable still gates real uploads; dry runs validate without it.
-    expect(submitWorkflow).toContain("vars.CWS_SUBMIT_ENABLED == 'true'");
     expect(submitWorkflow).toContain('--dry-run "${{ inputs.dry_run }}"');
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED");
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED=true");
+  });
+
+  it("refuses a real upload loudly, rather than skipping, when enablement is unset", async () => {
+    const submitWorkflow = await readFile(path.join(workflowsDir, "chrome-web-store.yml"), "utf8");
+
+    // No job-level condition (4-space key). A skipped job reports *success*, so gating the
+    // whole job on the variable would let a deliberate `dry_run=false` dispatch finish green
+    // with nothing uploaded -- indistinguishable from a completed submission.
+    expect(submitWorkflow).not.toContain("\n    if:");
+
+    // Run the guard rather than grep it: the contract is an exit code and a stated reason.
+    const guard = extractNamedWorkflowRunScript(
+      submitWorkflow,
+      "Require explicit enablement for a real upload",
+    );
+    expect(guard).toContain("CWS_SUBMIT_ENABLED");
+
+    const fixtureDir = await mkdtemp(path.join(tmpdir(), "pack-cws-guard-"));
+    try {
+      for (const value of ["", "false", "TRUE", "true "]) {
+        const refused = runWorkflowShell(guard, fixtureDir, { CWS_SUBMIT_ENABLED: value });
+        expect({ value, status: refused.status }).toEqual({ value, status: 1 });
+        expect(`${refused.stdout}${refused.stderr}`).toContain("Nothing was uploaded");
+      }
+
+      const allowed = runWorkflowShell(guard, fixtureDir, { CWS_SUBMIT_ENABLED: "true" });
+      expect(allowed.status).toBe(0);
+    } finally {
+      await rm(fixtureDir, { force: true, recursive: true });
+    }
   });
 
   it("monitors Chrome Web Store review status without publishing side effects", async () => {
@@ -308,14 +337,12 @@ exit "$FAKE_NODE_EXIT"
   });
 });
 
-function extractLastWorkflowRunScript(workflow: string): string {
-  const marker = "        run: |\n";
-  const start = workflow.lastIndexOf(marker);
-  expect(start).toBeGreaterThanOrEqual(0);
-  const lines = workflow.slice(start + marker.length).split("\n");
+const RUN_BLOCK_MARKER = "        run: |\n";
+
+function readIndentedRunBlock(rest: string): string {
   const script: string[] = [];
 
-  for (const line of lines) {
+  for (const line of rest.split("\n")) {
     if (line.startsWith("          ")) {
       script.push(line.slice(10));
       continue;
@@ -328,6 +355,22 @@ function extractLastWorkflowRunScript(workflow: string): string {
   }
 
   return script.join("\n");
+}
+
+function extractLastWorkflowRunScript(workflow: string): string {
+  const start = workflow.lastIndexOf(RUN_BLOCK_MARKER);
+  expect(start).toBeGreaterThanOrEqual(0);
+  return readIndentedRunBlock(workflow.slice(start + RUN_BLOCK_MARKER.length));
+}
+
+// Reads the `run:` block of one named step. Anchoring on the step name means a rename
+// fails the extraction loudly instead of silently reading a different step's script.
+function extractNamedWorkflowRunScript(workflow: string, stepName: string): string {
+  const anchor = workflow.indexOf(`- name: ${stepName}`);
+  expect(anchor).toBeGreaterThanOrEqual(0);
+  const start = workflow.indexOf(RUN_BLOCK_MARKER, anchor);
+  expect(start).toBeGreaterThanOrEqual(0);
+  return readIndentedRunBlock(workflow.slice(start + RUN_BLOCK_MARKER.length));
 }
 
 function runWorkflowShell(
