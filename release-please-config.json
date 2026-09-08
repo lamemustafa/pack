@@ -21,14 +21,33 @@
         {
           "type": "generic",
           "path": "docs/PUBLICATION_READINESS.md"
+        },
+        {
+          "type": "generic",
+          "path": "SECURITY.md"
         }
       ],
       "changelog-sections": [
-        { "type": "feat", "section": "Features" },
-        { "type": "fix", "section": "Fixes" },
-        { "type": "docs", "section": "Documentation" },
-        { "type": "test", "section": "Tests" },
-        { "type": "chore", "section": "Maintenance" }
+        {
+          "type": "feat",
+          "section": "Features"
+        },
+        {
+          "type": "fix",
+          "section": "Fixes"
+        },
+        {
+          "type": "docs",
+          "section": "Documentation"
+        },
+        {
+          "type": "test",
+          "section": "Tests"
+        },
+        {
+          "type": "chore",
+          "section": "Maintenance"
+        }
       ]
     }
   }

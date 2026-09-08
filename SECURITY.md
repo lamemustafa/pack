@@ -7,7 +7,7 @@ privately; do not open a public issue for security findings.
 
 | Version                    | Supported                                 |
 | -------------------------- | ----------------------------------------- |
-| Current release (`0.5.x`)  | Security reports and best-effort fixes    |
+| Current release (`v0.5.1`) | Security reports and best-effort fixes    | <!-- x-release-please-version --> |
 | Chrome Web Store release   | Published beta; reports and fixes         |
 | Previous releases          | Not supported; upgrade to the current one |
 | Development/nightly builds | No production support                     |
