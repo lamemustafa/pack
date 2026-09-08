@@ -23,8 +23,7 @@ jobs:
   # job level, before any step runs, so a guard living inside the protected job cannot
   # report anything until a maintainer has already approved the deployment -- the refusal
   # would arrive after the human cost it exists to avoid, and an unapproved run would sit
-  # waiting having never stated its reason. Keeping this ungated means a disabled upload
-  # fails immediately, loudly, and without consuming an approval.
+  # waiting having never stated its reason.
   #
   # It must never carry `environment:`; `ci-workflow.test.ts` asserts that.
   enablement:
@@ -33,22 +32,15 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      # A real upload requires the explicit repository variable, which is the invariant
-      # `release.yml` carried before store submission was decoupled from the release
-      # pipeline. A failing step rather than a job-level `if:`: a skipped job reports
-      # success, so a dry_run=false dispatch with the variable unset would show a green
-      # run and no upload, readable as a completed submission. Guards fail closed and
-      # name their own reason.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
       - name: Require explicit enablement for a real upload
-        if: ${{ inputs.dry_run != 'true' }}
         env:
+          CWS_DRY_RUN: ${{ inputs.dry_run }}
+          CWS_GUARD_STAGE: before approval
           CWS_SUBMIT_ENABLED: ${{ vars.CWS_SUBMIT_ENABLED }}
-        run: |
-          if [ "$CWS_SUBMIT_ENABLED" != "true" ]; then
-            echo "::error title=Chrome Web Store upload refused::dry_run=false was requested but the repository or organization variable CWS_SUBMIT_ENABLED is not exactly 'true'. Nothing was uploaded, and no deployment approval was requested. Re-run with dry_run=true to validate the package without uploading, or set the variable deliberately before retrying."
-            exit 1
-          fi
-          echo "CWS_SUBMIT_ENABLED is set; proceeding to request deployment approval."
+        run: node scripts/require-store-upload-enabled.mjs
 
   submit:
     name: Submit release package
@@ -86,6 +78,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+
+      # Re-checked at use time, not only at check time. The enablement job ran before this
+      # job waited for approval, and that wait can last days -- one lasted 22 in this repo
+      # (#336). Revoking the variable during the wait must revoke the upload, and nothing
+      # else re-reads it.
+      - name: Re-check enablement after approval
+        env:
+          CWS_DRY_RUN: ${{ inputs.dry_run }}
+          CWS_GUARD_STAGE: after approval
+          CWS_SUBMIT_ENABLED: ${{ vars.CWS_SUBMIT_ENABLED }}
+        run: node scripts/require-store-upload-enabled.mjs
 
       - name: Submit to Chrome Web Store
         run: >-
