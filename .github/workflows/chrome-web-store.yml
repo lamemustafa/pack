@@ -24,6 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     environment: chrome-web-store
+    # Dry runs validate a package and upload nothing, so they stay available. A real
+    # upload additionally requires the explicit repository variable, which is the
+    # invariant `release.yml` used to carry before store submission was decoupled
+    # from the release pipeline.
+    if: ${{ inputs.dry_run == 'true' || vars.CWS_SUBMIT_ENABLED == 'true' }}
 
     steps:
       - name: Checkout
