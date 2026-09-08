@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+// Declared here, not beside `resolveTagCommit`: this file runs top-level code before the
+// declarations at the bottom, and a `const` in temporal dead zone throws at run time while
+// `node --check` still reports the file as valid.
+const MAX_TAG_DEREFERENCES = 8;
+
 const args = parseArgs(process.argv.slice(2));
 const tag = required(args.tag, "--tag");
 const checksumFile = required(args.checksum, "--checksum");
@@ -58,14 +63,7 @@ if (zipFile) {
 // `git/ref/tags/<tag>` returns the **tag object** for an annotated tag, not the commit,
 // so comparing against `.object.sha` directly manufactures a false mismatch on every
 // annotated tag. Dereference it when the ref says so.
-const tagRef = ghApi(`repos/${repo}/git/ref/tags/${tag}`);
-let tagCommit = tagRef.object?.sha;
-if (tagRef.object?.type === "tag") {
-  tagCommit = ghApi(`repos/${repo}/git/tags/${tagRef.object.sha}`).object?.sha;
-}
-if (!tagCommit) {
-  throw new Error(`Could not resolve ${tag} to a commit; refusing to verify against it.`);
-}
+const tagCommit = resolveTagCommit(tag);
 if (provenance.source?.commit !== tagCommit) {
   throw new Error(
     `Release provenance was built from ${
@@ -123,6 +121,40 @@ function parseArgs(values) {
 function required(value, label) {
   if (!value) throw new Error(`Missing ${label}.`);
   return value;
+}
+
+// Git refs may point at a commit, a tag object, a tree, or a blob, and a tag object may
+// point at any of those -- including another tag. So resolution is: dereference while the
+// type is `tag`, then require the terminal object to be a commit. Taking the first SHA and
+// assuming it is a commit accepts a tree or blob as a "source commit", which is the
+// could-not-determine-treated-as-matches shape guards here are required not to have.
+//
+// This is the whole of git's object model for this question, not an approximation of it:
+// once the loop terminates the type is commit or the resolution failed, with nothing left
+// unhandled.
+function resolveTagCommit(tagName) {
+  let object = ghApi(`repos/${repo}/git/ref/tags/${tagName}`).object;
+
+  for (let depth = 0; object?.type === "tag"; depth += 1) {
+    // Content addressing makes a cycle impossible in a healthy repository, so a bound
+    // exceeded means the responses are not trustworthy. Fail rather than loop.
+    if (depth >= MAX_TAG_DEREFERENCES) {
+      throw new Error(
+        `Tag ${tagName} did not resolve to a commit within ${MAX_TAG_DEREFERENCES} dereferences; refusing to verify against it.`,
+      );
+    }
+    object = ghApi(`repos/${repo}/git/tags/${object.sha}`).object;
+  }
+
+  if (object?.type !== "commit" || !object.sha) {
+    throw new Error(
+      `Tag ${tagName} resolves to ${
+        object?.type ? `a ${object.type} object` : "no object"
+      } (${object?.sha ?? "unknown"}), not a commit. Refusing to verify a release against it.`,
+    );
+  }
+
+  return object.sha;
 }
 
 function ghApi(endpoint) {
