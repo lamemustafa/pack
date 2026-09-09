@@ -454,6 +454,63 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
+  // release-please regenerates its branch by force-pushing, and GitHub records those
+  // rewrites with no `before_commit_id`. Failing closed there makes a release pull request
+  // unmergeable as soon as anything lands on the base branch, which blocked v0.6.0
+  // entirely (#342). The branch carries no reviewed history to protect -- the bot rebuilds
+  // it from the base branch -- so the rewrite is accepted for that case only.
+  it("accepts an untraceable rewrite on the generated release branch", () => {
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [generatedReleasePull()],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      cleanDurableState(),
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null, "2026-08-17T00:00:00Z")],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=success");
+    expect(publicationText).not.toContain("GitHub did not record the prior head");
+    // The exemption is announced, because one nobody can see is one nobody can audit.
+    expect(result.stdout).toContain("Accepting an untraceable rewrite on generated release branch");
+  });
+
+  // The exemption is evidence-based, not name-based. Each case below satisfies part of the
+  // shape and must still be refused, because a branch name is chosen by whoever pushes.
+  it.each([
+    [
+      "a human-authored branch wearing the generated name",
+      generatedReleasePull({ userType: "User" }),
+    ],
+    ["a bot pull request from an ordinary branch", pull(1, { userType: "Bot" })],
+    [
+      "a bot branch naming a base this pull request does not target",
+      generatedReleasePull({ headRef: "release-please--branches--release-1.x--components--pack" }),
+    ],
+  ])("still refuses an untraceable rewrite for %s", (_label, pullRequest) => {
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pullRequest],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      cleanDurableState(),
+      [{ status: 0 }],
+      null,
+      [forcePushEvent(null, "2026-08-17T00:00:00Z")],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("GitHub did not record the prior head");
+  });
+
   it("never discards an unreachable deleted finding across an untraceable rewrite", () => {
     const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
@@ -744,15 +801,36 @@ else if (text.includes("check-runs")) {
 
 function pull(
   number: number,
-  { draft = false, state = "open", headRepo = "lamemustafa/pack" } = {},
+  {
+    draft = false,
+    state = "open",
+    headRepo = "lamemustafa/pack",
+    headRef = "tapish-codex/example",
+    baseRef = "master",
+    userType = "User",
+  } = {},
 ) {
   const sha = number === 1 ? headSha : String(number).repeat(40);
   return {
     number,
     state,
     draft,
-    head: { sha, repo: { full_name: headRepo } },
+    head: { sha, ref: headRef, repo: { full_name: headRepo } },
+    base: { ref: baseRef },
+    user: { login: userType === "Bot" ? "github-actions[bot]" : "maintainer", type: userType },
   };
+}
+
+// The shape release-please actually produces, confirmed against #337:
+//   head.ref release-please--branches--master--components--pack
+//   user     github-actions[bot] (type "Bot")
+function generatedReleasePull(overrides: Record<string, unknown> = {}) {
+  return pull(1, {
+    baseRef: "master",
+    headRef: "release-please--branches--master--components--pack",
+    userType: "Bot",
+    ...overrides,
+  });
 }
 
 function cleanDurableState(prNumber = 1) {
