@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 const rootDir = process.cwd();
 const scriptPath = path.join(rootDir, "scripts", "publish-review-gate-check.mjs");
 const headSha = "a".repeat(40);
+const baseSha = "e".repeat(40);
 
 describe("PR-head Review gate check publisher", () => {
   it.each([
@@ -332,8 +333,31 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).not.toContain("older-anchor-state");
   });
 
+  it("searches base-branch history below the branch point of a discarded head", () => {
+    const orphanedSha = "b".repeat(40);
+    const olderBaseSha = "f".repeat(40);
+    const { calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(orphanedSha)],
+      { [orphanedSha]: [baseSha], [baseSha]: [olderBaseSha] },
+    );
+
+    // Durable state is only ever published on a pull request head. `baseSha` and everything
+    // below it is base-branch history, which was never a head of this pull request, so a
+    // lookup there can only ever miss. This is the traversal that exhausted the lookup bound.
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${olderBaseSha}/check-runs?`)),
+    ).toBe(false);
+  });
+
   it("fails closed rather than exceeding the force-push history lookup bound", () => {
-    const history = Array.from({ length: 20 }, (_, index) => index.toString(16).padStart(40, "0"));
+    const history = Array.from({ length: 22 }, (_, index) => index.toString(16).padStart(40, "0"));
     const parents: Record<string, string[]> = {};
     for (const [index, sha] of history.entries()) {
       const parent = history[index + 1];
@@ -354,7 +378,10 @@ describe("PR-head Review gate check publisher", () => {
     const stateLookups = calls.filter((call) => call.join(" ").includes("/check-runs?"));
 
     expect(result.status).toBe(0);
-    expect(stateLookups).toHaveLength(21);
+    // Refused on the size of the line rather than by walking it: only the current head is
+    // looked up before the bound rejects, so an oversized history costs one request, not one
+    // per commit.
+    expect(stateLookups).toHaveLength(1);
     expect(publication?.join(" ")).toContain("conclusion=action_required");
   }, 10_000);
 
@@ -379,6 +406,125 @@ describe("PR-head Review gate check publisher", () => {
     ).toBe(true);
     expect(publicationText).toContain("conclusion=action_required");
     expect(publicationText).not.toContain("output[text]");
+  });
+
+  // A rewrite that records no `before_commit_id` never names the head it discarded. Reviews do:
+  // each records the commit it was submitted against. Without this the state below is
+  // unreachable, and the pull request is refused for want of state it actually has.
+  it("reaches durable state on a head named only by a review", () => {
+    const reviewedSha = "b".repeat(40);
+    const createdSha = "c".repeat(40);
+    const durableState = reviewStateWithDeletedFinding();
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [reviewedSha]: durableState },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T11:00:00Z" }] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${reviewedSha}/check-runs?`)),
+    ).toBe(true);
+    expect(publication?.join(" ")).toContain("conclusion=failure");
+  });
+
+  // The created head is newer than the review that named the discarded one, and the newest
+  // recorded state is the one that wins.
+  it("prefers state on the newer created head over an older reviewed head", () => {
+    const reviewedSha = "b".repeat(40);
+    const createdSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [createdSha]: cleanDurableState(),
+        [reviewedSha]: reviewStateWithDeletedFinding(1, "comment-on-older-head"),
+      },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T11:00:00Z" }] },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).not.toContain("comment-on-older-head");
+    expect(publicationText).toContain("conclusion=success");
+  });
+
+  // The branch comparison is what bounds the search. A list GitHub truncated, or one whose tip
+  // is not the head it was asked about, is a narrower search wearing the shape of a complete
+  // one -- so each is refused rather than searched.
+  it("fails closed when the discarded-line comparison was truncated", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      { [orphanedSha]: { total_commits: 2, commits: [{ sha: orphanedSha }] } },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(false);
+  });
+
+  it("fails closed when the discarded-line comparison does not reach that head", () => {
+    const orphanedSha = "b".repeat(40);
+    const straySha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      { [orphanedSha]: { total_commits: 1, commits: [{ sha: straySha }] } },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
   });
 
   it("publishes a durable-state workspace failure without its local path", () => {
@@ -469,7 +615,9 @@ describe("PR-head Review gate check publisher", () => {
       [{ status: 0 }],
       null,
       [{ status: 0 }],
-      { [orphanedSha]: cleanDurableState(2) },
+      // An open finding, so adopting it would be visible as a blocking verdict rather than
+      // needing the published bytes to be read for a prNumber.
+      { [orphanedSha]: reviewStateWithDeletedFinding(2, "comment-owned-by-pr-2") },
       [forcePushEvent(null, "2026-08-17T00:00:00Z", orphanedSha)],
     );
     const publicationText =
@@ -479,7 +627,8 @@ describe("PR-head Review gate check publisher", () => {
       calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
     ).toBe(true);
     expect(result.status).toBe(0);
-    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).not.toContain("comment-owned-by-pr-2");
+    expect(publicationText).not.toContain("conclusion=failure");
   });
 
   // The other half of the premise: a rewrite with neither field usable must stay
@@ -709,6 +858,8 @@ function runScript(
   syntheticFindingCount = 0,
   prCommits: Record<number, string[]> | null = null,
   environment: Record<string, string> = {},
+  reviews: Record<number, Array<{ commit_id: string; submitted_at: string }>> = {},
+  compareOverrides: Record<string, unknown> = {},
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -748,6 +899,8 @@ function runScript(
         FAKE_PARENTS: JSON.stringify(parents),
         FAKE_SYNTHETIC_FINDING_COUNT: String(syntheticFindingCount),
         FAKE_PR_COMMITS: JSON.stringify(prCommits),
+        FAKE_REVIEWS: JSON.stringify(reviews),
+        FAKE_COMPARE_OVERRIDES: JSON.stringify(compareOverrides),
       },
     },
   );
@@ -762,6 +915,11 @@ const calls = existsSync(process.env.FAKE_CALLS) ? JSON.parse(readFileSync(proce
 calls.push(args); writeFileSync(process.env.FAKE_CALLS, JSON.stringify(calls), "utf8");
 const text = args.join(" ");
 if (text.includes("pulls?state=open")) process.stdout.write(process.env.FAKE_PULLS);
+else if (text.includes("/pulls/") && text.includes("/reviews?")) {
+  const number = Number(text.match(/pulls\\/(\\d+)\\/reviews\\?/i)?.[1]);
+  const reviews = JSON.parse(process.env.FAKE_REVIEWS)?.[number] ?? [];
+  process.stdout.write(JSON.stringify([reviews]));
+}
 else if (text.includes("/pulls/") && text.includes("/commits?")) {
   const pulls = JSON.parse(process.env.FAKE_PULLS).flat();
   const number = Number(text.match(/pulls\\/(\\d+)\\/commits\\?/i)?.[1]);
@@ -772,6 +930,21 @@ else if (text.includes("/pulls/") && text.includes("/commits?")) {
 }
 else if (text.includes("/issues/") && text.includes("/timeline?")) {
   process.stdout.write(JSON.stringify([JSON.parse(process.env.FAKE_TIMELINE)]));
+}
+else if (text.includes("/compare/")) {
+  const match = text.match(/compare\\/([a-f0-9]{40})\\.\\.\\.([a-f0-9]{40})/i);
+  const base = match?.[1]; const head = match?.[2];
+  const parents = JSON.parse(process.env.FAKE_PARENTS);
+  const chain = []; let cursor = head;
+  while (cursor && cursor !== base) {
+    chain.push(cursor);
+    const next = parents[cursor]?.[0];
+    if (next === undefined) break;
+    cursor = next;
+  }
+  const overrides = JSON.parse(process.env.FAKE_COMPARE_OVERRIDES)?.[head];
+  const commits = chain.slice().reverse().map((sha) => ({ sha }));
+  process.stdout.write(JSON.stringify(overrides ?? { total_commits: commits.length, commits }));
 }
 else if (text.match(/\\/commits\\/[a-f0-9]{40}$/i)) {
   const sha = text.match(/commits\\/([a-f0-9]{40})$/i)?.[1];
@@ -826,6 +999,7 @@ function pull(
     state,
     draft,
     head: { sha, repo: { full_name: headRepo } },
+    base: { sha: baseSha },
   };
 }
 
