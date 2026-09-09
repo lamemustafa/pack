@@ -429,6 +429,80 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain(rawUrl);
   });
 
+  // #342: the decisive case. release-please force-pushes leave `before_commit_id`
+  // null, so the gate called the rewrite untraceable and refused -- but the same
+  // timeline event carries `commit_id`, the head after the push, which is where the
+  // orphaned durable state lives. Blocking every release pull request to protect
+  // state that was reachable all along is the defect this closes.
+  it("reaches durable state on a head named only by the force-push commit_id", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: cleanDurableState() },
+      [forcePushEvent(null, "2026-08-17T00:00:00Z", orphanedSha)],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+      "the orphaned head named by commit_id must be consulted",
+    ).toBe(true);
+    expect(result.status).toBe(0);
+    expect(publicationText).not.toContain("GitHub did not record the prior head");
+    expect(publicationText).toContain("conclusion=success");
+  });
+
+  // Continuity is recovered, not waived: state found through a recovered head is
+  // still required to belong to this pull request.
+  it("ignores recovered-head state that belongs to another pull request", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: cleanDurableState(2) },
+      [forcePushEvent(null, "2026-08-17T00:00:00Z", orphanedSha)],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(true);
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+  });
+
+  // The other half of the premise: a rewrite with neither field usable must stay
+  // untraceable. Whatever widening happens must not make this reachable.
+  it("stays untraceable when neither before_commit_id nor commit_id is usable", () => {
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { ["c".repeat(40)]: cleanDurableState() },
+      [forcePushEvent(null, "2026-08-17T00:00:00Z", null)],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("GitHub did not record the prior head");
+  });
+
   it("publishes a re-creation remedy instead of seeding state across an untraceable rewrite", () => {
     const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
@@ -780,10 +854,18 @@ function reviewStateWithDeletedFinding(
   );
 }
 
-function forcePushEvent(beforeCommitId: string | null, createdAt = "2026-08-17T12:00:00Z") {
+function forcePushEvent(
+  beforeCommitId: string | null,
+  createdAt = "2026-08-17T12:00:00Z",
+  commitId: string | null = null,
+) {
+  // Real events carry `commit_id` -- the head *after* the push -- even when
+  // `before_commit_id` is null. Verified on #337, where all three release-please
+  // force-pushes have a null `before_commit_id` and a populated `commit_id`.
   return {
     event: "head_ref_force_pushed",
     before_commit_id: beforeCommitId,
+    ...(commitId === null ? {} : { commit_id: commitId }),
     created_at: createdAt,
   };
 }

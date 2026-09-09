@@ -347,7 +347,7 @@ function loadForcePushedPriorShas(prNumber) {
       "force-push discontinuity discovery",
     ),
   );
-  const priorHeads = new Map();
+  const rewrites = [];
   let hasUntraceableRewrite = false;
 
   for (const event of flattenPages(timelinePages)) {
@@ -356,28 +356,46 @@ function loadForcePushedPriorShas(prNumber) {
     if (!Number.isFinite(createdAt)) {
       throw new Error("force-push event has no valid creation timestamp");
     }
-    if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
+    // `before_commit_id` is the discarded head and is what continuity wants. GitHub
+    // omits it for every release-please regeneration, which is what made those
+    // rewrites look untraceable and blocked release pull requests indefinitely
+    // (#342). The same event still names `commit_id`, the head the push created, and
+    // durable state published against either head is a check run addressable by its
+    // SHA -- so both are candidate heads to search rather than evidence to discard.
+    //
+    // This recovers continuity; it does not waive it. State found this way is still
+    // required to belong to this pull request, and a rewrite naming neither head
+    // remains untraceable below.
+    const shas = [event.commit_id, event.before_commit_id].filter((sha) =>
+      /^[0-9a-f]{40}$/iu.test(sha ?? ""),
+    );
+    if (shas.length === 0) {
       hasUntraceableRewrite = true;
       continue;
     }
-    const existing = priorHeads.get(event.before_commit_id);
-    if (!existing || createdAt > existing.createdAt) {
-      priorHeads.set(event.before_commit_id, { sha: event.before_commit_id, createdAt });
-    }
+    rewrites.push({ createdAt, shas });
   }
 
-  const orderedPriorHeads = [...priorHeads.values()].sort(
-    (left, right) => right.createdAt - left.createdAt,
-  );
-  for (let index = 1; index < orderedPriorHeads.length; index += 1) {
-    if (orderedPriorHeads[index - 1].createdAt === orderedPriorHeads[index].createdAt) {
+  // Ordering is over events, not SHAs. Two SHAs from one event share its timestamp
+  // and their order is known -- the created head is newer than the discarded one --
+  // so only a tie between distinct events is genuinely ambiguous.
+  rewrites.sort((left, right) => right.createdAt - left.createdAt);
+  for (let index = 1; index < rewrites.length; index += 1) {
+    if (rewrites[index - 1].createdAt === rewrites[index].createdAt) {
       throw new Error("force-push events have ambiguous chronological ordering");
     }
   }
-  return {
-    priorHeads: orderedPriorHeads.map(({ sha }) => sha),
-    hasUntraceableRewrite,
-  };
+
+  const seen = new Set();
+  const priorHeads = [];
+  for (const rewrite of rewrites) {
+    for (const sha of rewrite.shas) {
+      if (seen.has(sha)) continue;
+      seen.add(sha);
+      priorHeads.push(sha);
+    }
+  }
+  return { priorHeads, hasUntraceableRewrite };
 }
 
 function flattenPages(value) {
