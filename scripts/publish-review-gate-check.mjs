@@ -222,6 +222,30 @@ function untraceableRewriteError() {
   );
 }
 
+// Release Please regenerates its release branch by force-pushing it, and GitHub records
+// those rewrites with no `before_commit_id`, so they are untraceable by the check below.
+//
+// The continuity check exists so a rewrite cannot replace human-reviewed code without a
+// trace. A generated release branch has no such state to protect: the bot rebuilds the
+// branch from the base branch on every upstream merge, so a rewrite discards only content
+// the next run reproduces. Without this, a release pull request becomes unmergeable as
+// soon as anything lands on the base branch, which blocked v0.6.0 entirely (#342).
+//
+// Deliberately narrow, and evidence-based rather than name-based. A branch name alone is
+// not evidence, because anyone who can push may choose one. Both must hold:
+//   - the head branch is release-please's generated name for *this* pull request's base,
+//   - the pull request is authored by a bot.
+// A human branch named to look generated fails the second condition, and a bot pull
+// request from an ordinary branch fails the first.
+function isGeneratedReleasePullRequest(pr) {
+  const baseRef = pr?.base?.ref;
+  const headRef = pr?.head?.ref;
+  if (typeof baseRef !== "string" || baseRef.length === 0) return false;
+  if (typeof headRef !== "string") return false;
+  if (String(pr?.user?.type ?? "").toLowerCase() !== "bot") return false;
+  return headRef.startsWith(`release-please--branches--${baseRef}--components--`);
+}
+
 function loadLatestDurableReviewState(pr) {
   const { priorHeads: forcePushedPriorShas, hasUntraceableRewrite } = loadForcePushedPriorShas(
     pr.number,
@@ -230,7 +254,13 @@ function loadLatestDurableReviewState(pr) {
   // commit cannot contain a finding that was observed and then deleted only on the head this
   // rewrite discarded, so returning it would publish success while losing that ask. Continuity
   // across a null `before_commit_id` cannot be proved, so no reachable state is trustworthy here.
-  if (hasUntraceableRewrite) throw untraceableRewriteError();
+  if (hasUntraceableRewrite) {
+    if (!isGeneratedReleasePullRequest(pr)) throw untraceableRewriteError();
+    // Logged, never silent: an exemption nobody can see is one nobody can audit.
+    console.log(
+      `Accepting an untraceable rewrite on generated release branch ${pr.head.ref}: its contents are regenerated from ${pr.base.ref} rather than carried across review.`,
+    );
+  }
   const currentPrShas = loadCurrentPrCommitShas(pr);
   const currentPrShaSet = new Set(currentPrShas);
   const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
