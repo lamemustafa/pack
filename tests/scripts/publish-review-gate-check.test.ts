@@ -430,15 +430,11 @@ describe("PR-head Review gate check publisher", () => {
   });
 
   // #342: the decisive case. release-please force-pushes leave `before_commit_id`
-  // null, so the gate calls the rewrite untraceable and refuses -- but the same
-  // timeline event carries `commit_id`, the head after the push, which is where
-  // the orphaned durable state lives.
-  //
-  // This asserts CURRENT behaviour: the state is not found and the run is refused.
-  // It is the premise of the proposed fix, written before the fix so the fix has
-  // something to flip. If a change makes this pass without deliberately widening
-  // discovery, that change is doing something else.
-  it("cannot reach durable state on a head named only by the force-push commit_id", () => {
+  // null, so the gate called the rewrite untraceable and refused -- but the same
+  // timeline event carries `commit_id`, the head after the push, which is where the
+  // orphaned durable state lives. Blocking every release pull request to protect
+  // state that was reachable all along is the defect this closes.
+  it("reaches durable state on a head named only by the force-push commit_id", () => {
     const orphanedSha = "b".repeat(40);
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
@@ -453,14 +449,37 @@ describe("PR-head Review gate check publisher", () => {
     const publicationText =
       calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
 
-    // The orphaned head is never queried, though the timeline names it.
     expect(
       calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
-      "the orphaned head named by commit_id is not consulted today",
-    ).toBe(false);
+      "the orphaned head named by commit_id must be consulted",
+    ).toBe(true);
+    expect(result.status).toBe(0);
+    expect(publicationText).not.toContain("GitHub did not record the prior head");
+    expect(publicationText).toContain("conclusion=success");
+  });
+
+  // Continuity is recovered, not waived: state found through a recovered head is
+  // still required to belong to this pull request.
+  it("ignores recovered-head state that belongs to another pull request", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: cleanDurableState(2) },
+      [forcePushEvent(null, "2026-08-17T00:00:00Z", orphanedSha)],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(true);
     expect(result.status).toBe(0);
     expect(publicationText).toContain("conclusion=action_required");
-    expect(publicationText).toContain("GitHub did not record the prior head");
   });
 
   // The other half of the premise: a rewrite with neither field usable must stay
