@@ -238,23 +238,54 @@ run identifier, or dated observation. Unevidenced claims stay unchecked.
       cookies, credentials, OTP, or CAPTCHA data.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
-- [ ] The authorised live full fiscal year recovery matrix below is complete:
-      every observation matches a completion-eligible row in the cell legend,
-      and every recorded date is valid and no later than the current UTC date.
+- [ ] The authorised live full fiscal year capability and recovery matrices
+      below are complete: every observation matches a completion-eligible row in
+      the cell legend, and every recorded date is valid and no later than the
+      current UTC date.
 
-The selection rows are derived from the supported Cartesian product of
-`FILED_RETURNS_RETURN_TYPES` and `FILED_RETURNS_ARTIFACT_TYPES`; a test keeps
-this instrument aligned with those canonical constants. The same test derives
-each row's acquisition capability from
-`supportsFullFiscalYearFiledReturnsRun` and
-`supportsFiledReturnsArtifactType`; the document cannot declare that fact. For
-each row, the final expectation cell's capability claim must agree with the
-derived value. For each acquisition-capable selection, record service-worker
-restart, browser restart, interrupted download, cancellation/discard and its
-cleanup outcome, and a retained checkpoint whose browser record is no longer available. A
-resumed path must not repeat a completed target. An unproven path remains
-non-complete until retry or cancellation. Manual observation is only an
-explicit non-completing action and still requires retry before ZIP staging.
+This instrument is two tables because it records two different kinds of fact.
+
+**The capability matrix** keeps one row per selection, derived from the supported
+Cartesian product of `FILED_RETURNS_RETURN_TYPES` and
+`FILED_RETURNS_ARTIFACT_TYPES`; a test keeps it aligned with those canonical
+constants. The same test derives each row's acquisition capability from
+`supportsFullFiscalYearFiledReturnsRun` and `supportsFiledReturnsArtifactType`;
+the document cannot declare that fact. Each row's capability claim must agree
+with the derived value.
+
+**The recovery matrix** records one row per _target shape_, not per selection.
+Recovery behaviour is driven by the ledger, download correlation, and resume
+paths, and none of those branch on return type -- so recording the same
+observation once per return type is the same test repeated, not additional
+evidence. What does change the state a restart can land in is how many downloads
+a target produces:
+
+- `single-download` -- one concrete artifact (`PDF`, `JSON`, or `EXCEL`). A
+  restart asks only whether that one download completed.
+- `bundled-download` -- `PDF_AND_EXCEL`, which fetches
+  `FILED_RETURNS_CONCRETE_ARTIFACT_TYPES` in sequence. The only shape where a
+  restart lands mid-target, part of the bundle on disk and part not.
+
+A test derives these shapes from the artifact types and asserts every offered
+selection maps to a documented shape, so the reduction cannot silently drop a
+selection the way a hand-picked row list would.
+
+The workbook build is deliberately not a third shape. It runs in the offscreen
+entrypoint from an already-complete plan and holds no ledger state, so a restart
+during it is not a distinct recovery case. If that changes, this table gains a
+row.
+
+For each shape, record service-worker restart, browser restart, interrupted
+download, cancellation/discard and its cleanup outcome, and a retained
+checkpoint whose browser record is no longer available. A resumed path must not
+repeat a completed target. An unproven path remains non-complete until retry or
+cancellation. Manual observation is only an explicit non-completing action and
+still requires retry before ZIP staging.
+
+This replaced a ten-row, six-column table whose sixty cells were entirely
+`not-yet-run`. A gate shaped so that nobody starts produces no evidence and
+withholds a working feature indefinitely; twenty fillable cells that are
+actually observed are worth more than sixty that never will be.
 
 Every cell must match one complete row in this legend. The test renders the
 legend from the same rule table used for validation, so state, reason, date,
@@ -281,20 +312,29 @@ recording the observation. No other cell text is permitted, so raw portal URLs,
 filenames, download IDs, page or DOM text, local paths, and taxpayer/session
 data are unrepresentable in the matrix.
 
+<!-- BEGIN: full-year-capability-matrix -->
+
+| Return type | Artifact type | Expected fail-closed / not applicable                 |
+| ----------- | ------------- | ----------------------------------------------------- |
+| GSTR-3B     | PDF           | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-3B     | JSON          | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-3B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | PDF           | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | EXCEL         | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | PDF           | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | JSON          | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | EXCEL         | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded; reason: not-recorded |
+
+<!-- END: full-year-capability-matrix -->
+
 <!-- BEGIN: full-year-recovery-matrix -->
 
-| Return type | Artifact type | Service-worker restart          | Browser restart                 | Interrupted download            | Cancellation/discard and cleanup | Retained checkpoint; browser record unavailable | Expected fail-closed / not applicable                 |
-| ----------- | ------------- | ------------------------------- | ------------------------------- | ------------------------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
-| GSTR-3B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-3B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-3B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-1      | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-1      | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-2B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-2B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-2B     | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| Target shape     | Service-worker restart          | Browser restart                 | Interrupted download            | Cancellation/discard and cleanup | Retained checkpoint; browser record unavailable |
+| ---------------- | ------------------------------- | ------------------------------- | ------------------------------- | -------------------------------- | ----------------------------------------------- |
+| single-download  | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 |
+| bundled-download | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 |
 
 <!-- END: full-year-recovery-matrix -->
 

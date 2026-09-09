@@ -13,22 +13,28 @@ import {
 } from "../../src/connectors/gst/filed-returns-return-types";
 
 const rootDir = process.cwd();
+const capabilityStart = "<!-- BEGIN: full-year-capability-matrix -->";
+const capabilityEnd = "<!-- END: full-year-capability-matrix -->";
 const matrixStart = "<!-- BEGIN: full-year-recovery-matrix -->";
 const matrixEnd = "<!-- END: full-year-recovery-matrix -->";
 const legendStart = "<!-- BEGIN: full-year-recovery-cell-legend -->";
 const legendEnd = "<!-- END: full-year-recovery-cell-legend -->";
 const storeChecklistStart = "## Chrome Web Store Checklist";
 const storeChecklistEnd = "## Suggested Store Copy";
+// One row per selection: what Pack can acquire. Derived, so it cannot drift.
+const capabilityColumns = ["Return type", "Artifact type", "Expected fail-closed / not applicable"];
+// One row per target *shape*: how a restart can leave a target. Recovery code does
+// not branch on return type, so a per-selection row here is the same observation
+// repeated rather than new evidence.
 const matrixColumns = [
-  "Return type",
-  "Artifact type",
+  "Target shape",
   "Service-worker restart",
   "Browser restart",
   "Interrupted download",
   "Cancellation/discard and cleanup",
   "Retained checkpoint; browser record unavailable",
-  "Expected fail-closed / not applicable",
 ];
+const RECOVERY_SHAPES = ["single-download", "bundled-download"] as const;
 const observationPattern =
   /^([a-z]+(?:-[a-z]+)*); date: ([^;\s]+)(?:; reason: ([a-z]+(?:-[a-z]+)*))?$/;
 type DateConstraint = "not-recorded" | "recorded-not-future";
@@ -121,7 +127,7 @@ const observationCellRules: readonly ObservationCellRule[] = [
   },
 ];
 const recoveryMatrixCheckboxPattern =
-  /^- \[( |x)\] The authorised live full fiscal year recovery matrix below is complete:/m;
+  /^- \[( |x)\] The authorised live full fiscal year capability and recovery matrices/m;
 const storeChecklistEvidenceTokenPattern =
   /`(?:\.github\/|docs\/|scripts\/|src\/|tests\/|wxt\.config\.ts)[^`]*`|\b20\d{2}-\d{2}-\d{2}\b|\b(?:GitHub Actions run|[Ww]orkflow run|Run) `\d{8,}`/;
 
@@ -155,7 +161,14 @@ describe("publication readiness recovery matrix", () => {
   });
 
   it("tracks every canonical offered return and artifact selection once", async () => {
-    assertCanonicalSelections(matrixRows(await readRecoveryMatrix()));
+    assertCanonicalSelections(matrixRows(await readCapabilityMatrix(), capabilityColumns));
+  });
+
+  // The reduction from one row per selection to one row per shape is only honest
+  // if every selection still maps to a documented shape. This is the assertion
+  // that makes it a derivation rather than a hand-picked subset.
+  it("covers every offered selection with exactly one recovery target shape", async () => {
+    assertCanonicalRecoveryShapes(matrixRows(await readRecoveryMatrix()));
   });
 
   it("requires every checked Store item to carry a recorded evidence token", async () => {
@@ -183,32 +196,41 @@ describe("publication readiness recovery matrix", () => {
   });
 
   it("rejects every unexpected data row instead of filtering it out", async () => {
-    const matrix = await readRecoveryMatrix();
+    const capability = await readCapabilityMatrix();
     const unfilled = "not-yet-run; date: not-recorded";
-    const unexpectedRow = [
-      "Notes",
-      "unexpected",
-      unfilled,
-      unfilled,
-      unfilled,
-      unfilled,
-      unfilled,
-      `${unfilled}; reason: not-recorded`,
-    ];
-    const matrixWithUnexpectedRow = `${matrix.trimEnd()}\n| ${unexpectedRow.join(" | ")} |\n`;
+    const unexpectedRow = ["Notes", "unexpected", `${unfilled}; reason: not-recorded`];
+    const withUnexpectedRow = `${capability.trimEnd()}\n| ${unexpectedRow.join(" | ")} |\n`;
 
-    expect(() => assertCanonicalSelections(matrixRows(matrixWithUnexpectedRow))).toThrow();
+    expect(() =>
+      assertCanonicalSelections(matrixRows(withUnexpectedRow, capabilityColumns)),
+    ).toThrow();
+
+    const recovery = await readRecoveryMatrix();
+    const withUnexpectedShape = `${recovery.trimEnd()}\n| invented-shape | ${[unfilled, unfilled, unfilled, unfilled, unfilled].join(" | ")} |\n`;
+
+    expect(() => assertCanonicalRecoveryShapes(matrixRows(withUnexpectedShape))).toThrow();
   });
 
   it("keeps every observation fillable, dated, and reasoned when required", async () => {
-    const matrix = await readRecoveryMatrix();
+    for (const [returnType = "", artifactType = "", ...observations] of matrixRows(
+      await readCapabilityMatrix(),
+      capabilityColumns,
+    )) {
+      expect(observations.length, "capability row must have one observation cell").toBe(1);
+      validateObservation(
+        observations[0] ?? "",
+        true,
+        deriveRowCapability(returnType, artifactType),
+      );
+    }
 
-    for (const [returnType = "", artifactType = "", ...observations] of matrixRows(matrix)) {
-      const rowCapability = deriveRowCapability(returnType, artifactType);
-      expect(observations.length, "matrix row must have six observation cells").toBe(6);
-
-      for (const [index, observation] of observations.entries()) {
-        validateObservation(observation, index === observations.length - 1, rowCapability);
+    for (const [, ...observations] of matrixRows(await readRecoveryMatrix())) {
+      expect(observations.length, "recovery row must have five observation cells").toBe(5);
+      // Recovery rows describe a shape, not a selection, so there is no expectation
+      // column and no per-row capability -- only acquisition-capable selections
+      // reach a recovery scenario at all.
+      for (const observation of observations) {
+        validateObservation(observation, false, "acquisition-capable");
       }
     }
   });
@@ -309,33 +331,38 @@ describe("publication readiness recovery matrix", () => {
 
   it("allows a canonically non-capable selection to complete through its expected path", () => {
     const today = utcDateOffset(0);
-    const scenario = `fail-closed-as-expected; date: ${today}; reason: expected-fail-closed-boundary`;
     const expectation = `not-applicable; date: ${today}; reason: selection-not-acquisition-capable`;
 
-    expect(() =>
-      assertRecoveryRowComplete([
-        "GSTR-1",
-        "JSON",
-        ...Array<string>(5).fill(scenario),
-        expectation,
-      ]),
-    ).not.toThrow();
+    expect(() => assertCapabilityRowComplete(["GSTR-1", "JSON", expectation])).not.toThrow();
   });
 
   it("rejects a recorded capability claim that contradicts the derived value", () => {
     const today = utcDateOffset(0);
     const expectation = `not-applicable; date: ${today}; reason: selection-not-acquisition-capable`;
 
-    expect(() =>
-      assertRecoveryRowComplete([
-        "GSTR-3B",
-        "PDF",
-        ...Array<string>(5).fill(`pass; date: ${today}`),
-        expectation,
-      ]),
-    ).toThrow(
+    expect(() => assertCapabilityRowComplete(["GSTR-3B", "PDF", expectation])).toThrow(
       "matrix row capability mismatch: derived acquisition-capable; recorded not-acquisition-capable",
     );
+  });
+
+  // A recovery row records a shape, so it must not be gated on a selection's
+  // capability -- and it must still refuse an ineligible observation.
+  it("requires every recovery scenario cell to be completion-eligible", () => {
+    const today = utcDateOffset(0);
+
+    expect(() =>
+      assertRecoveryRowComplete([
+        "single-download",
+        ...Array<string>(5).fill(`pass; date: ${today}`),
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      assertRecoveryRowComplete([
+        "bundled-download",
+        `fail; date: ${today}`,
+        ...Array<string>(4).fill(`pass; date: ${today}`),
+      ]),
+    ).toThrow();
   });
 
   it("accepts a checked matrix only when every cell is completion-eligible", async () => {
@@ -350,16 +377,31 @@ function assertRecoveryGate(readiness: string): void {
   expect(checkbox).not.toBeNull();
   if (checkbox?.[1] !== "x") return;
 
+  // Both tables gate the same checkbox: a complete capability record with an
+  // unobserved recovery shape is not evidence of a recoverable release.
+  for (const row of matrixRows(capabilityMatrix(readiness), capabilityColumns)) {
+    assertCapabilityRowComplete(row);
+  }
   for (const row of matrixRows(recoveryMatrix(readiness))) assertRecoveryRowComplete(row);
 }
 
-function assertRecoveryRowComplete(row: string[]): void {
+function assertCapabilityRowComplete(row: string[]): void {
   const [returnType = "", artifactType = "", ...observations] = row;
-  const rowCapability = deriveRowCapability(returnType, artifactType);
-  expect(observations.length, "matrix row must have six observation cells").toBe(6);
+  expect(observations.length, "capability row must have one observation cell").toBe(1);
+  const rule = validateObservation(
+    observations[0] ?? "",
+    true,
+    deriveRowCapability(returnType, artifactType),
+  );
+  expect(rule.completionEligible, "matrix completion requires an eligible cell state").toBe(true);
+}
 
-  for (const [index, observation] of observations.entries()) {
-    const rule = validateObservation(observation, index === observations.length - 1, rowCapability);
+function assertRecoveryRowComplete(row: string[]): void {
+  const [, ...observations] = row;
+  expect(observations.length, "recovery row must have five observation cells").toBe(5);
+
+  for (const observation of observations) {
+    const rule = validateObservation(observation, false, "acquisition-capable");
     expect(rule.completionEligible, "matrix completion requires an eligible cell state").toBe(true);
   }
 }
@@ -369,7 +411,7 @@ function fillRecoveryMatrix(readiness: string): string {
   return readiness
     .replace(
       recoveryMatrixCheckboxPattern,
-      "- [x] The authorised live full fiscal year recovery matrix below is complete:",
+      "- [x] The authorised live full fiscal year capability and recovery matrices",
     )
     .replaceAll(
       "not-yet-run; date: not-recorded; reason: not-recorded",
@@ -399,7 +441,44 @@ function markedSection(document: string, startMarker: string, endMarker: string)
   return document.slice(start + startMarker.length, end);
 }
 
-function matrixRows(matrix: string): string[][] {
+function capabilityMatrix(readiness: string): string {
+  return markedSection(readiness, capabilityStart, capabilityEnd);
+}
+
+async function readCapabilityMatrix(): Promise<string> {
+  return capabilityMatrix(await readPublicationReadiness());
+}
+
+// Derived from the artifact type, not hand-listed: a bundle is the only shape a
+// restart can land inside. Every offered selection must map to a documented shape,
+// which is what keeps the reduced table from silently dropping a selection.
+function deriveRecoveryShape(artifactType: string): (typeof RECOVERY_SHAPES)[number] {
+  return artifactType === "PDF_AND_EXCEL" ? "bundled-download" : "single-download";
+}
+
+function assertCanonicalRecoveryShapes(rows: string[][]): void {
+  const documented = rows.map(([shape]) => shape);
+  const offered = [
+    ...new Set(
+      FILED_RETURNS_RETURN_TYPES.flatMap((returnType) =>
+        FILED_RETURNS_ARTIFACT_TYPES.filter((artifactType) =>
+          supportsFiledReturnsArtifactType(returnType, artifactType),
+        ).map((artifactType) => deriveRecoveryShape(artifactType)),
+      ),
+    ),
+  ];
+
+  expect(
+    documented.length === offered.length && offered.every((shape) => documented.includes(shape)),
+    "recovery matrix must carry exactly one row per offered target shape",
+  ).toBe(true);
+  expect(new Set(documented).size).toBe(documented.length);
+  for (const shape of documented) {
+    expect(RECOVERY_SHAPES, `unknown target shape ${shape}`).toContain(shape);
+  }
+}
+
+function matrixRows(matrix: string, columns: readonly string[] = matrixColumns): string[][] {
   const lines = matrix
     .split("\n")
     .map((line) => line.trim())
@@ -409,18 +488,17 @@ function matrixRows(matrix: string): string[][] {
 
   const [header, separator, ...dataRows] = lines.map(parseMatrixRow);
   expect(
-    header?.every((cell, index) => cell === matrixColumns[index]) &&
-      header.length === matrixColumns.length,
+    header?.every((cell, index) => cell === columns[index]) && header.length === columns.length,
     "matrix header must match the canonical columns",
   ).toBe(true);
   expect(separator?.length, "matrix separator must match the canonical column count").toBe(
-    matrixColumns.length,
+    columns.length,
   );
   expect(separator?.every((cell) => /^:?-{3,}:?$/.test(cell))).toBe(true);
 
   for (const row of dataRows) {
     expect(row.length, "matrix data row must match the canonical column count").toBe(
-      matrixColumns.length,
+      columns.length,
     );
   }
   return dataRows;
