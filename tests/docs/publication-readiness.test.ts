@@ -15,8 +15,10 @@ import {
 const rootDir = process.cwd();
 const capabilityStart = "<!-- BEGIN: full-year-capability-matrix -->";
 const capabilityEnd = "<!-- END: full-year-capability-matrix -->";
-const matrixStart = "<!-- BEGIN: full-year-recovery-matrix -->";
-const matrixEnd = "<!-- END: full-year-recovery-matrix -->";
+const targetStart = "<!-- BEGIN: full-year-target-recovery-matrix -->";
+const targetEnd = "<!-- END: full-year-target-recovery-matrix -->";
+const matrixStart = "<!-- BEGIN: full-year-run-recovery-matrix -->";
+const matrixEnd = "<!-- END: full-year-run-recovery-matrix -->";
 const legendStart = "<!-- BEGIN: full-year-recovery-cell-legend -->";
 const legendEnd = "<!-- END: full-year-recovery-cell-legend -->";
 const storeChecklistStart = "## Chrome Web Store Checklist";
@@ -26,15 +28,27 @@ const capabilityColumns = ["Return type", "Artifact type", "Expected fail-closed
 // One row per target *shape*: how a restart can leave a target. Recovery code does
 // not branch on return type, so a per-selection row here is the same observation
 // repeated rather than new evidence.
-const matrixColumns = [
-  "Target shape",
-  "Service-worker restart",
-  "Browser restart",
+// Per selection, because these scenarios exercise per-selection code:
+// `acquireFiledReturnArtifact` dispatches on return type, and
+// `scoreFiledReturnDownloadCandidate` branches GSTR-3B / non-GSTR-3B Excel /
+// descriptor. Evidence from one selection does not transfer to another.
+const targetColumns = [
+  "Return type",
+  "Artifact type",
   "Interrupted download",
-  "Cancellation/discard and cleanup",
   "Retained checkpoint; browser record unavailable",
 ];
-const RECOVERY_SHAPES = ["single-download", "bundled-download"] as const;
+// Per plan shape, because these exercise the ledger and its phases rather than
+// any one target's acquisition. What varies is whether a restart can land inside
+// a target.
+const matrixColumns = [
+  "Plan shape",
+  "Service-worker restart",
+  "Browser restart",
+  "Cancellation/discard and cleanup",
+  "Workbook and ZIP export phase",
+];
+const PLAN_SHAPES = ["single-artifact-plan", "bundled-artifact-plan"] as const;
 const observationPattern =
   /^([a-z]+(?:-[a-z]+)*); date: ([^;\s]+)(?:; reason: ([a-z]+(?:-[a-z]+)*))?$/;
 type DateConstraint = "not-recorded" | "recorded-not-future";
@@ -127,7 +141,7 @@ const observationCellRules: readonly ObservationCellRule[] = [
   },
 ];
 const recoveryMatrixCheckboxPattern =
-  /^- \[( |x)\] The authorised live full fiscal year capability and recovery matrices/m;
+  /^- \[( |x)\] The authorised live full fiscal year capability, target recovery, and run/m;
 const storeChecklistEvidenceTokenPattern =
   /`(?:\.github\/|docs\/|scripts\/|src\/|tests\/|wxt\.config\.ts)[^`]*`|\b20\d{2}-\d{2}-\d{2}\b|\b(?:GitHub Actions run|[Ww]orkflow run|Run) `\d{8,}`/;
 
@@ -167,7 +181,15 @@ describe("publication readiness recovery matrix", () => {
   // The reduction from one row per selection to one row per shape is only honest
   // if every selection still maps to a documented shape. This is the assertion
   // that makes it a derivation rather than a hand-picked subset.
-  it("covers every offered selection with exactly one recovery target shape", async () => {
+  // The target recovery matrix must carry the same canonical selections as the
+  // capability matrix. Without this, a selection can be dropped from recovery
+  // evidence while the capability table still lists it -- which is precisely the
+  // "one run stands as evidence for paths it never entered" defect.
+  it("tracks every canonical offered selection in the target recovery matrix too", async () => {
+    assertCanonicalSelections(matrixRows(await readTargetRecoveryMatrix(), targetColumns));
+  });
+
+  it("covers every offered selection with exactly one run plan shape", async () => {
     assertCanonicalRecoveryShapes(matrixRows(await readRecoveryMatrix()));
   });
 
@@ -224,11 +246,23 @@ describe("publication readiness recovery matrix", () => {
       );
     }
 
+    for (const [returnType = "", artifactType = "", ...observations] of matrixRows(
+      await readTargetRecoveryMatrix(),
+      targetColumns,
+    )) {
+      expect(observations.length, "target recovery row must have two observation cells").toBe(2);
+      // Per-selection scenarios still carry the row's derived capability: a
+      // selection Pack cannot acquire has no download to interrupt.
+      const rowCapability = deriveRowCapability(returnType, artifactType);
+      for (const observation of observations) {
+        validateObservation(observation, false, rowCapability);
+      }
+    }
+
     for (const [, ...observations] of matrixRows(await readRecoveryMatrix())) {
-      expect(observations.length, "recovery row must have five observation cells").toBe(5);
-      // Recovery rows describe a shape, not a selection, so there is no expectation
-      // column and no per-row capability -- only acquisition-capable selections
-      // reach a recovery scenario at all.
+      expect(observations.length, "run recovery row must have four observation cells").toBe(4);
+      // Run rows describe a plan shape, not a selection: only acquisition-capable
+      // selections reach a run at all.
       for (const observation of observations) {
         validateObservation(observation, false, "acquisition-capable");
       }
@@ -352,15 +386,15 @@ describe("publication readiness recovery matrix", () => {
 
     expect(() =>
       assertRecoveryRowComplete([
-        "single-download",
-        ...Array<string>(5).fill(`pass; date: ${today}`),
+        "single-artifact-plan",
+        ...Array<string>(4).fill(`pass; date: ${today}`),
       ]),
     ).not.toThrow();
     expect(() =>
       assertRecoveryRowComplete([
-        "bundled-download",
+        "bundled-artifact-plan",
         `fail; date: ${today}`,
-        ...Array<string>(4).fill(`pass; date: ${today}`),
+        ...Array<string>(3).fill(`pass; date: ${today}`),
       ]),
     ).toThrow();
   });
@@ -382,7 +416,21 @@ function assertRecoveryGate(readiness: string): void {
   for (const row of matrixRows(capabilityMatrix(readiness), capabilityColumns)) {
     assertCapabilityRowComplete(row);
   }
+  for (const row of matrixRows(targetRecoveryMatrix(readiness), targetColumns)) {
+    assertTargetRecoveryRowComplete(row);
+  }
   for (const row of matrixRows(recoveryMatrix(readiness))) assertRecoveryRowComplete(row);
+}
+
+function assertTargetRecoveryRowComplete(row: string[]): void {
+  const [returnType = "", artifactType = "", ...observations] = row;
+  expect(observations.length, "target recovery row must have two observation cells").toBe(2);
+  const rowCapability = deriveRowCapability(returnType, artifactType);
+
+  for (const observation of observations) {
+    const rule = validateObservation(observation, false, rowCapability);
+    expect(rule.completionEligible, "matrix completion requires an eligible cell state").toBe(true);
+  }
 }
 
 function assertCapabilityRowComplete(row: string[]): void {
@@ -398,7 +446,7 @@ function assertCapabilityRowComplete(row: string[]): void {
 
 function assertRecoveryRowComplete(row: string[]): void {
   const [, ...observations] = row;
-  expect(observations.length, "recovery row must have five observation cells").toBe(5);
+  expect(observations.length, "run recovery row must have four observation cells").toBe(4);
 
   for (const observation of observations) {
     const rule = validateObservation(observation, false, "acquisition-capable");
@@ -411,7 +459,7 @@ function fillRecoveryMatrix(readiness: string): string {
   return readiness
     .replace(
       recoveryMatrixCheckboxPattern,
-      "- [x] The authorised live full fiscal year capability and recovery matrices",
+      "- [x] The authorised live full fiscal year capability, target recovery, and run",
     )
     .replaceAll(
       "not-yet-run; date: not-recorded; reason: not-recorded",
@@ -452,8 +500,16 @@ async function readCapabilityMatrix(): Promise<string> {
 // Derived from the artifact type, not hand-listed: a bundle is the only shape a
 // restart can land inside. Every offered selection must map to a documented shape,
 // which is what keeps the reduced table from silently dropping a selection.
-function deriveRecoveryShape(artifactType: string): (typeof RECOVERY_SHAPES)[number] {
-  return artifactType === "PDF_AND_EXCEL" ? "bundled-download" : "single-download";
+function derivePlanShape(artifactType: string): (typeof PLAN_SHAPES)[number] {
+  return artifactType === "PDF_AND_EXCEL" ? "bundled-artifact-plan" : "single-artifact-plan";
+}
+
+function targetRecoveryMatrix(readiness: string): string {
+  return markedSection(readiness, targetStart, targetEnd);
+}
+
+async function readTargetRecoveryMatrix(): Promise<string> {
+  return targetRecoveryMatrix(await readPublicationReadiness());
 }
 
 function assertCanonicalRecoveryShapes(rows: string[][]): void {
@@ -463,18 +519,18 @@ function assertCanonicalRecoveryShapes(rows: string[][]): void {
       FILED_RETURNS_RETURN_TYPES.flatMap((returnType) =>
         FILED_RETURNS_ARTIFACT_TYPES.filter((artifactType) =>
           supportsFiledReturnsArtifactType(returnType, artifactType),
-        ).map((artifactType) => deriveRecoveryShape(artifactType)),
+        ).map((artifactType) => derivePlanShape(artifactType)),
       ),
     ),
   ];
 
   expect(
     documented.length === offered.length && offered.every((shape) => documented.includes(shape)),
-    "recovery matrix must carry exactly one row per offered target shape",
+    "run recovery matrix must carry exactly one row per offered plan shape",
   ).toBe(true);
   expect(new Set(documented).size).toBe(documented.length);
   for (const shape of documented) {
-    expect(RECOVERY_SHAPES, `unknown target shape ${shape}`).toContain(shape);
+    expect(PLAN_SHAPES, `unknown plan shape ${shape}`).toContain(shape);
   }
 }
 

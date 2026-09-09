@@ -238,12 +238,14 @@ run identifier, or dated observation. Unevidenced claims stay unchecked.
       cookies, credentials, OTP, or CAPTCHA data.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
-- [ ] The authorised live full fiscal year capability and recovery matrices
-      below are complete: every observation matches a completion-eligible row in
+- [ ] The authorised live full fiscal year capability, target recovery, and run
+      recovery matrices below are complete: every observation matches a completion-eligible row in
       the cell legend, and every recorded date is valid and no later than the
       current UTC date.
 
-This instrument is two tables because it records two different kinds of fact.
+This instrument is three tables because recovery evidence transfers between
+selections for some scenarios and not others. Which table a scenario belongs to
+is decided by what its code path actually depends on, not by convenience.
 
 **The capability matrix** keeps one row per selection, derived from the supported
 Cartesian product of `FILED_RETURNS_RETURN_TYPES` and
@@ -253,39 +255,39 @@ constants. The same test derives each row's acquisition capability from
 the document cannot declare that fact. Each row's capability claim must agree
 with the derived value.
 
-**The recovery matrix** records one row per _target shape_, not per selection.
-Recovery behaviour is driven by the ledger, download correlation, and resume
-paths, and none of those branch on return type -- so recording the same
-observation once per return type is the same test repeated, not additional
-evidence. What does change the state a restart can land in is how many downloads
-a target produces:
+**The target recovery matrix** also keeps one row per selection, because these
+two scenarios exercise per-selection code. `acquireFiledReturnArtifact`
+dispatches on return type -- GSTR-2B and GSTR-1 have their own acquisition
+functions and GSTR-3B an inline path -- and
+`scoreFiledReturnDownloadCandidate` branches three ways: GSTR-3B, non-GSTR-3B
+Excel, and descriptor-driven. A GSTR-3B PDF observation therefore says nothing
+about GSTR-1 Excel or GSTR-2B JSON, and collapsing them would let one run stand
+as evidence for paths it never entered.
 
-- `single-download` -- one concrete artifact (`PDF`, `JSON`, or `EXCEL`). A
-  restart asks only whether that one download completed.
-- `bundled-download` -- `PDF_AND_EXCEL`, which fetches
-  `FILED_RETURNS_CONCRETE_ARTIFACT_TYPES` in sequence. The only shape where a
-  restart lands mid-target, part of the bundle on disk and part not.
+**The run recovery matrix** keeps one row per plan shape, because these four
+scenarios exercise the ledger and its phases rather than any one target's
+acquisition. What varies is whether a restart can land inside a target:
+`single-artifact-plan` cannot, `bundled-artifact-plan` can, and bundle size
+itself differs by return type -- two artifacts for GSTR-3B and GSTR-1, three for
+GSTR-2B, since `PDF_AND_EXCEL` means every format a return offers.
 
-A test derives these shapes from the artifact types and asserts every offered
-selection maps to a documented shape, so the reduction cannot silently drop a
-selection the way a hand-picked row list would.
+The export phase is one of those four and is **new coverage**, not a reduction.
+`completeRun` persists `zipPhase: "export-pending"` immediately before
+`exportFullFiscalYearZip`, and an interrupted export moves to
+`export-retry-pending`. A restart during that window must rebuild and export the
+completed plan without repeating portal targets. The previous instrument never
+asked for this at all.
 
-The workbook build is deliberately not a third shape. It runs in the offscreen
-entrypoint from an already-complete plan and holds no ledger state, so a restart
-during it is not a distinct recovery case. If that changes, this table gains a
-row.
-
-For each shape, record service-worker restart, browser restart, interrupted
-download, cancellation/discard and its cleanup outcome, and a retained
-checkpoint whose browser record is no longer available. A resumed path must not
-repeat a completed target. An unproven path remains non-complete until retry or
-cancellation. Manual observation is only an explicit non-completing action and
-still requires retry before ZIP staging.
+For every scenario, a resumed path must not repeat a completed target. An
+unproven path remains non-complete until retry or cancellation. Manual
+observation is only an explicit non-completing action and still requires retry
+before ZIP staging.
 
 This replaced a ten-row, six-column table whose sixty cells were entirely
-`not-yet-run`. A gate shaped so that nobody starts produces no evidence and
-withholds a working feature indefinitely; twenty fillable cells that are
-actually observed are worth more than sixty that never will be.
+`not-yet-run`. The instrument now asks for thirty-eight, keeps per-selection
+evidence wherever the code path differs, and adds the export phase it was
+missing. A gate shaped so that nobody starts produces no evidence and withholds a
+working feature indefinitely.
 
 Every cell must match one complete row in this legend. The test renders the
 legend from the same rule table used for validation, so state, reason, date,
@@ -329,14 +331,31 @@ data are unrepresentable in the matrix.
 
 <!-- END: full-year-capability-matrix -->
 
-<!-- BEGIN: full-year-recovery-matrix -->
+<!-- BEGIN: full-year-target-recovery-matrix -->
 
-| Target shape     | Service-worker restart          | Browser restart                 | Interrupted download            | Cancellation/discard and cleanup | Retained checkpoint; browser record unavailable |
-| ---------------- | ------------------------------- | ------------------------------- | ------------------------------- | -------------------------------- | ----------------------------------------------- |
-| single-download  | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 |
-| bundled-download | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 |
+| Return type | Artifact type | Interrupted download            | Retained checkpoint; browser record unavailable |
+| ----------- | ------------- | ------------------------------- | ----------------------------------------------- |
+| GSTR-3B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-3B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-3B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-1      | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-1      | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-2B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-2B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-2B     | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
+| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded                 |
 
-<!-- END: full-year-recovery-matrix -->
+<!-- END: full-year-target-recovery-matrix -->
+
+<!-- BEGIN: full-year-run-recovery-matrix -->
+
+| Plan shape            | Service-worker restart          | Browser restart                 | Cancellation/discard and cleanup | Workbook and ZIP export phase   |
+| --------------------- | ------------------------------- | ------------------------------- | -------------------------------- | ------------------------------- |
+| single-artifact-plan  | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded |
+| bundled-artifact-plan | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded |
+
+<!-- END: full-year-run-recovery-matrix -->
 
 - [ ] Action-bound capture is tested in clean Chrome and Brave profiles plus the
       real profile where the native Save dialog appeared, with "Ask where to
