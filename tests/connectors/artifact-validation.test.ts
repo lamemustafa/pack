@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeJsonArtifactRejection,
   filedReturnsJsonDocumentContract,
   validateArtifactBytes,
 } from "../../src/connectors/gst/artifact-validation";
+import { ARTIFACT_ACQUISITION_DIAGNOSTIC_SIGNALS } from "../../src/connectors/gst/filed-returns-acquisition-diagnostics";
+import {
+  PORTAL_BLOB_SHIM_SUPPRESSION_METHODS,
+  RETURNS_DASHBOARD_ANCHOR_FAILURE_REASONS,
+  isDurableFiledReturnsSignal,
+} from "../../src/connectors/gst/filed-returns-durable-signals";
 
 const encoder = new TextEncoder();
 
@@ -92,5 +99,98 @@ describe("validateArtifactBytes", () => {
       ok: false,
       reason: "unexpected-content",
     });
+  });
+});
+
+describe("compact filed-return summary envelopes", () => {
+  // Captured live on 2026-09-10: a filed GSTR-1 period with nothing in it answers the summary
+  // preflight with a valid envelope well under 100 bytes. A size floor refused it before anything
+  // read it, and the run blocked on a return that was filed and downloadable.
+  const compactGstr1Envelope = encoder.encode(JSON.stringify({ data: { ret_period: "042025" } }));
+
+  it("accepts a valid summary envelope that is smaller than a hundred bytes", () => {
+    expect(compactGstr1Envelope.byteLength).toBeLessThan(100);
+    expect(validateArtifactBytes(compactGstr1Envelope, "JSON", "042025", "GSTR-1")).toEqual({
+      ok: true,
+      mimeType: "application/json",
+    });
+  });
+
+  // What the floor was standing in for, each caught by the contract instead and caught better.
+  it("still refuses compact bodies the contract rejects", () => {
+    const cases: Array<[string, Uint8Array, string]> = [
+      ["not JSON at all", encoder.encode("<html><body>error</body></html>"), "unexpected-content"],
+      ["no envelope", encoder.encode(JSON.stringify({ status: 1 })), "unexpected-content"],
+      [
+        "no period field",
+        encoder.encode(JSON.stringify({ data: { other: "x" } })),
+        "unexpected-content",
+      ],
+      [
+        "another period",
+        encoder.encode(JSON.stringify({ data: { ret_period: "052025" } })),
+        "target-period-mismatch",
+      ],
+    ];
+    for (const [label, bytes, reason] of cases) {
+      expect(bytes.byteLength, label).toBeLessThan(100);
+      expect(validateArtifactBytes(bytes, "JSON", "042025", "GSTR-1"), label).toEqual({
+        ok: false,
+        reason,
+      });
+    }
+  });
+
+  it("still refuses an empty body", () => {
+    expect(validateArtifactBytes(new Uint8Array(), "JSON", "042025", "GSTR-1")).toEqual({
+      ok: false,
+      reason: "empty",
+    });
+  });
+});
+
+describe("acquisition diagnostics are persistable", () => {
+  // The defect this pins: a diagnostic signal that is emitted but not registered rejects the
+  // entire durable signal array, so the run halts on non-canonical recovery metadata instead of
+  // recording the refusal the signal was there to explain. Emitting a new one without registering
+  // it is worse than not emitting it at all.
+  it("registers every acquisition diagnostic as a durable signal", () => {
+    const unregistered = ARTIFACT_ACQUISITION_DIAGNOSTIC_SIGNALS.filter(
+      (signal) => !isDurableFiledReturnsSignal(signal),
+    );
+    expect(unregistered).toEqual([]);
+  });
+
+  it("emits only registered signals when a compact body fails the contract", () => {
+    const bodies = [
+      encoder.encode("<html></html>"),
+      encoder.encode(JSON.stringify({ status: 1 })),
+      encoder.encode(JSON.stringify({ data: { other: "x" } })),
+      encoder.encode(JSON.stringify({ data: { ret_period: "052025" } })),
+      new Uint8Array(),
+    ];
+    for (const bytes of bodies) {
+      for (const signal of describeJsonArtifactRejection(bytes, "042025", "GSTR-1")) {
+        expect(isDurableFiledReturnsSignal(signal), signal).toBe(true);
+      }
+    }
+  });
+});
+
+describe("template-built signals are persistable", () => {
+  // These are assembled from a prefix and a variable, so a scan for signal string literals never
+  // sees them. Three reached production unregistered, and each one rejected the entire durable
+  // array it travelled in -- halting the run on non-canonical recovery metadata instead of on the
+  // navigation problem the signal described.
+  it("registers every returns-dashboard anchor failure and blob-shim suppression", () => {
+    const built = [
+      ...RETURNS_DASHBOARD_ANCHOR_FAILURE_REASONS.map(
+        (reason) => `returns-dashboard-anchor-${reason}`,
+      ),
+      ...PORTAL_BLOB_SHIM_SUPPRESSION_METHODS.map(
+        (method) => `portal-blob-shim-suppressed-via-${method}`,
+      ),
+    ];
+    expect(built.filter((signal) => !isDurableFiledReturnsSignal(signal))).toEqual([]);
   });
 });

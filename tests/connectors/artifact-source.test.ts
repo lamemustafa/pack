@@ -432,7 +432,7 @@ describe("GSTR-1 artifact acquisition", () => {
       ok: false,
       reason: "control-not-found",
       requestId: request.requestId,
-      safeSignals: ["target-period-verified"],
+      safeSignals: ["target-period-verified", "gstr1-control-label-unmatched"],
     });
     expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
   });
@@ -468,7 +468,7 @@ describe("GSTR-1 artifact acquisition", () => {
       ok: false,
       reason: "control-not-found",
       requestId: request.requestId,
-      safeSignals: ["target-period-verified"],
+      safeSignals: ["target-period-verified", "gstr1-control-label-unmatched"],
     });
     expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
   });
@@ -483,7 +483,7 @@ describe("GSTR-1 artifact acquisition", () => {
       ok: false,
       reason: "control-not-found",
       requestId: request.requestId,
-      safeSignals: ["target-period-verified"],
+      safeSignals: ["target-period-verified", "gstr1-control-label-ambiguous"],
     });
     expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
   });
