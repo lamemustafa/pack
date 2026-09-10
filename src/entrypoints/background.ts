@@ -76,6 +76,7 @@ export {
   rememberGstTabIfSupported,
   sendMessageToTabWithInjection,
 } from "../background/gst-tab-context";
+import { backgroundFailureFingerprint } from "../background/background-failure-fingerprint";
 
 const OFFICIAL_URL = "https://pack.complyeaze.com";
 
@@ -159,14 +160,22 @@ export default defineBackground(() => {
 
     void handleMessage(message, sender)
       .then((response) => sendResponse(response))
-      .catch(() =>
+      .catch((error: unknown) => {
+        // The reply stays a safe, fixed message -- it reaches the panel, and an arbitrary error
+        // string there could carry portal text. The console is neither rendered nor persisted, so
+        // the reason is named there instead of discarded. A handler that fails without saying why
+        // costs a build and a live run to locate, which is the whole reason this line exists.
+        console.error(
+          `Pack background handler failed for ${backgroundMessageSource(message)}:`,
+          error,
+        );
         sendResponse({
           ok: false,
           error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
-          safeMessage: `Pack stopped while handling ${backgroundMessageSource(message)}. Try the action again.`,
+          safeMessage: `Pack stopped while handling ${backgroundMessageSource(message)}. Try the action again. (${backgroundFailureFingerprint(error)})`,
           safeSite: backgroundMessageHandlerSite(message),
-        } satisfies PackMessageResponse),
-      );
+        } satisfies PackMessageResponse);
+      });
     return true;
   });
 });
