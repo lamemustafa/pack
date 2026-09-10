@@ -13,6 +13,12 @@ import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 const GSTR2B_SUMMARY_ROUTE = /\/gstr2b\/auth\/gstr2b\/summary\/?$/i;
 const GSTR2B_AUTH_ROUTE = /\/gstr2b\/auth(?:\/|$)/i;
 
+// The summary route alone. `isGstr2bSummaryPage` additionally requires the download controls, so
+// it cannot identify the variant of this page where the portal renders a refusal in their place.
+export function isGstr2bSummaryRoute(documentRef: Document): boolean {
+  return GSTR2B_SUMMARY_ROUTE.test(documentRef.defaultView?.location.pathname ?? "");
+}
+
 export function isGstr2bSummaryPage(documentRef: Document, normalisedText: string): boolean {
   const pathname = documentRef.defaultView?.location.pathname ?? "";
   return (
