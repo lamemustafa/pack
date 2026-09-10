@@ -3,6 +3,10 @@ import type {
   FiledReturnsDownloadDiagnostic,
   FiledReturnsFullFiscalYearTargetStatus,
 } from "../connectors/gst/filed-returns-contracts";
+import {
+  isResolvedFullFiscalYearTargetStatus,
+  isFiledReturnsFullFiscalYearTargetStatus,
+} from "../connectors/gst/filed-returns-contracts";
 import type {
   FiledReturnsArtifactType,
   FiledReturnsConcreteArtifactType,
@@ -119,21 +123,6 @@ export type AllSupportedFullFiscalYearZipPhase =
   | "cleaned";
 
 const MAX_SAFE_MESSAGE_LENGTH = 500;
-const TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "pending",
-  "running",
-  "downloaded",
-  "manually-observed",
-  "not-filed",
-  "download-unconfirmed",
-  "blocked",
-  "failed",
-  "cancelled",
-]);
-const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
 const ZIP_PHASES = new Set<AllSupportedFullFiscalYearZipPhase>([
   "export-pending",
   "export-retry-pending",
@@ -281,7 +270,7 @@ export function isAllSupportedFullFiscalYearLedger(
   return !(
     ledger.zipPhase &&
     ZIP_PHASES_REQUIRING_COMPLETED_TARGETS.has(ledger.zipPhase) &&
-    !ledger.targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+    !ledger.targets.every((target) => isResolvedFullFiscalYearTargetStatus(target.status))
   );
 }
 
@@ -491,7 +480,9 @@ function isTarget(
     target.returnType !== planTarget.returnType ||
     target.artifactType !== planTarget.artifactType ||
     !sameArtifacts(target.concreteArtifactTypes, planTarget.concreteArtifactTypes) ||
-    !TARGET_STATUSES.has(target.status as FiledReturnsFullFiscalYearTargetStatus) ||
+    !isFiledReturnsFullFiscalYearTargetStatus(
+      target.status as FiledReturnsFullFiscalYearTargetStatus,
+    ) ||
     !isAttemptCount(target.attempts) ||
     !isBoundedString(target.safeMessage, 1, MAX_SAFE_MESSAGE_LENGTH) ||
     !isCanonicalTimestamp(target.updatedAt) ||

@@ -8,6 +8,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
+  isResolvedFullFiscalYearTargetStatus,
   isCleanedZipPhase,
   zipPhaseProvesDelivery,
 } from "../connectors/gst/filed-returns-contracts";
@@ -121,11 +122,6 @@ const RUN_INDETERMINATE_SIGNALS: readonly string[] = [
   "filed-returns-active-run-malformed",
 ];
 
-const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
-
 /**
  * The nine internal statuses collapsed to what a reader is deciding about.
  *
@@ -141,6 +137,7 @@ const TARGET_OUTCOMES: Readonly<
   // OPFS, not delivered to the browser.
   downloaded: "saved",
   "not-filed": "not-filed",
+  "not-generated": "not-generated",
   // A person reporting what they saw is not correlated download evidence, so
   // this sits with the failures rather than with `saved`.
   "manually-observed": "needs-review",
@@ -162,6 +159,11 @@ export function targetStatusFromFlowStep(
   }
   if (step.safeSignals.includes("filed-return-positively-not-filed")) {
     return "not-filed";
+  }
+  // The portal stated it produced nothing for this period. A positive answer, like
+  // `filed-return-positively-not-filed` above -- not an inability to determine.
+  if (step.safeSignals.includes("filed-gstr2b-not-generated")) {
+    return "not-generated";
   }
   if (step.safeSignals.some(isUnconfirmedBrowserDownloadSignal)) {
     return "download-unconfirmed";
@@ -388,7 +390,7 @@ export function toFullFiscalYearSummary(
 ): FiledReturnsFlowSummary {
   ledger = recoveryLedgerView(ledger);
   const completedPeriods = ledger.targets
-    .filter((target) => COMPLETED_SUMMARY_TARGET_STATUSES.has(target.status))
+    .filter((target) => isResolvedFullFiscalYearTargetStatus(target.status))
     .map((target) => target.period);
   const recoveryTarget = fullFiscalYearRecoveryTarget(
     ledger,

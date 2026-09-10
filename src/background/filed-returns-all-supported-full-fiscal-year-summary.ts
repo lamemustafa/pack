@@ -2,9 +2,9 @@ import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
   FiledReturnsDownloadScope,
-  FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   allSupportedExplicitRetryTarget,
@@ -21,11 +21,6 @@ import type {
   FiledReturnsAllSupportedFullFiscalYearLedger,
   FiledReturnsAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
-
-const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
 
 export interface AllSupportedFullFiscalYearCurrentStateDeps {
   storageKeys: { allSupportedFullFiscalYearLedgerIndex?: string; activeRun?: string };
@@ -129,7 +124,7 @@ export function toAllSupportedFullFiscalYearSummary(
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
     updatedAt: ledger.updatedAt,
     completedTargetIds: ledger.targets
-      .filter((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+      .filter((target) => isResolvedFullFiscalYearTargetStatus(target.status))
       .map((target) => target.targetId),
     targetEvidence: ledger.targets.map((target) => ({
       targetId: target.targetId,

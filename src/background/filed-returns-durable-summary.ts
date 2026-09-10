@@ -29,6 +29,7 @@ import {
   hasPositiveFiledReturnsDownloadEvidence,
   isValidFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
+import { isFiledReturnsFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 
 const SUMMARY_KEYS = [
   "artifactAcquisitionCompletion",
@@ -80,17 +81,6 @@ const FLOW_STATES = new Set<PortalFlowStepResult["state"]>([
   "ready",
   "unsupported-page",
   "user-action-required",
-]);
-const TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "blocked",
-  "cancelled",
-  "download-unconfirmed",
-  "downloaded",
-  "failed",
-  "manually-observed",
-  "not-filed",
-  "pending",
-  "running",
 ]);
 
 export function parseDurableFiledReturnsFlowSummary(
@@ -357,7 +347,7 @@ function parseRecovery(
   }
   if (
     typeof recovery.targetStatus !== "string" ||
-    !TARGET_STATUSES.has(recovery.targetStatus as FiledReturnsFullFiscalYearTargetStatus)
+    !isFiledReturnsFullFiscalYearTargetStatus(recovery.targetStatus)
   ) {
     return null;
   }

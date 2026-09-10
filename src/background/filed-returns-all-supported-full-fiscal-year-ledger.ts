@@ -3,6 +3,7 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import {
   ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
   expandAllSupportedFullFiscalYearTargetPlan,
@@ -29,17 +30,6 @@ import {
   type FiledReturnsAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
 
-const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
-const EXPLICIT_RETRY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "download-unconfirmed",
-  "blocked",
-  "failed",
-  "cancelled",
-  "manually-observed",
-]);
 const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
   "all-supported-full-fiscal-year-artifact-snapshot-mismatch",
   "full-fiscal-year-pinned-gst-tab-unavailable",
@@ -64,7 +54,7 @@ export function allSupportedExplicitRetryTarget(
   const target = ledger.targets[targetIndex]!;
   return ledger.targets
     .slice(0, targetIndex)
-    .every((candidate) => POSITIVE_TARGET_STATUSES.has(candidate.status)) &&
+    .every((candidate) => isResolvedFullFiscalYearTargetStatus(candidate.status)) &&
     ledger.targets.slice(targetIndex + 1).every((candidate) => candidate.status === "pending")
     ? target
     : null;
@@ -74,7 +64,9 @@ function isExplicitlyRetryableTarget(
   target: FiledReturnsAllSupportedFullFiscalYearTarget,
 ): boolean {
   return (
-    EXPLICIT_RETRY_TARGET_STATUSES.has(target.status) &&
+    !isResolvedFullFiscalYearTargetStatus(target.status) &&
+    target.status !== "pending" &&
+    target.status !== "running" &&
     !target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal))
   );
 }
@@ -118,8 +110,9 @@ export function allSupportedResumeIsProductive(
     return !ledger.targets.some((target) => target.status === "running");
   }
   if (ledger.status === "partial") {
-    return ledger.targets.every((target) =>
-      ["pending", ...POSITIVE_TARGET_STATUSES].includes(target.status),
+    return ledger.targets.every(
+      (target) =>
+        target.status === "pending" || isResolvedFullFiscalYearTargetStatus(target.status),
     );
   }
   return false;
@@ -335,7 +328,7 @@ export function canCompleteAllSupportedFullFiscalYearLedger(
 ): boolean {
   return (
     ledger.targets.length > 0 &&
-    ledger.targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+    ledger.targets.every((target) => isResolvedFullFiscalYearTargetStatus(target.status))
   );
 }
 
@@ -406,7 +399,9 @@ export function markAllSupportedFullFiscalYearTargetTerminal(
           status: effectiveStatus,
           ...canonicalDurableTargetStatus(targetScope(target), effectiveStatus, inputSignals),
           ...(diagnosticState ?? {}),
-          ...(POSITIVE_TARGET_STATUSES.has(effectiveStatus) ? { completedAt: timestamp } : {}),
+          ...(isResolvedFullFiscalYearTargetStatus(effectiveStatus)
+            ? { completedAt: timestamp }
+            : {}),
           updatedAt: timestamp,
         }
       : target,
@@ -422,7 +417,7 @@ export function markAllSupportedFullFiscalYearTargetTerminal(
   // `currentTargetId` is a recovery pointer, not a record of the last write.
   // Leaving it on a completed target made an interrupted worker window name a
   // return that had already succeeded as the affected target.
-  if (POSITIVE_TARGET_STATUSES.has(effectiveStatus)) delete terminal.currentTargetId;
+  if (isResolvedFullFiscalYearTargetStatus(effectiveStatus)) delete terminal.currentTargetId;
   return terminal;
 }
 
@@ -481,9 +476,10 @@ function ledgerStatus(
   targets: readonly FiledReturnsAllSupportedFullFiscalYearTarget[],
   lastStatus: FiledReturnsFullFiscalYearTargetStatus,
 ): FiledReturnsAllSupportedFullFiscalYearLedger["status"] {
-  if (targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))) return "complete";
+  if (targets.every((target) => isResolvedFullFiscalYearTargetStatus(target.status)))
+    return "complete";
   if (lastStatus === "cancelled") return "cancelled";
-  if (lastStatus === "manually-observed" || POSITIVE_TARGET_STATUSES.has(lastStatus))
+  if (lastStatus === "manually-observed" || isResolvedFullFiscalYearTargetStatus(lastStatus))
     return "partial";
   return "blocked";
 }

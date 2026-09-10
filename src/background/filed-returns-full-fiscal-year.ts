@@ -4,6 +4,7 @@ import type {
   FiledReturnsFullFiscalYearLedger,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
 import { filedReturnsSummaryStatusMessage } from "../connectors/gst/filed-returns-summary-status";
@@ -436,14 +437,14 @@ export async function startFullFiscalYearDownloadFlow(
       deps.now?.() ?? new Date(),
     );
     if (
-      (targetStatus === "downloaded" || targetStatus === "not-filed") &&
+      isResolvedFullFiscalYearTargetStatus(targetStatus) &&
       canCompleteFullFiscalYearLedger(ledger)
     ) {
       ledger = markFullFiscalYearZipPhase(ledger, deps.now?.() ?? new Date(), "export-pending");
     }
     await persistLedgerAndMaybeSummary(deps, ledger, flowStep);
 
-    if (targetStatus === "downloaded" || targetStatus === "not-filed") continue;
+    if (isResolvedFullFiscalYearTargetStatus(targetStatus)) continue;
     const flowSummary = toFullFiscalYearSummary(ledger, flowStep);
     if (targetStatus !== "download-unconfirmed") {
       await persistSummary(deps, flowSummary);
@@ -451,6 +452,10 @@ export async function startFullFiscalYearDownloadFlow(
     return { ...response, flowStep, flowSummary };
   }
 }
+
+// A target the run does not need to stop for: the portal answered, and the answer is final for
+// this period. `not-generated` belongs here for the same reason `not-filed` does -- a period the
+// portal produced nothing for cannot be fixed by pausing the run and asking someone to look at it.
 
 async function completeRun(
   deps: FiledReturnsFlowRunnerDeps,

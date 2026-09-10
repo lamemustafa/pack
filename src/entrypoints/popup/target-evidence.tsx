@@ -29,6 +29,9 @@ const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   "partly-saved": "Partly saved",
   captured: "Captured",
   "not-filed": "Not filed",
+  // Not "Not filed": an auto-drafted statement is never filed by the taxpayer, and saying so
+  // would put a claim about them on screen that the portal never made.
+  "not-generated": "Not generated",
   "needs-review": "Needs review",
   running: "In progress",
   pending: "Waiting",
@@ -46,6 +49,7 @@ const OUTCOME_GLYPHS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   // confirmed. The difference is the whole point of the column.
   captured: "•",
   "not-filed": "–",
+  "not-generated": "–",
   "needs-review": "!",
   running: "…",
   pending: "·",

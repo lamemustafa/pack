@@ -2,10 +2,14 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
   FiledReturnsFullFiscalYearTarget,
-  FiledReturnsFullFiscalYearTargetStatus,
   FiledReturnsLedgerPlanTarget,
 } from "../connectors/gst/filed-returns-contracts";
-import { isCleanedZipPhase, CLEANED_ZIP_PHASES } from "../connectors/gst/filed-returns-contracts";
+import {
+  isResolvedFullFiscalYearTargetStatus,
+  isFiledReturnsFullFiscalYearTargetStatus,
+  isCleanedZipPhase,
+  CLEANED_ZIP_PHASES,
+} from "../connectors/gst/filed-returns-contracts";
 import {
   isFiledReturnsArtifactType,
   normaliseFiledReturnsArtifactType,
@@ -119,17 +123,6 @@ const VALID_LEDGER_STATUSES = new Set<FiledReturnsFullFiscalYearLedger["status"]
   "blocked",
   "cancelled",
 ]);
-const VALID_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "pending",
-  "running",
-  "downloaded",
-  "manually-observed",
-  "not-filed",
-  "download-unconfirmed",
-  "blocked",
-  "failed",
-  "cancelled",
-]);
 const VALID_ZIP_PHASES = new Set<NonNullable<FiledReturnsFullFiscalYearLedger["zipPhase"]>>([
   "export-pending",
   "export-retry-pending",
@@ -154,10 +147,6 @@ const ZIP_PHASES_REQUIRING_COMPLETED_TARGETS = new Set<
   "no-artifacts-cleanup-pending",
   "legacy-cleanup-pending",
   ...CLEANED_ZIP_PHASES,
-]);
-const COMPLETED_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
 ]);
 const LEDGER_KEYS = [
   "connectorVersion",
@@ -268,7 +257,7 @@ export function isFullFiscalYearLedger(input: unknown): input is FiledReturnsFul
     ledger.zipPhase &&
     ZIP_PHASES_REQUIRING_COMPLETED_TARGETS.has(ledger.zipPhase) &&
     (ledger.targets.length === 0 ||
-      !ledger.targets.every((target) => COMPLETED_TARGET_STATUSES.has(target.status)))
+      !ledger.targets.every((target) => isResolvedFullFiscalYearTargetStatus(target.status)))
   ) {
     return false;
   }
@@ -385,7 +374,7 @@ function isFullFiscalYearTarget(
   if (target.targetId !== createTargetId(financialYear, period, returnType, artifactType)) {
     return false;
   }
-  if (!target.status || !VALID_TARGET_STATUSES.has(target.status)) return false;
+  if (!target.status || !isFiledReturnsFullFiscalYearTargetStatus(target.status)) return false;
   const attempts = target.attempts;
   if (
     typeof attempts !== "number" ||

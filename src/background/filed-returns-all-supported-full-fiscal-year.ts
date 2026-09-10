@@ -2,9 +2,9 @@ import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsAllSupportedFullFiscalYearRequest,
   FiledReturnsDownloadScope,
-  FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
   expandAllSupportedFullFiscalYearTargetPlan,
@@ -61,10 +61,6 @@ type AllSupportedRunnerDeps = FiledReturnsFlowRunnerDeps & {
 
 type SystemErrorPredecessor = FiledReturnsFlowStepCategory | "initial";
 
-const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
 const MAX_DURABLE_FLOW_SIGNALS = 32;
 
 /**
@@ -377,8 +373,9 @@ async function continueSavedAllSupportedFullFiscalYearRun(
   }
   if (
     ledger.status === "partial" &&
-    ledger.targets.every((target) =>
-      ["pending", ...POSITIVE_TARGET_STATUSES].includes(target.status),
+    ledger.targets.every(
+      (target) =>
+        target.status === "pending" || isResolvedFullFiscalYearTargetStatus(target.status),
     )
   ) {
     return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
@@ -568,7 +565,7 @@ async function runAllSupportedFullFiscalYearTargets(
     const persistedTarget = ledger.targets.find(
       (target) => target.targetId === nextTarget.targetId,
     );
-    if (persistedTarget && POSITIVE_TARGET_STATUSES.has(persistedTarget.status)) continue;
+    if (persistedTarget && isResolvedFullFiscalYearTargetStatus(persistedTarget.status)) continue;
     return allSupportedResponse(deps, ledger, flowStep);
   }
 }
@@ -717,7 +714,7 @@ function toAllSupportedSummary(
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
     updatedAt: ledger.updatedAt,
     completedTargetIds: ledger.targets
-      .filter((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+      .filter((target) => isResolvedFullFiscalYearTargetStatus(target.status))
       .map((target) => target.targetId),
     targetEvidence: ledger.targets.map((target) => ({
       targetId: target.targetId,
