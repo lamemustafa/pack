@@ -241,8 +241,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               </>
             )}
             {allSupportedNeedsRecovery ? (
+              // Named for its own run. Both blocks can render at once, and unlabelled they read as
+              // one contradictory statement: a live run showed "could not start a full fiscal year
+              // run" -- the all-year plan's reason -- directly above a single-return run that had
+              // plainly started and processed twelve periods.
               <p className="panel-recovery-reason">
-                Why Pack paused: {allSupportedSummary?.flowStep.safeMessage}
+                Why the all-returns year plan paused: {allSupportedSummary?.flowStep.safeMessage}
               </p>
             ) : null}
             {hasRecoveryActions(summary ?? null) ? (
