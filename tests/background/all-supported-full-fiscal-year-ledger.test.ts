@@ -6,6 +6,8 @@ import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-ret
 import {
   allSupportedExplicitRetryTarget,
   createAllSupportedFullFiscalYearLedger,
+  markAllSupportedFullFiscalYearTargetRunning,
+  markAllSupportedFullFiscalYearTargetTerminal,
   createAllSupportedFullFiscalYearTargetPlan,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
 import {
@@ -608,5 +610,39 @@ describe("all-supported full-fiscal-year ledger", () => {
     await expect(persistAllSupportedFullFiscalYearLedger(deps, createLedger())).rejects.toThrow(
       "could not verify the all-supported saved-plan index",
     );
+  });
+});
+
+describe("a period the portal declined to generate, in an all-returns year", () => {
+  // The single-return fiscal-year path reported this correctly from the day the status existed,
+  // because its status-to-outcome mapping is an exhaustive record that fails to compile when a
+  // status is missing. The all-returns path kept two hand-written copies ending in a
+  // `needs-review` default, so the same period read as needing a person in one run type and as
+  // resolved in the other -- and a run of everything stopped on periods that could never change.
+  it("reports it as not generated, not as needing review", () => {
+    let ledger = createLedger();
+    const target = ledger.targets.find((candidate) => candidate.returnType === "GSTR-2B");
+    if (!target) throw new Error("expected a GSTR-2B target in the all-returns plan");
+
+    ledger = markAllSupportedFullFiscalYearTargetRunning(ledger, target.targetId, NOW);
+    ledger = markAllSupportedFullFiscalYearTargetTerminal(
+      ledger,
+      target.targetId,
+      "not-generated",
+      {
+        connectorId: "gst",
+        scopeId: "gst-gstr2b-private-v0",
+        state: "blocked",
+        safeSignals: ["gstr2b-summary-route", "filed-gstr2b-not-generated"],
+        safeMessage: "x",
+      } as never,
+      NOW,
+    );
+
+    const summary = toAllSupportedFullFiscalYearSummary(ledger);
+    const evidence = summary.targetEvidence.find((row) => row.targetId === target.targetId);
+
+    expect(evidence?.outcome).toBe("not-generated");
+    expect(evidence?.outcome).not.toBe("needs-review");
   });
 });
