@@ -624,6 +624,74 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
+  // The tie is over the whole cohort sharing the newest timestamp. Comparing only the first two
+  // would accept a third state recording a different unresolved finding.
+  it("refuses a three-way tie whose first two states agree", () => {
+    const firstSha = "b".repeat(40);
+    const secondSha = "c".repeat(40);
+    const thirdSha = "d".repeat(40);
+    const agreed = cleanDurableState();
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [firstSha]: reviewStateWithDeletedFinding(1, "third-state-finding"),
+        [secondSha]: agreed,
+        [thirdSha]: agreed,
+      },
+      [
+        forcePushEvent(firstSha, "2026-08-17T12:00:00Z"),
+        forcePushEvent(secondSha, "2026-08-17T12:01:00Z"),
+        forcePushEvent(thirdSha, "2026-08-17T12:02:00Z"),
+      ],
+      { [firstSha]: [], [secondSha]: [], [thirdSha]: [] },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  // A review attached to a commit still on the current line is already covered, and its
+  // comparison results are discarded. Requesting one anyway is work the bound cannot stop,
+  // because those results never grow the candidate list it measures.
+  it("does not compare a reviewed head that is still on the current line", () => {
+    const currentLineSha = "b".repeat(40);
+    const orphanedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: reviewStateWithDeletedFinding(1, "orphaned-state") },
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      { 1: [currentLineSha, headSha] },
+      {},
+      {
+        1: [
+          { commit_id: currentLineSha, submitted_at: "2026-08-17T11:00:00Z" },
+          { commit_id: headSha, submitted_at: "2026-08-17T11:30:00Z" },
+        ],
+      },
+    );
+    const comparisons = calls.filter((call) => call.join(" ").includes("/compare/"));
+
+    expect(result.status).toBe(0);
+    expect(comparisons.some((call) => call.join(" ").includes(currentLineSha))).toBe(false);
+    expect(comparisons.some((call) => call.join(" ").includes(headSha))).toBe(false);
+    expect(comparisons.some((call) => call.join(" ").includes(orphanedSha))).toBe(true);
+  });
+
   it("stops expanding candidate heads as soon as the bound is exceeded", () => {
     const heads = Array.from({ length: 25 }, (_, index) =>
       (index + 16).toString(16).padStart(40, "0"),

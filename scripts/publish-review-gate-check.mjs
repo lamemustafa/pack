@@ -261,11 +261,15 @@ function loadLatestDurableReviewState(pr) {
 }
 
 function selectNewestDurableState(states) {
-  const ordered = [...states].sort((left, right) => right.recordedAt - left.recordedAt);
-  const [newest, runnerUp] = ordered;
-  // A tie between two different states is a precedence question with no recorded answer, and
-  // guessing it can drop an ask that only the loser records.
-  if (runnerUp && runnerUp.recordedAt === newest.recordedAt && runnerUp.text !== newest.text) {
+  const newestRecordedAt = Math.max(...states.map((state) => state.recordedAt));
+  // The whole tied cohort, not the first two of it. Comparing a pair would accept three states
+  // whose first two agree while a third records a different unresolved finding, which is the
+  // ask-dropping outcome this refusal exists to prevent.
+  const tied = states.filter((state) => state.recordedAt === newestRecordedAt);
+  const [newest] = tied;
+  // A tie between different states is a precedence question with no recorded answer, and guessing
+  // it can drop an ask that only the loser records.
+  if (tied.some((state) => state.text !== newest.text)) {
     throw new Error("durable review states have ambiguous recording order");
   }
   return newest.text;
@@ -318,6 +322,11 @@ function loadDiscardedLineShas(pr, priorHeads, currentPrShaSet) {
   const seen = new Set(currentPrShaSet);
   const shas = [];
   for (const head of priorHeads) {
+    // Checked before the comparison request, not after its results are discarded. A head already
+    // covered -- a reviewed commit still on the current line, or one collected from another
+    // head's line -- contributes only commits that are themselves already covered, and its
+    // results never grow `shas`, so the bound below would never stop the redundant requests.
+    if (seen.has(head)) continue;
     for (const sha of loadDiscardedLineForHead(baseSha, head)) {
       if (seen.has(sha)) continue;
       seen.add(sha);
