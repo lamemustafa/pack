@@ -439,7 +439,7 @@ describe("PR-head Review gate check publisher", () => {
   // unreachable, and the pull request is refused for want of state it actually has.
   it("reaches durable state on a head named only by a review", () => {
     const reviewedSha = "b".repeat(40);
-    const createdSha = "c".repeat(40);
+    const discardedSha = "c".repeat(40);
     const durableState = reviewStateWithDeletedFinding();
     const { result, calls } = runScript(
       ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
@@ -449,7 +449,10 @@ describe("PR-head Review gate check publisher", () => {
       null,
       [{ status: 0 }],
       { [reviewedSha]: durableState },
-      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      // The rewrite records what it discarded, so continuity across it is established and a state
+      // recovered from an earlier head is usable. With an unnamed discard it would be refused
+      // instead, because a discarded head's state is always written before the rewrite.
+      [forcePushEvent(discardedSha, "2026-08-17T12:00:00Z")],
       {},
       0,
       null,
@@ -783,6 +786,34 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("output[text]");
   });
 
+  it("refuses a reachable state recorded at the same instant as an unnamed discard", () => {
+    const createdSha = "b".repeat(40);
+    const reviewedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [reviewedSha]: cleanDurableState() },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T10:00:00Z" }] },
+      {},
+      { [reviewedSha]: "2026-08-17T12:00:00Z" },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("did not record the head it discarded");
+  });
+
   it("accepts a reachable state recorded after an unnamed discard", () => {
     const createdSha = "b".repeat(40);
     const { result, calls } = runScript(
@@ -822,7 +853,7 @@ describe("PR-head Review gate check publisher", () => {
       null,
       [{ status: 0 }],
       { [markedSha]: reviewStateWithDeletedFinding(1, "state-on-marked-head") },
-      [forcePushEvent(null, "2026-08-17T10:00:00Z", createdSha)],
+      [forcePushEvent(createdSha, "2026-08-17T13:00:00Z")],
       {},
       0,
       null,

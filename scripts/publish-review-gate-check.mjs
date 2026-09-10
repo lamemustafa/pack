@@ -275,7 +275,10 @@ function loadLatestDurableReviewState(pr) {
     // Reachable is not the same as current. A rewrite that did not name what it discarded may
     // have destroyed a head whose state superseded this one, and accepting an older state as the
     // baseline would drop a finding recorded only there -- publishing success over an open ask.
-    if (unidentifiedDiscardAt !== null && newest.recordedAt < unidentifiedDiscardAt) {
+    // Fail closed on equality too. GitHub timestamps share an instant often enough that a strict
+    // comparison would treat an unknown order as a safe one, which is the "could not determine
+    // means matches" mistake rather than a boundary detail.
+    if (unidentifiedDiscardAt !== null && newest.recordedAt <= unidentifiedDiscardAt) {
       throw durableStateRejection(
         "a rewrite did not record the head it discarded, and the newest recoverable review state predates that rewrite, so a finding recorded only on the discarded head cannot be ruled out. Re-create the branch as described in #299",
         "newest reachable durable review state predates an unidentified force-push discard",
