@@ -233,47 +233,51 @@ function loadLatestDurableReviewState(pr) {
   if (hasUntraceableRewrite) throw untraceableRewriteError();
 
   const currentPrShas = loadCurrentPrCommitShas(pr);
-  const currentLineState = scanShasForDurableState(currentPrShas, pr.number);
-  if (currentLineState) return { reviewState: currentLineState };
-  if (forcePushedPriorShas.length === 0) return { reviewState: cleanReviewState(pr.number) };
+  if (forcePushedPriorShas.length === 0) {
+    // Linear history. A commit stops being the head the moment the next one is pushed, and state
+    // is only ever published against the head, so nothing can land on an older commit afterwards:
+    // higher commit means newer state, and the first hit searching newest-first is the latest.
+    const currentLineState = findFirstDurableState(currentPrShas, pr.number);
+    return { reviewState: currentLineState?.text ?? cleanReviewState(pr.number) };
+  }
 
   // A rewrite that records no `before_commit_id` never names the head it discarded, so the
   // force-push events alone do not enumerate every head this pull request has had. Reviews do
   // name them: each review records the `commit_id` it was submitted against. On #337 the first
   // regeneration's discarded head is named by nothing else, and it is the head that actually
   // carries this pull request's durable state.
-  const priorHeads = mergePriorHeadCandidates(
-    forcePushedPriorShas,
-    loadReviewedHeadShas(pr.number),
-  );
+  const priorHeads = dedupePriorHeadShas(forcePushedPriorShas, loadReviewedHeadShas(pr.number));
   const discardedLineShas = loadDiscardedLineShas(pr, priorHeads, new Set(currentPrShas));
-  if (discardedLineShas.length > MAX_DURABLE_FORCE_PUSH_HISTORY_NODES) {
-    throw new Error("durable force-push history exceeded the safe lookup bound");
-  }
-  const discardedLineState = scanShasForDurableState(discardedLineShas, pr.number);
-  if (discardedLineState) return { reviewState: discardedLineState };
+
+  // Across a rewrite there is no commit order to read precedence from, and no timestamp attached
+  // to a head is safe to infer it from: a review submitted after a force-push still records the
+  // older commit it was started against, which would rank a discarded head above the newer one
+  // that replaced it. So rank by the only recorded fact about the state itself -- when the gate
+  // published it -- which means every candidate is read rather than stopping at the first hit.
+  const states = collectDurableStates([...currentPrShas, ...discardedLineShas], pr.number);
+  if (states.length > 0) return { reviewState: selectNewestDurableState(states) };
 
   throw new Error("force-push discontinuity left no reachable durable review state");
 }
 
-// Ordered newest first, because the newest recorded state is the one that wins. Force-push
-// ordering is already checked for ambiguity among its own events; a review that shares a
-// timestamp with a rewrite is ordered after it, which is a stated tie-break rather than an
-// ambiguity, since both heads are searched either way.
-function mergePriorHeadCandidates(forcePushedPriorHeads, reviewedHeads) {
-  const candidates = [
-    ...forcePushedPriorHeads.map((head, index) => ({ ...head, rank: 0, index })),
-    ...reviewedHeads.map((head, index) => ({ ...head, rank: 1, index })),
-  ];
-  candidates.sort(
-    (left, right) => right.at - left.at || left.rank - right.rank || left.index - right.index,
-  );
+function selectNewestDurableState(states) {
+  const ordered = [...states].sort((left, right) => right.recordedAt - left.recordedAt);
+  const [newest, runnerUp] = ordered;
+  // A tie between two different states is a precedence question with no recorded answer, and
+  // guessing it can drop an ask that only the loser records.
+  if (runnerUp && runnerUp.recordedAt === newest.recordedAt && runnerUp.text !== newest.text) {
+    throw new Error("durable review states have ambiguous recording order");
+  }
+  return newest.text;
+}
+
+function dedupePriorHeadShas(forcePushedPriorHeads, reviewedHeads) {
   const seen = new Set();
   const shas = [];
-  for (const candidate of candidates) {
-    if (seen.has(candidate.sha)) continue;
-    seen.add(candidate.sha);
-    shas.push(candidate.sha);
+  for (const head of [...forcePushedPriorHeads, ...reviewedHeads]) {
+    if (seen.has(head.sha)) continue;
+    seen.add(head.sha);
+    shas.push(head.sha);
   }
   return shas;
 }
@@ -318,6 +322,13 @@ function loadDiscardedLineShas(pr, priorHeads, currentPrShaSet) {
       if (seen.has(sha)) continue;
       seen.add(sha);
       shas.push(sha);
+      // Checked here rather than by the caller so the bound limits the work as well as the
+      // result. Checked afterwards, an oversized history still costs one comparison request per
+      // candidate head before anything refuses, which can exhaust the run that was supposed to
+      // publish the fail-closed check.
+      if (shas.length > MAX_DURABLE_FORCE_PUSH_HISTORY_NODES) {
+        throw new Error("durable force-push history exceeded the safe lookup bound");
+      }
     }
   }
   return shas;
@@ -346,41 +357,66 @@ function loadDiscardedLineForHead(baseSha, head) {
     }
     shas.push(commit.sha);
   }
-  // The recovered head must be the tip of what it is compared against. If it is not, the line was
-  // rewritten or merged away underneath us and this list is not the line we meant to search.
+  // The head is a candidate whether or not the comparison contributes commits: it is a head this
+  // pull request had, and it can carry durable state. A base branch that has advanced to contain
+  // it legitimately yields no head-only commits, and refusing that would discard reachable state.
+  if (shas.length === 0) return [head];
+  // When the comparison does contribute commits, the head must be their tip. If it is not, this
+  // is not the line that was asked about, and searching it would be a narrower search wearing the
+  // shape of a complete one.
   if (shas.at(-1) !== head) {
     throw new Error("durable review-state branch comparison did not reach the discarded head");
   }
   return shas.reverse();
 }
 
-function scanShasForDurableState(shas, prNumber) {
+function findFirstDurableState(shas, prNumber) {
   for (const sha of shas) {
-    const checkPages = JSON.parse(
-      runGithub(
-        [
-          "api",
-          "--paginate",
-          "--slurp",
-          `repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=all&per_page=100`,
-        ],
-        "durable review-state lookup",
-      ),
-    );
-    for (const page of flattenPages(checkPages)) {
-      for (const check of page?.check_runs ?? []) {
-        if (
-          check?.name === CHECK_RUN_NAME &&
-          typeof check.output?.text === "string" &&
-          check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) &&
-          durableReviewStateBelongsToPr(check.output.text, prNumber)
-        ) {
-          return check.output.text;
-        }
-      }
-    }
+    const [state] = readDurableStatesAt(sha, prNumber);
+    if (state) return state;
   }
   return null;
+}
+
+function collectDurableStates(shas, prNumber) {
+  const states = [];
+  for (const sha of shas) states.push(...readDurableStatesAt(sha, prNumber));
+  return states;
+}
+
+function readDurableStatesAt(sha, prNumber) {
+  const checkPages = JSON.parse(
+    runGithub(
+      [
+        "api",
+        "--paginate",
+        "--slurp",
+        `repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=all&per_page=100`,
+      ],
+      "durable review-state lookup",
+    ),
+  );
+  const states = [];
+  for (const page of flattenPages(checkPages)) {
+    for (const check of page?.check_runs ?? []) {
+      if (
+        check?.name !== CHECK_RUN_NAME ||
+        typeof check.output?.text !== "string" ||
+        !check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) ||
+        !durableReviewStateBelongsToPr(check.output.text, prNumber)
+      ) {
+        continue;
+      }
+      const recordedAt = Date.parse(check.completed_at ?? "");
+      // Recording order is how precedence is decided, so a state that cannot say when it was
+      // recorded cannot be ranked against one that can.
+      if (!Number.isFinite(recordedAt)) {
+        throw new Error("durable review state has no valid recording timestamp");
+      }
+      states.push({ text: check.output.text, recordedAt });
+    }
+  }
+  return states;
 }
 
 function loadCurrentPrCommitShas(pr) {
