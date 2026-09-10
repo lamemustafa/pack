@@ -12,21 +12,41 @@
 // It supplies evidence; it does not waive anything. A marker names a commit, and the gate still
 // searches that commit for state belonging to that pull request. A marker naming a head with no
 // state leaves the gate exactly as unconvinced as it was before.
+//
+// A record is written in two stages because the rewrite is not atomic with the recording of it.
+// The `before` head is written first, while it is still the branch head; the `after` head is added
+// once the rewrite has produced one. A record stopped in between names a discarded head and no
+// replacement, which identifies nothing on its own -- so the gate ignores it, and the next run
+// completes it from the branch head it finds, which is precisely the head that rewrite created.
 const MARKER_PATTERN =
-  /<!--\s*review-gate-rewrite\s+before=([0-9a-f]{40})\s+after=([0-9a-f]{40})\s*-->/iu;
+  /<!--\s*review-gate-rewrite\s+branch=(\S+)\s+before=([0-9a-f]{40})(?:\s+after=([0-9a-f]{40}))?\s*-->/iu;
 
-export function formatReleaseBranchRewriteMarker(before, after) {
-  if (!/^[0-9a-f]{40}$/iu.test(before ?? "") || !/^[0-9a-f]{40}$/iu.test(after ?? "")) {
-    throw new Error("A release branch rewrite marker needs two full commit SHAs.");
+const SHA_PATTERN = /^[0-9a-f]{40}$/iu;
+
+export function formatReleaseBranchRewriteMarker({ branch, before, after = null }) {
+  if (!branch || /\s/u.test(branch)) {
+    throw new Error("A release branch rewrite marker needs a whitespace-free branch name.");
   }
-  return `<!-- review-gate-rewrite before=${before.toLowerCase()} after=${after.toLowerCase()} -->`;
+  if (!SHA_PATTERN.test(before ?? "")) {
+    throw new Error("A release branch rewrite marker needs a full discarded-head SHA.");
+  }
+  if (after !== null && !SHA_PATTERN.test(after)) {
+    throw new Error("A release branch rewrite marker needs a full created-head SHA or none.");
+  }
+  const suffix = after === null ? "" : ` after=${after.toLowerCase()}`;
+  return `<!-- review-gate-rewrite branch=${branch} before=${before.toLowerCase()}${suffix} -->`;
 }
 
-// Returns `{ before, after }` for a comment that carries the marker, or null. Callers must check
-// the comment's author themselves: only a marker written by the workflow that performed the
-// rewrite is evidence, and anyone who can comment can write the text.
+// Returns `{ branch, before, after }` for a comment that carries the marker, or null. `after` is
+// null for a record whose rewrite had not produced a head yet. Callers must check the comment's
+// author themselves: only a marker written by the workflow that performed the rewrite is evidence,
+// and anyone who can comment can write the text.
 export function readReleaseBranchRewriteMarker(body) {
   const match = MARKER_PATTERN.exec(body ?? "");
   if (!match) return null;
-  return { before: match[1].toLowerCase(), after: match[2].toLowerCase() };
+  return {
+    branch: match[1],
+    before: match[2].toLowerCase(),
+    after: match[3] ? match[3].toLowerCase() : null,
+  };
 }

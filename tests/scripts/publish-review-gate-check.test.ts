@@ -933,7 +933,7 @@ describe("PR-head Review gate check publisher", () => {
       [
         {
           user: { login: "github-actions[bot]" },
-          body: `<!-- review-gate-rewrite before=${discardedSha} after=${createdSha} -->`,
+          body: `<!-- review-gate-rewrite branch=release-please--branches--master--components--pack before=${discardedSha} after=${createdSha} -->`,
         },
       ],
     );
@@ -945,6 +945,42 @@ describe("PR-head Review gate check publisher", () => {
       calls.some((call) => call.join(" ").includes(`commits/${discardedSha}/check-runs?`)),
     ).toBe(true);
     expect(publicationText).toContain("state-on-recorded-discard");
+  });
+
+  // An interrupted run leaves a record naming a discarded head and no replacement. It pairs with
+  // no rewrite, so it identifies nothing and must not be read as if it did.
+  it("ignores a rewrite record whose rewrite never produced a head", () => {
+    const createdSha = "b".repeat(40);
+    const discardedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [discardedSha]: reviewStateWithDeletedFinding(1, "state-behind-open-record") },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      {},
+      { [discardedSha]: "2026-08-17T11:00:00Z" },
+      [
+        {
+          user: { login: "github-actions[bot]" },
+          body: `<!-- review-gate-rewrite branch=release-please--branches--master--components--pack before=${discardedSha} -->`,
+        },
+      ],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).not.toContain("state-behind-open-record");
   });
 
   // Anyone who can comment can write the marker text, so the author is the whole of its authority.
@@ -970,7 +1006,7 @@ describe("PR-head Review gate check publisher", () => {
       [
         {
           user: { login: "someone-else" },
-          body: `<!-- review-gate-rewrite before=${discardedSha} after=${createdSha} -->`,
+          body: `<!-- review-gate-rewrite branch=release-please--branches--master--components--pack before=${discardedSha} after=${createdSha} -->`,
         },
       ],
     );
@@ -1011,11 +1047,11 @@ describe("PR-head Review gate check publisher", () => {
       [
         {
           user: { login: "github-actions[bot]" },
-          body: `<!-- review-gate-rewrite before=${discardedSha} after=${createdSha} -->`,
+          body: `<!-- review-gate-rewrite branch=release-please--branches--master--components--pack before=${discardedSha} after=${createdSha} -->`,
         },
         {
           user: { login: "github-actions[bot]" },
-          body: `<!-- review-gate-rewrite before=${otherSha} after=${createdSha} -->`,
+          body: `<!-- review-gate-rewrite branch=release-please--branches--master--components--pack before=${otherSha} after=${createdSha} -->`,
         },
       ],
     );

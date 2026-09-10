@@ -237,11 +237,14 @@ function untraceableRewriteError() {
 }
 
 function loadLatestDurableReviewState(pr) {
+  // Read once and shared: both the rewrite records and the clean top-level review markers live in
+  // this one list, and fetching it twice was a duplicate of a fact the pull request states once.
+  const comments = loadIssueComments(pr.number);
   const {
     priorHeads: forcePushedPriorShas,
     hasUntraceableRewrite,
     unidentifiedDiscardAt,
-  } = loadForcePushedPriorShas(pr.number);
+  } = loadForcePushedPriorShas(pr.number, comments);
   // Reject before consulting any reachable state, not after. A state surviving on a current-line
   // commit cannot contain a finding that was observed and then deleted only on the head this
   // rewrite discarded, so returning it would publish success while losing that ask. Continuity
@@ -265,7 +268,7 @@ function loadLatestDurableReviewState(pr) {
   const priorHeads = dedupePriorHeadShas(
     forcePushedPriorShas,
     loadReviewedHeadShas(pr.number),
-    loadTopLevelReviewedHeadShas(pr.number, currentPrShas, forcePushedPriorShas),
+    loadTopLevelReviewedHeadShas(comments, currentPrShas, forcePushedPriorShas),
   );
   const discardedLineShas = loadDiscardedLineShas(pr, priorHeads, new Set(currentPrShas));
 
@@ -350,16 +353,10 @@ function loadReviewedHeadShas(prNumber) {
 // it names was therefore a head of this pull request, so it belongs among the candidate heads --
 // otherwise a head reviewed clean and then rewritten away is named in the record but never
 // searched.
-function loadTopLevelReviewedHeadShas(prNumber, currentPrShas, forcePushedPriorHeads) {
-  const commentPages = JSON.parse(
-    runGithub(
-      ["api", "--paginate", "--slurp", `repos/${repo}/issues/${prNumber}/comments?per_page=100`],
-      "reviewed head marker discovery",
-    ),
-  );
+function loadTopLevelReviewedHeadShas(comments, currentPrShas, forcePushedPriorHeads) {
   const known = [...currentPrShas, ...forcePushedPriorHeads.map((head) => head.sha)];
   const prefixes = new Set();
-  for (const comment of flattenPages(commentPages)) {
+  for (const comment of comments) {
     if (normaliseLogin(comment?.user?.login) !== REQUIRED_REVIEW_AUTHOR) continue;
     const prefix = readCleanTopLevelReviewCommit(comment.body);
     // A marker naming a head already in hand needs no lookup, and the common case is the current
@@ -569,18 +566,26 @@ function durableReviewStateBelongsToPr(state, expectedPrNumber) {
 // `before_commit_id` for a generated-branch regeneration, and the workflow performing it records
 // the pair instead (#350). This supplies the missing name; it does not waive anything, because a
 // head named this way is still searched for state belonging to this pull request.
-function loadRecordedRewriteDiscards(prNumber) {
-  const commentPages = JSON.parse(
-    runGithub(
-      ["api", "--paginate", "--slurp", `repos/${repo}/issues/${prNumber}/comments?per_page=100`],
-      "recorded rewrite discovery",
+function loadIssueComments(prNumber) {
+  return flattenPages(
+    JSON.parse(
+      runGithub(
+        ["api", "--paginate", "--slurp", `repos/${repo}/issues/${prNumber}/comments?per_page=100`],
+        "pull request comment discovery",
+      ),
     ),
   );
+}
+
+function loadRecordedRewriteDiscards(comments) {
   const discards = new Map();
-  for (const comment of flattenPages(commentPages)) {
+  for (const comment of comments) {
     if (normaliseLogin(comment?.user?.login) !== TRUSTED_REWRITE_RECORDER) continue;
     const marker = readReleaseBranchRewriteMarker(comment.body);
-    if (!marker) continue;
+    // An open record names a discarded head and no replacement, so it pairs with no rewrite and
+    // identifies nothing. A record whose heads match says the branch did not move, which is a
+    // recorded non-event rather than a discard.
+    if (!marker || marker.after === null || marker.after === marker.before) continue;
     // A second marker for the same created head is two different claims about one rewrite, and
     // there is no basis for preferring either.
     if (discards.has(marker.after) && discards.get(marker.after) !== marker.before) {
@@ -594,8 +599,8 @@ function loadRecordedRewriteDiscards(prNumber) {
   return discards;
 }
 
-function loadForcePushedPriorShas(prNumber) {
-  const recordedDiscards = loadRecordedRewriteDiscards(prNumber);
+function loadForcePushedPriorShas(prNumber, comments) {
+  const recordedDiscards = loadRecordedRewriteDiscards(comments);
   const timelinePages = JSON.parse(
     runGithub(
       [

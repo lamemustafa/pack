@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildReleaseOutputs,
@@ -145,83 +145,156 @@ describe("Release Please workflow wrapper", () => {
 });
 
 describe("release branch rewrite records", () => {
-  it("records the discarded head when a regeneration rewrote the branch", async () => {
-    const before = "b".repeat(40);
-    const after = "c".repeat(40);
-    const requests: Array<{ url: string; method: string; body?: string }> = [];
-    const fetchMock = vi.fn(async (url: string, init: RequestInit = {}) => {
-      requests.push({ url, method: String(init.method ?? "GET"), body: init.body as string });
-      if (String(url).includes("matching-refs")) {
-        // `recordBranchRewrites` is given the pre-regeneration heads and reads only the current
-        // ones, so this single call answers with the head the rewrite created.
-        const sha = after;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => [
-            {
-              ref: "refs/heads/release-please--branches--master--components--pack",
-              object: { sha },
-            },
-          ],
-        } as unknown as Response;
-      }
-      return { ok: true, status: 201, json: async () => ({}) } as unknown as Response;
-    });
-    vi.stubGlobal("fetch", fetchMock);
+  const branch = "release-please--branches--master--components--pack";
+  const env = { GITHUB_TOKEN: "t", GITHUB_API_URL: "https://api.github.test" };
 
-    const { recordBranchRewrites } = await import("../../scripts/run-release-please.mjs");
-    await recordBranchRewrites({
-      env: { GITHUB_TOKEN: "t", GITHUB_API_URL: "https://api.github.test" },
-      owner: "lamemustafa",
-      repo: "pack",
-      targetBranch: "master",
-      headsBeforeRegeneration: new Map([
-        ["release-please--branches--master--components--pack", before],
-      ]),
-      pullRequests: [
-        { number: 337, headBranchName: "release-please--branches--master--components--pack" },
-      ],
-    });
+  function stubGitHub(handlers: {
+    heads?: string | null;
+    comments?: Array<{ id: number; body: string }>;
+    pulls?: Array<{ number: number }>;
+    malformedHeads?: boolean;
+  }) {
+    const calls: Array<{ method: string; path: string; body?: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        const path = new URL(String(url)).pathname + new URL(String(url)).search;
+        calls.push({ method: String(init.method ?? "GET"), path, body: init.body as string });
+        if (path.includes("matching-refs")) {
+          const payload = handlers.malformedHeads
+            ? { message: "something else" }
+            : handlers.heads
+              ? [{ ref: `refs/heads/${branch}`, object: { sha: handlers.heads } }]
+              : [];
+          return { ok: true, status: 200, json: async () => payload } as unknown as Response;
+        }
+        if (path.includes("/pulls?")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => handlers.pulls ?? [{ number: 337 }],
+          } as unknown as Response;
+        }
+        if (path.includes("/issues/") && path.includes("/comments")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => handlers.comments ?? [],
+          } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }),
+    );
+    return calls;
+  }
 
-    const posted = requests.find((request) => request.method === "POST");
-    expect(posted?.url).toContain("/repos/lamemustafa/pack/issues/337/comments");
-    expect(posted?.body).toContain(`review-gate-rewrite before=${before} after=${after}`);
+  afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("records nothing when the head did not move", async () => {
-    const sha = "b".repeat(40);
-    const requests: Array<{ method: string }> = [];
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit = {}) => {
-      requests.push({ method: String(init.method ?? "GET") });
-      return {
-        ok: true,
-        status: 200,
-        json: async () => [
-          { ref: "refs/heads/release-please--branches--master--components--pack", object: { sha } },
-        ],
-      } as unknown as Response;
-    });
-    vi.stubGlobal("fetch", fetchMock);
+  it("opens a record naming the head about to be discarded", async () => {
+    const head = "b".repeat(40);
+    const calls = stubGitHub({ heads: head });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
 
-    const { recordBranchRewrites } = await import("../../scripts/run-release-please.mjs");
-    await recordBranchRewrites({
-      env: { GITHUB_TOKEN: "t", GITHUB_API_URL: "https://api.github.test" },
+    const heads = await openBranchRewriteRecords({
+      env,
       owner: "lamemustafa",
       repo: "pack",
       targetBranch: "master",
-      headsBeforeRegeneration: new Map([
-        ["release-please--branches--master--components--pack", sha],
-      ]),
-      pullRequests: [
-        { number: 337, headBranchName: "release-please--branches--master--components--pack" },
-      ],
     });
 
-    // A branch that was created rather than rewritten, or one whose head did not move, discarded
-    // nothing. A marker for either would record a rewrite that never happened.
-    expect(requests.some((request) => request.method === "POST")).toBe(false);
-    vi.unstubAllGlobals();
+    expect(heads.get(branch)).toBe(head);
+    const posted = calls.find((call) => call.method === "POST");
+    expect(posted?.path).toContain("/issues/337/comments");
+    expect(posted?.body).toContain(`review-gate-rewrite branch=${branch} before=${head}`);
+    expect(posted?.body).not.toContain("after=");
+  });
+
+  it("completes a record an interrupted run left open, from the head standing now", async () => {
+    const lostBefore = "c".repeat(40);
+    const head = "b".repeat(40);
+    const calls = stubGitHub({
+      heads: head,
+      comments: [
+        { id: 99, body: `<!-- review-gate-rewrite branch=${branch} before=${lostBefore} -->` },
+      ],
+    });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await openBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+    });
+
+    // The branch head standing here is exactly what the lost rewrite created, because nothing but
+    // this workflow rewrites the branch and it has not run since.
+    const patched = calls.find((call) => call.method === "PATCH");
+    expect(patched?.path).toContain("/issues/comments/99");
+    expect(patched?.body).toContain(`before=${lostBefore} after=${head}`);
+  });
+
+  it("refuses to regenerate when the head list is malformed", async () => {
+    stubGitHub({ malformedHeads: true });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    // An indeterminate response read as "no branches" would let a rewrite proceed unrecorded,
+    // which nothing downstream could detect.
+    await expect(
+      openBranchRewriteRecords({
+        env,
+        owner: "lamemustafa",
+        repo: "pack",
+        targetBranch: "master",
+      }),
+    ).rejects.toThrow(/malformed release branch head list/iu);
+  });
+
+  it("closes the open record with the head the rewrite created", async () => {
+    const before = "c".repeat(40);
+    const after = "b".repeat(40);
+    const calls = stubGitHub({
+      heads: after,
+      comments: [
+        { id: 99, body: `<!-- review-gate-rewrite branch=${branch} before=${before} -->` },
+      ],
+    });
+    const { closeBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await closeBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+      headsBeforeRegeneration: new Map([[branch, before]]),
+    });
+
+    const patched = calls.find((call) => call.method === "PATCH");
+    expect(patched?.body).toContain(`before=${before} after=${after}`);
+  });
+
+  it("leaves the record open rather than failing a run that already published a release", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 500 }) as unknown as Response),
+    );
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { closeBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    // Throwing here would abort the workflow after a GitHub release exists, stranding it without
+    // its assets. The open record costs a refusal the gate was already making.
+    await expect(
+      closeBranchRewriteRecords({
+        env,
+        owner: "lamemustafa",
+        repo: "pack",
+        targetBranch: "master",
+        headsBeforeRegeneration: new Map([[branch, "c".repeat(40)]]),
+      }),
+    ).resolves.toBeUndefined();
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining("stays open"));
+    errors.mockRestore();
   });
 });

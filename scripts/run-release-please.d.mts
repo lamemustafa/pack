@@ -11,11 +11,17 @@ export function resolveReleaseTargetBranch(
 
 export function serializeGitHubOutput(outputs: Record<string, string>): string;
 
-export function recordBranchRewrites(options: {
+export function openBranchRewriteRecords(options: {
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  owner: string;
+  repo: string;
+  targetBranch: string;
+}): Promise<Map<string, string>>;
+
+export function closeBranchRewriteRecords(options: {
   env: NodeJS.ProcessEnv | Record<string, string | undefined>;
   owner: string;
   repo: string;
   targetBranch: string;
   headsBeforeRegeneration: Map<string, string>;
-  pullRequests: Array<{ number?: number; headBranchName?: string }>;
 }): Promise<void>;
