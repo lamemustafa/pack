@@ -751,6 +751,132 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).toContain("state-on-caught-up-head");
   });
 
+  // `commit_id` names the head a rewrite created, never the one it discarded. When the discarded
+  // head is unnamed, a state recorded before that rewrite may have been superseded on the head
+  // nobody can address, so accepting it as the baseline would publish success over that ask.
+  it("refuses a reachable state that predates an unnamed discard", () => {
+    const createdSha = "b".repeat(40);
+    const reviewedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [reviewedSha]: cleanDurableState() },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T10:00:00Z" }] },
+      {},
+      { [reviewedSha]: "2026-08-17T10:30:00Z" },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("did not record the head it discarded");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("accepts a reachable state recorded after an unnamed discard", () => {
+    const createdSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [createdSha]: reviewStateWithDeletedFinding(1, "state-after-the-discard") },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      {},
+      { [createdSha]: "2026-08-17T12:30:00Z" },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("state-after-the-discard");
+  });
+
+  // A clean Codex review is a top-level comment with a `Reviewed commit` marker, not a review
+  // object, so `/pulls/N/reviews` never names the head it reviewed.
+  it("reaches durable state on a head named only by a clean top-level review", () => {
+    const markedSha = "b".repeat(40);
+    const createdSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [markedSha]: reviewStateWithDeletedFinding(1, "state-on-marked-head") },
+      [forcePushEvent(null, "2026-08-17T10:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      {},
+      { [markedSha]: "2026-08-17T12:00:00Z" },
+      [
+        {
+          user: { login: "chatgpt-codex-connector[bot]" },
+          body: "Codex Review: Didn't find any major issues.\n\n**Reviewed commit:** `bbbbbbbbbbbb`",
+        },
+      ],
+      { bbbbbbbbbbbb: markedSha },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${markedSha}/check-runs?`)),
+    ).toBe(true);
+    expect(publicationText).toContain("state-on-marked-head");
+  });
+
+  // AGENTS.md: a rejection must name its own reason. Wrapped in the generic operation message,
+  // these are only diagnosable from workflow logs.
+  it("publishes which boundary rejected the history, not a generic failure", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      { [orphanedSha]: { total_commits: 2, commits: [{ sha: orphanedSha }] } },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("GitHub truncated the commit list");
+    expect(publicationText).not.toContain("could not retrieve durable review state");
+  });
+
   it("publishes a durable-state workspace failure without its local path", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-private-path-"));
     const privatePath = path.join(directory, "not-a-directory");
@@ -1085,6 +1211,8 @@ function runScript(
   reviews: Record<number, Array<{ commit_id: string; submitted_at: string }>> = {},
   compareOverrides: Record<string, unknown> = {},
   durableCompletedAt: Record<string, string> = {},
+  issueComments: unknown[] = [],
+  markerCommits: Record<string, string> = {},
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -1127,6 +1255,8 @@ function runScript(
         FAKE_REVIEWS: JSON.stringify(reviews),
         FAKE_COMPARE_OVERRIDES: JSON.stringify(compareOverrides),
         FAKE_DURABLE_COMPLETED_AT: JSON.stringify(durableCompletedAt),
+        FAKE_ISSUE_COMMENTS: JSON.stringify(issueComments),
+        FAKE_MARKER_COMMITS: JSON.stringify(markerCommits),
       },
     },
   );
@@ -1154,6 +1284,9 @@ else if (text.includes("/pulls/") && text.includes("/commits?")) {
   const shas = configuredCommits?.[number] ?? (pull ? [pull.head.sha] : []);
   process.stdout.write(JSON.stringify([shas.map((sha) => ({ sha }))]));
 }
+else if (text.includes("/issues/") && text.includes("/comments?")) {
+  process.stdout.write(JSON.stringify([JSON.parse(process.env.FAKE_ISSUE_COMMENTS)]));
+}
 else if (text.includes("/issues/") && text.includes("/timeline?")) {
   process.stdout.write(JSON.stringify([JSON.parse(process.env.FAKE_TIMELINE)]));
 }
@@ -1171,6 +1304,13 @@ else if (text.includes("/compare/")) {
   const overrides = JSON.parse(process.env.FAKE_COMPARE_OVERRIDES)?.[head];
   const commits = chain.slice().reverse().map((sha) => ({ sha }));
   process.stdout.write(JSON.stringify(overrides ?? { total_commits: commits.length, commits }));
+}
+else if (text.match(/\\/commits\\/[a-f0-9]{10,39}$/i)) {
+  const prefix = text.match(/commits\\/([a-f0-9]{10,39})$/i)?.[1]?.toLowerCase();
+  const known = JSON.parse(process.env.FAKE_MARKER_COMMITS);
+  const sha = known[prefix];
+  if (!sha) process.exit(1);
+  process.stdout.write(JSON.stringify({ sha }));
 }
 else if (text.match(/\\/commits\\/[a-f0-9]{40}$/i)) {
   const sha = text.match(/commits\\/([a-f0-9]{40})$/i)?.[1];
