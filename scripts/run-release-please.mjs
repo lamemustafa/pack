@@ -1,4 +1,5 @@
 import { appendFile } from "node:fs/promises";
+import { formatReleaseBranchRewriteMarker } from "./lib/release-branch-rewrite.mjs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -49,7 +50,17 @@ export async function runReleasePlease(env = process.env) {
     configFile,
     manifestFile,
   );
+  // Read before the regeneration so the head it is about to discard is still addressable.
+  const headsBeforeRegeneration = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
   const pullRequests = (await pullRequestManifest.createPullRequests()).filter(Boolean);
+  await recordBranchRewrites({
+    env,
+    owner,
+    repo,
+    targetBranch,
+    headsBeforeRegeneration,
+    pullRequests,
+  });
   outputs.prs_created = String(pullRequests.length > 0);
   if (pullRequests.length > 0) {
     outputs.pr = JSON.stringify(pullRequests[0]);
@@ -65,6 +76,71 @@ export async function runReleasePlease(env = process.env) {
   );
 
   return outputs;
+}
+
+// Release Please regenerates by force-pushing, and GitHub records no `before_commit_id` for it, so
+// the discarded head is unnameable from the pull request's record afterwards. Recording it here --
+// from the only place that still knows it -- is what lets the review gate establish continuity
+// across a regeneration instead of refusing every release pull request (#342, #350).
+export async function recordBranchRewrites({
+  env,
+  owner,
+  repo,
+  targetBranch,
+  headsBeforeRegeneration,
+  pullRequests,
+}) {
+  const headsAfter = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
+  for (const pullRequest of pullRequests) {
+    const branch = pullRequest?.headBranchName;
+    const number = pullRequest?.number;
+    if (!branch || !Number.isInteger(number)) continue;
+    const before = headsBeforeRegeneration.get(branch);
+    const after = headsAfter.get(branch);
+    // No prior head means the branch was created rather than rewritten, and an unchanged head
+    // means nothing was discarded. Neither is a rewrite, and inventing a marker for one would be
+    // recording something that did not happen.
+    if (!before || !after || before === after) continue;
+    await githubRequest(env, `/repos/${owner}/${repo}/issues/${number}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body: formatReleaseBranchRewriteMarker(before, after) }),
+    });
+    console.log(`Recorded release branch rewrite on #${number}: ${before} -> ${after}`);
+  }
+}
+
+async function readReleaseBranchHeads({ env, owner, repo, targetBranch }) {
+  const prefix = `heads/release-please--branches--${targetBranch}--`;
+  const refs = await githubRequest(env, `/repos/${owner}/${repo}/git/matching-refs/${prefix}`);
+  const heads = new Map();
+  if (!Array.isArray(refs)) return heads;
+  for (const ref of refs) {
+    const branch = String(ref?.ref ?? "").replace(/^refs\/heads\//u, "");
+    const sha = ref?.object?.sha;
+    if (branch && /^[0-9a-f]{40}$/iu.test(sha ?? "")) heads.set(branch, sha.toLowerCase());
+  }
+  return heads;
+}
+
+async function githubRequest(env, path, init = {}) {
+  const token = env.RELEASE_PLEASE_TOKEN || env.GITHUB_TOKEN || env.GH_TOKEN;
+  const apiUrl = env.GITHUB_API_URL || DEFAULT_GITHUB_API_URL;
+  const response = await globalThis.fetch(`${apiUrl}${path}`, {
+    ...init,
+    headers: {
+      accept: "application/vnd.github+json",
+      authorization: `Bearer ${token}`,
+      "x-github-api-version": "2022-11-28",
+      ...(init.body ? { "content-type": "application/json" } : {}),
+      ...init.headers,
+    },
+  });
+  if (!response.ok) {
+    // Named rather than swallowed: a rewrite that was performed but not recorded is the case the
+    // review gate cannot tell apart from one that never happened.
+    throw new Error(`GitHub request failed: ${init.method ?? "GET"} ${path} -> ${response.status}`);
+  }
+  return response.status === 204 ? null : response.json();
 }
 
 export function buildReleaseOutputs(releases) {

@@ -10,3 +10,12 @@ export function resolveReleaseTargetBranch(
 ): string;
 
 export function serializeGitHubOutput(outputs: Record<string, string>): string;
+
+export function recordBranchRewrites(options: {
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  owner: string;
+  repo: string;
+  targetBranch: string;
+  headsBeforeRegeneration: Map<string, string>;
+  pullRequests: Array<{ number?: number; headBranchName?: string }>;
+}): Promise<void>;

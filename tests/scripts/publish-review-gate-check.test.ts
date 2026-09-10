@@ -908,6 +908,124 @@ describe("PR-head Review gate check publisher", () => {
     expect(publicationText).not.toContain("could not retrieve durable review state");
   });
 
+  // The workflow that rewrites a generated branch records the head it discarded, because GitHub
+  // does not. That turns an unnamed discard into a named one, so state older than the rewrite is
+  // usable again -- and the named head is still searched rather than trusted.
+  it("accepts older state when the rewrite recorded the head it discarded", () => {
+    const createdSha = "b".repeat(40);
+    const discardedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [discardedSha]: reviewStateWithDeletedFinding(1, "state-on-recorded-discard") },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      {},
+      { [discardedSha]: "2026-08-17T11:00:00Z" },
+      [
+        {
+          user: { login: "github-actions[bot]" },
+          body: `<!-- review-gate-rewrite before=${discardedSha} after=${createdSha} -->`,
+        },
+      ],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${discardedSha}/check-runs?`)),
+    ).toBe(true);
+    expect(publicationText).toContain("state-on-recorded-discard");
+  });
+
+  // Anyone who can comment can write the marker text, so the author is the whole of its authority.
+  it("ignores a rewrite record that a trusted workflow did not write", () => {
+    const createdSha = "b".repeat(40);
+    const discardedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [discardedSha]: reviewStateWithDeletedFinding(1, "state-behind-untrusted-marker") },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      {},
+      { [discardedSha]: "2026-08-17T11:00:00Z" },
+      [
+        {
+          user: { login: "someone-else" },
+          body: `<!-- review-gate-rewrite before=${discardedSha} after=${createdSha} -->`,
+        },
+      ],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    // The head the untrusted marker names is never made a candidate, so its state is neither
+    // searched nor published. The refusal that fires is the no-reachable-state one rather than
+    // the unnamed-discard one, and either way nothing is accepted on that marker's word.
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${discardedSha}/check-runs?`)),
+    ).toBe(false);
+    expect(publicationText).not.toContain("state-behind-untrusted-marker");
+  });
+
+  it("refuses when one rewrite was recorded twice with different discarded heads", () => {
+    const createdSha = "b".repeat(40);
+    const discardedSha = "c".repeat(40);
+    const otherSha = "d".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      {},
+      {},
+      [
+        {
+          user: { login: "github-actions[bot]" },
+          body: `<!-- review-gate-rewrite before=${discardedSha} after=${createdSha} -->`,
+        },
+        {
+          user: { login: "github-actions[bot]" },
+          body: `<!-- review-gate-rewrite before=${otherSha} after=${createdSha} -->`,
+        },
+      ],
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("recorded twice with different discarded heads");
+  });
+
   it("publishes a durable-state workspace failure without its local path", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "pack-review-gate-private-path-"));
     const privatePath = path.join(directory, "not-a-directory");

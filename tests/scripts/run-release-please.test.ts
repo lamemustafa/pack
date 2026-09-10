@@ -99,6 +99,14 @@ describe("Release Please workflow wrapper", () => {
       .spyOn(releasePlease.Manifest.prototype, "createPullRequests")
       .mockImplementation(createPullRequests);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const fetched: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        fetched.push(`${String(init.method ?? "GET")} ${new URL(String(url)).pathname}`);
+        return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      }),
+    );
 
     try {
       const outputs = await runReleasePlease({
@@ -120,11 +128,100 @@ describe("Release Please workflow wrapper", () => {
         prs_created: "true",
         release_created: "true",
       });
+      // The only direct GitHub calls are the two branch-head reads that bracket the
+      // regeneration. Nothing is written, because this run rewrote no branch.
+      expect(fetched).toEqual([
+        "GET /repos/lamemustafa/pack/git/matching-refs/heads/release-please--branches--master--",
+        "GET /repos/lamemustafa/pack/git/matching-refs/heads/release-please--branches--master--",
+      ]);
     } finally {
+      vi.unstubAllGlobals();
       log.mockRestore();
       pullRequestManifest.mockRestore();
       releaseManifest.mockRestore();
       getFileContentsOnBranch.mockRestore();
     }
+  });
+});
+
+describe("release branch rewrite records", () => {
+  it("records the discarded head when a regeneration rewrote the branch", async () => {
+    const before = "b".repeat(40);
+    const after = "c".repeat(40);
+    const requests: Array<{ url: string; method: string; body?: string }> = [];
+    const fetchMock = vi.fn(async (url: string, init: RequestInit = {}) => {
+      requests.push({ url, method: String(init.method ?? "GET"), body: init.body as string });
+      if (String(url).includes("matching-refs")) {
+        // `recordBranchRewrites` is given the pre-regeneration heads and reads only the current
+        // ones, so this single call answers with the head the rewrite created.
+        const sha = after;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              ref: "refs/heads/release-please--branches--master--components--pack",
+              object: { sha },
+            },
+          ],
+        } as unknown as Response;
+      }
+      return { ok: true, status: 201, json: async () => ({}) } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { recordBranchRewrites } = await import("../../scripts/run-release-please.mjs");
+    await recordBranchRewrites({
+      env: { GITHUB_TOKEN: "t", GITHUB_API_URL: "https://api.github.test" },
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+      headsBeforeRegeneration: new Map([
+        ["release-please--branches--master--components--pack", before],
+      ]),
+      pullRequests: [
+        { number: 337, headBranchName: "release-please--branches--master--components--pack" },
+      ],
+    });
+
+    const posted = requests.find((request) => request.method === "POST");
+    expect(posted?.url).toContain("/repos/lamemustafa/pack/issues/337/comments");
+    expect(posted?.body).toContain(`review-gate-rewrite before=${before} after=${after}`);
+    vi.unstubAllGlobals();
+  });
+
+  it("records nothing when the head did not move", async () => {
+    const sha = "b".repeat(40);
+    const requests: Array<{ method: string }> = [];
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit = {}) => {
+      requests.push({ method: String(init.method ?? "GET") });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [
+          { ref: "refs/heads/release-please--branches--master--components--pack", object: { sha } },
+        ],
+      } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { recordBranchRewrites } = await import("../../scripts/run-release-please.mjs");
+    await recordBranchRewrites({
+      env: { GITHUB_TOKEN: "t", GITHUB_API_URL: "https://api.github.test" },
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+      headsBeforeRegeneration: new Map([
+        ["release-please--branches--master--components--pack", sha],
+      ]),
+      pullRequests: [
+        { number: 337, headBranchName: "release-please--branches--master--components--pack" },
+      ],
+    });
+
+    // A branch that was created rather than rewritten, or one whose head did not move, discarded
+    // nothing. A marker for either would record a rewrite that never happened.
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+    vi.unstubAllGlobals();
   });
 });

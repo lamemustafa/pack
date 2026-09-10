@@ -11,9 +11,14 @@ import {
   runGhText,
 } from "./lib/github-cli-retry.mjs";
 import { readCleanTopLevelReviewCommit } from "./lib/codex-review-markers.mjs";
+import { readReleaseBranchRewriteMarker } from "./lib/release-branch-rewrite.mjs";
 
 const CHECK_RUN_NAME = "Review gate (scheduled)";
 const REQUIRED_REVIEW_AUTHOR = "chatgpt-codex-connector";
+// Only the workflow that performs a rewrite can attest to what it discarded. Anyone who can
+// comment can write the marker text, so the author is the whole of its authority: no human can
+// post under this login.
+const TRUSTED_REWRITE_RECORDER = "github-actions";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
@@ -560,7 +565,37 @@ function durableReviewStateBelongsToPr(state, expectedPrNumber) {
   return parsed?.version === 1 && parsed.prNumber === expectedPrNumber;
 }
 
+// Discarded heads a rewrite recorded out-of-band, keyed by the head it created. GitHub omits
+// `before_commit_id` for a generated-branch regeneration, and the workflow performing it records
+// the pair instead (#350). This supplies the missing name; it does not waive anything, because a
+// head named this way is still searched for state belonging to this pull request.
+function loadRecordedRewriteDiscards(prNumber) {
+  const commentPages = JSON.parse(
+    runGithub(
+      ["api", "--paginate", "--slurp", `repos/${repo}/issues/${prNumber}/comments?per_page=100`],
+      "recorded rewrite discovery",
+    ),
+  );
+  const discards = new Map();
+  for (const comment of flattenPages(commentPages)) {
+    if (normaliseLogin(comment?.user?.login) !== TRUSTED_REWRITE_RECORDER) continue;
+    const marker = readReleaseBranchRewriteMarker(comment.body);
+    if (!marker) continue;
+    // A second marker for the same created head is two different claims about one rewrite, and
+    // there is no basis for preferring either.
+    if (discards.has(marker.after) && discards.get(marker.after) !== marker.before) {
+      throw durableStateRejection(
+        "a rewrite was recorded twice with different discarded heads, so which commit it discarded is not settled",
+        "conflicting recorded rewrite discards for one created head",
+      );
+    }
+    discards.set(marker.after, marker.before);
+  }
+  return discards;
+}
+
 function loadForcePushedPriorShas(prNumber) {
+  const recordedDiscards = loadRecordedRewriteDiscards(prNumber);
   const timelinePages = JSON.parse(
     runGithub(
       [
@@ -607,7 +642,9 @@ function loadForcePushedPriorShas(prNumber) {
     // leaves no timeline entry at all. Recording when that happened is what lets state older than
     // it be recognised as possibly superseded.
     if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
-      unidentifiedDiscardAt = Math.max(unidentifiedDiscardAt ?? -Infinity, createdAt);
+      const recorded = recordedDiscards.get(String(event.commit_id ?? "").toLowerCase());
+      if (recorded) shas.push(recorded);
+      else unidentifiedDiscardAt = Math.max(unidentifiedDiscardAt ?? -Infinity, createdAt);
     }
     rewrites.push({ createdAt, shas });
   }
