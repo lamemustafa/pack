@@ -150,6 +150,10 @@ export function clickFiledGstr1SummaryForPdf(
   if (scope.returnType !== "GSTR-1") return null;
   if (!scopeIncludesPdfArtifact(scope)) return null;
   if (safeSignals.includes("download-pdf-gstr-1")) return null;
+  // The detail route can carry the filed-PDF control itself, captured 2026-09-10 as
+  // `DOWNLOAD FILED (PDF)` with no View Summary control anywhere on the page. Navigating away from
+  // a page that already offers the download is what left this flow waiting until its step limit.
+  if (safeSignals.includes("download-filed-gstr-1")) return null;
   if (isGstr1SummaryRoute(documentRef)) return null;
 
   const summaryControl = findGstr1ViewSummaryControl(documentRef);

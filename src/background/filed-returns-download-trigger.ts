@@ -43,6 +43,13 @@ import {
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
+// The portal's own declined-artifact answers. Only these are adopted from a post-click inspection;
+// any other page state leaves the original acquisition failure standing with its reason intact.
+const DECLINED_ARTIFACT_SIGNALS = new Set([
+  "filed-gstr1-excel-no-details-available",
+  "filed-gstr2b-not-generated",
+]);
+
 async function persistSingleArtifactRecoveryIntent(
   scope: FiledReturnsDownloadScope,
   artifactType: FiledReturnsConcreteArtifactType,
@@ -686,7 +693,14 @@ async function triggerPageGeneratedSinglePeriodArtifact(
               : {}),
           },
         }
-      : {
+      : ((await postClickBlockedStep({
+          artifactType,
+          deps,
+          requestId,
+          returnType,
+          scope,
+          tabId,
+        })) ?? {
           ok: true,
           flowStep: {
             connectorId: "gst",
@@ -699,12 +713,63 @@ async function triggerPageGeneratedSinglePeriodArtifact(
             ],
             safeMessage: acquired.safeMessage ?? artifactFailureMessageForDelivery(acquired.reason),
           },
-        };
+        });
   } finally {
     if (tracksBrowserDownload && !retainCheckpointForRecovery) {
       await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
     }
   }
+}
+
+// The portal answers a filed GSTR-1 e-invoice Excel request with an information dialog when the
+// taxpayer has no e-invoices to report. That is an answer, not a failure: there is nothing to
+// download and retrying cannot change it.
+//
+// The content script has always been able to recognise that dialog, and the ledger has always
+// known how to record the artifact as unavailable and carry the run on. Nothing sent the message
+// between them, so the recognition never ran, and the run stopped on a generic failure whose only
+// offered remedy was to retry something that cannot succeed.
+//
+// This asks, and only when an acquisition has already failed. It cannot turn a failure into a
+// download: the step it returns is still `blocked`, and completion still requires correlated
+// download evidence.
+async function postClickBlockedStep({
+  artifactType,
+  deps,
+  requestId,
+  returnType,
+  scope,
+  tabId,
+}: {
+  artifactType: FiledReturnsConcreteArtifactType;
+  deps: FiledReturnsFlowMessagingDeps;
+  requestId: string;
+  returnType: "GSTR-1" | "GSTR-2B";
+  scope: FiledReturnsDownloadScope;
+  tabId: number;
+}): Promise<FlowStepResponse | null> {
+  const declinable =
+    (returnType === "GSTR-1" && artifactType === "EXCEL") || returnType === "GSTR-2B";
+  if (!declinable) return null;
+  const response = normaliseContentScriptMessageResponse(
+    await deps.sendMessageToTabWithInjection(tabId, {
+      type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3",
+      payload: {
+        actionId: requestId,
+        artifactType,
+        financialYear: scope.financialYear,
+        period: scope.period,
+        returnType,
+      },
+    }),
+    "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3",
+  );
+  if (!response.ok || !("flowStep" in response)) return null;
+  // Only the recognised no-details answer is adopted. Any other post-click state leaves the
+  // original acquisition failure standing, reason intact.
+  return response.flowStep.safeSignals.some((signal) => DECLINED_ARTIFACT_SIGNALS.has(signal))
+    ? { ok: true, flowStep: response.flowStep }
+    : null;
 }
 
 async function deliverValidatedArtifact({

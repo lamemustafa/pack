@@ -19,13 +19,33 @@ export const GSTR1_SUMMARY_PATH = "/returns/auth/gstr1/gstr1sum";
 export const GSTR1_DETAIL_PATH = "/returns/auth/gstr1";
 export const GSTR1_SUMMARY_PREFLIGHT_PATH = "/returns/auth/api/gstr1/summary";
 
+export interface PageGeneratedArtifactSurface {
+  path: string;
+  controlText: string;
+}
+
+// Where each GSTR-1 artifact can be acquired, and what the portal calls the control there.
+//
+// A filed GSTR-1 PDF has two surfaces, not one. The summary page offers `DOWNLOAD SUMMARY (PDF)`;
+// the detail route offers `DOWNLOAD FILED (PDF)` -- captured live on 2026-09-10 on a period whose
+// page had no route to the summary page at all, which left the flow demanding a page it could not
+// reach. Listing both here keeps that fact in one place instead of in a path check and a label
+// check that can disagree.
 export const GSTR1_PAGE_GENERATED_ARTIFACTS: Record<
   Gstr2bPageGeneratedArtifact,
-  { controlText: string; expectedMime: string }
+  { surfaces: readonly PageGeneratedArtifactSurface[]; expectedMime: string }
 > = {
-  PDF: { controlText: "DOWNLOAD SUMMARY (PDF)", expectedMime: "application/pdf" },
+  PDF: {
+    surfaces: [
+      { path: GSTR1_SUMMARY_PATH, controlText: "DOWNLOAD SUMMARY (PDF)" },
+      { path: GSTR1_DETAIL_PATH, controlText: "DOWNLOAD FILED (PDF)" },
+    ],
+    expectedMime: "application/pdf",
+  },
   EXCEL: {
-    controlText: "DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)",
+    surfaces: [
+      { path: GSTR1_DETAIL_PATH, controlText: "DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)" },
+    ],
     expectedMime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   },
 };
