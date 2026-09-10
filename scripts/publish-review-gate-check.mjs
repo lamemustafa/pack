@@ -420,9 +420,9 @@ function loadDiscardedLineShas(pr, priorHeads, currentPrShaSet) {
       // publish the fail-closed check.
       if (shas.length > MAX_DURABLE_FORCE_PUSH_HISTORY_NODES) {
         throw durableStateRejection(
-        "this pull request has more rewritten heads than the review gate will search, so continuity cannot be established. Re-create the branch as described in #299",
-        "durable force-push history exceeded the safe lookup bound",
-      );
+          "this pull request has more rewritten heads than the review gate will search, so continuity cannot be established. Re-create the branch as described in #299",
+          "durable force-push history exceeded the safe lookup bound",
+        );
       }
     }
   }

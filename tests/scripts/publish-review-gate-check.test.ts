@@ -842,9 +842,9 @@ describe("PR-head Review gate check publisher", () => {
       calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
 
     expect(result.status).toBe(0);
-    expect(
-      calls.some((call) => call.join(" ").includes(`commits/${markedSha}/check-runs?`)),
-    ).toBe(true);
+    expect(calls.some((call) => call.join(" ").includes(`commits/${markedSha}/check-runs?`))).toBe(
+      true,
+    );
     expect(publicationText).toContain("state-on-marked-head");
   });
 
