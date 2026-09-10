@@ -6,6 +6,7 @@ import {
   DEFAULT_GH_RETRY_BACKOFF_MS,
   runGhText,
 } from "./lib/github-cli-retry.mjs";
+import { readCleanTopLevelReviewCommit } from "./lib/codex-review-markers.mjs";
 
 const BLOCKING_STATE_EXIT_CODE = 1;
 const EVALUATION_FAILURE_EXIT_CODE = 2;
@@ -25,8 +26,6 @@ const DURABLE_DISPOSITION_MARKER = "<!-- review-gate-disposition:";
 const ALLOWED_MISSING_HEAD_REVIEW_MARKER = "review-gate:allowed-missing-head-review";
 const CODEX_SEVERITY_BADGE_PATTERN =
   /!\[P[0-3] Badge\]\(https:\/\/img\.shields\.io\/badge\/P[0-3]-[^)\s]+\)/u;
-const CODEX_CLEAN_TOP_LEVEL_REVIEW_PATTERN =
-  /^Codex Review: Didn't find any major issues\.[^\r\n]*(?:\r?\n)+[\s\S]*?\*\*Reviewed commit:\*\*\s*`([0-9a-f]{10,64})`/u;
 
 const rawArgs = process.argv.slice(2);
 const evaluationErrorPath = readArgValue("--write-evaluation-error");
@@ -198,9 +197,8 @@ function isTrustedCurrentHeadCodexTopLevelReview(comment, headRefOid) {
   if (normaliseAuthorLogin(comment.author?.login) !== normaliseAuthorLogin(requiredReviewAuthor)) {
     return false;
   }
-  const match = (comment.body ?? "").trimStart().match(CODEX_CLEAN_TOP_LEVEL_REVIEW_PATTERN);
-  const reviewedCommit = match?.[1]?.toLowerCase();
-  return reviewedCommit !== undefined && headRefOid.toLowerCase().startsWith(reviewedCommit);
+  const reviewedCommit = readCleanTopLevelReviewCommit(comment.body);
+  return reviewedCommit !== null && headRefOid.toLowerCase().startsWith(reviewedCommit);
 }
 
 function readDurableReviewState(filePath, expectedPrNumber) {

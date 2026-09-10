@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 const rootDir = process.cwd();
 const scriptPath = path.join(rootDir, "scripts", "publish-review-gate-check.mjs");
 const headSha = "a".repeat(40);
+const baseSha = "e".repeat(40);
 
 describe("PR-head Review gate check publisher", () => {
   it.each([
@@ -92,9 +93,11 @@ describe("PR-head Review gate check publisher", () => {
 
     expect(result.status).toBe(0);
     expect(stateLookup?.join(" ")).toContain("check_name=Review%20gate%20(scheduled)");
+    // Across a rewrite there is no commit order to stop early on, so the discarded head is read
+    // too and precedence comes from which state was recorded later.
     expect(
       calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
-    ).toBe(false);
+    ).toBe(true);
     expect(calls.some((call) => call.join(" ").includes("issues/1/timeline?"))).toBe(true);
     expect(publicationText).toContain("conclusion=failure");
     expect(publicationText).toContain("output[text]=review-gate-state/v1");
@@ -269,6 +272,13 @@ describe("PR-head Review gate check publisher", () => {
       {},
       0,
       { 1: [currentLineSha, headSha] },
+      {},
+      {},
+      {},
+      {
+        [currentLineSha]: "2026-08-17T12:05:00Z",
+        [orphanedSha]: "2026-08-17T12:00:00Z",
+      },
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
 
@@ -296,6 +306,15 @@ describe("PR-head Review gate check publisher", () => {
         forcePushEvent(newerSha, "2026-08-17T12:01:00Z"),
       ],
       { [newerSha]: [], [olderSha]: [] },
+      0,
+      null,
+      {},
+      {},
+      {},
+      {
+        [newerSha]: "2026-08-17T12:05:00Z",
+        [olderSha]: "2026-08-17T12:00:00Z",
+      },
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
 
@@ -324,6 +343,15 @@ describe("PR-head Review gate check publisher", () => {
         forcePushEvent(newerSha, "2026-08-17T12:01:00Z"),
       ],
       { [newerSha]: [newerAncestorSha] },
+      0,
+      null,
+      {},
+      {},
+      {},
+      {
+        [newerAncestorSha]: "2026-08-17T12:05:00Z",
+        [olderSha]: "2026-08-17T12:00:00Z",
+      },
     );
     const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
 
@@ -332,8 +360,31 @@ describe("PR-head Review gate check publisher", () => {
     expect(publication?.join(" ")).not.toContain("older-anchor-state");
   });
 
+  it("searches base-branch history below the branch point of a discarded head", () => {
+    const orphanedSha = "b".repeat(40);
+    const olderBaseSha = "f".repeat(40);
+    const { calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(orphanedSha)],
+      { [orphanedSha]: [baseSha], [baseSha]: [olderBaseSha] },
+    );
+
+    // Durable state is only ever published on a pull request head. `baseSha` and everything
+    // below it is base-branch history, which was never a head of this pull request, so a
+    // lookup there can only ever miss. This is the traversal that exhausted the lookup bound.
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${olderBaseSha}/check-runs?`)),
+    ).toBe(false);
+  });
+
   it("fails closed rather than exceeding the force-push history lookup bound", () => {
-    const history = Array.from({ length: 20 }, (_, index) => index.toString(16).padStart(40, "0"));
+    const history = Array.from({ length: 22 }, (_, index) => index.toString(16).padStart(40, "0"));
     const parents: Record<string, string[]> = {};
     for (const [index, sha] of history.entries()) {
       const parent = history[index + 1];
@@ -354,7 +405,9 @@ describe("PR-head Review gate check publisher", () => {
     const stateLookups = calls.filter((call) => call.join(" ").includes("/check-runs?"));
 
     expect(result.status).toBe(0);
-    expect(stateLookups).toHaveLength(21);
+    // Refused while the line is being expanded, so an oversized history costs neither a state
+    // lookup nor a comparison per candidate head.
+    expect(stateLookups).toHaveLength(0);
     expect(publication?.join(" ")).toContain("conclusion=action_required");
   }, 10_000);
 
@@ -379,6 +432,480 @@ describe("PR-head Review gate check publisher", () => {
     ).toBe(true);
     expect(publicationText).toContain("conclusion=action_required");
     expect(publicationText).not.toContain("output[text]");
+  });
+
+  // A rewrite that records no `before_commit_id` never names the head it discarded. Reviews do:
+  // each records the commit it was submitted against. Without this the state below is
+  // unreachable, and the pull request is refused for want of state it actually has.
+  it("reaches durable state on a head named only by a review", () => {
+    const reviewedSha = "b".repeat(40);
+    const discardedSha = "c".repeat(40);
+    const durableState = reviewStateWithDeletedFinding();
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [reviewedSha]: durableState },
+      // The rewrite records what it discarded, so continuity across it is established and a state
+      // recovered from an earlier head is usable. With an unnamed discard it would be refused
+      // instead, because a discarded head's state is always written before the rewrite.
+      [forcePushEvent(discardedSha, "2026-08-17T12:00:00Z")],
+      {},
+      0,
+      null,
+      {},
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T11:00:00Z" }] },
+    );
+    const publication = calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"));
+
+    expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${reviewedSha}/check-runs?`)),
+    ).toBe(true);
+    expect(publication?.join(" ")).toContain("conclusion=failure");
+  });
+
+  // The created head is newer than the review that named the discarded one, and the newest
+  // recorded state is the one that wins.
+  it("prefers state on the newer created head over an older reviewed head", () => {
+    const reviewedSha = "b".repeat(40);
+    const createdSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [createdSha]: cleanDurableState(),
+        [reviewedSha]: reviewStateWithDeletedFinding(1, "comment-on-older-head"),
+      },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T11:00:00Z" }] },
+      {},
+      {
+        [createdSha]: "2026-08-17T12:05:00Z",
+        [reviewedSha]: "2026-08-17T12:00:00Z",
+      },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).not.toContain("comment-on-older-head");
+    expect(publicationText).toContain("conclusion=success");
+  });
+
+  // The branch comparison is what bounds the search. A list GitHub truncated, or one whose tip
+  // is not the head it was asked about, is a narrower search wearing the shape of a complete
+  // one -- so each is refused rather than searched.
+  it("fails closed when the discarded-line comparison was truncated", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      { [orphanedSha]: { total_commits: 2, commits: [{ sha: orphanedSha }] } },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(false);
+  });
+
+  it("fails closed when the discarded-line comparison does not reach that head", () => {
+    const orphanedSha = "b".repeat(40);
+    const straySha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      { [orphanedSha]: { total_commits: 1, commits: [{ sha: straySha }] } },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+  });
+
+  // A review submitted after a force-push still records the commit it was started against, so a
+  // review timestamp cannot rank heads. Ranking by it here would put the discarded head ahead of
+  // the head that replaced it and publish that head's clean state, losing the finding below.
+  it("does not let a late review outrank the head that replaced its commit", () => {
+    const reviewedSha = "b".repeat(40);
+    const createdSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [reviewedSha]: cleanDurableState(),
+        [createdSha]: reviewStateWithDeletedFinding(1, "comment-on-replacing-head"),
+      },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      // Submitted after the force-push, against the commit the force-push discarded.
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T18:00:00Z" }] },
+      {},
+      {
+        [reviewedSha]: "2026-08-17T11:00:00Z",
+        [createdSha]: "2026-08-17T12:30:00Z",
+      },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("comment-on-replacing-head");
+    expect(publicationText).toContain("conclusion=failure");
+  });
+
+  it("refuses rather than rank two states recorded at the same instant", () => {
+    const firstSha = "b".repeat(40);
+    const secondSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [firstSha]: reviewStateWithDeletedFinding(1, "first-state"),
+        [secondSha]: cleanDurableState(),
+      },
+      [
+        forcePushEvent(firstSha, "2026-08-17T12:00:00Z"),
+        forcePushEvent(secondSha, "2026-08-17T12:01:00Z"),
+      ],
+      { [firstSha]: [], [secondSha]: [] },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  // The tie is over the whole cohort sharing the newest timestamp. Comparing only the first two
+  // would accept a third state recording a different unresolved finding.
+  it("refuses a three-way tie whose first two states agree", () => {
+    const firstSha = "b".repeat(40);
+    const secondSha = "c".repeat(40);
+    const thirdSha = "d".repeat(40);
+    const agreed = cleanDurableState();
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {
+        [firstSha]: reviewStateWithDeletedFinding(1, "third-state-finding"),
+        [secondSha]: agreed,
+        [thirdSha]: agreed,
+      },
+      [
+        forcePushEvent(firstSha, "2026-08-17T12:00:00Z"),
+        forcePushEvent(secondSha, "2026-08-17T12:01:00Z"),
+        forcePushEvent(thirdSha, "2026-08-17T12:02:00Z"),
+      ],
+      { [firstSha]: [], [secondSha]: [], [thirdSha]: [] },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  // A review attached to a commit still on the current line is already covered, and its
+  // comparison results are discarded. Requesting one anyway is work the bound cannot stop,
+  // because those results never grow the candidate list it measures.
+  it("does not compare a reviewed head that is still on the current line", () => {
+    const currentLineSha = "b".repeat(40);
+    const orphanedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: reviewStateWithDeletedFinding(1, "orphaned-state") },
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      { 1: [currentLineSha, headSha] },
+      {},
+      {
+        1: [
+          { commit_id: currentLineSha, submitted_at: "2026-08-17T11:00:00Z" },
+          { commit_id: headSha, submitted_at: "2026-08-17T11:30:00Z" },
+        ],
+      },
+    );
+    const comparisons = calls.filter((call) => call.join(" ").includes("/compare/"));
+
+    expect(result.status).toBe(0);
+    expect(comparisons.some((call) => call.join(" ").includes(currentLineSha))).toBe(false);
+    expect(comparisons.some((call) => call.join(" ").includes(headSha))).toBe(false);
+    expect(comparisons.some((call) => call.join(" ").includes(orphanedSha))).toBe(true);
+  });
+
+  it("stops expanding candidate heads as soon as the bound is exceeded", () => {
+    const heads = Array.from({ length: 25 }, (_, index) =>
+      (index + 16).toString(16).padStart(40, "0"),
+    );
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      heads.map((sha, index) =>
+        forcePushEvent(sha, `2026-08-17T12:${String(index).padStart(2, "0")}:00Z`),
+      ),
+      Object.fromEntries(heads.map((sha) => [sha, []])),
+    );
+    const comparisons = calls.filter((call) => call.join(" ").includes("/compare/"));
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    // The bound limits the work, not just the answer: it stops one comparison past the bound
+    // rather than comparing all 25 candidate heads first.
+    expect(comparisons.length).toBeLessThanOrEqual(21);
+  }, 10_000);
+
+  // A base branch that has advanced to contain a discarded head legitimately leaves the
+  // comparison with no head-only commits. The head is still a head this pull request had, and
+  // refusing it would discard state that is sitting right there.
+  it("searches a recovered head the base branch has caught up to", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [orphanedSha]: reviewStateWithDeletedFinding(1, "state-on-caught-up-head") },
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      { [orphanedSha]: { total_commits: 0, commits: [] } },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(
+      calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
+    ).toBe(true);
+    expect(publicationText).toContain("state-on-caught-up-head");
+  });
+
+  // `commit_id` names the head a rewrite created, never the one it discarded. When the discarded
+  // head is unnamed, a state recorded before that rewrite may have been superseded on the head
+  // nobody can address, so accepting it as the baseline would publish success over that ask.
+  it("refuses a reachable state that predates an unnamed discard", () => {
+    const createdSha = "b".repeat(40);
+    const reviewedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [reviewedSha]: cleanDurableState() },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T10:00:00Z" }] },
+      {},
+      { [reviewedSha]: "2026-08-17T10:30:00Z" },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("did not record the head it discarded");
+    expect(publicationText).not.toContain("output[text]");
+  });
+
+  it("refuses a reachable state recorded at the same instant as an unnamed discard", () => {
+    const createdSha = "b".repeat(40);
+    const reviewedSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [reviewedSha]: cleanDurableState() },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      { 1: [{ commit_id: reviewedSha, submitted_at: "2026-08-17T10:00:00Z" }] },
+      {},
+      { [reviewedSha]: "2026-08-17T12:00:00Z" },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("did not record the head it discarded");
+  });
+
+  it("accepts a reachable state recorded after an unnamed discard", () => {
+    const createdSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [createdSha]: reviewStateWithDeletedFinding(1, "state-after-the-discard") },
+      [forcePushEvent(null, "2026-08-17T12:00:00Z", createdSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      {},
+      { [createdSha]: "2026-08-17T12:30:00Z" },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("state-after-the-discard");
+  });
+
+  // A clean Codex review is a top-level comment with a `Reviewed commit` marker, not a review
+  // object, so `/pulls/N/reviews` never names the head it reviewed.
+  it("reaches durable state on a head named only by a clean top-level review", () => {
+    const markedSha = "b".repeat(40);
+    const createdSha = "c".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      { [markedSha]: reviewStateWithDeletedFinding(1, "state-on-marked-head") },
+      [forcePushEvent(createdSha, "2026-08-17T13:00:00Z")],
+      {},
+      0,
+      null,
+      {},
+      {},
+      {},
+      { [markedSha]: "2026-08-17T12:00:00Z" },
+      [
+        {
+          user: { login: "chatgpt-codex-connector[bot]" },
+          body: "Codex Review: Didn't find any major issues.\n\n**Reviewed commit:** `bbbbbbbbbbbb`",
+        },
+      ],
+      { bbbbbbbbbbbb: markedSha },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(calls.some((call) => call.join(" ").includes(`commits/${markedSha}/check-runs?`))).toBe(
+      true,
+    );
+    expect(publicationText).toContain("state-on-marked-head");
+  });
+
+  // AGENTS.md: a rejection must name its own reason. Wrapped in the generic operation message,
+  // these are only diagnosable from workflow logs.
+  it("publishes which boundary rejected the history, not a generic failure", () => {
+    const orphanedSha = "b".repeat(40);
+    const { result, calls } = runScript(
+      ["--reconcile-open-prs", "--max-prs", "1", "--selection-offset", "0"],
+      [pull(1)],
+      cleanReviewFixture(),
+      [{ status: 0 }],
+      null,
+      [{ status: 0 }],
+      {},
+      [forcePushEvent(orphanedSha)],
+      {},
+      0,
+      null,
+      {},
+      {},
+      { [orphanedSha]: { total_commits: 2, commits: [{ sha: orphanedSha }] } },
+    );
+    const publicationText =
+      calls.find((call) => call.includes("repos/lamemustafa/pack/check-runs"))?.join(" ") ?? "";
+
+    expect(result.status).toBe(0);
+    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).toContain("GitHub truncated the commit list");
+    expect(publicationText).not.toContain("could not retrieve durable review state");
   });
 
   it("publishes a durable-state workspace failure without its local path", () => {
@@ -469,7 +996,9 @@ describe("PR-head Review gate check publisher", () => {
       [{ status: 0 }],
       null,
       [{ status: 0 }],
-      { [orphanedSha]: cleanDurableState(2) },
+      // An open finding, so adopting it would be visible as a blocking verdict rather than
+      // needing the published bytes to be read for a prNumber.
+      { [orphanedSha]: reviewStateWithDeletedFinding(2, "comment-owned-by-pr-2") },
       [forcePushEvent(null, "2026-08-17T00:00:00Z", orphanedSha)],
     );
     const publicationText =
@@ -479,7 +1008,8 @@ describe("PR-head Review gate check publisher", () => {
       calls.some((call) => call.join(" ").includes(`commits/${orphanedSha}/check-runs?`)),
     ).toBe(true);
     expect(result.status).toBe(0);
-    expect(publicationText).toContain("conclusion=action_required");
+    expect(publicationText).not.toContain("comment-owned-by-pr-2");
+    expect(publicationText).not.toContain("conclusion=failure");
   });
 
   // The other half of the premise: a rewrite with neither field usable must stay
@@ -709,6 +1239,11 @@ function runScript(
   syntheticFindingCount = 0,
   prCommits: Record<number, string[]> | null = null,
   environment: Record<string, string> = {},
+  reviews: Record<number, Array<{ commit_id: string; submitted_at: string }>> = {},
+  compareOverrides: Record<string, unknown> = {},
+  durableCompletedAt: Record<string, string> = {},
+  issueComments: unknown[] = [],
+  markerCommits: Record<string, string> = {},
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "pack-review-publisher-"));
   const callsPath = path.join(directory, "calls.json");
@@ -748,6 +1283,11 @@ function runScript(
         FAKE_PARENTS: JSON.stringify(parents),
         FAKE_SYNTHETIC_FINDING_COUNT: String(syntheticFindingCount),
         FAKE_PR_COMMITS: JSON.stringify(prCommits),
+        FAKE_REVIEWS: JSON.stringify(reviews),
+        FAKE_COMPARE_OVERRIDES: JSON.stringify(compareOverrides),
+        FAKE_DURABLE_COMPLETED_AT: JSON.stringify(durableCompletedAt),
+        FAKE_ISSUE_COMMENTS: JSON.stringify(issueComments),
+        FAKE_MARKER_COMMITS: JSON.stringify(markerCommits),
       },
     },
   );
@@ -762,6 +1302,11 @@ const calls = existsSync(process.env.FAKE_CALLS) ? JSON.parse(readFileSync(proce
 calls.push(args); writeFileSync(process.env.FAKE_CALLS, JSON.stringify(calls), "utf8");
 const text = args.join(" ");
 if (text.includes("pulls?state=open")) process.stdout.write(process.env.FAKE_PULLS);
+else if (text.includes("/pulls/") && text.includes("/reviews?")) {
+  const number = Number(text.match(/pulls\\/(\\d+)\\/reviews\\?/i)?.[1]);
+  const reviews = JSON.parse(process.env.FAKE_REVIEWS)?.[number] ?? [];
+  process.stdout.write(JSON.stringify([reviews]));
+}
 else if (text.includes("/pulls/") && text.includes("/commits?")) {
   const pulls = JSON.parse(process.env.FAKE_PULLS).flat();
   const number = Number(text.match(/pulls\\/(\\d+)\\/commits\\?/i)?.[1]);
@@ -770,8 +1315,33 @@ else if (text.includes("/pulls/") && text.includes("/commits?")) {
   const shas = configuredCommits?.[number] ?? (pull ? [pull.head.sha] : []);
   process.stdout.write(JSON.stringify([shas.map((sha) => ({ sha }))]));
 }
+else if (text.includes("/issues/") && text.includes("/comments?")) {
+  process.stdout.write(JSON.stringify([JSON.parse(process.env.FAKE_ISSUE_COMMENTS)]));
+}
 else if (text.includes("/issues/") && text.includes("/timeline?")) {
   process.stdout.write(JSON.stringify([JSON.parse(process.env.FAKE_TIMELINE)]));
+}
+else if (text.includes("/compare/")) {
+  const match = text.match(/compare\\/([a-f0-9]{40})\\.\\.\\.([a-f0-9]{40})/i);
+  const base = match?.[1]; const head = match?.[2];
+  const parents = JSON.parse(process.env.FAKE_PARENTS);
+  const chain = []; let cursor = head;
+  while (cursor && cursor !== base) {
+    chain.push(cursor);
+    const next = parents[cursor]?.[0];
+    if (next === undefined) break;
+    cursor = next;
+  }
+  const overrides = JSON.parse(process.env.FAKE_COMPARE_OVERRIDES)?.[head];
+  const commits = chain.slice().reverse().map((sha) => ({ sha }));
+  process.stdout.write(JSON.stringify(overrides ?? { total_commits: commits.length, commits }));
+}
+else if (text.match(/\\/commits\\/[a-f0-9]{10,39}$/i)) {
+  const prefix = text.match(/commits\\/([a-f0-9]{10,39})$/i)?.[1]?.toLowerCase();
+  const known = JSON.parse(process.env.FAKE_MARKER_COMMITS);
+  const sha = known[prefix];
+  if (!sha) process.exit(1);
+  process.stdout.write(JSON.stringify({ sha }));
 }
 else if (text.match(/\\/commits\\/[a-f0-9]{40}$/i)) {
   const sha = text.match(/commits\\/([a-f0-9]{40})$/i)?.[1];
@@ -786,7 +1356,8 @@ else if (text.includes("/check-runs?")) {
   if (response.status) process.exit(response.status);
   const sha = text.match(/commits\\/([a-f0-9]{40})\\/check-runs\\?/i)?.[1];
   const state = sha ? JSON.parse(process.env.FAKE_DURABLE_STATES)[sha] : null;
-  process.stdout.write(JSON.stringify([{ check_runs: state ? [{ name: "Review gate (scheduled)", completed_at: "2026-08-17T12:00:00Z", output: { text: state } }] : [] }]));
+  const completedAt = JSON.parse(process.env.FAKE_DURABLE_COMPLETED_AT)?.[sha] ?? "2026-08-17T12:00:00Z";
+  process.stdout.write(JSON.stringify([{ check_runs: state ? [{ name: "Review gate (scheduled)", completed_at: completedAt, output: { text: state } }] : [] }]));
 }
 else if (text.includes("graphql")) {
   const fixture = JSON.parse(process.env.FAKE_FIXTURE);
@@ -826,6 +1397,7 @@ function pull(
     state,
     draft,
     head: { sha, repo: { full_name: headRepo } },
+    base: { sha: baseSha },
   };
 }
 

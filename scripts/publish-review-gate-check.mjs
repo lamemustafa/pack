@@ -10,8 +10,10 @@ import {
   DEFAULT_GH_RETRY_BACKOFF_MS,
   runGhText,
 } from "./lib/github-cli-retry.mjs";
+import { readCleanTopLevelReviewCommit } from "./lib/codex-review-markers.mjs";
 
 const CHECK_RUN_NAME = "Review gate (scheduled)";
+const REQUIRED_REVIEW_AUTHOR = "chatgpt-codex-connector";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
@@ -215,6 +217,13 @@ function readTerminalEvaluationError(path) {
   return "Review evaluator published an invalid structured terminal error.";
 }
 
+// AGENTS.md requires a rejection to name its own reason. `runEvaluationOperation` otherwise wraps
+// these in the generic "could not retrieve durable review state", which is what forced diagnosis
+// of #337 through workflow logs rather than the published check.
+function durableStateRejection(reason, detail) {
+  return new EvaluationOperationError(reason, new Error(detail));
+}
+
 function untraceableRewriteError() {
   return new EvaluationOperationError(
     "GitHub did not record the prior head, so review continuity cannot be verified across that rewrite. Re-create the branch as described in #299 before running the review gate",
@@ -223,80 +232,298 @@ function untraceableRewriteError() {
 }
 
 function loadLatestDurableReviewState(pr) {
-  const { priorHeads: forcePushedPriorShas, hasUntraceableRewrite } = loadForcePushedPriorShas(
-    pr.number,
-  );
+  const {
+    priorHeads: forcePushedPriorShas,
+    hasUntraceableRewrite,
+    unidentifiedDiscardAt,
+  } = loadForcePushedPriorShas(pr.number);
   // Reject before consulting any reachable state, not after. A state surviving on a current-line
   // commit cannot contain a finding that was observed and then deleted only on the head this
   // rewrite discarded, so returning it would publish success while losing that ask. Continuity
   // across a null `before_commit_id` cannot be proved, so no reachable state is trustworthy here.
   if (hasUntraceableRewrite) throw untraceableRewriteError();
+
   const currentPrShas = loadCurrentPrCommitShas(pr);
-  const currentPrShaSet = new Set(currentPrShas);
-  const pendingShas = [...currentPrShas, ...forcePushedPriorShas];
-  const visitedShas = new Set();
-  const visitedForcePushHistoryShas = new Set();
-
-  while (pendingShas.length > 0) {
-    const sha = pendingShas.shift();
-    if (!/^[0-9a-f]{40}$/iu.test(sha ?? "") || visitedShas.has(sha)) continue;
-    if (
-      !currentPrShaSet.has(sha) &&
-      visitedForcePushHistoryShas.size >= MAX_DURABLE_FORCE_PUSH_HISTORY_NODES
-    ) {
-      throw new Error("durable force-push history exceeded the safe lookup bound");
-    }
-    visitedShas.add(sha);
-    if (!currentPrShaSet.has(sha)) visitedForcePushHistoryShas.add(sha);
-    const checkPages = JSON.parse(
-      runGithub(
-        [
-          "api",
-          "--paginate",
-          "--slurp",
-          `repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=all&per_page=100`,
-        ],
-        "durable review-state lookup",
-      ),
-    );
-    for (const page of flattenPages(checkPages)) {
-      for (const check of page?.check_runs ?? []) {
-        if (
-          check?.name === CHECK_RUN_NAME &&
-          typeof check.output?.text === "string" &&
-          check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) &&
-          durableReviewStateBelongsToPr(check.output.text, pr.number)
-        ) {
-          return { reviewState: check.output.text };
-        }
-      }
-    }
-
-    if (currentPrShaSet.has(sha)) continue;
-
-    const commit = JSON.parse(
-      runGithub(
-        ["api", "repos/" + repo + "/commits/" + sha],
-        "durable review-state ancestry lookup",
-      ),
-    );
-    if (!Array.isArray(commit?.parents)) {
-      throw new Error("durable review-state commit ancestry is incomplete");
-    }
-    for (const parent of commit.parents) {
-      if (!/^[0-9a-f]{40}$/iu.test(parent?.sha ?? "")) {
-        throw new Error("durable review-state parent metadata is incomplete");
-      }
-      if (!visitedShas.has(parent.sha)) pendingShas.unshift(parent.sha);
-    }
+  if (forcePushedPriorShas.length === 0) {
+    // Linear history. A commit stops being the head the moment the next one is pushed, and state
+    // is only ever published against the head, so nothing can land on an older commit afterwards:
+    // higher commit means newer state, and the first hit searching newest-first is the latest.
+    const currentLineState = findFirstDurableState(currentPrShas, pr.number);
+    return { reviewState: currentLineState?.text ?? cleanReviewState(pr.number) };
   }
 
-  if (forcePushedPriorShas.length > 0) {
-    throw new Error("force-push discontinuity left no reachable durable review state");
+  // A rewrite that records no `before_commit_id` never names the head it discarded, so the
+  // force-push events alone do not enumerate every head this pull request has had. Reviews do
+  // name them: each review records the `commit_id` it was submitted against. On #337 the first
+  // regeneration's discarded head is named by nothing else, and it is the head that actually
+  // carries this pull request's durable state.
+  const priorHeads = dedupePriorHeadShas(
+    forcePushedPriorShas,
+    loadReviewedHeadShas(pr.number),
+    loadTopLevelReviewedHeadShas(pr.number, currentPrShas, forcePushedPriorShas),
+  );
+  const discardedLineShas = loadDiscardedLineShas(pr, priorHeads, new Set(currentPrShas));
+
+  // Across a rewrite there is no commit order to read precedence from, and no timestamp attached
+  // to a head is safe to infer it from: a review submitted after a force-push still records the
+  // older commit it was started against, which would rank a discarded head above the newer one
+  // that replaced it. So rank by the only recorded fact about the state itself -- when the gate
+  // published it -- which means every candidate is read rather than stopping at the first hit.
+  const states = collectDurableStates([...currentPrShas, ...discardedLineShas], pr.number);
+  if (states.length > 0) {
+    const newest = selectNewestDurableState(states);
+    // Reachable is not the same as current. A rewrite that did not name what it discarded may
+    // have destroyed a head whose state superseded this one, and accepting an older state as the
+    // baseline would drop a finding recorded only there -- publishing success over an open ask.
+    // Fail closed on equality too. GitHub timestamps share an instant often enough that a strict
+    // comparison would treat an unknown order as a safe one, which is the "could not determine
+    // means matches" mistake rather than a boundary detail.
+    if (unidentifiedDiscardAt !== null && newest.recordedAt <= unidentifiedDiscardAt) {
+      throw durableStateRejection(
+        "a rewrite did not record the head it discarded, and the newest recoverable review state predates that rewrite, so a finding recorded only on the discarded head cannot be ruled out. Re-create the branch as described in #299",
+        "newest reachable durable review state predates an unidentified force-push discard",
+      );
+    }
+    return { reviewState: newest.text };
   }
-  return {
-    reviewState: JSON.stringify({ version: 1, prNumber: pr.number, findings: [] }),
-  };
+
+  throw durableStateRejection(
+    "a rewrite left no reachable review state, so a finding recorded before it cannot be ruled out. Re-create the branch as described in #299",
+    "force-push discontinuity left no reachable durable review state",
+  );
+}
+
+function selectNewestDurableState(states) {
+  const newestRecordedAt = Math.max(...states.map((state) => state.recordedAt));
+  // The whole tied cohort, not the first two of it. Comparing a pair would accept three states
+  // whose first two agree while a third records a different unresolved finding, which is the
+  // ask-dropping outcome this refusal exists to prevent.
+  const tied = states.filter((state) => state.recordedAt === newestRecordedAt);
+  const [newest] = tied;
+  // A tie between different states is a precedence question with no recorded answer, and guessing
+  // it can drop an ask that only the loser records.
+  if (tied.some((state) => state.text !== newest.text)) {
+    throw durableStateRejection(
+      "two different review states were recorded at the same instant, so which one supersedes the other is not recorded",
+      "durable review states have ambiguous recording order",
+    );
+  }
+  return newest;
+}
+
+function dedupePriorHeadShas(...headGroups) {
+  const seen = new Set();
+  const shas = [];
+  for (const head of headGroups.flat()) {
+    if (seen.has(head.sha)) continue;
+    seen.add(head.sha);
+    shas.push(head.sha);
+  }
+  return shas;
+}
+
+function loadReviewedHeadShas(prNumber) {
+  const reviewPages = JSON.parse(
+    runGithub(
+      ["api", "--paginate", "--slurp", `repos/${repo}/pulls/${prNumber}/reviews?per_page=100`],
+      "reviewed head discovery",
+    ),
+  );
+  const heads = [];
+  for (const review of flattenPages(reviewPages)) {
+    // Skipping an unusable entry only narrows what is searched; it can never accept state. The
+    // refusal below still stands when nothing is found.
+    if (!/^[0-9a-f]{40}$/iu.test(review?.commit_id ?? "")) continue;
+    const at = Date.parse(review.submitted_at ?? "");
+    heads.push({ sha: review.commit_id, at: Number.isFinite(at) ? at : 0 });
+  }
+  return heads;
+}
+
+// A clean Codex review is a top-level comment carrying a `Reviewed commit` marker rather than a
+// review object, and the evaluator already trusts that marker as a current-head review. The commit
+// it names was therefore a head of this pull request, so it belongs among the candidate heads --
+// otherwise a head reviewed clean and then rewritten away is named in the record but never
+// searched.
+function loadTopLevelReviewedHeadShas(prNumber, currentPrShas, forcePushedPriorHeads) {
+  const commentPages = JSON.parse(
+    runGithub(
+      ["api", "--paginate", "--slurp", `repos/${repo}/issues/${prNumber}/comments?per_page=100`],
+      "reviewed head marker discovery",
+    ),
+  );
+  const known = [...currentPrShas, ...forcePushedPriorHeads.map((head) => head.sha)];
+  const prefixes = new Set();
+  for (const comment of flattenPages(commentPages)) {
+    if (normaliseLogin(comment?.user?.login) !== REQUIRED_REVIEW_AUTHOR) continue;
+    const prefix = readCleanTopLevelReviewCommit(comment.body);
+    // A marker naming a head already in hand needs no lookup, and the common case is the current
+    // head naming itself.
+    if (prefix === null || known.some((sha) => sha.toLowerCase().startsWith(prefix))) continue;
+    prefixes.add(prefix);
+    if (prefixes.size > MAX_DURABLE_FORCE_PUSH_HISTORY_NODES) {
+      throw durableStateRejection(
+        "this pull request names more reviewed heads than the review gate will resolve, so continuity cannot be established. Re-create the branch as described in #299",
+        "reviewed head markers exceeded the safe lookup bound",
+      );
+    }
+  }
+  return [...prefixes].map((prefix) => ({ sha: resolveCommitSha(prefix) }));
+}
+
+function resolveCommitSha(prefix) {
+  const commit = JSON.parse(
+    runGithub(["api", `repos/${repo}/commits/${prefix}`], "reviewed head marker resolution"),
+  );
+  if (!/^[0-9a-f]{40}$/iu.test(commit?.sha ?? "")) {
+    throw durableStateRejection(
+      "a reviewed commit named in this pull request could not be resolved to a commit, so the head it names could not be searched",
+      "reviewed head marker did not resolve to a commit SHA",
+    );
+  }
+  return commit.sha;
+}
+
+function normaliseLogin(login) {
+  return String(login ?? "")
+    .toLowerCase()
+    .replace(/\[bot\]$/u, "");
+}
+
+function cleanReviewState(prNumber) {
+  return JSON.stringify({ version: 1, prNumber, findings: [] });
+}
+
+// Durable state is published only against a pull request head -- `publishCheck` is always called
+// with `pr.head.sha`. So the commits that can carry it are the heads this pull request has had:
+// its current commits, and for a line a force-push discarded, the commits unique to that head
+// against the base branch. Ancestry below the branch point is base-branch history, which was
+// never a head here and can only ever miss. Walking into it is what exhausted the lookup bound on
+// a release pull request whose discarded heads each sat directly on master (#337).
+function loadDiscardedLineShas(pr, priorHeads, currentPrShaSet) {
+  const baseSha = pr.base?.sha;
+  if (!/^[0-9a-f]{40}$/iu.test(baseSha ?? "")) {
+    throw new Error("pull request base metadata is incomplete");
+  }
+  const seen = new Set(currentPrShaSet);
+  const shas = [];
+  for (const head of priorHeads) {
+    // Checked before the comparison request, not after its results are discarded. A head already
+    // covered -- a reviewed commit still on the current line, or one collected from another
+    // head's line -- contributes only commits that are themselves already covered, and its
+    // results never grow `shas`, so the bound below would never stop the redundant requests.
+    if (seen.has(head)) continue;
+    for (const sha of loadDiscardedLineForHead(baseSha, head)) {
+      if (seen.has(sha)) continue;
+      seen.add(sha);
+      shas.push(sha);
+      // Checked here rather than by the caller so the bound limits the work as well as the
+      // result. Checked afterwards, an oversized history still costs one comparison request per
+      // candidate head before anything refuses, which can exhaust the run that was supposed to
+      // publish the fail-closed check.
+      if (shas.length > MAX_DURABLE_FORCE_PUSH_HISTORY_NODES) {
+        throw durableStateRejection(
+          "this pull request has more rewritten heads than the review gate will search, so continuity cannot be established. Re-create the branch as described in #299",
+          "durable force-push history exceeded the safe lookup bound",
+        );
+      }
+    }
+  }
+  return shas;
+}
+
+function loadDiscardedLineForHead(baseSha, head) {
+  const comparison = JSON.parse(
+    runGithub(
+      ["api", `repos/${repo}/compare/${baseSha}...${head}`],
+      "durable review-state branch scope lookup",
+    ),
+  );
+  const commits = comparison?.commits;
+  if (!Array.isArray(commits)) {
+    throw new Error("durable review-state branch comparison is incomplete");
+  }
+  // GitHub caps the inline commit list, and a truncated list would silently narrow the search
+  // into a false proof of absence below.
+  if (!Number.isInteger(comparison.total_commits) || comparison.total_commits > commits.length) {
+    throw durableStateRejection(
+      "GitHub truncated the commit list for a rewritten head, so that head's history could not be searched completely",
+      "durable review-state branch comparison was truncated",
+    );
+  }
+  const shas = [];
+  for (const commit of commits) {
+    if (!/^[0-9a-f]{40}$/iu.test(commit?.sha ?? "")) {
+      throw new Error("durable review-state branch comparison has an invalid commit SHA");
+    }
+    shas.push(commit.sha);
+  }
+  // The head is a candidate whether or not the comparison contributes commits: it is a head this
+  // pull request had, and it can carry durable state. A base branch that has advanced to contain
+  // it legitimately yields no head-only commits, and refusing that would discard reachable state.
+  if (shas.length === 0) return [head];
+  // When the comparison does contribute commits, the head must be their tip. If it is not, this
+  // is not the line that was asked about, and searching it would be a narrower search wearing the
+  // shape of a complete one.
+  if (shas.at(-1) !== head) {
+    throw durableStateRejection(
+      "the commit list GitHub returned for a rewritten head does not end at that head, so it is not the history that was asked for",
+      "durable review-state branch comparison did not reach the discarded head",
+    );
+  }
+  return shas.reverse();
+}
+
+function findFirstDurableState(shas, prNumber) {
+  for (const sha of shas) {
+    const [state] = readDurableStatesAt(sha, prNumber);
+    if (state) return state;
+  }
+  return null;
+}
+
+function collectDurableStates(shas, prNumber) {
+  const states = [];
+  for (const sha of shas) states.push(...readDurableStatesAt(sha, prNumber));
+  return states;
+}
+
+function readDurableStatesAt(sha, prNumber) {
+  const checkPages = JSON.parse(
+    runGithub(
+      [
+        "api",
+        "--paginate",
+        "--slurp",
+        `repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(CHECK_RUN_NAME)}&filter=all&per_page=100`,
+      ],
+      "durable review-state lookup",
+    ),
+  );
+  const states = [];
+  for (const page of flattenPages(checkPages)) {
+    for (const check of page?.check_runs ?? []) {
+      if (
+        check?.name !== CHECK_RUN_NAME ||
+        typeof check.output?.text !== "string" ||
+        !check.output.text.startsWith(DURABLE_REVIEW_STATE_PREFIX) ||
+        !durableReviewStateBelongsToPr(check.output.text, prNumber)
+      ) {
+        continue;
+      }
+      const recordedAt = Date.parse(check.completed_at ?? "");
+      // Recording order is how precedence is decided, so a state that cannot say when it was
+      // recorded cannot be ranked against one that can.
+      if (!Number.isFinite(recordedAt)) {
+        throw durableStateRejection(
+          "a published review state does not record when it was written, so it cannot be ranked against the others",
+          "durable review state has no valid recording timestamp",
+        );
+      }
+      states.push({ text: check.output.text, recordedAt });
+    }
+  }
+  return states;
 }
 
 function loadCurrentPrCommitShas(pr) {
@@ -349,6 +576,7 @@ function loadForcePushedPriorShas(prNumber) {
   );
   const rewrites = [];
   let hasUntraceableRewrite = false;
+  let unidentifiedDiscardAt = null;
 
   for (const event of flattenPages(timelinePages)) {
     if (event?.event !== "head_ref_force_pushed") continue;
@@ -373,6 +601,14 @@ function loadForcePushedPriorShas(prNumber) {
       hasUntraceableRewrite = true;
       continue;
     }
+    // `commit_id` is the head this rewrite created, not the one it discarded. When
+    // `before_commit_id` is absent the discarded head is unnamed, and nothing in the pull
+    // request's record is guaranteed to name it -- an ordinary push that was later rewritten away
+    // leaves no timeline entry at all. Recording when that happened is what lets state older than
+    // it be recognised as possibly superseded.
+    if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
+      unidentifiedDiscardAt = Math.max(unidentifiedDiscardAt ?? -Infinity, createdAt);
+    }
     rewrites.push({ createdAt, shas });
   }
 
@@ -392,10 +628,10 @@ function loadForcePushedPriorShas(prNumber) {
     for (const sha of rewrite.shas) {
       if (seen.has(sha)) continue;
       seen.add(sha);
-      priorHeads.push(sha);
+      priorHeads.push({ sha, at: rewrite.createdAt });
     }
   }
-  return { priorHeads, hasUntraceableRewrite };
+  return { priorHeads, hasUntraceableRewrite, unidentifiedDiscardAt };
 }
 
 function flattenPages(value) {
