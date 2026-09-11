@@ -416,7 +416,8 @@ unresolved outcome when the acquisition flow establishes one.
 ## Filed GSTR-1 detail route can be the download surface itself (2026-09-10)
 
 Captured live, authenticated, source-surfaces build v0.6.0, on the GSTR-1 detail route
-(`/returns/auth/gstr1`) for a monthly period whose header read `Status - Filed`.
+(`/returns/auth/gstr1`) for a filed monthly period. No value read from the page is reproduced
+here: this file records what the portal's surfaces do, not what any return says.
 
 **The page carried four controls and no navigation step:**
 
@@ -462,8 +463,11 @@ No details available for download (This is relevant only if you have reported e-
                             [ OK ]
 ```
 
-The taxpayer reports no e-invoices, so there is no workbook. The page's own advisory says as much:
-the file "would be blank in case taxpayer is not e-invoicing".
+The portal returns this when the period has no e-invoice records to export, which its own advisory
+states: the file "would be blank in case taxpayer is not e-invoicing". That is the portal's rule,
+quoted from its own copy. Whether it applies to a given return is a fact about that return, and not
+one this file records. Pack treats the modal as the artifact being unavailable and records it as
+such.
 
 **GSTR-2B summary.** The summary route renders an error panel:
 
@@ -495,9 +499,9 @@ Captured live during a full-fiscal-year run. The GSTR-2B summary route does not 
 (`/gstr2b/auth/gstr2b/summary`), and after the portal renders the "could not be generated" panel it
 keeps rendering that panel -- and the header block naming the period it belongs to -- until a new
 dashboard search settles. A run that read the panel without also reading the header therefore got a
-confident answer for every later period without navigating to any of them: one taxpayer's run
-reported twelve periods processed after a single navigation, while the page still read
-`Return Period - April`.
+confident answer for every later period without navigating to any of them: a full-year run reported
+twelve periods processed after a single navigation, while the header still named the first period
+of that run.
 
 The header is what makes the correct reading possible. Even with the download controls replaced by
 the error panel, the portal still renders `GSTIN`, `Financial Year`, `Return Period` and
