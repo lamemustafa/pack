@@ -21,16 +21,17 @@ import {
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isValidFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
-const MISSING_ARTIFACT_REASONS = new Set([
-  "artifact-filed-gstr1-excel-no-details-available",
-  "artifact-filed-gstr2b-not-generated",
-]);
+import {
+  DECLINED_ARTIFACT_REASONS as DECLINED_ARTIFACT_REASONS_LIST,
+  DECLINED_ARTIFACT_SIGNALS,
+  declinedArtifactReason,
+} from "../connectors/gst/filed-returns-acquisition-diagnostics";
+const MISSING_ARTIFACT_REASONS = new Set<string>(DECLINED_ARTIFACT_REASONS_LIST);
 
 // The flow signal the portal's refusal carries, and the reason recorded against the artifact.
-const DECLINED_ARTIFACT_REASONS = new Map([
-  ["filed-gstr1-excel-no-details-available", "artifact-filed-gstr1-excel-no-details-available"],
-  ["filed-gstr2b-not-generated", "artifact-filed-gstr2b-not-generated"],
-]);
+const DECLINED_ARTIFACT_REASONS = new Map<string, string>(
+  DECLINED_ARTIFACT_SIGNALS.map((signal) => [signal, declinedArtifactReason(signal)]),
+);
 
 const LEDGER_KEYS = [
   "artifactPlan",
