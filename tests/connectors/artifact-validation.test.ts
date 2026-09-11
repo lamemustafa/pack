@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  MAX_ARTIFACT_BYTES,
   describeJsonArtifactRejection,
   filedReturnsJsonDocumentContract,
   validateArtifactBytes,
@@ -192,5 +193,24 @@ describe("template-built signals are persistable", () => {
       ),
     ];
     expect(built.filter((signal) => !isDurableFiledReturnsSignal(signal))).toEqual([]);
+  });
+
+  it("names an oversized body without decoding or parsing it", () => {
+    // The cap is a processing bound, not only a verdict. Decoding and parsing a body already known
+    // to be too large spends exactly the work the cap refuses, on the path where the input is known
+    // to be unreasonable.
+    const oversized = new Uint8Array(MAX_ARTIFACT_BYTES + 1);
+    const decode = vi.spyOn(TextDecoder.prototype, "decode");
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      expect(describeJsonArtifactRejection(oversized, "052025", "GSTR-1")).toEqual([
+        "json-body-oversized",
+      ]);
+      expect(decode).not.toHaveBeenCalled();
+      expect(parse).not.toHaveBeenCalled();
+    } finally {
+      decode.mockRestore();
+      parse.mockRestore();
+    }
   });
 });
