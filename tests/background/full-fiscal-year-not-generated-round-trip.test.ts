@@ -22,6 +22,7 @@ const browserMocks = vi.hoisted(() => ({
 vi.mock("wxt/browser", () => ({ browser: browserMocks }));
 
 import {
+  hasTerminalPositiveTarget,
   persistLedger,
   readPlanLedgersStorageState,
 } from "../../src/background/filed-returns-full-fiscal-year-run-state";
@@ -119,5 +120,26 @@ describe("a full-year run whose period the portal never generated", () => {
     expect(step.safeSignals).not.toContain("full-fiscal-year-zip-artifact-staging-incomplete");
     expect(step.safeSignals).toContain("full-fiscal-year-no-zip-artifacts");
     expect(step.state).not.toBe("blocked");
+  });
+});
+
+describe("a cancelled run that recorded a declined period", () => {
+  // The guard that decides whether a cancelled run may be silently replaced listed `not-filed` but
+  // not `not-generated`. Both are the portal answering that there is nothing to download, so a run
+  // holding one was protected and a run holding the other was not.
+  it("counts as work the run must not discard without asking", () => {
+    const now = new Date("2026-09-11T00:00:00.000Z");
+    let ledger = createFullFiscalYearLedger(scope, now, ["April", "May"]);
+    const april = ledger.targets[0]!.targetId;
+    ledger = markFullFiscalYearTargetRunning(ledger, april, now);
+    ledger = markFullFiscalYearTargetTerminal(
+      ledger,
+      april,
+      "not-generated",
+      notGeneratedStep(),
+      now,
+    );
+
+    expect(hasTerminalPositiveTarget(ledger)).toBe(true);
   });
 });
