@@ -11,17 +11,21 @@ export function resolveReleaseTargetBranch(
 
 export function serializeGitHubOutput(outputs: Record<string, string>): string;
 
-export function openBranchRewriteRecords(options: {
+interface ReleaseBranchScope {
   env: NodeJS.ProcessEnv | Record<string, string | undefined>;
   owner: string;
   repo: string;
   targetBranch: string;
-}): Promise<Map<string, string>>;
+}
 
-export function closeBranchRewriteRecords(options: {
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>;
-  owner: string;
-  repo: string;
-  targetBranch: string;
+/** The heads the run snapshotted, which the later two stages bring up to date and close. */
+interface OpenedRewriteRecords extends ReleaseBranchScope {
   headsBeforeRegeneration: Map<string, string>;
-}): Promise<void>;
+}
+
+export function openBranchRewriteRecords(options: ReleaseBranchScope): Promise<Map<string, string>>;
+
+/** `false` when it could not confirm what the regeneration is about to discard. */
+export function refreshBranchRewriteRecords(options: OpenedRewriteRecords): Promise<boolean>;
+
+export function closeBranchRewriteRecords(options: OpenedRewriteRecords): Promise<void>;

@@ -1,6 +1,7 @@
 import { appendFile } from "node:fs/promises";
 import {
   formatReleaseBranchRewriteMarker,
+  isTrustedRewriteRecord,
   readReleaseBranchRewriteMarker,
 } from "./lib/release-branch-rewrite.mjs";
 import { createRequire } from "node:module";
@@ -63,7 +64,18 @@ export async function runReleasePlease(env = process.env) {
     configFile,
     manifestFile,
   );
-  const pullRequests = (await pullRequestManifest.createPullRequests()).filter(Boolean);
+  // Immediately before the force-push, not at the snapshot above: see
+  // `refreshBranchRewriteRecords` for why the gap between the two is the dangerous part.
+  const recordsNameTheCurrentHeads = await refreshBranchRewriteRecords({
+    env,
+    owner,
+    repo,
+    targetBranch,
+    headsBeforeRegeneration,
+  });
+  const pullRequests = recordsNameTheCurrentHeads
+    ? (await pullRequestManifest.createPullRequests()).filter(Boolean)
+    : [];
   await closeBranchRewriteRecords({ env, owner, repo, targetBranch, headsBeforeRegeneration });
   outputs.prs_created = String(pullRequests.length > 0);
   if (pullRequests.length > 0) {
@@ -101,7 +113,7 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
     // the only thing that rewrites the branch and it has not run since.
     for (const record of records) {
       if (record.marker.branch !== branch || record.marker.after !== null) continue;
-      await completeBranchRewriteRecord({ env, owner, repo, record, after: head });
+      await writeBranchRewriteRecord({ env, owner, repo, record, after: head });
     }
     await githubRequest(env, `/repos/${owner}/${repo}/issues/${pullRequestNumber}/comments`, {
       method: "POST",
@@ -126,24 +138,17 @@ export async function closeBranchRewriteRecords({
   headsBeforeRegeneration,
 }) {
   try {
-    const headsAfter = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
-    for (const branch of headsBeforeRegeneration.keys()) {
-      const after = headsAfter.get(branch);
-      // An unchanged head discarded nothing. Completing the record with `after === before` says
-      // exactly that, and the gate reads it as the non-event it was.
-      if (!after) continue;
-      const pullRequestNumber = await findOpenPullRequestNumber({ env, owner, repo, branch });
-      if (pullRequestNumber === null) continue;
-      const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
-      const open = records.find(
-        (record) => record.marker.branch === branch && record.marker.after === null,
-      );
-      if (!open) continue;
-      await completeBranchRewriteRecord({ env, owner, repo, record: open, after });
-      console.log(
-        `Closed release branch rewrite record on #${pullRequestNumber}: ${open.marker.before} -> ${after}`,
-      );
-    }
+    await eachOpenBranchRewriteRecord(
+      { env, owner, repo, targetBranch, branches: headsBeforeRegeneration.keys() },
+      async ({ pullRequestNumber, record, head }) => {
+        // An unchanged head discarded nothing. Completing the record with `after === before` says
+        // exactly that, and the gate reads it as the non-event it was.
+        await writeBranchRewriteRecord({ env, owner, repo, record, after: head });
+        console.log(
+          `Closed release branch rewrite record on #${pullRequestNumber}: ${record.marker.before} -> ${head}`,
+        );
+      },
+    );
   } catch (error) {
     console.error(
       `Could not close a release branch rewrite record: ${error.message}. The record stays open and the next run completes it.`,
@@ -151,15 +156,78 @@ export async function closeBranchRewriteRecords({
   }
 }
 
-async function completeBranchRewriteRecord({ env, owner, repo, record, after }) {
+/**
+ * Brings every open record up to the head its branch actually carries, and reports whether it
+ * could. `false` means the regeneration must not proceed.
+ *
+ * The record is opened before `createReleases()` so that a failure there costs a re-run rather
+ * than a published release with no assets. That ordering leaves a gap: anything reaching the
+ * branch between then and the force-push is discarded while the record still names the older head,
+ * and the gate accepts that recorded pair and never searches the head that was lost.
+ *
+ * Throwing is not available here -- the release already exists and a later workflow step uploads
+ * its assets -- so the failure is reported instead and the caller skips the rewrite. Discarding a
+ * head no record names is unrecoverable and is the whole point of this mechanism; a release whose
+ * pull request waits for the next run is not.
+ */
+export async function refreshBranchRewriteRecords({
+  env,
+  owner,
+  repo,
+  targetBranch,
+  headsBeforeRegeneration,
+}) {
+  try {
+    await eachOpenBranchRewriteRecord(
+      { env, owner, repo, targetBranch, branches: headsBeforeRegeneration.keys() },
+      async ({ pullRequestNumber, record, head }) => {
+        if (head === record.marker.before) return;
+        await writeBranchRewriteRecord({ env, owner, repo, record, before: head });
+        console.log(
+          `Refreshed release branch rewrite record on #${pullRequestNumber}: before=${head}`,
+        );
+      },
+    );
+    return true;
+  } catch (error) {
+    console.error(
+      `Could not confirm what the regeneration is about to discard: ${error.message}. Skipping the release pull request so nothing is discarded unrecorded; the next run retries.`,
+    );
+    return false;
+  }
+}
+
+/**
+ * The walk the refresh and the close share: each branch's open record, paired with the head its
+ * branch carries right now. They differ only in what they write to it.
+ */
+async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, branches }, visit) {
+  const heads = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
+  for (const branch of branches) {
+    const head = heads.get(branch);
+    if (!head) continue;
+    const pullRequestNumber = await findOpenPullRequestNumber({ env, owner, repo, branch });
+    if (pullRequestNumber === null) continue;
+    const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
+    const open = records.find(
+      (record) => record.marker.branch === branch && record.marker.after === null,
+    );
+    if (open) await visit({ pullRequestNumber, record: open, head });
+  }
+}
+
+async function writeBranchRewriteRecord({
+  env,
+  owner,
+  repo,
+  record,
+  before = record.marker.before,
+  after = null,
+}) {
   await githubRequest(env, `/repos/${owner}/${repo}/issues/comments/${record.id}`, {
     method: "PATCH",
     body: JSON.stringify({
-      body: formatReleaseBranchRewriteMarker({
-        branch: record.marker.branch,
-        before: record.marker.before,
-        after,
-      }),
+      body: formatReleaseBranchRewriteMarker({ branch: record.marker.branch, before, after }),
     }),
   });
 }
@@ -172,6 +240,11 @@ async function readBranchRewriteRecords({ env, owner, repo, pullRequestNumber })
   );
   const records = [];
   for (const comment of comments) {
+    // The author is the whole of a marker's authority. Without this, anyone who can comment on a
+    // release pull request could have their comment treated as this workflow's own open record --
+    // and completing a record rewrites the comment in place, so an unrelated comment would be
+    // overwritten, or an uneditable one would abort the run before any release work began.
+    if (!isTrustedRewriteRecord(comment)) continue;
     const marker = readReleaseBranchRewriteMarker(comment?.body);
     if (marker && Number.isInteger(comment?.id)) records.push({ id: comment.id, marker });
   }
@@ -184,8 +257,14 @@ async function findOpenPullRequestNumber({ env, owner, repo, branch }) {
     `/repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}`,
     "pull request list for a release branch",
   );
-  const number = pulls.find((pull) => Number.isInteger(pull?.number))?.number;
-  return number ?? null;
+  // An empty list means no open pull request; an entry that cannot be read means the answer is
+  // unknown, and the two must not collapse into one. Read as "none", an unreadable entry makes the
+  // caller skip opening a record while the regeneration force-pushes the branch anyway -- which
+  // discards a head nothing named, the exact loss this mechanism exists to prevent.
+  if (pulls.length > 0 && !pulls.some((pull) => Number.isInteger(pull?.number))) {
+    throw new Error("GitHub returned a malformed pull request list for a release branch.");
+  }
+  return pulls.find((pull) => Number.isInteger(pull?.number))?.number ?? null;
 }
 
 async function readReleaseBranchHeads({ env, owner, repo, targetBranch }) {
