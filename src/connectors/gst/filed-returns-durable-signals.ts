@@ -25,7 +25,11 @@ import {
   FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES,
   filedReturnsTargetReviewClearFailureSignal,
 } from "./filed-returns-target-review-clear";
-import { ARTIFACT_ACQUISITION_DIAGNOSTIC_SIGNALS } from "./filed-returns-acquisition-diagnostics";
+import {
+  ARTIFACT_ACQUISITION_DIAGNOSTIC_SIGNALS,
+  DECLINED_ARTIFACT_REASONS,
+  DECLINED_ARTIFACT_SIGNALS,
+} from "./filed-returns-acquisition-diagnostics";
 
 // The reasons and methods those templates can produce. Enumerated here beside the allowlist so a
 // new one is a compile-time change in one place rather than a signal that silently fails to
@@ -147,8 +151,9 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-gstr1-download-status-not-filed",
   "filed-gstr1-download-trigger-ambiguous",
   "filed-gstr1-excel-control-pending",
-  "filed-gstr1-excel-no-details-available",
-  "filed-gstr2b-not-generated",
+  // Both portal refusals, from the list that defines them, so registering a new one is not a
+  // separate step someone can forget -- which is how the last one halted a run.
+  ...DECLINED_ARTIFACT_SIGNALS,
   GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   "filed-gstr1-result-view-auto-attempt-failed",
   "filed-gstr1-result-view-auto-clicked",
@@ -361,6 +366,18 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "gstr1-artifact-response-missing",
   "gstr1-artifact-state-invalid",
   "gstr2b-detail-heading",
+  // Page-identity evidence for the GSTR-2B summary route. These were transient while the only
+  // step that carried them was the "ready" hand-off to acquisition, whose signals never reach
+  // durable state. Recording the portal's refusal made them terminal, and one unregistered token
+  // rejects the whole array -- which blocked every period the portal declined to generate.
+  "gstr2b-visible-period-verified",
+  "gstr2b-visible-period-mismatch",
+  "gstr2b-labelled-period-evidence-missing",
+  "gstr2b-server-period-mismatch",
+  "gstr2b-server-visible-period-conflict",
+  "gstr2b-summary-period-mismatch",
+  "gstr2b-summary-dashboard-back-clicked",
+  "gstr2b-summary-back-clicked",
   "gstr2b-detail-route",
   "gstr2b-dashboard-period-select-found",
   "gstr2b-dashboard-period-select-missing",
@@ -647,8 +664,7 @@ const SCOPED_RETURN_SIGNAL_SUFFIXES = new Set([
 ]);
 const ARTIFACT_FAILURE_SIGNALS = new Set([
   "artifact-acquisition-failed",
-  "artifact-filed-gstr1-excel-no-details-available",
-  "artifact-filed-gstr2b-not-generated",
+  ...DECLINED_ARTIFACT_REASONS,
   // Artifact-acquisition recovery exists to survive service-worker death, so
   // its outcomes must be persistable. Without these the blocked summary that
   // routes an interrupted acquisition to review is rejected by

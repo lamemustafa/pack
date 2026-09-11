@@ -1,4 +1,5 @@
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import type { JsonArtifactRejectionSignal } from "./filed-returns-acquisition-diagnostics";
 
 export type ArtifactValidationResult =
   | {
@@ -100,12 +101,12 @@ export function describeJsonArtifactRejection(
   bytes: Uint8Array,
   expectedReturnPeriod: string,
   returnType: FiledReturnsReturnType,
-): string[] {
+): JsonArtifactRejectionSignal[] {
   if (bytes.byteLength === 0) return ["json-body-empty"];
   // Report the size band and keep going. Stopping here says only that the body is small, which
   // cannot distinguish a legitimately compact envelope from a truncated or unrelated response --
   // and that distinction is the whole question when a return has nothing in it.
-  const signals: string[] = [];
+  const signals: JsonArtifactRejectionSignal[] = [];
   let parsed: unknown;
   try {
     parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;

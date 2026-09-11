@@ -40,15 +40,13 @@ import {
   gstr3bFullFiscalYearAcquisitionNotWiredStep,
   isGstr3bFullFiscalYearAcquisitionScope,
 } from "./gstr3b-artifact-acquisition-block";
+import { DECLINED_ARTIFACT_SIGNALS } from "../connectors/gst/filed-returns-acquisition-diagnostics";
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
-// The portal's own declined-artifact answers. Only these are adopted from a post-click inspection;
-// any other page state leaves the original acquisition failure standing with its reason intact.
-const DECLINED_ARTIFACT_SIGNALS = new Set([
-  "filed-gstr1-excel-no-details-available",
-  "filed-gstr2b-not-generated",
-]);
+// Only the portal's own declined-artifact answers are adopted from a post-click inspection; any
+// other page state leaves the original acquisition failure standing with its reason intact.
+const DECLINED_ARTIFACT_SIGNAL_SET = new Set<string>(DECLINED_ARTIFACT_SIGNALS);
 
 async function persistSingleArtifactRecoveryIntent(
   scope: FiledReturnsDownloadScope,
@@ -767,7 +765,7 @@ async function postClickBlockedStep({
   if (!response.ok || !("flowStep" in response)) return null;
   // Only the recognised no-details answer is adopted. Any other post-click state leaves the
   // original acquisition failure standing, reason intact.
-  return response.flowStep.safeSignals.some((signal) => DECLINED_ARTIFACT_SIGNALS.has(signal))
+  return response.flowStep.safeSignals.some((signal) => DECLINED_ARTIFACT_SIGNAL_SET.has(signal))
     ? { ok: true, flowStep: response.flowStep }
     : null;
 }
