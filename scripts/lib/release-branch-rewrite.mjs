@@ -37,10 +37,27 @@ export function formatReleaseBranchRewriteMarker({ branch, before, after = null 
   return `<!-- review-gate-rewrite branch=${branch} before=${before.toLowerCase()}${suffix} -->`;
 }
 
+// Only the workflow that performs a rewrite can attest to what it discarded. Anyone who can
+// comment can write the marker text, so the author is the whole of its authority: no human can post
+// under this login. It lives beside the parser because a parser that cannot check authorship and an
+// authority check kept somewhere else is how one of the two readers came to skip it.
+const TRUSTED_REWRITE_RECORDER = "github-actions";
+
+export function normaliseGithubLogin(login) {
+  return String(login ?? "")
+    .toLowerCase()
+    .replace(/\[bot\]$/u, "");
+}
+
+// A marker is evidence only from this author. Both readers -- the workflow that writes records and
+// the gate that reads them -- ask this same question of a comment before trusting its marker.
+export function isTrustedRewriteRecord(comment) {
+  return normaliseGithubLogin(comment?.user?.login) === TRUSTED_REWRITE_RECORDER;
+}
+
 // Returns `{ branch, before, after }` for a comment that carries the marker, or null. `after` is
-// null for a record whose rewrite had not produced a head yet. Callers must check the comment's
-// author themselves: only a marker written by the workflow that performed the rewrite is evidence,
-// and anyone who can comment can write the text.
+// null for a record whose rewrite had not produced a head yet. This reads the text only: pair it
+// with `isTrustedRewriteRecord` before treating a marker as evidence or as recoverable state.
 export function readReleaseBranchRewriteMarker(body) {
   const match = MARKER_PATTERN.exec(body ?? "");
   if (!match) return null;

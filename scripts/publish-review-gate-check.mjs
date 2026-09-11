@@ -11,14 +11,14 @@ import {
   runGhText,
 } from "./lib/github-cli-retry.mjs";
 import { readCleanTopLevelReviewCommit } from "./lib/codex-review-markers.mjs";
-import { readReleaseBranchRewriteMarker } from "./lib/release-branch-rewrite.mjs";
+import {
+  isTrustedRewriteRecord,
+  normaliseGithubLogin,
+  readReleaseBranchRewriteMarker,
+} from "./lib/release-branch-rewrite.mjs";
 
 const CHECK_RUN_NAME = "Review gate (scheduled)";
 const REQUIRED_REVIEW_AUTHOR = "chatgpt-codex-connector";
-// Only the workflow that performs a rewrite can attest to what it discarded. Anyone who can
-// comment can write the marker text, so the author is the whole of its authority: no human can
-// post under this login.
-const TRUSTED_REWRITE_RECORDER = "github-actions";
 const DURABLE_REVIEW_STATE_PREFIX = "review-gate-state/v1\n";
 const MAX_DURABLE_FORCE_PUSH_HISTORY_NODES = 20;
 const MAX_DURABLE_REVIEW_STATE_BYTES = 60_000;
@@ -357,7 +357,7 @@ function loadTopLevelReviewedHeadShas(comments, currentPrShas, forcePushedPriorH
   const known = [...currentPrShas, ...forcePushedPriorHeads.map((head) => head.sha)];
   const prefixes = new Set();
   for (const comment of comments) {
-    if (normaliseLogin(comment?.user?.login) !== REQUIRED_REVIEW_AUTHOR) continue;
+    if (normaliseGithubLogin(comment?.user?.login) !== REQUIRED_REVIEW_AUTHOR) continue;
     const prefix = readCleanTopLevelReviewCommit(comment.body);
     // A marker naming a head already in hand needs no lookup, and the common case is the current
     // head naming itself.
@@ -384,12 +384,6 @@ function resolveCommitSha(prefix) {
     );
   }
   return commit.sha;
-}
-
-function normaliseLogin(login) {
-  return String(login ?? "")
-    .toLowerCase()
-    .replace(/\[bot\]$/u, "");
 }
 
 function cleanReviewState(prNumber) {
@@ -580,7 +574,7 @@ function loadIssueComments(prNumber) {
 function loadRecordedRewriteDiscards(comments) {
   const discards = new Map();
   for (const comment of comments) {
-    if (normaliseLogin(comment?.user?.login) !== TRUSTED_REWRITE_RECORDER) continue;
+    if (!isTrustedRewriteRecord(comment)) continue;
     const marker = readReleaseBranchRewriteMarker(comment.body);
     // An open record names a discarded head and no replacement, so it pairs with no rewrite and
     // identifies nothing. A record whose heads match says the branch did not move, which is a
