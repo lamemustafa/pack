@@ -153,6 +153,8 @@ describe("release branch rewrite records", () => {
     comments?: Array<{ id: number; body: string }>;
     pulls?: Array<{ number: number }>;
     malformedHeads?: boolean;
+    malformedHeadEntry?: boolean;
+    commentPages?: Array<Array<{ id: number; body: string }>>;
   }) {
     const calls: Array<{ method: string; path: string; body?: string }> = [];
     vi.stubGlobal(
@@ -163,9 +165,11 @@ describe("release branch rewrite records", () => {
         if (path.includes("matching-refs")) {
           const payload = handlers.malformedHeads
             ? { message: "something else" }
-            : handlers.heads
-              ? [{ ref: `refs/heads/${branch}`, object: { sha: handlers.heads } }]
-              : [];
+            : handlers.malformedHeadEntry
+              ? [{ ref: `refs/heads/${branch}`, object: {} }]
+              : handlers.heads
+                ? [{ ref: `refs/heads/${branch}`, object: { sha: handlers.heads } }]
+                : [];
           return { ok: true, status: 200, json: async () => payload } as unknown as Response;
         }
         if (path.includes("/pulls?")) {
@@ -176,6 +180,14 @@ describe("release branch rewrite records", () => {
           } as unknown as Response;
         }
         if (path.includes("/issues/") && path.includes("/comments")) {
+          if (handlers.commentPages) {
+            const page = Number(new URL(String(url)).searchParams.get("page") ?? "1");
+            return {
+              ok: true,
+              status: 200,
+              json: async () => handlers.commentPages?.[page - 1] ?? [],
+            } as unknown as Response;
+          }
           return {
             ok: true,
             status: 200,
@@ -250,6 +262,52 @@ describe("release branch rewrite records", () => {
         targetBranch: "master",
       }),
     ).rejects.toThrow(/malformed release branch head list/iu);
+  });
+
+  // An entry this function cannot read makes its branch look absent, and an absent branch is
+  // force-pushed with no record of the head it discarded. That is the same claim as an unreadable
+  // response, so it is the same refusal rather than a skipped row.
+  it("refuses to regenerate when one matching-ref entry is unreadable", async () => {
+    stubGitHub({ malformedHeadEntry: true });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await expect(
+      openBranchRewriteRecords({
+        env,
+        owner: "lamemustafa",
+        repo: "pack",
+        targetBranch: "master",
+      }),
+    ).rejects.toThrow(/malformed release branch head list/iu);
+  });
+
+  // A release pull request outlives a hundred comments, and the marker this mechanism just wrote is
+  // the newest one -- exactly what a first-page read drops. Losing it leaves the force-push
+  // permanently unpaired, because every later run reads the same truncated page.
+  it("reads a rewrite record past the first page of comments", async () => {
+    const before = "c".repeat(40);
+    const after = "b".repeat(40);
+    const marker = `<!-- review-gate-rewrite branch=${branch} before=${before} -->`;
+    const calls = stubGitHub({
+      heads: after,
+      commentPages: [
+        Array.from({ length: 100 }, (_unused, index) => ({ id: index + 1, body: "chatter" })),
+        [{ id: 501, body: marker }],
+      ],
+    });
+    const { closeBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await closeBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+      headsBeforeRegeneration: new Map([[branch, before]]),
+    });
+
+    const patched = calls.find((call) => call.method === "PATCH");
+    expect(patched?.path).toContain("/issues/comments/501");
+    expect(patched?.body).toContain(`after=${after}`);
   });
 
   it("closes the open record with the head the rewrite created", async () => {

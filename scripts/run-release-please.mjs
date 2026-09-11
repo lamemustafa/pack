@@ -165,13 +165,11 @@ async function completeBranchRewriteRecord({ env, owner, repo, record, after }) 
 }
 
 async function readBranchRewriteRecords({ env, owner, repo, pullRequestNumber }) {
-  const comments = await githubRequest(
+  const comments = await githubList(
     env,
-    `/repos/${owner}/${repo}/issues/${pullRequestNumber}/comments?per_page=100`,
+    `/repos/${owner}/${repo}/issues/${pullRequestNumber}/comments`,
+    "comment list for a release pull request",
   );
-  if (!Array.isArray(comments)) {
-    throw new Error("GitHub returned a malformed comment list for a release pull request.");
-  }
   const records = [];
   for (const comment of comments) {
     const marker = readReleaseBranchRewriteMarker(comment?.body);
@@ -181,33 +179,67 @@ async function readBranchRewriteRecords({ env, owner, repo, pullRequestNumber })
 }
 
 async function findOpenPullRequestNumber({ env, owner, repo, branch }) {
-  const pulls = await githubRequest(
+  const pulls = await githubList(
     env,
     `/repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}`,
+    "pull request list for a release branch",
   );
-  if (!Array.isArray(pulls)) {
-    throw new Error("GitHub returned a malformed pull request list for a release branch.");
-  }
   const number = pulls.find((pull) => Number.isInteger(pull?.number))?.number;
   return number ?? null;
 }
 
 async function readReleaseBranchHeads({ env, owner, repo, targetBranch }) {
   const prefix = `heads/release-please--branches--${targetBranch}--`;
-  const refs = await githubRequest(env, `/repos/${owner}/${repo}/git/matching-refs/${prefix}`);
-  // An indeterminate response is not an empty branch list. Reading it as one would let a rewrite
-  // proceed with no record of what it discarded, which is the state this whole mechanism exists to
-  // prevent and which nothing downstream could detect.
-  if (!Array.isArray(refs)) {
-    throw new Error("GitHub returned a malformed release branch head list.");
-  }
+  // An indeterminate response is not an empty branch list. Reading it as one lets a rewrite proceed
+  // with no record of what it discarded, which is the state this whole mechanism exists to prevent
+  // and which nothing downstream could detect. An entry this function cannot read is the same
+  // claim as a response it cannot read, so it is the same refusal: skipping the entry would make
+  // its branch look absent, which is the reading being guarded against.
+  const refs = await githubList(
+    env,
+    `/repos/${owner}/${repo}/git/matching-refs/${prefix}`,
+    "release branch head list",
+  );
   const heads = new Map();
   for (const ref of refs) {
     const branch = String(ref?.ref ?? "").replace(/^refs\/heads\//u, "");
     const sha = ref?.object?.sha;
-    if (branch && /^[0-9a-f]{40}$/iu.test(sha ?? "")) heads.set(branch, sha.toLowerCase());
+    if (!branch || !/^[0-9a-f]{40}$/iu.test(sha ?? "")) {
+      throw new Error("GitHub returned a malformed release branch head list.");
+    }
+    heads.set(branch, sha.toLowerCase());
   }
   return heads;
+}
+
+const GITHUB_PAGE_SIZE = 100;
+const GITHUB_MAX_PAGES = 20;
+
+/**
+ * Every page of a GitHub list endpoint, or a throw.
+ *
+ * Three call sites read lists this script's correctness depends on, and each had its own
+ * single-page request and its own array check. A first page is not a list: a release pull request
+ * outlives a hundred comments, and the marker this mechanism has just written is the newest one, so
+ * it is precisely what a first-page read drops. Running out of pages throws rather than returning
+ * what was collected, because a short answer here is indistinguishable from "no such branch" and
+ * that reading is what force-pushes a branch with no record of the head it discarded.
+ */
+async function githubList(env, path, description) {
+  const items = [];
+  for (let page = 1; page <= GITHUB_MAX_PAGES; page += 1) {
+    const separator = path.includes("?") ? "&" : "?";
+    const batch = await githubRequest(
+      env,
+      `${path}${separator}per_page=${GITHUB_PAGE_SIZE}&page=${page}`,
+    );
+    if (!Array.isArray(batch)) {
+      throw new Error(`GitHub returned a malformed ${description}.`);
+    }
+    items.push(...batch);
+    if (batch.length < GITHUB_PAGE_SIZE) return items;
+  }
+  throw new Error(`GitHub returned more pages of ${description} than this script will read.`);
 }
 
 async function githubRequest(env, path, init = {}) {
