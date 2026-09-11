@@ -44,6 +44,9 @@ import {
  * The summary route renders whichever period it last loaded, so both callers must confirm the
  * header before trusting anything on the page -- one to record a refusal, the other to click a
  * download. Failing closed is the point: an unreadable header is "could not determine".
+ *
+ * `requireVisibleEvidence` is the difference between them, and it is the refusal that sets it:
+ * see `verifyVisibleGstr2bPeriod`.
  */
 function leaveUnlessVisiblePeriodMatches(
   documentRef: Document,
@@ -51,8 +54,14 @@ function leaveUnlessVisiblePeriodMatches(
   scope: FiledReturnsDownloadScope,
   scopeId: string,
   safeSignals: readonly string[],
+  requireVisibleEvidence = false,
 ): PortalFlowStepResult | null {
-  const periodGuard = verifyVisibleGstr2bPeriod(documentRef, normalisedText, scope);
+  const periodGuard = verifyVisibleGstr2bPeriod(
+    documentRef,
+    normalisedText,
+    scope,
+    requireVisibleEvidence,
+  );
   if (!periodGuard) return null;
   return (
     returnFromMismatchedGstr2bSummary(documentRef, scopeId, [
@@ -118,6 +127,7 @@ export async function runGstr2bDownloadStep(
       scope,
       scopeId,
       safeSignals,
+      true,
     );
     if (leaving) return leaving;
     return {

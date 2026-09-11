@@ -59,10 +59,19 @@ export function verifyVisibleGstr2bSummaryScope(
   return verifyVisibleGstr2bPeriod(documentRef, normalised, scope);
 }
 
+/**
+ * `null` when this page is the requested period, otherwise the mismatch that rejects it.
+ *
+ * `requireVisibleEvidence` decides whether the page's own inline configuration may stand in for
+ * the identity a reader can see. A download click may rely on it, because the file that follows
+ * is correlated to this target before the target counts as complete. A refusal may not: it
+ * resolves the target outright, so the visible header is the only evidence there will ever be.
+ */
 export function verifyVisibleGstr2bPeriod(
   documentRef: Document,
   normalisedText: string,
   scope: FiledReturnsDownloadScope,
+  requireVisibleEvidence = false,
 ): PortalDownloadTriggerResult | null {
   const serverScope = extractGstr2bServerScope(documentRef);
   const visiblePeriod = extractGstr2bLabelValue(normalisedText, "return period");
@@ -86,16 +95,13 @@ export function verifyVisibleGstr2bPeriod(
     return gstr2bPeriodMismatch(serverScope ? ["gstr2b-server-visible-period-conflict"] : []);
   }
 
-  if (hasCompleteLabelledEvidence) return null;
+  // Whole-page month/year matches are not target evidence: generated-on text and table content
+  // can mention another period. Only labels or the portal statement heading qualify as visible.
+  if (hasCompleteLabelledEvidence || statementScope) return null;
 
-  if (serverScope) return null;
+  if (serverScope && !requireVisibleEvidence) return null;
 
-  if (!statementScope) {
-    // Whole-page month/year matches are not target evidence: generated-on text and table
-    // content can mention another period. Only labels or the portal statement heading qualify.
-    return gstr2bPeriodMismatch(["gstr2b-labelled-period-evidence-missing"]);
-  }
-  return null;
+  return gstr2bPeriodMismatch(["gstr2b-labelled-period-evidence-missing"]);
 
   function gstr2bPeriodMismatch(extraSignals: string[]): PortalDownloadTriggerResult {
     return {
