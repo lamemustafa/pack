@@ -7,8 +7,8 @@ import {
   GSTR2B_ORIGIN,
   GSTR2B_PAGE_GENERATED_ARTIFACTS,
   GSTR2B_SUMMARY_PATH,
+  findPageArtifactControls,
 } from "./portal-artifact-endpoints";
-import { getClickableElements, normaliseText } from "./filed-returns-dom";
 import { extractScopedFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import { filedReturnDetailIdentityMatchesScope } from "./filed-returns-detail-navigation";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
@@ -246,7 +246,7 @@ async function acquireGstr1Artifact(
       view.location.pathname === GSTR1_DETAIL_PATH ? "gstr1-on-detail-page" : "gstr1-on-other-page",
     ]);
   }
-  const controls = resolvePageArtifactControls(documentRef, surface.controlText);
+  const controls = findPageArtifactControls(documentRef, surface.controlText);
   if (controls.length !== 1 || !controls[0]) {
     // How many matched matters: none means the label is wrong for this page shape, several means
     // the label is ambiguous and binding to one of them would be a guess.
@@ -332,7 +332,7 @@ async function acquireGstr2bArtifact(
   if (view.location.pathname !== GSTR2B_SUMMARY_PATH)
     return failed(request, "wrong-page", ["target-period-verified"]);
   const descriptor = GSTR2B_PAGE_GENERATED_ARTIFACTS[request.artifactType];
-  const controls = resolvePageArtifactControls(documentRef, descriptor.controlText);
+  const controls = findPageArtifactControls(documentRef, descriptor.controlText);
   if (controls.length !== 1 || !controls[0])
     return failed(request, "control-not-found", ["target-period-verified"]);
   // The preflight above validated the fetched JSON, not the page. The summary
@@ -360,15 +360,6 @@ async function acquireGstr2bArtifact(
       `page-generated-${request.artifactType.toLowerCase()}-ready`,
     ],
   };
-}
-
-function resolvePageArtifactControls(documentRef: Document, canonicalLabel: string): HTMLElement[] {
-  const normalisedLabel = normaliseText(canonicalLabel);
-  return getClickableElements(documentRef).filter(
-    (element) =>
-      getClickableElements(element).length === 0 &&
-      normaliseText(element.textContent || "").includes(normalisedLabel),
-  );
 }
 
 function failed(
