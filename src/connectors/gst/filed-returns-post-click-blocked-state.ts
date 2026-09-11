@@ -2,6 +2,7 @@ import type { PortalDownloadTriggerResult } from "../../core/contracts";
 import { delay } from "../../core/time";
 import type { FiledReturnsDownloadTarget } from "./filed-returns-contracts";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
+import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 
 const GSTR1_EXCEL_POST_CLICK_BLOCKED_WAIT_MS = 800;
 const GSTR1_EXCEL_POST_CLICK_BLOCKED_POLL_MS = 100;
@@ -38,6 +39,17 @@ export function detectPostClickBlockedState(
   ) {
     return null;
   }
+
+  // A dialog on screen is not bound to this target by being on screen. The detail route does not
+  // change per period, and a dialog left standing by an earlier target would otherwise mark this
+  // artifact unavailable -- letting a composite or full-year run carry on having silently omitted
+  // an artifact the portal never declined for it.
+  //
+  // This is the same guard that binds a download click, asked the same question: the visible page
+  // must be this return type, this period, this financial year. Recording a refusal resolves the
+  // target outright and no artifact follows to corroborate it, so it is held to the same bar. It
+  // fails closed -- an unreadable detail header is "could not determine", never "matches".
+  if (verifyFiledReturnsDownloadTarget(documentRef, target, [])) return null;
 
   return {
     connectorId: "gst",

@@ -494,11 +494,19 @@ safe-result inspection found one GSTR-1/IFF result row for May and no
 `/returns/auth/gstr1`, with safe signals for the GSTR-1 detail route, GSTR-1
 heading and filed status.
 
-The live PDF path is different from GSTR-3B: the filed GSTR-1 detail page does
-not expose the final summary PDF download directly. It exposes a portal
-`View Summary` action whose live merged label appeared as
-`VIEW SUMMARY PROCEED TO FILE/SUMMARY VIEW SUMMARY`; that action opens a
-separate summary page with the PDF download control near the bottom.
+> **Superseded in part on 2026-09-10.** The paragraph below records what this
+> spike saw, and it is accurate for that capture. It is not the general rule it
+> was read as: a later capture found the filed-PDF control on the detail route
+> itself, with no `View Summary` control on the page at all. The detail route
+> has **two** shapes, and a flow written from this paragraph alone waits out its
+> step budget on the other one. See "Filed GSTR-1 detail route can be the
+> download surface itself" in `PORTAL_INTEGRATION_FINDINGS.md`.
+
+The live PDF path is different from GSTR-3B: on the page captured here, the
+filed GSTR-1 detail page does not expose the final summary PDF download
+directly. It exposes a portal `View Summary` action whose live merged label
+appeared as `VIEW SUMMARY PROCEED TO FILE/SUMMARY VIEW SUMMARY`; that action
+opens a separate summary page with the PDF download control near the bottom.
 
 Implementation changes from this evidence:
 
