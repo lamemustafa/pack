@@ -9,6 +9,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import {
   isResolvedFullFiscalYearTargetStatus,
+  needsExplicitFullFiscalYearRetry,
   isCleanedZipPhase,
   zipPhaseProvesDelivery,
 } from "../connectors/gst/filed-returns-contracts";
@@ -240,7 +241,7 @@ export function needsResumeConfirmation(ledger: FiledReturnsFullFiscalYearLedger
  * ZIP afterwards. So `downloaded` means "Pack holds these bytes" until the ZIP
  * delivery signal appears, and only then does it mean the browser has them.
  */
-function targetOutcome(
+export function filedReturnsTargetOutcome(
   status: FiledReturnsFullFiscalYearTargetStatus,
   zipDelivered: boolean,
   runInterrupted: boolean,
@@ -345,7 +346,7 @@ export function fullFiscalYearTargetEvidence(
     RUN_INDETERMINATE_SIGNALS.some((signal) => flowStep.safeSignals.includes(signal));
   return ledger.targets.map((target) => ({
     period: target.period,
-    outcome: targetOutcome(
+    outcome: filedReturnsTargetOutcome(
       target.status,
       zipDelivered,
       runInterrupted,
@@ -496,24 +497,14 @@ function fullFiscalYearRecoveryTarget(
     : ledger.targets.find(isRecoverableFullFiscalYearTarget);
 }
 
+// The exact complement of resolved, so it is derived rather than restated. Written out, this was a
+// seven-line list that had to be edited every time the union grew.
 function isRecoverableFullFiscalYearTarget(target: FiledReturnsFullFiscalYearTarget): boolean {
-  return (
-    target.status === "pending" ||
-    target.status === "download-unconfirmed" ||
-    target.status === "running" ||
-    target.status === "blocked" ||
-    target.status === "failed" ||
-    target.status === "cancelled" ||
-    target.status === "manually-observed"
-  );
+  return !isResolvedFullFiscalYearTargetStatus(target.status);
 }
 
 function hasRecoverableActionRequiredTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
-  return ledger.targets.some((target) =>
-    ["blocked", "failed", "cancelled", "download-unconfirmed", "manually-observed"].includes(
-      target.status,
-    ),
-  );
+  return ledger.targets.some((target) => needsExplicitFullFiscalYearRetry(target.status));
 }
 
 export function activeFullFiscalYearStep(

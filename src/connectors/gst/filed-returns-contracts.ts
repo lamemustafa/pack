@@ -274,6 +274,20 @@ export function isResolvedFullFiscalYearTargetStatus(
   return RESOLVED_TARGET_STATUSES.has(status);
 }
 
+/**
+ * Unresolved, and not a state the run reaches by itself. What is left needs the user to choose.
+ *
+ * Derived rather than listed: a status that is neither resolved nor pending/running belongs here by
+ * definition, so a new one cannot land in neither bucket.
+ */
+export function needsExplicitFullFiscalYearRetry(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+): boolean {
+  return (
+    !isResolvedFullFiscalYearTargetStatus(status) && status !== "pending" && status !== "running"
+  );
+}
+
 export interface FiledReturnsFullFiscalYearTarget {
   targetId: string;
   financialYear: string;

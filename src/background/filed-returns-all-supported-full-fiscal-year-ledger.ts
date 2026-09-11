@@ -3,7 +3,10 @@ import type {
   FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
+import {
+  isResolvedFullFiscalYearTargetStatus,
+  needsExplicitFullFiscalYearRetry,
+} from "../connectors/gst/filed-returns-contracts";
 import {
   ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
   expandAllSupportedFullFiscalYearTargetPlan,
@@ -64,9 +67,7 @@ function isExplicitlyRetryableTarget(
   target: FiledReturnsAllSupportedFullFiscalYearTarget,
 ): boolean {
   return (
-    !isResolvedFullFiscalYearTargetStatus(target.status) &&
-    target.status !== "pending" &&
-    target.status !== "running" &&
+    needsExplicitFullFiscalYearRetry(target.status) &&
     !target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal))
   );
 }
