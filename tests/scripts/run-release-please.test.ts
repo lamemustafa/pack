@@ -12,6 +12,10 @@ import {
 const require = createRequire(import.meta.url);
 const releasePlease = require("release-please");
 
+// A marker is evidence only from the workflow that wrote it, so every fixture comment carrying one
+// must say who posted it. Anyone can write the text.
+const RECORDER = "github-actions[bot]";
+
 describe("Release Please workflow wrapper", () => {
   it("emits root release outputs compatible with release-please-action", () => {
     const outputs = buildReleaseOutputs([
@@ -128,12 +132,13 @@ describe("Release Please workflow wrapper", () => {
         prs_created: "true",
         release_created: "true",
       });
-      // The only direct GitHub calls are the two branch-head reads that bracket the
-      // regeneration. Nothing is written, because this run rewrote no branch.
-      expect(fetched).toEqual([
-        "GET /repos/lamemustafa/pack/git/matching-refs/heads/release-please--branches--master--",
-        "GET /repos/lamemustafa/pack/git/matching-refs/heads/release-please--branches--master--",
-      ]);
+      // The only direct GitHub calls are three branch-head reads: the snapshot taken before
+      // anything irreversible happens, the re-read immediately before the rewrite, and the read
+      // after it. The middle one is the point -- the first is too old to say what the force-push
+      // is about to discard. Nothing is written, because this run rewrote no branch.
+      const headRead =
+        "GET /repos/lamemustafa/pack/git/matching-refs/heads/release-please--branches--master--";
+      expect(fetched).toEqual([headRead, headRead, headRead]);
     } finally {
       vi.unstubAllGlobals();
       log.mockRestore();
@@ -150,11 +155,11 @@ describe("release branch rewrite records", () => {
 
   function stubGitHub(handlers: {
     heads?: string | null;
-    comments?: Array<{ id: number; body: string }>;
+    comments?: Array<{ id: number; body: string; user?: { login: string } }>;
     pulls?: Array<{ number: number }>;
     malformedHeads?: boolean;
     malformedHeadEntry?: boolean;
-    commentPages?: Array<Array<{ id: number; body: string }>>;
+    commentPages?: Array<Array<{ id: number; body: string; user?: { login: string } }>>;
   }) {
     const calls: Array<{ method: string; path: string; body?: string }> = [];
     vi.stubGlobal(
@@ -229,7 +234,11 @@ describe("release branch rewrite records", () => {
     const calls = stubGitHub({
       heads: head,
       comments: [
-        { id: 99, body: `<!-- review-gate-rewrite branch=${branch} before=${lostBefore} -->` },
+        {
+          id: 99,
+          user: { login: RECORDER },
+          body: `<!-- review-gate-rewrite branch=${branch} before=${lostBefore} -->`,
+        },
       ],
     });
     const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
@@ -246,6 +255,95 @@ describe("release branch rewrite records", () => {
     const patched = calls.find((call) => call.method === "PATCH");
     expect(patched?.path).toContain("/issues/comments/99");
     expect(patched?.body).toContain(`before=${lostBefore} after=${head}`);
+  });
+
+  it("ignores a marker written by anyone but the workflow", async () => {
+    // The author is the whole of a marker's authority: anyone who can comment can write the text.
+    // Treating a stranger's comment as an open record would rewrite that comment in place, or --
+    // if it cannot be edited -- abort the run before any release work began.
+    const calls = stubGitHub({
+      heads: "b".repeat(40),
+      comments: [
+        {
+          id: 99,
+          user: { login: "a-passer-by" },
+          body: `<!-- review-gate-rewrite branch=${branch} before=${"c".repeat(40)} -->`,
+        },
+      ],
+    });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await openBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+    });
+
+    expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
+  });
+
+  it("refuses to regenerate when a pull request entry cannot be read", async () => {
+    // A list that is empty means no open pull request. A list whose entry cannot be read means the
+    // answer is unknown. Collapsing the second into the first skips the record while the rewrite
+    // force-pushes anyway, discarding a head nothing named.
+    stubGitHub({ heads: "b".repeat(40), pulls: [{ id: 1 } as unknown as { number: number }] });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await expect(
+      openBranchRewriteRecords({ env, owner: "lamemustafa", repo: "pack", targetBranch: "master" }),
+    ).rejects.toThrow(/malformed pull request list/iu);
+  });
+
+  it("records the head the branch carries at the rewrite, not at the snapshot", async () => {
+    // The record is opened before `createReleases()` so a failure there costs a re-run rather than
+    // a release with no assets. Anything reaching the branch in that gap would otherwise be
+    // discarded while the record still named the older head, and the gate would never search it.
+    const snapshot = "b".repeat(40);
+    const arrivedSince = "e".repeat(40);
+    // The branch already carries the newer head by the time the refresh reads it.
+    const calls = stubGitHub({
+      heads: arrivedSince,
+      comments: [
+        {
+          id: 99,
+          user: { login: RECORDER },
+          body: `<!-- review-gate-rewrite branch=${branch} before=${snapshot} -->`,
+        },
+      ],
+    });
+    const { refreshBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    const proceeded = await refreshBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+      headsBeforeRegeneration: new Map([[branch, snapshot]]),
+    });
+
+    expect(proceeded).toBe(true);
+    const patched = calls.find((call) => call.method === "PATCH");
+    expect(patched?.body).toContain(`before=${arrivedSince}`);
+    expect(patched?.body).not.toContain("after=");
+  });
+
+  it("refuses to regenerate when it cannot confirm what is about to be discarded", async () => {
+    // Throwing is unavailable here: the release exists and a later workflow step uploads its
+    // assets. So the rewrite is skipped instead -- a pull request that waits for the next run is
+    // recoverable, a head discarded with no record of it is not.
+    stubGitHub({ malformedHeads: true });
+    const { refreshBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    const proceeded = await refreshBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+      headsBeforeRegeneration: new Map([[branch, "b".repeat(40)]]),
+    });
+
+    expect(proceeded).toBe(false);
   });
 
   it("refuses to regenerate when the head list is malformed", async () => {
@@ -292,7 +390,7 @@ describe("release branch rewrite records", () => {
       heads: after,
       commentPages: [
         Array.from({ length: 100 }, (_unused, index) => ({ id: index + 1, body: "chatter" })),
-        [{ id: 501, body: marker }],
+        [{ id: 501, user: { login: RECORDER }, body: marker }],
       ],
     });
     const { closeBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
@@ -316,7 +414,11 @@ describe("release branch rewrite records", () => {
     const calls = stubGitHub({
       heads: after,
       comments: [
-        { id: 99, body: `<!-- review-gate-rewrite branch=${branch} before=${before} -->` },
+        {
+          id: 99,
+          user: { login: RECORDER },
+          body: `<!-- review-gate-rewrite branch=${branch} before=${before} -->`,
+        },
       ],
     });
     const { closeBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
