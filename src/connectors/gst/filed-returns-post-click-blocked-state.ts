@@ -1,6 +1,8 @@
 import type { PortalDownloadTriggerResult } from "../../core/contracts";
 import type { FiledReturnsDownloadTarget } from "./filed-returns-contracts";
+import { normaliseText } from "./filed-returns-dom";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
+import { readDocumentText, verifyVisibleGstr2bPeriod } from "./gstr2b-summary";
 
 // The portal declining to produce an artifact, in its own words.
 //
@@ -14,11 +16,6 @@ import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 // records a download: every result here is `blocked`, and completion still requires correlated
 // download evidence.
 
-function normalisedPageText(documentRef: Document): string {
-  const text = documentRef.body?.innerText ?? documentRef.body?.textContent ?? "";
-  return text.replace(/\s+/g, " ").trim();
-}
-
 function withSignal(safeSignals: string[], signal: string): string[] {
   return safeSignals.includes(signal) ? [...safeSignals] : [...safeSignals, signal];
 }
@@ -28,12 +25,14 @@ export function detectPostClickBlockedState(
   target: FiledReturnsDownloadTarget,
   safeSignals: string[],
 ): PortalDownloadTriggerResult | null {
-  const normalised = normalisedPageText(documentRef);
+  // The same reading the observation path uses. This was a second, subtly different copy: it
+  // skipped the lower-casing, so a case-sensitive label pattern could not have matched against it.
+  const normalised = normaliseText(readDocumentText(documentRef));
   if (target.returnType === "GSTR-1" && target.artifactType === "EXCEL") {
     return detectGstr1ExcelNoDetails(normalised, target, safeSignals);
   }
   if (target.returnType === "GSTR-2B") {
-    return detectGstr2bNotGenerated(normalised, target, safeSignals);
+    return detectGstr2bNotGenerated(documentRef, normalised, target, safeSignals);
   }
   return null;
 }
@@ -88,11 +87,22 @@ export const GSTR2B_NOT_GENERATED_SAFE_MESSAGE =
   "The GST Portal reported that it did not generate the auto-drafted GSTR-2B statement for this period, so there is nothing for Pack to download. Pack recorded the period as unavailable rather than retrying.";
 
 function detectGstr2bNotGenerated(
+  documentRef: Document,
   normalised: string,
   target: FiledReturnsDownloadTarget,
   safeSignals: string[],
 ): PortalDownloadTriggerResult | null {
   if (!isGstr2bNotGeneratedText(normalised)) return null;
+
+  // The refusal panel is not bound to the target by the fact that it is on screen. The summary
+  // route does not change per period and keeps rendering the panel -- and the header naming the
+  // period it belongs to -- until a new search settles, so a stale panel will answer for whichever
+  // target asks. Recording it resolves that target outright, with no artifact to corroborate it
+  // afterwards, which makes the visible header the whole of the evidence.
+  //
+  // A target is a scope with an action id, so the same guard the observation path uses applies
+  // unchanged here. It fails closed: an unreadable header is "could not determine".
+  if (verifyVisibleGstr2bPeriod(documentRef, normalised, target)) return null;
 
   return {
     connectorId: "gst",
