@@ -102,7 +102,7 @@ function detectGstr2bNotGenerated(
   //
   // A target is a scope with an action id, so the same guard the observation path uses applies
   // unchanged here. It fails closed: an unreadable header is "could not determine".
-  if (verifyVisibleGstr2bPeriod(documentRef, normalised, target)) return null;
+  if (verifyVisibleGstr2bPeriod(documentRef, normalised, target, true)) return null;
 
   return {
     connectorId: "gst",
