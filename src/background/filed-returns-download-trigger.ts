@@ -677,41 +677,53 @@ async function triggerPageGeneratedSinglePeriodArtifact(
           checkpointHasDownloadId,
           externallyVisibleActionMayHaveOccurred,
         }));
-    return acquired.ok
-      ? {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: filedReturnScopeId(returnType),
-            state: "downloaded",
-            safeSignals: [...artifact.safeSignals, ...acquired.safeSignals],
-            safeMessage: acquired.safeMessage ?? artifactSuccessMessage(returnType, artifactType),
-            ...(hasDownloadDiagnostic(acquired) && acquired.downloadDiagnostic
-              ? { downloadDiagnostic: acquired.downloadDiagnostic }
-              : {}),
-          },
-        }
-      : ((await postClickBlockedStep({
-          artifactType,
-          deps,
-          requestId,
-          returnType,
-          scope,
-          tabId,
-        })) ?? {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: filedReturnScopeId(returnType),
-            state: "blocked",
-            safeSignals: [
-              "artifact-acquisition-failed",
-              `artifact-${acquired.reason}`,
-              ...acquired.safeSignals,
-            ],
-            safeMessage: acquired.safeMessage ?? artifactFailureMessageForDelivery(acquired.reason),
-          },
-        });
+    if (acquired.ok) {
+      return {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnScopeId(returnType),
+          state: "downloaded",
+          safeSignals: [...artifact.safeSignals, ...acquired.safeSignals],
+          safeMessage: acquired.safeMessage ?? artifactSuccessMessage(returnType, artifactType),
+          ...(hasDownloadDiagnostic(acquired) && acquired.downloadDiagnostic
+            ? { downloadDiagnostic: acquired.downloadDiagnostic }
+            : {}),
+        },
+      };
+    }
+
+    const declined = await postClickBlockedStep({
+      artifactType,
+      deps,
+      requestId,
+      returnType,
+      scope,
+      tabId,
+    });
+    if (declined) {
+      // The retain decision above was made about an acquisition failure. This is not one: the
+      // portal has established that no download exists for this target, so there is nothing for a
+      // retry to reconcile. Leaving the intent checkpoint standing would block the next attempt as
+      // `artifact-acquisition-start-unreconciled` -- refusing the retry this very result offers.
+      retainCheckpointForRecovery = false;
+      return declined;
+    }
+
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(returnType),
+        state: "blocked",
+        safeSignals: [
+          "artifact-acquisition-failed",
+          `artifact-${acquired.reason}`,
+          ...acquired.safeSignals,
+        ],
+        safeMessage: acquired.safeMessage ?? artifactFailureMessageForDelivery(acquired.reason),
+      },
+    };
   } finally {
     if (tracksBrowserDownload && !retainCheckpointForRecovery) {
       await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
@@ -749,8 +761,13 @@ async function postClickBlockedStep({
   const declinable =
     (returnType === "GSTR-1" && artifactType === "EXCEL") || returnType === "GSTR-2B";
   if (!declinable) return null;
-  const response = normaliseContentScriptMessageResponse(
-    await deps.sendMessageToTabWithInjection(tabId, {
+  // This runs after an acquisition has already failed, and it can only refine that failure. If the
+  // tab has closed, navigated, or refuses injection, the answer is simply that the failure cannot
+  // be refined -- so the original reason stands. Throwing here would replace a specific, actionable
+  // failure with the generic background error and lose the terminal summary with it.
+  let raw: unknown;
+  try {
+    raw = await deps.sendMessageToTabWithInjection(tabId, {
       type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3",
       payload: {
         actionId: requestId,
@@ -759,7 +776,12 @@ async function postClickBlockedStep({
         period: scope.period,
         returnType,
       },
-    }),
+    });
+  } catch {
+    return null;
+  }
+  const response = normaliseContentScriptMessageResponse(
+    raw,
     "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3",
   );
   if (!response.ok || !("flowStep" in response)) return null;
