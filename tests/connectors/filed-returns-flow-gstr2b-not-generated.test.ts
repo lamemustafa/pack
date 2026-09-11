@@ -148,9 +148,9 @@ describe("recovering from a stale refusal", () => {
 
 describe("the signals a terminal step leaves behind", () => {
   // A terminal step's signals are persisted. One token the allowlist has never been told about
-  // rejects the entire array, which blocks the target -- so a live run recorded "needs review" for
-  // all seven periods the portal had plainly refused. The transient "ready" step carried the same
-  // token harmlessly for months, because its signals never reach durable state.
+  // rejects the entire array, which blocks the target -- so every period the portal declined came
+  // back as "needs review" instead of as the answer it was. The transient "ready" step carried the
+  // same token harmlessly for months, because its signals never reach durable state.
   it.each([
     ["the refusal it records", "April"],
     ["the stale page it walks away from", "May"],
