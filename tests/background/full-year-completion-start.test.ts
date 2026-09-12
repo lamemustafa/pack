@@ -309,6 +309,13 @@ describe("full-year Start preserves existing recovery", () => {
         returnType: "GSTR-2B" as const,
         artifactType: "PDF_AND_EXCEL" as const,
       };
+      zipMocks.exportFullFiscalYearZip.mockResolvedValue({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-zip-export-failed"],
+        safeMessage: "Synthetic unexpected ZIP export.",
+      });
       const runner = vi.fn<SinglePeriodRunner>(async (_scope, childDeps) => {
         expect(childDeps.stageCapturedDownloads).toMatchObject({
           bundleKind: "full-fiscal-year",
