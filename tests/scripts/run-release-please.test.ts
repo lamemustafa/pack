@@ -160,6 +160,7 @@ describe("release branch rewrite records", () => {
     malformedHeads?: boolean;
     malformedHeadEntry?: boolean;
     commentPages?: Array<Array<{ id: number; body: string; user?: { login: string } }>>;
+    forcePushedHeads?: Array<{ commit_id?: string; created_at?: string }>;
   }) {
     const calls: Array<{ method: string; path: string; body?: string }> = [];
     vi.stubGlobal(
@@ -182,6 +183,20 @@ describe("release branch rewrite records", () => {
             ok: true,
             status: 200,
             json: async () => handlers.pulls ?? [{ number: 337 }],
+          } as unknown as Response;
+        }
+        if (path.includes("/timeline")) {
+          // `commit_id` on a force-push event is the head that rewrite created -- the field the
+          // review gate keys recorded discards by.
+          return {
+            ok: true,
+            status: 200,
+            json: async () =>
+              (handlers.forcePushedHeads ?? []).map((entry) => ({
+                event: "head_ref_force_pushed",
+                created_at: entry.created_at ?? "2026-09-12T00:00:00Z",
+                ...entry,
+              })),
           } as unknown as Response;
         }
         if (path.includes("/issues/") && path.includes("/comments")) {
@@ -388,6 +403,7 @@ describe("release branch rewrite records", () => {
     const marker = `<!-- review-gate-rewrite branch=${branch} before=${before} -->`;
     const calls = stubGitHub({
       heads: after,
+      forcePushedHeads: [{ commit_id: after }],
       commentPages: [
         Array.from({ length: 100 }, (_unused, index) => ({ id: index + 1, body: "chatter" })),
         [{ id: 501, user: { login: RECORDER }, body: marker }],
@@ -413,6 +429,7 @@ describe("release branch rewrite records", () => {
     const after = "b".repeat(40);
     const calls = stubGitHub({
       heads: after,
+      forcePushedHeads: [{ commit_id: after }],
       comments: [
         {
           id: 99,
@@ -433,6 +450,87 @@ describe("release branch rewrite records", () => {
 
     const patched = calls.find((call) => call.method === "PATCH");
     expect(patched?.body).toContain(`before=${before} after=${after}`);
+  });
+
+  it("closes with the head the rewrite created, not the one the branch carries now", async () => {
+    // The gate looks a record up by the head the force-push created -- the timeline event's
+    // `commit_id`. An ordinary commit landing on the branch before this read would otherwise have
+    // the record name a head no event mentions, leaving the rewrite as unidentified as if nothing
+    // had recorded it at all.
+    const before = "c".repeat(40);
+    const created = "b".repeat(40);
+    const landedSince = "e".repeat(40);
+    const calls = stubGitHub({
+      heads: landedSince,
+      forcePushedHeads: [{ commit_id: created }],
+      comments: [
+        {
+          id: 99,
+          user: { login: RECORDER },
+          body: `<!-- review-gate-rewrite branch=${branch} before=${before} -->`,
+        },
+      ],
+    });
+    const { closeBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await closeBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+      headsBeforeRegeneration: new Map([[branch, before]]),
+    });
+
+    const patched = calls.find((call) => call.method === "PATCH");
+    expect(patched?.body).toContain(`before=${before} after=${created}`);
+    expect(patched?.body).not.toContain(landedSince);
+  });
+
+  it("leaves the record open when no event names the head the rewrite created", async () => {
+    // Not knowing is answered the way this module answers it everywhere: the gate ignores an open
+    // record and the next run completes it. Closing with an uncorroborated head would publish a
+    // claim about a rewrite nothing backs.
+    const before = "c".repeat(40);
+    const calls = stubGitHub({
+      heads: "b".repeat(40),
+      forcePushedHeads: [],
+      comments: [
+        {
+          id: 99,
+          user: { login: RECORDER },
+          body: `<!-- review-gate-rewrite branch=${branch} before=${before} -->`,
+        },
+      ],
+    });
+    const { closeBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await closeBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+      headsBeforeRegeneration: new Map([[branch, before]]),
+    });
+
+    expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
+  });
+
+  it("looks for the release pull request by base branch as well as head", async () => {
+    // A generated branch can carry open pull requests against more than one base. Matched on head
+    // alone, the record could be opened on a different pull request while the force-push rewrote
+    // this one.
+    const calls = stubGitHub({ heads: "b".repeat(40) });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await openBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+    });
+
+    const lookup = calls.find((call) => call.path.includes("/pulls?"));
+    expect(lookup?.path).toContain("base=master");
   });
 
   it("leaves the record open rather than failing a run that already published a release", async () => {
