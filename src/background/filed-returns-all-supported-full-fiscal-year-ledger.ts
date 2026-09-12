@@ -399,7 +399,7 @@ export function markAllSupportedFullFiscalYearTargetTerminal(
           ...target,
           status: effectiveStatus,
           ...canonicalDurableTargetStatus(targetScope(target), effectiveStatus, inputSignals),
-          ...(diagnosticState ?? {}),
+      ...(diagnosticState ?? {}),
           ...(isResolvedFullFiscalYearTargetStatus(effectiveStatus)
             ? { completedAt: timestamp }
             : {}),

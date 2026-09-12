@@ -451,7 +451,7 @@ export async function startFullFiscalYearDownloadFlow(
     if (targetStatus !== "download-unconfirmed") {
       await persistSummary(deps, flowSummary);
     }
-    return { ...response, flowStep, flowSummary };
+    return { ...response, flowStep: terminalFlowStep, flowSummary };
   }
 }
 

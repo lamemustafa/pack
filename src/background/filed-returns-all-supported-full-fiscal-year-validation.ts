@@ -526,7 +526,7 @@ function isTarget(
   if (!durableStatus) return false;
   if (
     verifiedTarget.status === "not-generated" &&
-    hasDurableFullFiscalYearArtifactEvidence(verifiedTarget.safeSignals)
+    hasDurableAllSupportedFullFiscalYearArtifactEvidence(verifiedTarget.safeSignals)
   ) {
     return false;
   }

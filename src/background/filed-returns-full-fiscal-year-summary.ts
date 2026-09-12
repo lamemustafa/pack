@@ -205,6 +205,11 @@ export function fullFiscalYearTargetFlowStep(
   if (
     targetStatusFromFlowStep(step, returnType) === "blocked" &&
     returnType === "GSTR-2B" &&
+    step.safeSignals.some(
+      (signal) =>
+        signal === "filed-gstr2b-not-generated" ||
+        signal === "artifact-filed-gstr2b-not-generated",
+    ) &&
     (hasDurableFullFiscalYearArtifactEvidence(step.safeSignals) ||
       hasDurableAllSupportedFullFiscalYearArtifactEvidence(step.safeSignals))
   ) {
