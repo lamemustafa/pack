@@ -3,7 +3,12 @@ import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadTarget,
 } from "./filed-returns-contracts";
-import { type DeclinedArtifactSignal } from "./filed-returns-acquisition-diagnostics";
+import {
+  DECLINED_ARTIFACT_SIGNALS,
+  type DeclinedArtifactSignal,
+} from "./filed-returns-acquisition-diagnostics";
+import { normaliseFiledReturnsArtifactType } from "./filed-returns-artifacts";
+import { FULL_FISCAL_YEAR_PERIOD } from "./filed-returns-scope";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { isGstr2bSummaryRoute, verifyVisibleGstr2bPeriod } from "./gstr2b-summary";
@@ -50,11 +55,44 @@ export interface VisibleTargetBinding<
  * entire array it travels in, and a refusal is a terminal step whose signals are persisted --
  * so a terminal refusal remains readable after persistence.
  */
+const DECLINED_ARTIFACT_BINDING_SIGNALS = {
+  "filed-gstr1-excel-no-details-available": ["filed-gstr1-detail-period-verified"],
+  "filed-gstr2b-not-generated": ["gstr2b-summary-route-verified", "gstr2b-visible-period-verified"],
+} as const;
+
 export const REFUSAL_BINDING_SIGNALS = [
-  "filed-gstr1-detail-period-verified",
-  "gstr2b-summary-route-verified",
-  "gstr2b-visible-period-verified",
+  ...DECLINED_ARTIFACT_BINDING_SIGNALS["filed-gstr1-excel-no-details-available"],
+  ...DECLINED_ARTIFACT_BINDING_SIGNALS["filed-gstr2b-not-generated"],
 ] as const;
+
+export function getBoundDeclinedArtifactSignal(
+  scope: FiledReturnsDownloadScope,
+  safeSignals: readonly string[],
+): DeclinedArtifactSignal | null {
+  if (
+    scope.period === FULL_FISCAL_YEAR_PERIOD ||
+    safeSignals.includes("filed-return-positively-not-filed")
+  )
+    return null;
+  const signals = DECLINED_ARTIFACT_SIGNALS.filter((signal) => safeSignals.includes(signal));
+  if (signals.length !== 1) return null;
+  const signal = signals[0]!;
+  const requiredProofs: readonly string[] = DECLINED_ARTIFACT_BINDING_SIGNALS[signal];
+  if (
+    REFUSAL_BINDING_SIGNALS.some(
+      (proof) => safeSignals.includes(proof) && !requiredProofs.includes(proof),
+    )
+  )
+    return null;
+  const compatibleScope =
+    signal === "filed-gstr1-excel-no-details-available"
+      ? scope.returnType === "GSTR-1" &&
+        normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) === "EXCEL"
+      : scope.returnType === "GSTR-2B";
+  return compatibleScope && requiredProofs.every((proof) => safeSignals.includes(proof))
+    ? signal
+    : null;
+}
 
 export type RefusalBindingSignal = (typeof REFUSAL_BINDING_SIGNALS)[number];
 
@@ -111,9 +149,11 @@ export function bindGstr1DetailRefusal(
   const mismatch = verifyFiledReturnsDownloadTarget(documentRef, target, []);
   return mismatch
     ? { bound: null, mismatch }
-    : bound("filed-gstr1-excel-no-details-available", "GSTR-1", [
-        "filed-gstr1-detail-period-verified",
-      ]);
+    : bound(
+        "filed-gstr1-excel-no-details-available",
+        "GSTR-1",
+        DECLINED_ARTIFACT_BINDING_SIGNALS["filed-gstr1-excel-no-details-available"],
+      );
 }
 
 /**
@@ -146,10 +186,11 @@ export function bindGstr2bSummaryRefusal(
   const mismatch = verifyVisibleGstr2bPeriod(documentRef, normalisedText, scope, true);
   return mismatch
     ? { bound: null, mismatch }
-    : bound("filed-gstr2b-not-generated", "GSTR-2B", [
-        "gstr2b-summary-route-verified",
-        "gstr2b-visible-period-verified",
-      ]);
+    : bound(
+        "filed-gstr2b-not-generated",
+        "GSTR-2B",
+        DECLINED_ARTIFACT_BINDING_SIGNALS["filed-gstr2b-not-generated"],
+      );
 }
 
 /**
