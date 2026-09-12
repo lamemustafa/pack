@@ -680,6 +680,10 @@ describe("artifact acquisition checkpoint", () => {
     expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toEqual(
       expect.objectContaining({ requestId: actionId(21) }),
     );
+    await expect(
+      clearArtifactAcquisitionCheckpointOrThrow(MAY_PDF, actionId(21)),
+    ).resolves.toBeUndefined();
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeUndefined();
   });
 
   it.each(["storage-read-failed", "storage-remove-failed"] as const)(
