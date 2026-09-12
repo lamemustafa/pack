@@ -252,6 +252,17 @@ export async function clearArtifactAcquisitionCheckpoint(
   });
 }
 
+/** Clears an ordinary acquisition checkpoint, preserving the prior rejecting contract. */
+export async function clearArtifactAcquisitionCheckpointOrThrow(
+  target: ArtifactAcquisitionTarget,
+  requestId: string,
+): Promise<void> {
+  const result = await clearArtifactAcquisitionCheckpoint(target, requestId);
+  if (!result.ok) {
+    throw new Error(`artifact acquisition checkpoint clear failed: ${result.reason}`);
+  }
+}
+
 async function runArtifactAcquisitionCheckpointMutation<T>(action: () => Promise<T>): Promise<T> {
   const previous = artifactAcquisitionCheckpointMutationCriticalSection;
   let release: () => void = () => undefined;

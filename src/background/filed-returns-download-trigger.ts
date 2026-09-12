@@ -29,6 +29,7 @@ import {
 import { withFiledReturnsDownloadDiagnostic } from "./filed-returns-download-diagnostics";
 import {
   clearArtifactAcquisitionCheckpoint,
+  clearArtifactAcquisitionCheckpointOrThrow,
   persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent,
   persistArtifactAcquisitionUnconfirmedDownload,
@@ -307,7 +308,7 @@ export async function triggerAndObserveFiledReturnDownload({
               };
         } finally {
           if (tracksBrowserDownload && !retainCheckpointForRecovery) {
-            await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
+            await clearArtifactAcquisitionCheckpointOrThrow(checkpointTarget, requestId);
           }
         }
       }
@@ -425,7 +426,7 @@ export async function triggerAndObserveFiledReturnDownload({
               };
         } finally {
           if (tracksBrowserDownload && !retainCheckpointForRecovery) {
-            await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
+            await clearArtifactAcquisitionCheckpointOrThrow(checkpointTarget, requestId);
           }
         }
       }
@@ -854,7 +855,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
     };
   } finally {
     if (tracksBrowserDownload && !retainCheckpointForRecovery && !checkpointCleared) {
-      await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
+      await clearArtifactAcquisitionCheckpointOrThrow(checkpointTarget, requestId);
     }
   }
 }
