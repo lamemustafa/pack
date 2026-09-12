@@ -50,12 +50,25 @@ const captureMocks = vi.hoisted(() => ({
   })),
 }));
 const summaryStorage = vi.hoisted(() => ({
+  values: {} as Record<string, unknown>,
   remove: vi.fn(async () => undefined),
-  set: vi.fn(async () => undefined),
+  set: vi.fn(async (values: Record<string, unknown>) => {
+    Object.assign(summaryStorage.values, values);
+  }),
+}));
+const reviewStorage = vi.hoisted(() => ({
+  values: {} as Record<string, unknown>,
+  get: vi.fn(async (key: string) => ({ [key]: reviewStorage.values[key] })),
+  remove: vi.fn(async (key: string) => {
+    delete reviewStorage.values[key];
+  }),
+  set: vi.fn(async (values: Record<string, unknown>) =>
+    Object.assign(reviewStorage.values, values),
+  ),
 }));
 
 vi.mock("wxt/browser", () => ({
-  browser: { storage: { session: summaryStorage } },
+  browser: { storage: { local: reviewStorage, session: summaryStorage } },
 }));
 
 vi.mock("../../src/background/artifact-download", () => ({
@@ -95,6 +108,10 @@ import {
 import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
 import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
+import {
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+} from "../../src/background/storage-keys";
 
 const ARTIFACT_ACQUISITION_RETURN_TYPES = FILED_RETURNS_RETURN_TYPES;
 
@@ -1057,8 +1074,23 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
       connectorId: "gst",
       scopeId: filedReturnScopeId("GSTR-1"),
       state: "blocked",
-      safeSignals: ["filed-gstr1-excel-no-details-available"],
+      safeSignals: ["filed-gstr1-excel-no-details-available", "filed-gstr1-detail-period-verified"],
       safeMessage: "The GST Portal reported that no e-invoice details are available.",
+    },
+  } as PackMessageResponse;
+
+  const gstr2bNotGeneratedStep = {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-2B"),
+      state: "blocked",
+      safeSignals: [
+        "filed-gstr2b-not-generated",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ],
+      safeMessage: "The GST Portal reported that this GSTR-2B is not generated.",
     },
   } as PackMessageResponse;
 
@@ -1121,6 +1153,262 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
     );
   });
 
+  it("clears the exact persisted target review after a durable definitive refusal", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-1" } as const;
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: {
+        sendMessageToTabWithInjection: messagingDeps(noDetailsStep),
+        storageKeys: {
+          completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+          targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+        },
+      },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "EXCEL" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      {
+        storageKeys: {
+          completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+          targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+        },
+      } as never,
+      true,
+    );
+
+    expect(reviewStorage.set).toHaveBeenCalledWith(
+      expect.objectContaining({ [PACK_LOCAL_STORAGE_KEYS.targetReview]: expect.any(Object) }),
+    );
+    expect(reviewStorage.remove).toHaveBeenCalledWith(PACK_LOCAL_STORAGE_KEYS.targetReview);
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toBeUndefined();
+    expect(persisted).toMatchObject({ flowSummary: { status: "complete" } });
+
+    armDefinitiveNoActionFailure();
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: {
+        sendMessageToTabWithInjection: messagingDeps(noDetailsStep),
+        storageKeys: {
+          completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+          targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+        },
+      },
+      scope,
+      tabId: 17,
+    });
+    expect(reviewStorage.set).toHaveBeenCalledTimes(2);
+    expect(reviewStorage.remove).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a clear refusal blocked and resumable through outer summary persistence", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    reviewStorage.remove.mockRejectedValueOnce(
+      new Error("Synthetic target-review remove failure."),
+    );
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-1" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection: messagingDeps(noDetailsStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "EXCEL" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-gstr1-excel-no-details-available",
+          "filed-returns-target-review-clear-failed",
+          "filed-returns-target-review-clear-failed:storage-remove-failed",
+        ]),
+        state: "download-unconfirmed",
+        userAction: { canResume: true, type: "RETRY_PORTAL_GENERATION" },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(
+      summaryStorage.values[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary],
+    ).toMatchObject({
+      status: "blocked",
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "EXCEL" },
+    });
+  });
+
+  it("keeps a target-review read throw blocked and resumable through outer summary persistence", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    reviewStorage.get
+      .mockImplementationOnce(async (key: string) => ({ [key]: reviewStorage.values[key] }))
+      .mockRejectedValueOnce(new Error("Synthetic target-review read failure."));
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-1" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection: messagingDeps(noDetailsStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "EXCEL" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-gstr1-excel-no-details-available",
+          "filed-returns-target-review-clear-failed:storage-read-failed",
+        ]),
+        userAction: { canResume: true },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "EXCEL" },
+    });
+  });
+
+  it("keeps a GSTR-2B clear refusal blocked and resumable through outer summary persistence", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    reviewStorage.remove.mockRejectedValueOnce(
+      new Error("Synthetic target-review remove failure."),
+    );
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-2B" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "PDF",
+      deps: { sendMessageToTabWithInjection: messagingDeps(gstr2bNotGeneratedStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "PDF" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-gstr2b-not-generated",
+          "filed-returns-target-review-clear-failed:storage-remove-failed",
+        ]),
+        userAction: { canResume: true },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "PDF" },
+    });
+  });
+
+  it("keeps a GSTR-2B target-review read throw blocked and resumable through outer summary persistence", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    reviewStorage.get
+      .mockImplementationOnce(async (key: string) => ({ [key]: reviewStorage.values[key] }))
+      .mockRejectedValueOnce(new Error("Synthetic target-review read failure."));
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-2B" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "PDF",
+      deps: { sendMessageToTabWithInjection: messagingDeps(gstr2bNotGeneratedStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "PDF" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-gstr2b-not-generated",
+          "filed-returns-target-review-clear-failed:storage-read-failed",
+        ]),
+        userAction: { canResume: true },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "PDF" },
+    });
+  });
+
+  it("does not write a single-period summary for a staged full-year refusal", async () => {
+    armDefinitiveNoActionFailure();
+    summaryStorage.set.mockRejectedValueOnce(new Error("Synthetic session write failure."));
+    const persistedBefore = summaryStorage.set.mock.calls.length;
+
+    await expect(
+      triggerAndObserveFiledReturnDownload({
+        activePeriod: "April",
+        artifactType: "EXCEL",
+        deps: {
+          sendMessageToTabWithInjection: messagingDeps(noDetailsStep),
+          stageCapturedDownloads: {
+            bundleKind: "full-fiscal-year",
+            ledgerId: "full-fiscal-year:test",
+          },
+          storageKeys: { completion: "completion" },
+        },
+        scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+        tabId: 17,
+      }),
+    ).resolves.toMatchObject({ flowStep: { state: "blocked" } });
+    expect(summaryStorage.set.mock.calls.length).toBe(persistedBefore);
+    summaryStorage.set.mockResolvedValue(undefined);
+  });
+
   it("retains an uncertain acquisition instead of adopting a later decline", async () => {
     captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
       ok: false as const,
@@ -1157,6 +1445,8 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
   });
 
   it("retains the checkpoint when terminal-decline persistence throws", async () => {
+    summaryStorage.set.mockReset();
+    summaryStorage.set.mockResolvedValue(undefined);
     armDefinitiveNoActionFailure();
     const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
     const clearedBefore = captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length;
