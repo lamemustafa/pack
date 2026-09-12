@@ -105,7 +105,13 @@ export async function runReleasePlease(env = process.env) {
 export async function openBranchRewriteRecords({ env, owner, repo, targetBranch }) {
   const heads = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
   for (const [branch, head] of heads) {
-    const pullRequestNumber = await findOpenPullRequestNumber({ env, owner, repo, branch });
+    const pullRequestNumber = await findOpenPullRequestNumber({
+      env,
+      owner,
+      repo,
+      branch,
+      targetBranch,
+    });
     if (pullRequestNumber === null) continue;
     const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
     // A record left open by an interrupted run names a discarded head and no replacement. The
@@ -143,9 +149,31 @@ export async function closeBranchRewriteRecords({
       async ({ pullRequestNumber, record, head }) => {
         // An unchanged head discarded nothing. Completing the record with `after === before` says
         // exactly that, and the gate reads it as the non-event it was.
-        await writeBranchRewriteRecord({ env, owner, repo, record, after: head });
+        if (head === record.marker.before) {
+          await writeBranchRewriteRecord({ env, owner, repo, record, after: head });
+          console.log(
+            `Closed release branch rewrite record on #${pullRequestNumber}: branch unchanged.`,
+          );
+          return;
+        }
+        // Otherwise the head is read from the rewrite itself, not from the branch. The gate looks
+        // this record up by the head the force-push *created* -- it keys on the timeline event's
+        // `commit_id` -- so an ordinary commit landing on the branch before this read would have
+        // the record name a head no event mentions, and the rewrite would stay unidentified
+        // exactly as if nothing had recorded it.
+        const created = await readLatestForcePushedHead({ env, owner, repo, pullRequestNumber });
+        if (!created) {
+          // Leaving it open is the established answer to not knowing: the gate ignores an open
+          // record, and the next run completes it. Closing it with an uncorroborated head would
+          // publish a claim about a rewrite that no event backs.
+          console.error(
+            `Could not name the head the regeneration created on #${pullRequestNumber}. The record stays open and the next run completes it.`,
+          );
+          return;
+        }
+        await writeBranchRewriteRecord({ env, owner, repo, record, after: created });
         console.log(
-          `Closed release branch rewrite record on #${pullRequestNumber}: ${record.marker.before} -> ${head}`,
+          `Closed release branch rewrite record on #${pullRequestNumber}: ${record.marker.before} -> ${created}`,
         );
       },
     );
@@ -198,6 +226,31 @@ export async function refreshBranchRewriteRecords({
 }
 
 /**
+ * The head named by this pull request's most recent force-push, or `null`.
+ *
+ * `commit_id` on a `head_ref_force_pushed` event is the head that rewrite created -- the same
+ * field the review gate keys recorded discards by. Reading it here is what makes the two sides
+ * agree about which rewrite a record describes.
+ */
+async function readLatestForcePushedHead({ env, owner, repo, pullRequestNumber }) {
+  const timeline = await githubList(
+    env,
+    `/repos/${owner}/${repo}/issues/${pullRequestNumber}/timeline`,
+    "pull request timeline for a release branch",
+  );
+  let latest = null;
+  for (const event of timeline) {
+    if (event?.event !== "head_ref_force_pushed") continue;
+    const sha = String(event.commit_id ?? "").toLowerCase();
+    if (!/^[0-9a-f]{40}$/u.test(sha)) continue;
+    const at = Date.parse(event.created_at ?? "");
+    if (!Number.isFinite(at)) continue;
+    if (!latest || at > latest.at) latest = { sha, at };
+  }
+  return latest?.sha ?? null;
+}
+
+/**
  * The walk the refresh and the close share: each branch's open record, paired with the head its
  * branch carries right now. They differ only in what they write to it.
  */
@@ -206,7 +259,13 @@ async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, bra
   for (const branch of branches) {
     const head = heads.get(branch);
     if (!head) continue;
-    const pullRequestNumber = await findOpenPullRequestNumber({ env, owner, repo, branch });
+    const pullRequestNumber = await findOpenPullRequestNumber({
+      env,
+      owner,
+      repo,
+      branch,
+      targetBranch,
+    });
     if (pullRequestNumber === null) continue;
     const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
     const open = records.find(
@@ -251,10 +310,14 @@ async function readBranchRewriteRecords({ env, owner, repo, pullRequestNumber })
   return records;
 }
 
-async function findOpenPullRequestNumber({ env, owner, repo, branch }) {
+async function findOpenPullRequestNumber({ env, owner, repo, branch, targetBranch }) {
+  // Head *and* base. A generated branch can carry open pull requests against more than one base,
+  // and only the one targeting this run's branch is the release pull request being regenerated.
+  // Matched on head alone, the record could be opened and closed on a different pull request
+  // while the force-push rewrote this one -- leaving the rewrite that mattered unrecorded.
   const pulls = await githubList(
     env,
-    `/repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}`,
+    `/repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}&base=${targetBranch}`,
     "pull request list for a release branch",
   );
   // An empty list means no open pull request; an entry that cannot be read means the answer is
