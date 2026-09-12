@@ -1,3 +1,5 @@
+import { getClickableElements, normaliseText } from "./filed-returns-dom";
+
 export const GSTR2B_ORIGIN = "https://gstr2b.gst.gov.in";
 export const GSTR2B_JSON_PATH = "/gstr2b/auth/api/gstr2b/getjson";
 export const GSTR2B_SUMMARY_PATH = "/gstr2b/auth/gstr2b/summary";
@@ -49,3 +51,31 @@ export const GSTR1_PAGE_GENERATED_ARTIFACTS: Record<
     expectedMime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   },
 };
+
+/**
+ * The controls on this page that a descriptor's `controlText` names, and that can be clicked.
+ *
+ * A leaf clickable whose text carries the label -- not any element mentioning it. Whether a page
+ * offers an artifact is a question about controls, and answering it from page text lets decoy or
+ * non-actionable copy stand in for a button. It lives beside the descriptor so that the label and
+ * the search for it cannot drift apart.
+ */
+export function findPageArtifactControls(
+  documentRef: Document,
+  canonicalLabel: string,
+): HTMLElement[] {
+  const normalisedLabel = normaliseText(canonicalLabel);
+  return getClickableElements(documentRef).filter(
+    (element) =>
+      getClickableElements(element).length === 0 &&
+      normaliseText(element.textContent || "").includes(normalisedLabel),
+  );
+}
+
+/** Whether the filed GSTR-1 detail route is itself offering the filed PDF, as captured live. */
+export function offersFiledGstr1DetailPdf(documentRef: Document): boolean {
+  const surface = GSTR1_PAGE_GENERATED_ARTIFACTS.PDF.surfaces.find(
+    (candidate) => candidate.path === GSTR1_DETAIL_PATH,
+  );
+  return surface ? findPageArtifactControls(documentRef, surface.controlText).length > 0 : false;
+}

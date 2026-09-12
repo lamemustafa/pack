@@ -161,13 +161,13 @@ export default defineBackground(() => {
     void handleMessage(message, sender)
       .then((response) => sendResponse(response))
       .catch((error: unknown) => {
-        // The reply stays a safe, fixed message -- it reaches the panel, and an arbitrary error
-        // string there could carry portal text. The console is neither rendered nor persisted, so
-        // the reason is named there instead of discarded. A handler that fails without saying why
-        // costs a build and a live run to locate, which is the whole reason this line exists.
+        // The fingerprint, not the error. A handler that fails without saying why costs a build
+        // and a live run to locate, so the reason is named rather than discarded -- but an error
+        // raised by storage, scripting, or downloads can quote a URL, a path, or a response body,
+        // and "the console is not persisted" is not a reason to log those. The fingerprint carries
+        // what a reader needs and is established to be this bundle's own.
         console.error(
-          `Pack background handler failed for ${backgroundMessageSource(message)}:`,
-          error,
+          `Pack background handler failed for ${backgroundMessageSource(message)}: ${backgroundFailureFingerprint(error)}`,
         );
         sendResponse({
           ok: false,

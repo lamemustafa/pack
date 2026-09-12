@@ -1,30 +1,43 @@
 // Enough to name a thrown failure, and nothing that could carry portal text.
 //
 // An error's message is not safe to render: it can quote a page, a URL, or a field value. Its
-// class name and the innermost stack symbol come from this bundle's own code, so they identify
-// where a failure happened without repeating anything the portal said. Both are filtered to a
-// strict symbol charset, so a thrown non-Error — or an error with a doctored name — cannot smuggle
-// text through either.
+// class name and the innermost stack symbol can name where a failure happened without repeating
+// anything the portal said -- but only if each is established to be this bundle's, rather than
+// merely made to look harmless.
+//
+// Stripping punctuation was the earlier approach and it was worse than no filter: a frame pointing
+// at a portal URL came back with its slashes deleted, so the value *looked* like a symbol
+// precisely because the characters that would have exposed it were gone. A filter that launders
+// its input is not a guard.
 //
 // This exists because a discarded error cost three separate round trips to locate, each needing a
-// build and a live authenticated run. The panel gets the fingerprint; the console gets the error.
-const SYMBOL_CHARSET = /[^A-Za-z0-9_.:$-]/gu;
+// build and a live authenticated run.
 
-function safeSymbol(value: string): string {
-  return value.replace(SYMBOL_CHARSET, "").slice(0, 60);
+// A frame names a place in this bundle only when the file it points at is this bundle's. The
+// symbol is what is kept; the URL is what proves the symbol is ours, and it is never kept. An
+// anonymous frame has no symbol to take, and a frame from anywhere else does not match at all.
+const BUNDLE_FRAME = /^\s*at\s+(?:async\s+)?([A-Za-z_$][\w$.]{0,59})\s+\(chrome-extension:\/\//u;
+
+// Every error class in this bundle ends in `Error`, as do the platform's own; `DOMException` is
+// the one exception the platform makes. Letters and that suffix cannot spell a GSTIN, an ARN, or
+// a URL, and a name that fails the shape degrades to `Error` rather than being laundered into one.
+const BUNDLE_ERROR_NAME = /^[A-Za-z]{1,40}Error$/u;
+
+function safeErrorName(name: string): string {
+  if (name === "DOMException") return name;
+  return BUNDLE_ERROR_NAME.test(name) ? name : "Error";
 }
 
 export function backgroundFailureFingerprint(error: unknown): string {
   if (!(error instanceof Error)) return "NonError";
-  const name = safeSymbol(error.name || "Error");
-  const frame =
+  const name = safeErrorName(error.name || "Error");
+  const symbol =
     typeof error.stack === "string"
       ? (error.stack
           .split("\n")
           .slice(1)
-          .map((line) => /at\s+([^\s(]+)/u.exec(line)?.[1])
-          .find((symbol) => symbol && !symbol.startsWith("chrome-extension")) ?? "")
+          .map((line) => BUNDLE_FRAME.exec(line)?.[1])
+          .find(Boolean) ?? "")
       : "";
-  const symbol = safeSymbol(frame);
   return symbol ? `${name} at ${symbol}` : name;
 }
