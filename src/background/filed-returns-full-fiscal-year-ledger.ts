@@ -344,9 +344,6 @@ export function markFullFiscalYearTargetTerminal(
           ["filed-return-durable-status-rejected"],
         )),
       ...(diagnosticState ?? {}),
-      ...(flowStep.safeMessage.includes("retained a captured artifact")
-        ? { safeMessage: flowStep.safeMessage }
-        : {}),
       ...(isResolvedFullFiscalYearTargetStatus(effectiveStatus) ? { completedAt: timestamp } : {}),
       updatedAt: timestamp,
     };

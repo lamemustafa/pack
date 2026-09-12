@@ -19,7 +19,10 @@ import {
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
-import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
+import {
+  parseDurableTargetStatus,
+  DURABLE_BOUND_REFUSAL_WITH_RETAINED_ARTIFACT_MESSAGE,
+} from "../connectors/gst/filed-returns-durable-status";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import { hasDurableFullFiscalYearArtifactEvidence } from "./filed-returns-full-fiscal-year-validation";
 import { hasDurableAllSupportedFullFiscalYearArtifactEvidence } from "./filed-returns-all-supported-full-fiscal-year-validation";
@@ -216,8 +219,7 @@ export function fullFiscalYearTargetFlowStep(
     return {
       ...step,
       state: "blocked",
-      safeMessage:
-        "Pack retained a captured artifact while the GST Portal reported this whole target as not generated; the fiscal-year run is paused for review.",
+      safeMessage: DURABLE_BOUND_REFUSAL_WITH_RETAINED_ARTIFACT_MESSAGE,
     };
   }
   return step;

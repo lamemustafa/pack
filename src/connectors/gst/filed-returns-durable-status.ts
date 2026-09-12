@@ -278,6 +278,17 @@ function canonicalDurableTargetMessage(
   status: FiledReturnsFullFiscalYearTargetStatus | "target-review",
   signals: readonly string[],
 ): string {
+  if (
+    status === "blocked" &&
+    signals.some((signal) => signal === "filed-gstr2b-not-generated") &&
+    signals.some(
+      (signal) =>
+        signal.startsWith("filed-return-artifact-downloaded:") ||
+        signal.includes("full-fiscal-year-opfs-staged:"),
+    )
+  ) {
+    return DURABLE_BOUND_REFUSAL_WITH_RETAINED_ARTIFACT_MESSAGE;
+  }
   return [
     renderDurableMessage(messageKeyForTarget(status, signals), scope),
     filenameOutcomeMessage(signals, status === "downloaded" ? "download" : "unresolved-target"),
@@ -285,6 +296,9 @@ function canonicalDurableTargetMessage(
     .filter(Boolean)
     .join(" ");
 }
+
+export const DURABLE_BOUND_REFUSAL_WITH_RETAINED_ARTIFACT_MESSAGE =
+  "Pack retained a captured artifact while the GST Portal reported this whole target as not generated; the fiscal-year run is paused for review.";
 
 function filenameOutcomeMessage(
   signals: readonly string[],
