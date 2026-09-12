@@ -277,6 +277,58 @@ describe("full-year Start preserves existing recovery", () => {
     expect(runSinglePeriod).toHaveBeenCalledTimes(1);
   });
 
+  it("blocks an ordinary active retry after staged evidence and does not export", async () => {
+    const scope = { ...RECOVERY_SCOPE, returnType: "GSTR-2B" as const };
+    const ledger = makeCompletedRecoveryLedger("blocked", {
+      stagedPositive: true,
+      positiveFirst: true,
+      returnType: "GSTR-2B",
+      stagedRecovery: true,
+    });
+    storage.local.ledger = ledger;
+    const target = ledger.targets[1]!;
+    const preparation = await prepareFullFiscalYearTargetRetry(
+      { ledgerId: ledger.ledgerId, targetId: target.targetId, expectedRevision: ledger.revision! },
+      deps,
+    );
+    expect(preparation.ok).toBe(true);
+    if (!preparation.ok) throw new Error("Expected retry preparation.");
+    storage.local.ledger = preparation.ledger;
+    const runSinglePeriod = vi.fn(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+        state: "candidate-not-found" as const,
+        safeSignals: [
+          "filed-gstr2b-not-generated",
+          "gstr2b-summary-route-verified",
+          "gstr2b-visible-period-verified",
+        ],
+        safeMessage: "Synthetic bound refusal.",
+      },
+    }));
+    const response = await startFullFiscalYearDownloadFlow(scope, deps, runSinglePeriod, {
+      allowExistingLedgerResume: true,
+    });
+    expect(response).toMatchObject({ flowSummary: { status: "blocked" } });
+    expect(runSinglePeriod).toHaveBeenCalledOnce();
+    expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect(storage.local.ledger).toMatchObject({
+      status: "blocked",
+      targets: expect.arrayContaining([
+        expect.objectContaining({
+          status: "downloaded",
+          safeSignals: expect.arrayContaining(["full-fiscal-year-opfs-staged:PDF"]),
+        }),
+        expect.objectContaining({
+          status: "blocked",
+          safeMessage: expect.stringContaining("retained a captured artifact"),
+        }),
+      ]),
+    });
+  });
+
   it.each(["ledger", "target", "revision", "running"] as const)(
     "preserves the %s retry guard",
     async (guard) => {
