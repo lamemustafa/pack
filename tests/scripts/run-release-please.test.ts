@@ -522,13 +522,9 @@ describe("release branch rewrite records", () => {
     ).rejects.toThrow(/malformed pull request list/iu);
   });
 
-  it("records the head the branch carries at the rewrite, not at the snapshot", async () => {
-    // The record is opened before `createReleases()` so a failure there costs a re-run rather than
-    // a release with no assets. Anything reaching the branch in that gap would otherwise be
-    // discarded while the record still named the older head, and the gate would never search it.
+  it("refuses an ordinary advance after capture without replacing the recorded head", async () => {
     const snapshot = "b".repeat(40);
     const arrivedSince = "e".repeat(40);
-    // The branch already carries the newer head by the time the refresh reads it.
     const calls = stubGitHub({
       heads: arrivedSince,
       comments: [
@@ -549,10 +545,39 @@ describe("release branch rewrite records", () => {
       headsBeforeRegeneration: openedRecords(snapshot),
     });
 
-    expect(proceeded).toBe(true);
-    const patched = calls.find((call) => call.method === "PATCH");
-    expect(patched?.body).toContain(`before=${arrivedSince}`);
-    expect(patched?.body).not.toContain("after=");
+    expect(proceeded).toBe(false);
+    expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
+    expect(calls.find((call) => call.method === "POST")).toBeUndefined();
+  });
+
+  it("refuses a force advance after capture without confusing it for an ordinary one", async () => {
+    const snapshot = "b".repeat(40);
+    const arrivedSince = "e".repeat(40);
+    const calls = stubGitHub({
+      heads: arrivedSince,
+      comments: [
+        {
+          id: 99,
+          user: { login: RECORDER },
+          body: `<!-- review-gate-rewrite branch=${branch} before=${snapshot} -->`,
+        },
+      ],
+      forcePushedHeads: [{ commit_id: arrivedSince }],
+    });
+    const { refreshBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await expect(
+      refreshBranchRewriteRecords({
+        env,
+        owner: "lamemustafa",
+        repo: "pack",
+        targetBranch: "master",
+        headsBeforeRegeneration: openedRecords(snapshot),
+      }),
+    ).resolves.toBe(false);
+
+    expect(calls.find((call) => call.path.includes("/timeline"))).toBeUndefined();
+    expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
   });
 
   it("refuses to regenerate when it cannot confirm what is about to be discarded", async () => {

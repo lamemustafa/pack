@@ -229,13 +229,13 @@ export async function closeBranchRewriteRecords({
 }
 
 /**
- * Brings every open record up to the head its branch actually carries, and reports whether it
- * could. `false` means the regeneration must not proceed.
+ * Confirms every open record still names the head its branch carries. `false` means the
+ * regeneration must not proceed.
  *
  * The record is opened before `createReleases()` so that a failure there costs a re-run rather
- * than a published release with no assets. That ordering leaves a gap: anything reaching the
- * branch between then and the force-push is discarded while the record still names the older head,
- * and the gate accepts that recorded pair and never searches the head that was lost.
+ * than a published release with no assets. A changed head is not refreshed: replacing `before`
+ * would erase the only durable name of the earlier head. The later compare-and-swap makes the
+ * remaining update atomic, so this path only admits an exact snapshot.
  *
  * Throwing is not available here -- the release already exists and a later workflow step uploads
  * its assets -- so the failure is reported instead and the caller skips the rewrite. Discarding a
@@ -252,13 +252,10 @@ export async function refreshBranchRewriteRecords({
   try {
     await eachOpenBranchRewriteRecord(
       { env, owner, repo, targetBranch, expected: headsBeforeRegeneration },
-      async ({ pullRequestNumber, record, head }) => {
+      async ({ record, head }) => {
         if (head === record.marker.before) return;
-        await writeBranchRewriteRecord({ env, owner, repo, record, before: head });
-        const expectedRecord = headsBeforeRegeneration.get(record.marker.branch);
-        if (expectedRecord && typeof expectedRecord !== "string") expectedRecord.head = head;
-        console.log(
-          `Refreshed release branch rewrite record on #${pullRequestNumber}: before=${head}`,
+        throw new Error(
+          `Release branch ${record.marker.branch} advanced after its rewrite record was opened; its original discarded head remains recorded and this regeneration will retry.`,
         );
       },
     );
