@@ -1,4 +1,6 @@
 import type { UserActionRequired } from "../core/contracts";
+import { getBoundDeclinedArtifactSignal } from "../connectors/gst/filed-returns-declined-artifact";
+import { DECLINED_ARTIFACT_SIGNALS } from "../connectors/gst/filed-returns-acquisition-diagnostics";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
@@ -220,23 +222,17 @@ function isConsistentCompleteSummary({
   ) {
     return false;
   }
-  if (flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
+  if (DECLINED_ARTIFACT_SIGNALS.some((signal) => flowStep.safeSignals.includes(signal))) {
     return (
-      flowStep.state === "candidate-not-found" &&
+      getBoundDeclinedArtifactSignal(scope, flowStep.safeSignals) !== null &&
+      flowStep.state === "blocked" &&
       flowStep.downloadDiagnostic === undefined &&
       flowStep.downloadDiagnostics === undefined
     );
   }
-  const isGstr1ExcelNoDetails =
-    scope.returnType === "GSTR-1" &&
-    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) === "EXCEL" &&
-    flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available");
-  if (
-    isGstr1ExcelNoDetails ||
-    (scope.returnType === "GSTR-2B" && flowStep.safeSignals.includes("filed-gstr2b-not-generated"))
-  ) {
+  if (flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
     return (
-      flowStep.state === "blocked" &&
+      flowStep.state === "candidate-not-found" &&
       flowStep.downloadDiagnostic === undefined &&
       flowStep.downloadDiagnostics === undefined
     );
