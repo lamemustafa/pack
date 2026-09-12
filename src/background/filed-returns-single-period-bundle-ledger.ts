@@ -396,7 +396,7 @@ export function markSinglePeriodBundleArtifactUnavailable(
     return null;
   }
   const diagnostic = optionalArtifactDiagnostic(flowStep, ledger.scope, artifactType);
-  const missingReason = missingArtifactReason(flowStep, ledger.scope.returnType);
+  const missingReason = missingArtifactReason(flowStep, ledger.scope.returnType, artifactType);
   if (!missingReason) return null;
   const updated = updateArtifact(ledger, artifactType, now, {
     artifactType,
@@ -426,14 +426,16 @@ export function markSinglePeriodBundlePeriodUnavailable(
   ) {
     return null;
   }
-  const missingReason = missingArtifactReason(flowStep, ledger.scope.returnType);
-  if (!missingReason) return null;
+  const missingReasons = ledger.artifacts.map((artifact) =>
+    missingArtifactReason(flowStep, ledger.scope.returnType, artifact.artifactType),
+  );
+  if (missingReasons.some((missingReason) => !missingReason)) return null;
   const timestamp = now.toISOString();
   const updated = nextLedger(ledger, now, {
-    artifacts: ledger.artifacts.map((artifact) => ({
+    artifacts: ledger.artifacts.map((artifact, index) => ({
       artifactType: artifact.artifactType,
       completedAt: timestamp,
-      missingReason,
+      missingReason: missingReasons[index]!,
       safeSignals: ["single-period-bundle-artifact-unavailable"],
       startedAt: artifact.startedAt ?? timestamp,
       status: "unavailable" as const,
@@ -674,6 +676,11 @@ function parseArtifact(
   }
   const diagnostic = optionalArtifactDiagnostic(artifact, scope, expectedArtifactType);
   if (artifact.downloadDiagnostic !== undefined && !diagnostic) return null;
+  const missingReason = normaliseArtifactMissingReason(
+    artifact.missingReason,
+    scope.returnType,
+    expectedArtifactType,
+  );
 
   if (artifact.status === "pending") {
     if (
@@ -694,11 +701,7 @@ function parseArtifact(
     if (expectedArtifactType === "PDF" && diagnostic.mimeClass !== "pdf") return null;
     if (expectedArtifactType === "JSON" && diagnostic.mimeClass !== "json") return null;
     if (expectedArtifactType === "EXCEL" && diagnostic.mimeClass !== "spreadsheet") return null;
-  } else if (
-    !artifact.startedAt ||
-    !artifact.completedAt ||
-    !isMissingReason(artifact.missingReason)
-  ) {
+  } else if (!artifact.startedAt || !artifact.completedAt || !missingReason) {
     return null;
   }
 
@@ -706,7 +709,7 @@ function parseArtifact(
     artifactType: expectedArtifactType,
     ...(artifact.completedAt ? { completedAt: artifact.completedAt } : {}),
     ...(diagnostic ? { downloadDiagnostic: diagnostic } : {}),
-    ...(artifact.missingReason ? { missingReason: artifact.missingReason } : {}),
+    ...(missingReason ? { missingReason } : {}),
     safeSignals: expectedSignals,
     ...(artifact.startedAt ? { startedAt: artifact.startedAt } : {}),
     status: artifact.status,
@@ -917,18 +920,31 @@ function parsedArtifactPlan(
 function missingArtifactReason(
   flowStep: PortalFlowStepResult,
   returnType: FiledReturnsDownloadScope["returnType"],
+  artifactType: FiledReturnsConcreteArtifactType,
 ): string | null {
-  const recorded = flowStep.safeSignals.find((signal) => MISSING_ARTIFACT_REASONS.has(signal));
-  if (recorded) return recorded;
-  const declined = flowStep.safeSignals.find((signal) => DECLINED_ARTIFACT_REASONS.has(signal));
-  const compatible =
-    (declined === "filed-gstr1-excel-no-details-available" && returnType === "GSTR-1") ||
-    (declined === "filed-gstr2b-not-generated" && returnType === "GSTR-2B");
-  return compatible ? (DECLINED_ARTIFACT_REASONS.get(declined) ?? null) : null;
+  return (
+    flowStep.safeSignals
+      .map((signal) => normaliseArtifactMissingReason(signal, returnType, artifactType))
+      .find((reason): reason is string => reason !== null) ?? null
+  );
 }
 
-function isMissingReason(value: unknown): value is string {
-  return typeof value === "string" && MISSING_ARTIFACT_REASONS.has(value);
+function normaliseArtifactMissingReason(
+  value: unknown,
+  returnType: FiledReturnsDownloadScope["returnType"],
+  artifactType: FiledReturnsConcreteArtifactType,
+): string | null {
+  if (typeof value !== "string") return null;
+  const reason = MISSING_ARTIFACT_REASONS.has(value)
+    ? value
+    : (DECLINED_ARTIFACT_REASONS.get(value) ?? null);
+  if (!reason) return null;
+  if (reason === "artifact-filed-gstr1-excel-no-details-available") {
+    return returnType === "GSTR-1" && artifactType === "EXCEL" ? reason : null;
+  }
+  return reason === "artifact-filed-gstr2b-not-generated" && returnType === "GSTR-2B"
+    ? reason
+    : null;
 }
 
 function bundleSafeMessage(ledger: SinglePeriodBundleLedger): string {
