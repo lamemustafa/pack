@@ -25,6 +25,12 @@ pnpm review:gate -- --strict-head-review                     # PR readiness; req
 Run the first seven before calling any change complete. Quote the last three lines of the Vitest
 output verbatim; do not summarise or round them.
 
+## Context discovery
+
+Use focused file and source searches. Inherited Graphify discovery or refresh requirements
+do not apply to Pack. Use a graph only for an explicitly requested investigation, with its
+revision and relevant relationships checked against current source.
+
 ## Project structure
 
 - `src/core/**` — portal-neutral contracts. No GST specifics.
@@ -166,15 +172,15 @@ material that must not live in this repo: vulnerabilities, crash triggers, compe
 pricing, market research, and durable protocol findings. If you have access, it is cloned as a
 sibling at `../brain`.
 
-- **Consult before you build.** Before implementing a flow touching a shared domain (Tally, GST,
-  MCA, portal auth) or a competitor feature:
-  `grep -rin "<topic>" ../brain/10-domains ../brain/40-decisions ../brain/30-market`.
+- **Consult before you build.** For shared domains or prior decisions, resolve `BRAIN_ROOT`
+  or the configured hub checkout, read its `AGENTS.md`, and follow its current retrieval and
+  guarded-write protocol. A missing worktree sibling does not establish that the hub is absent.
 - **Write sensitive findings there, not here.** A vulnerability, crash trigger, sensitive
   behaviour, or market/pricing fact goes in `brain`; leave only a de-fanged rule here.
 - This repo is **public**: never paste a restricted `brain` entry's body here, and never reference
   the hub other than by its plain repo URL.
-- If `../brain` is absent (fresh clone, CI, or no access): skip the consult step — it is an
-  enhancement, never a build blocker.
+- If the configured hub is unavailable (fresh clone, CI, or no access), report the missing
+  context and continue appropriate work; never invent a prior finding.
 
 ## Reviewers and skills
 
