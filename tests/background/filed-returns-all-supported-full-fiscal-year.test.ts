@@ -740,7 +740,9 @@ describe("all-supported full-fiscal-year worker", () => {
     );
 
     expect(response).toMatchObject({ flowStep: { state: "blocked" } });
-    expect(response.flowStep.safeMessage).toContain("retained a captured artifact");
+    expect("flowStep" in response ? response.flowStep.safeMessage : "").toContain(
+      "retained a captured artifact",
+    );
     expect(refusalRunner).toHaveBeenCalledOnce();
     expect(zip.export).not.toHaveBeenCalled();
     const retained = savedLedger();
