@@ -11,6 +11,11 @@ import {
   runGhText,
 } from "./lib/github-cli-retry.mjs";
 import { readCleanTopLevelReviewCommit } from "./lib/codex-review-markers.mjs";
+import {
+  isTrustedRewriteRecord,
+  normaliseGithubLogin,
+  readReleaseBranchRewriteMarker,
+} from "./lib/release-branch-rewrite.mjs";
 
 const CHECK_RUN_NAME = "Review gate (scheduled)";
 const REQUIRED_REVIEW_AUTHOR = "chatgpt-codex-connector";
@@ -232,11 +237,14 @@ function untraceableRewriteError() {
 }
 
 function loadLatestDurableReviewState(pr) {
+  // Read once and shared: both the rewrite records and the clean top-level review markers live in
+  // this one list, and fetching it twice was a duplicate of a fact the pull request states once.
+  const comments = loadIssueComments(pr.number);
   const {
     priorHeads: forcePushedPriorShas,
     hasUntraceableRewrite,
     unidentifiedDiscardAt,
-  } = loadForcePushedPriorShas(pr.number);
+  } = loadForcePushedPriorShas(pr.number, comments);
   // Reject before consulting any reachable state, not after. A state surviving on a current-line
   // commit cannot contain a finding that was observed and then deleted only on the head this
   // rewrite discarded, so returning it would publish success while losing that ask. Continuity
@@ -260,7 +268,7 @@ function loadLatestDurableReviewState(pr) {
   const priorHeads = dedupePriorHeadShas(
     forcePushedPriorShas,
     loadReviewedHeadShas(pr.number),
-    loadTopLevelReviewedHeadShas(pr.number, currentPrShas, forcePushedPriorShas),
+    loadTopLevelReviewedHeadShas(comments, currentPrShas, forcePushedPriorShas),
   );
   const discardedLineShas = loadDiscardedLineShas(pr, priorHeads, new Set(currentPrShas));
 
@@ -345,17 +353,11 @@ function loadReviewedHeadShas(prNumber) {
 // it names was therefore a head of this pull request, so it belongs among the candidate heads --
 // otherwise a head reviewed clean and then rewritten away is named in the record but never
 // searched.
-function loadTopLevelReviewedHeadShas(prNumber, currentPrShas, forcePushedPriorHeads) {
-  const commentPages = JSON.parse(
-    runGithub(
-      ["api", "--paginate", "--slurp", `repos/${repo}/issues/${prNumber}/comments?per_page=100`],
-      "reviewed head marker discovery",
-    ),
-  );
+function loadTopLevelReviewedHeadShas(comments, currentPrShas, forcePushedPriorHeads) {
   const known = [...currentPrShas, ...forcePushedPriorHeads.map((head) => head.sha)];
   const prefixes = new Set();
-  for (const comment of flattenPages(commentPages)) {
-    if (normaliseLogin(comment?.user?.login) !== REQUIRED_REVIEW_AUTHOR) continue;
+  for (const comment of comments) {
+    if (normaliseGithubLogin(comment?.user?.login) !== REQUIRED_REVIEW_AUTHOR) continue;
     const prefix = readCleanTopLevelReviewCommit(comment.body);
     // A marker naming a head already in hand needs no lookup, and the common case is the current
     // head naming itself.
@@ -382,12 +384,6 @@ function resolveCommitSha(prefix) {
     );
   }
   return commit.sha;
-}
-
-function normaliseLogin(login) {
-  return String(login ?? "")
-    .toLowerCase()
-    .replace(/\[bot\]$/u, "");
 }
 
 function cleanReviewState(prNumber) {
@@ -560,7 +556,45 @@ function durableReviewStateBelongsToPr(state, expectedPrNumber) {
   return parsed?.version === 1 && parsed.prNumber === expectedPrNumber;
 }
 
-function loadForcePushedPriorShas(prNumber) {
+// Discarded heads a rewrite recorded out-of-band, keyed by the head it created. GitHub omits
+// `before_commit_id` for a generated-branch regeneration, and the workflow performing it records
+// the pair instead (#350). This supplies the missing name; it does not waive anything, because a
+// head named this way is still searched for state belonging to this pull request.
+function loadIssueComments(prNumber) {
+  return flattenPages(
+    JSON.parse(
+      runGithub(
+        ["api", "--paginate", "--slurp", `repos/${repo}/issues/${prNumber}/comments?per_page=100`],
+        "pull request comment discovery",
+      ),
+    ),
+  );
+}
+
+function loadRecordedRewriteDiscards(comments) {
+  const discards = new Map();
+  for (const comment of comments) {
+    if (!isTrustedRewriteRecord(comment)) continue;
+    const marker = readReleaseBranchRewriteMarker(comment.body);
+    // An open record names a discarded head and no replacement, so it pairs with no rewrite and
+    // identifies nothing. A record whose heads match says the branch did not move, which is a
+    // recorded non-event rather than a discard.
+    if (!marker || marker.after === null || marker.after === marker.before) continue;
+    // A second marker for the same created head is two different claims about one rewrite, and
+    // there is no basis for preferring either.
+    if (discards.has(marker.after) && discards.get(marker.after) !== marker.before) {
+      throw durableStateRejection(
+        "a rewrite was recorded twice with different discarded heads, so which commit it discarded is not settled",
+        "conflicting recorded rewrite discards for one created head",
+      );
+    }
+    discards.set(marker.after, marker.before);
+  }
+  return discards;
+}
+
+function loadForcePushedPriorShas(prNumber, comments) {
+  const recordedDiscards = loadRecordedRewriteDiscards(comments);
   const timelinePages = JSON.parse(
     runGithub(
       [
@@ -607,7 +641,9 @@ function loadForcePushedPriorShas(prNumber) {
     // leaves no timeline entry at all. Recording when that happened is what lets state older than
     // it be recognised as possibly superseded.
     if (!/^[0-9a-f]{40}$/iu.test(event.before_commit_id ?? "")) {
-      unidentifiedDiscardAt = Math.max(unidentifiedDiscardAt ?? -Infinity, createdAt);
+      const recorded = recordedDiscards.get(String(event.commit_id ?? "").toLowerCase());
+      if (recorded) shas.push(recorded);
+      else unidentifiedDiscardAt = Math.max(unidentifiedDiscardAt ?? -Infinity, createdAt);
     }
     rewrites.push({ createdAt, shas });
   }

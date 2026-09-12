@@ -1,4 +1,9 @@
 import { appendFile } from "node:fs/promises";
+import {
+  formatReleaseBranchRewriteMarker,
+  isTrustedRewriteRecord,
+  readReleaseBranchRewriteMarker,
+} from "./lib/release-branch-rewrite.mjs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -40,16 +45,63 @@ export async function runReleasePlease(env = process.env) {
     configFile,
     manifestFile,
   );
+  // Before `createReleases()`, because everything here can fail and nothing here is reversible
+  // once a GitHub release exists. A failure at this point costs a re-run; the same failure after a
+  // release is published leaves that release without its assets.
+  const headsBeforeRegeneration = await openBranchRewriteRecords({
+    env,
+    owner,
+    repo,
+    targetBranch,
+  });
+
   const releases = (await releaseManifest.createReleases()).filter(Boolean);
   const outputs = buildReleaseOutputs(releases);
-
-  const pullRequestManifest = await Manifest.fromManifest(
-    github,
-    targetBranch,
-    configFile,
-    manifestFile,
-  );
-  const pullRequests = (await pullRequestManifest.createPullRequests()).filter(Boolean);
+  let pullRequests = [];
+  const confirmedRewrites = new Map();
+  let regenerationError = null;
+  try {
+    const pullRequestManifest = await Manifest.fromManifest(
+      github,
+      targetBranch,
+      configFile,
+      manifestFile,
+    );
+    // Immediately before the force-push, not at the snapshot above: see
+    // `refreshBranchRewriteRecords` for why the gap between the two is the dangerous part.
+    const recordsNameTheCurrentHeads = await refreshBranchRewriteRecords({
+      env,
+      owner,
+      repo,
+      targetBranch,
+      headsBeforeRegeneration,
+    });
+    if (!recordsNameTheCurrentHeads) {
+      throw new Error("Could not confirm release branch rewrite records for regeneration.");
+    }
+    pullRequests = await withReleaseBranchRewriteCas(
+      github,
+      headsBeforeRegeneration,
+      confirmedRewrites,
+      async () => (await pullRequestManifest.createPullRequests()).filter(Boolean),
+    );
+  } catch (error) {
+    regenerationError = error;
+  }
+  const closeErrors = await closeBranchRewriteRecords({ env, owner, repo, confirmedRewrites });
+  if (releases.length === 0 && (regenerationError || closeErrors.length > 0)) {
+    const errors = regenerationError ? [regenerationError, ...closeErrors] : closeErrors;
+    const reasons = errors.map((error) => error?.message ?? String(error)).join("; ");
+    throw new AggregateError(
+      errors,
+      `Could not complete release pull request regeneration: ${reasons}`,
+    );
+  }
+  if (regenerationError) {
+    console.error(
+      `Could not regenerate release pull requests: ${regenerationError.message}. Existing release outputs remain available for asset publication.`,
+    );
+  }
   outputs.prs_created = String(pullRequests.length > 0);
   if (pullRequests.length > 0) {
     outputs.pr = JSON.stringify(pullRequests[0]);
@@ -65,6 +117,390 @@ export async function runReleasePlease(env = process.env) {
   );
 
   return outputs;
+}
+
+// Release Please regenerates by force-pushing, and GitHub records no `before_commit_id` for it, so
+// the discarded head is unnameable from the pull request's record afterwards. Recording it here --
+// from the only place that still knows it -- is what lets the review gate establish continuity
+// across a regeneration instead of refusing every release pull request (#342, #350).
+//
+// Opening the record before the rewrite rather than writing it afterwards is what makes an
+// interrupted run diagnosable: a cancellation leaves the discarded SHA recorded, but a later run
+// must hold if it cannot prove the rewrite's created head from its own CAS receipt.
+export async function openBranchRewriteRecords({ env, owner, repo, targetBranch }) {
+  const heads = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
+  const opened = new Map();
+  for (const [branch, head] of heads) {
+    const pullRequestNumber = await findOpenPullRequestNumber({
+      env,
+      owner,
+      repo,
+      branch,
+      targetBranch,
+    });
+    if (pullRequestNumber === null)
+      throw new Error(
+        `Retained release branch ${branch} has no open release pull request for a durable rewrite record; regeneration remains held.`,
+      );
+    const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
+    const open = records.find(
+      (record) => record.marker.branch === branch && record.marker.after === null,
+    );
+    if (open) {
+      if (head === open.marker.before) {
+        opened.set(branch, { head, recordId: open.id, pullRequestNumber });
+        continue;
+      }
+      throw new Error(
+        "An interrupted rewrite record no longer matches its branch head; regeneration remains held.",
+      );
+    }
+    const created = await githubRequest(
+      env,
+      `/repos/${owner}/${repo}/issues/${pullRequestNumber}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          body: formatReleaseBranchRewriteMarker({ branch, before: head }),
+        }),
+      },
+    );
+    if (!Number.isInteger(created?.id)) {
+      throw new Error(
+        "GitHub did not return an identifier for the opened release branch rewrite record.",
+      );
+    }
+    opened.set(branch, { head, recordId: created.id, pullRequestNumber });
+    console.log(`Opened release branch rewrite record on #${pullRequestNumber}: before=${head}`);
+  }
+  return opened;
+}
+
+// Every confirmed receipt is attempted even if another close fails. The caller decides whether
+// those named failures remain terminal: no-release runs hold, while already-created releases keep
+// their asset-publication outputs.
+export async function closeBranchRewriteRecords({ env, owner, repo, confirmedRewrites }) {
+  const errors = [];
+  for (const receipt of confirmedRewrites.values()) {
+    try {
+      await writeBranchRewriteRecord({
+        env,
+        owner,
+        repo,
+        record: receipt.record,
+        after: receipt.after,
+      });
+    } catch (error) {
+      errors.push(error);
+      console.error(
+        `Could not close a release branch rewrite record: ${error.message}. The record remains held for review.`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * Confirms every open record still names the head its branch carries. `false` means the
+ * regeneration must not proceed.
+ *
+ * The record is opened before `createReleases()` so that a failure there costs a re-run rather
+ * than a published release with no assets. A changed head is not refreshed: replacing `before`
+ * would erase the only durable name of the earlier head. The later compare-and-swap makes the
+ * remaining update atomic, so this path only admits an exact snapshot.
+ *
+ * Throwing is not available here -- the release already exists and a later workflow step uploads
+ * its assets -- so the failure is reported instead and the caller skips the rewrite. Discarding a
+ * head no record names is unrecoverable and is the whole point of this mechanism; a release whose
+ * pull request waits for the next run is not.
+ */
+export async function refreshBranchRewriteRecords({
+  env,
+  owner,
+  repo,
+  targetBranch,
+  headsBeforeRegeneration,
+}) {
+  try {
+    await eachOpenBranchRewriteRecord(
+      { env, owner, repo, targetBranch, expected: headsBeforeRegeneration },
+      async ({ record, head }) => {
+        if (head === record.marker.before) return;
+        throw new Error(
+          `Release branch ${record.marker.branch} advanced after its rewrite record was opened; its original discarded head remains recorded and this regeneration will retry.`,
+        );
+      },
+    );
+    return true;
+  } catch (error) {
+    console.error(
+      `Could not confirm what the regeneration is about to discard: ${error.message}. Skipping the release pull request so nothing is discarded unrecorded; the next run retries.`,
+    );
+    return false;
+  }
+}
+
+// Release Please delegates generated-branch updates to an unconditional REST force-push. That
+// leaves a race after the marker is refreshed: a commit that arrives before the push is discarded
+// even though the marker names the earlier head. GitHub's `updateRefs` mutation accepts `beforeOid`,
+// so replace recorded rewrites and the first update after a confirmed generated-branch creation
+// with a compare-and-swap. A mismatch rejects the release run while an open marker remains
+// durable for recovery.
+export async function withReleaseBranchRewriteCas(github, expected, confirmedRewrites, operation) {
+  const updates = github.octokit?.git?.updateRef;
+  const creates = github.octokit?.git?.createRef;
+  if (
+    typeof updates !== "function" ||
+    typeof creates !== "function" ||
+    typeof github.graphql !== "function"
+  ) {
+    throw new Error("Release Please did not expose the GitHub clients needed for rewrite CAS.");
+  }
+  let repositoryId = null;
+  const createdBranches = new Map();
+  github.octokit.git.createRef = async (request) => {
+    const branch = String(request?.ref ?? "").replace(/^refs\/heads\//u, "");
+    if (!branch.startsWith("release-please--branches--")) {
+      return creates.call(github.octokit.git, request);
+    }
+    const result = await creates.call(github.octokit.git, request);
+    const head = String(result?.data?.object?.sha ?? "").toLowerCase();
+    if (!/^[0-9a-f]{40}$/u.test(head)) {
+      throw new Error(`GitHub did not confirm the initial head for generated branch ${branch}.`);
+    }
+    createdBranches.set(branch, head);
+    return result;
+  };
+  github.octokit.git.updateRef = async (request) => {
+    const branch = String(request?.ref ?? "").replace(/^heads\//u, "");
+    if (!branch.startsWith("release-please--branches--")) {
+      return updates.call(github.octokit.git, request);
+    }
+    const record = expected.get(branch);
+    const createdHead = createdBranches.get(branch);
+    if (!record && !createdHead) {
+      throw new Error(`Release Please tried to rewrite unrecorded generated branch ${branch}.`);
+    }
+    const afterOid = String(request?.sha ?? "").toLowerCase();
+    if (!/^[0-9a-f]{40}$/u.test(afterOid)) {
+      throw new Error(`Release Please gave rewrite CAS an invalid destination for ${branch}.`);
+    }
+    if (repositoryId === null) {
+      const repository = await github.graphql(
+        "query ReleaseBranchRewriteRepository($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }",
+        { owner: github.repository.owner, name: github.repository.repo },
+      );
+      repositoryId = repository?.repository?.id;
+      if (typeof repositoryId !== "string" || !repositoryId) {
+        throw new Error("GitHub did not return a repository id for release branch rewrite CAS.");
+      }
+    }
+    const result = await github.graphql(
+      "mutation ReleaseBranchRewriteCas($repositoryId: ID!, $refUpdates: [RefUpdate!]!) { updateRefs(input: { repositoryId: $repositoryId, refUpdates: $refUpdates }) { clientMutationId } }",
+      {
+        repositoryId,
+        refUpdates: [
+          {
+            name: `refs/heads/${branch}`,
+            beforeOid: record?.head ?? createdHead,
+            afterOid,
+            force: true,
+          },
+        ],
+      },
+    );
+    if (!result?.updateRefs) {
+      throw new Error(`GitHub did not confirm the compare-and-swap update for ${branch}.`);
+    }
+    if (record) {
+      confirmedRewrites.set(branch, {
+        record: { id: record.recordId, marker: { branch, before: record.head } },
+        after: afterOid,
+      });
+    }
+    return { data: { object: { sha: afterOid } } };
+  };
+  try {
+    return await operation();
+  } finally {
+    github.octokit.git.updateRef = updates;
+    github.octokit.git.createRef = creates;
+  }
+}
+
+/**
+ * The walk the refresh and the close share: each branch's open record, paired with the head its
+ * branch carries right now. They differ only in what they write to it.
+ */
+async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, expected }, visit) {
+  const heads = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
+  for (const [branch, expectedRecord] of expected) {
+    const head = heads.get(branch);
+    if (!head)
+      throw new Error(`Release branch ${branch} disappeared after its rewrite record was opened.`);
+    const pullRequestNumber = await findOpenPullRequestNumber({
+      env,
+      owner,
+      repo,
+      branch,
+      targetBranch,
+    });
+    if (pullRequestNumber === null || pullRequestNumber !== expectedRecord.pullRequestNumber) {
+      throw new Error(
+        `Release pull request for ${branch} changed after its rewrite record was opened.`,
+      );
+    }
+    const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
+    const open = records.find(
+      (record) =>
+        record.id === expectedRecord.recordId &&
+        record.marker.branch === branch &&
+        record.marker.after === null,
+    );
+    if (!open) {
+      throw new Error(
+        `Release branch ${branch} lost the rewrite record opened for this regeneration.`,
+      );
+    }
+    await visit({ pullRequestNumber, record: open, head });
+  }
+}
+
+async function writeBranchRewriteRecord({
+  env,
+  owner,
+  repo,
+  record,
+  before = record.marker.before,
+  after = null,
+}) {
+  await githubRequest(env, `/repos/${owner}/${repo}/issues/comments/${record.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      body: formatReleaseBranchRewriteMarker({ branch: record.marker.branch, before, after }),
+    }),
+  });
+}
+
+async function readBranchRewriteRecords({ env, owner, repo, pullRequestNumber }) {
+  const comments = await githubList(
+    env,
+    `/repos/${owner}/${repo}/issues/${pullRequestNumber}/comments`,
+    "comment list for a release pull request",
+  );
+  const records = [];
+  for (const comment of comments) {
+    // The author is the whole of a marker's authority. Without this, anyone who can comment on a
+    // release pull request could have their comment treated as this workflow's own open record --
+    // and completing a record rewrites the comment in place, so an unrelated comment would be
+    // overwritten, or an uneditable one would abort the run before any release work began.
+    if (!isTrustedRewriteRecord(comment)) continue;
+    const marker = readReleaseBranchRewriteMarker(comment?.body);
+    const createdAt = Date.parse(comment?.created_at ?? "");
+    if (marker && Number.isInteger(comment?.id)) {
+      records.push({
+        id: comment.id,
+        marker,
+        createdAt: Number.isFinite(createdAt) ? createdAt : 0,
+      });
+    }
+  }
+  return records;
+}
+
+async function findOpenPullRequestNumber({ env, owner, repo, branch, targetBranch }) {
+  // Head *and* base. A generated branch can carry open pull requests against more than one base,
+  // and only the one targeting this run's branch is the release pull request being regenerated.
+  // Matched on head alone, the record could be opened and closed on a different pull request
+  // while the force-push rewrote this one -- leaving the rewrite that mattered unrecorded.
+  const pulls = await githubList(
+    env,
+    `/repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}&base=${targetBranch}`,
+    "pull request list for a release branch",
+  );
+  // An empty list means no open pull request; an entry that cannot be read means the answer is
+  // unknown, and the two must not collapse into one. Read as "none", an unreadable entry makes the
+  // caller skip opening a record while the regeneration force-pushes the branch anyway -- which
+  // discards a head nothing named, the exact loss this mechanism exists to prevent.
+  if (pulls.length > 0 && !pulls.some((pull) => Number.isInteger(pull?.number))) {
+    throw new Error("GitHub returned a malformed pull request list for a release branch.");
+  }
+  return pulls.find((pull) => Number.isInteger(pull?.number))?.number ?? null;
+}
+
+async function readReleaseBranchHeads({ env, owner, repo, targetBranch }) {
+  const prefix = `heads/release-please--branches--${targetBranch}--`;
+  // An indeterminate response is not an empty branch list. Reading it as one lets a rewrite proceed
+  // with no record of what it discarded, which is the state this whole mechanism exists to prevent
+  // and which nothing downstream could detect. An entry this function cannot read is the same
+  // claim as a response it cannot read, so it is the same refusal: skipping the entry would make
+  // its branch look absent, which is the reading being guarded against.
+  const refs = await githubList(
+    env,
+    `/repos/${owner}/${repo}/git/matching-refs/${prefix}`,
+    "release branch head list",
+  );
+  const heads = new Map();
+  for (const ref of refs) {
+    const branch = String(ref?.ref ?? "").replace(/^refs\/heads\//u, "");
+    const sha = ref?.object?.sha;
+    if (!branch || !/^[0-9a-f]{40}$/iu.test(sha ?? "")) {
+      throw new Error("GitHub returned a malformed release branch head list.");
+    }
+    heads.set(branch, sha.toLowerCase());
+  }
+  return heads;
+}
+
+const GITHUB_PAGE_SIZE = 100;
+const GITHUB_MAX_PAGES = 20;
+
+/**
+ * Every page of a GitHub list endpoint, or a throw.
+ *
+ * Three call sites read lists this script's correctness depends on, and each had its own
+ * single-page request and its own array check. A first page is not a list: a release pull request
+ * outlives a hundred comments, and the marker this mechanism has just written is the newest one, so
+ * it is precisely what a first-page read drops. Running out of pages throws rather than returning
+ * what was collected, because a short answer here is indistinguishable from "no such branch" and
+ * that reading is what force-pushes a branch with no record of the head it discarded.
+ */
+async function githubList(env, path, description) {
+  const items = [];
+  for (let page = 1; page <= GITHUB_MAX_PAGES; page += 1) {
+    const separator = path.includes("?") ? "&" : "?";
+    const batch = await githubRequest(
+      env,
+      `${path}${separator}per_page=${GITHUB_PAGE_SIZE}&page=${page}`,
+    );
+    if (!Array.isArray(batch)) {
+      throw new Error(`GitHub returned a malformed ${description}.`);
+    }
+    items.push(...batch);
+    if (batch.length < GITHUB_PAGE_SIZE) return items;
+  }
+  throw new Error(`GitHub returned more pages of ${description} than this script will read.`);
+}
+
+async function githubRequest(env, path, init = {}) {
+  const token = env.RELEASE_PLEASE_TOKEN || env.GITHUB_TOKEN || env.GH_TOKEN;
+  const apiUrl = env.GITHUB_API_URL || DEFAULT_GITHUB_API_URL;
+  const response = await globalThis.fetch(`${apiUrl}${path}`, {
+    ...init,
+    headers: {
+      accept: "application/vnd.github+json",
+      authorization: `Bearer ${token}`,
+      "x-github-api-version": "2022-11-28",
+      ...(init.body ? { "content-type": "application/json" } : {}),
+      ...init.headers,
+    },
+  });
+  if (!response.ok) {
+    // Named rather than swallowed: a rewrite that was performed but not recorded is the case the
+    // review gate cannot tell apart from one that never happened.
+    throw new Error(`GitHub request failed: ${init.method ?? "GET"} ${path} -> ${response.status}`);
+  }
+  return response.status === 204 ? null : response.json();
 }
 
 export function buildReleaseOutputs(releases) {

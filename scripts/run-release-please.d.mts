@@ -10,3 +10,54 @@ export function resolveReleaseTargetBranch(
 ): string;
 
 export function serializeGitHubOutput(outputs: Record<string, string>): string;
+
+interface ReleaseBranchScope {
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  owner: string;
+  repo: string;
+  targetBranch: string;
+}
+
+/** The heads and durable marker identities opened for this regeneration. */
+interface OpenedRewriteRecords extends ReleaseBranchScope {
+  headsBeforeRegeneration: Map<
+    string,
+    { head: string; recordId: number; pullRequestNumber: number }
+  >;
+}
+
+export function openBranchRewriteRecords(
+  options: ReleaseBranchScope,
+): Promise<Map<string, { head: string; recordId: number; pullRequestNumber: number }>>;
+
+/** `false` when it could not confirm what the regeneration is about to discard. */
+export function refreshBranchRewriteRecords(options: OpenedRewriteRecords): Promise<boolean>;
+
+export function closeBranchRewriteRecords(options: {
+  env: ReleaseBranchScope["env"];
+  owner: string;
+  repo: string;
+  confirmedRewrites: Map<
+    string,
+    { record: { id: number; marker: { branch: string; before: string } }; after: string }
+  >;
+}): Promise<unknown[]>;
+
+export function withReleaseBranchRewriteCas<T>(
+  github: {
+    repository: { owner: string; repo: string };
+    graphql: (query: string, variables: Record<string, unknown>) => Promise<unknown>;
+    octokit: {
+      git: {
+        createRef: (request: Record<string, unknown>) => Promise<unknown>;
+        updateRef: (request: Record<string, unknown>) => Promise<unknown>;
+      };
+    };
+  },
+  expected: OpenedRewriteRecords["headsBeforeRegeneration"],
+  confirmedRewrites: Map<
+    string,
+    { record: { id: number; marker: { branch: string; before: string } }; after: string }
+  >,
+  operation: () => Promise<T>,
+): Promise<T>;
