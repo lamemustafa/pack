@@ -31,6 +31,7 @@ import {
   hasLegacyRetainedStaging,
   summariseFullFiscalYearLedger,
   targetStatusFromFlowStep,
+  fullFiscalYearTargetFlowStep,
   toFullFiscalYearSummary,
 } from "./filed-returns-full-fiscal-year-summary";
 import {
@@ -428,12 +429,13 @@ export async function startFullFiscalYearDownloadFlow(
         systemErrorPredecessor,
       ),
     );
-    const targetStatus = targetStatusFromFlowStep(flowStep, retryScope.returnType);
+    const terminalFlowStep = fullFiscalYearTargetFlowStep(flowStep, retryScope.returnType);
+    const targetStatus = targetStatusFromFlowStep(terminalFlowStep, retryScope.returnType);
     ledger = markFullFiscalYearTargetTerminal(
       ledger,
       nextTarget.targetId,
       targetStatus,
-      flowStep,
+      terminalFlowStep,
       deps.now?.() ?? new Date(),
     );
     if (
@@ -442,10 +444,10 @@ export async function startFullFiscalYearDownloadFlow(
     ) {
       ledger = markFullFiscalYearZipPhase(ledger, deps.now?.() ?? new Date(), "export-pending");
     }
-    await persistLedgerAndMaybeSummary(deps, ledger, flowStep);
+    await persistLedgerAndMaybeSummary(deps, ledger, terminalFlowStep);
 
     if (isResolvedFullFiscalYearTargetStatus(targetStatus)) continue;
-    const flowSummary = toFullFiscalYearSummary(ledger, flowStep);
+    const flowSummary = toFullFiscalYearSummary(ledger, terminalFlowStep);
     if (targetStatus !== "download-unconfirmed") {
       await persistSummary(deps, flowSummary);
     }

@@ -125,6 +125,29 @@ export type AllSupportedFullFiscalYearZipPhase =
   | "cleaned";
 
 const MAX_SAFE_MESSAGE_LENGTH = 500;
+
+export function durableAllSupportedFullFiscalYearArtifactSignals(
+  signals: readonly string[],
+): string[] {
+  return signals.filter(
+    (signal) =>
+      /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|JSON|EXCEL)$/.test(signal) ||
+      /^all-supported-full-fiscal-year-opfs-staged:(?:PDF|JSON|EXCEL)$/.test(signal),
+  );
+}
+
+export function hasDurableAllSupportedFullFiscalYearArtifactEvidence(
+  signals: readonly string[],
+): boolean {
+  return (
+    hasDurableFullFiscalYearArtifactEvidence(signals) ||
+    durableAllSupportedFullFiscalYearArtifactSignals(signals).some(
+      (signal) =>
+        signal.startsWith("filed-return-artifact-downloaded:") ||
+        signal.startsWith("all-supported-full-fiscal-year-opfs-staged:"),
+    )
+  );
+}
 const ZIP_PHASES = new Set<AllSupportedFullFiscalYearZipPhase>([
   "export-pending",
   "export-retry-pending",

@@ -46,12 +46,16 @@ import type {
   FiledReturnsAllSupportedFullFiscalYearPeriodPlan,
   FiledReturnsAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
+import { durableAllSupportedFullFiscalYearArtifactSignals } from "./filed-returns-all-supported-full-fiscal-year-validation";
 import {
   discardAllSupportedFullFiscalYearFiledReturnsZip,
   exportAllSupportedFullFiscalYearZip,
   reconcileAllSupportedFullFiscalYearZipDownload,
 } from "./filed-returns-all-supported-full-fiscal-year-zip";
-import { targetStatusFromFlowStep } from "./filed-returns-full-fiscal-year-summary";
+import {
+  targetStatusFromFlowStep,
+  fullFiscalYearTargetFlowStep,
+} from "./filed-returns-full-fiscal-year-summary";
 import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 
 type AllSupportedRunnerDeps = FiledReturnsFlowRunnerDeps & {
@@ -550,12 +554,13 @@ async function runAllSupportedFullFiscalYearTargets(
         systemErrorPredecessor,
       ),
     );
-    const targetStatus = targetStatusFromFlowStep(flowStep, scope.returnType);
+    const terminalFlowStep = fullFiscalYearTargetFlowStep(flowStep, scope.returnType);
+    const targetStatus = targetStatusFromFlowStep(terminalFlowStep, scope.returnType);
     ledger = markAllSupportedFullFiscalYearTargetTerminal(
       ledger,
       nextTarget.targetId,
       targetStatus,
-      flowStep,
+      terminalFlowStep,
       deps.now?.() ?? new Date(),
     );
     if (canCompleteAllSupportedFullFiscalYearLedger(ledger)) {
@@ -567,7 +572,7 @@ async function runAllSupportedFullFiscalYearTargets(
       (target) => target.targetId === nextTarget.targetId,
     );
     if (persistedTarget && isResolvedFullFiscalYearTargetStatus(persistedTarget.status)) continue;
-    return allSupportedResponse(deps, ledger, flowStep);
+    return allSupportedResponse(deps, ledger, terminalFlowStep);
   }
 }
 
@@ -829,11 +834,7 @@ function mergeRetriedArtifactSignals(
   previousSignals: readonly string[],
   flowStep: PortalFlowStepResult,
 ): PortalFlowStepResult {
-  const retained = previousSignals.filter(
-    (signal) =>
-      /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|JSON|EXCEL)$/.test(signal) ||
-      /^all-supported-full-fiscal-year-opfs-staged:(?:PDF|JSON|EXCEL)$/.test(signal),
-  );
+  const retained = durableAllSupportedFullFiscalYearArtifactSignals(previousSignals);
   return retained.length === 0
     ? flowStep
     : { ...flowStep, safeSignals: Array.from(new Set([...retained, ...flowStep.safeSignals])) };

@@ -1,7 +1,5 @@
-import {
-  filedReturnsTargetOutcome,
-  hasRetainedFullFiscalYearArtifactEvidence,
-} from "./filed-returns-full-fiscal-year-summary";
+import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
+import { hasDurableAllSupportedFullFiscalYearArtifactEvidence } from "./filed-returns-all-supported-full-fiscal-year-validation";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
@@ -289,7 +287,7 @@ function targetOutcome(
     zipDelivered,
     false,
     target.status === "not-generated"
-      ? hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals)
+      ? hasDurableAllSupportedFullFiscalYearArtifactEvidence(target.safeSignals)
       : target.safeSignals.some((signal) =>
           signal.startsWith("filed-return-artifact-unavailable:"),
         ),

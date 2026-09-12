@@ -117,10 +117,10 @@ export function durableFullFiscalYearArtifactSignals(signals: readonly string[])
 }
 
 export function hasDurableFullFiscalYearArtifactEvidence(signals: readonly string[]): boolean {
-  return signals.some((signal) =>
-    /^(?:filed-return-artifact-downloaded|full-fiscal-year-opfs-staged|all-supported-full-fiscal-year-opfs-staged):(?:PDF|JSON|EXCEL)$/.test(
-      signal,
-    ),
+  return durableFullFiscalYearArtifactSignals(signals).some(
+    (signal) =>
+      signal.startsWith("filed-return-artifact-downloaded:") ||
+      signal.startsWith("full-fiscal-year-opfs-staged:"),
   );
 }
 

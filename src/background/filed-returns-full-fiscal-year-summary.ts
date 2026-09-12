@@ -22,6 +22,7 @@ import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-type
 import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import { hasDurableFullFiscalYearArtifactEvidence } from "./filed-returns-full-fiscal-year-validation";
+import { hasDurableAllSupportedFullFiscalYearArtifactEvidence } from "./filed-returns-all-supported-full-fiscal-year-validation";
 import {
   canCompleteFullFiscalYearLedger,
   unplannedEligibleFullFiscalYearPeriods,
@@ -153,10 +154,6 @@ const TARGET_OUTCOMES: Readonly<
   pending: "pending",
 };
 
-export function hasRetainedFullFiscalYearArtifactEvidence(signals: readonly string[]): boolean {
-  return hasDurableFullFiscalYearArtifactEvidence(signals);
-}
-
 export function targetStatusFromFlowStep(
   step: PortalFlowStepResult,
   returnType?: FiledReturnsReturnType,
@@ -178,6 +175,12 @@ export function targetStatusFromFlowStep(
         signal === "filed-gstr2b-not-generated" || signal === "artifact-filed-gstr2b-not-generated",
     )
   ) {
+    if (
+      hasDurableFullFiscalYearArtifactEvidence(step.safeSignals) ||
+      hasDurableAllSupportedFullFiscalYearArtifactEvidence(step.safeSignals)
+    ) {
+      return "blocked";
+    }
     return "not-generated";
   }
   if (step.safeSignals.some(isUnconfirmedBrowserDownloadSignal)) {
@@ -193,6 +196,26 @@ export function targetStatusFromFlowStep(
     return "blocked";
   }
   return "failed";
+}
+
+export function fullFiscalYearTargetFlowStep(
+  step: PortalFlowStepResult,
+  returnType?: FiledReturnsReturnType,
+): PortalFlowStepResult {
+  if (
+    targetStatusFromFlowStep(step, returnType) === "blocked" &&
+    returnType === "GSTR-2B" &&
+    (hasDurableFullFiscalYearArtifactEvidence(step.safeSignals) ||
+      hasDurableAllSupportedFullFiscalYearArtifactEvidence(step.safeSignals))
+  ) {
+    return {
+      ...step,
+      state: "blocked",
+      safeMessage:
+        "Pack retained a captured artifact while the GST Portal reported this whole target as not generated; the fiscal-year run is paused for review.",
+    };
+  }
+  return step;
 }
 
 export function summariseFullFiscalYearLedger(
@@ -399,7 +422,8 @@ function targetMissedAnArtifact(target: FiledReturnsFullFiscalYearTarget): boole
   // record. A malformed one throwing here is diagnosable; a malformed one
   // silently reading as saved is not.
   return target.status === "not-generated"
-    ? hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals)
+    ? hasDurableFullFiscalYearArtifactEvidence(target.safeSignals) ||
+        hasDurableAllSupportedFullFiscalYearArtifactEvidence(target.safeSignals)
     : target.safeSignals.some((signal) => signal.startsWith("filed-return-artifact-unavailable:"));
 }
 

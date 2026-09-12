@@ -690,6 +690,68 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(savedLedger().revision).toBeGreaterThan(blocked.revision);
   });
 
+  it("blocks a later bound GSTR-2B refusal after a staged artifact without exporting again", async () => {
+    const firstRunner = vi.fn<SinglePeriodRunner>(async (scope) =>
+      scope.returnType === "GSTR-2B"
+        ? {
+            ok: true as const,
+            flowStep: {
+              connectorId: "gst" as const,
+              scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+              state: "downloaded" as const,
+              safeSignals: [
+                "filed-return-artifact-downloaded:PDF",
+                "all-supported-full-fiscal-year-opfs-staged:PDF",
+              ],
+              safeMessage: "Synthetic staged artifact.",
+            },
+          }
+        : notFiledStep(),
+    );
+    await startAllSupportedFullFiscalYearDownloadFlow(request, deps, firstRunner);
+    const checkpoint = savedLedger();
+    const target = checkpoint.targets.find((candidate) => candidate.returnType === "GSTR-2B");
+    if (!target) throw new Error("expected a GSTR-2B target");
+    vi.clearAllMocks();
+    const refusalRunner = vi.fn<SinglePeriodRunner>(async () => ({
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+        state: "candidate-not-found" as const,
+        safeSignals: [
+          "filed-gstr2b-not-generated",
+          "gstr2b-summary-route-verified",
+          "gstr2b-visible-period-verified",
+        ],
+        safeMessage: "Synthetic bound refusal.",
+      },
+    }));
+
+    const response = await retryAllSupportedFullFiscalYearTarget(
+      {
+        financialYear: request.financialYear,
+        ledgerId: checkpoint.ledgerId,
+        targetId: target.targetId,
+        expectedRevision: checkpoint.revision,
+      },
+      deps,
+      refusalRunner,
+    );
+
+    expect(response).toMatchObject({ flowStep: { state: "blocked" } });
+    expect(response.flowStep.safeMessage).toContain("retained a captured artifact");
+    expect(refusalRunner).toHaveBeenCalledOnce();
+    expect(zip.export).not.toHaveBeenCalled();
+    const retained = savedLedger();
+    expect(
+      retained.targets.find((candidate) => candidate.targetId === target.targetId),
+    ).toMatchObject({
+      status: "blocked",
+      safeSignals: expect.arrayContaining(["all-supported-full-fiscal-year-opfs-staged:PDF"]),
+    });
+  });
+
   it("refuses a retry that names a different reviewed target", async () => {
     const blockedRunner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, blockedRunner);
