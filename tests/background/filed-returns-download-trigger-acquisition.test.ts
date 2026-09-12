@@ -42,6 +42,7 @@ const captureMocks = vi.hoisted(() => ({
     safeSignals: [] as string[],
   })),
   clearArtifactAcquisitionCheckpoint: vi.fn(async () => ({ ok: true as const })),
+  clearArtifactAcquisitionCheckpointOrThrow: vi.fn(async () => undefined),
   persistArtifactAcquisitionDownloadId: vi.fn(async () => undefined),
   persistArtifactAcquisitionIntent: vi.fn(async () => undefined),
   persistArtifactAcquisitionUnconfirmedDownload: vi.fn(async () => undefined),
@@ -76,6 +77,7 @@ vi.mock("../../src/background/artifact-download", () => ({
 }));
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
   clearArtifactAcquisitionCheckpoint: captureMocks.clearArtifactAcquisitionCheckpoint,
+  clearArtifactAcquisitionCheckpointOrThrow: captureMocks.clearArtifactAcquisitionCheckpointOrThrow,
   persistArtifactAcquisitionDownloadId: captureMocks.persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent: captureMocks.persistArtifactAcquisitionIntent,
   persistArtifactAcquisitionUnconfirmedDownload:
@@ -156,6 +158,53 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
       expect.objectContaining({ type: "PACK_CONTENT_TRIGGER_FILED_GSTR3B_DOWNLOAD_V3" }),
     );
   });
+
+  it.each(["JSON", "PDF"] as const)(
+    "surfaces a named cleanup failure when %s checkpoint cleanup fails",
+    async (artifactType) => {
+      vi.clearAllMocks();
+      captureMocks.clearArtifactAcquisitionCheckpointOrThrow.mockRejectedValueOnce(
+        new Error("artifact acquisition checkpoint clear failed: storage-remove-failed"),
+      );
+      if (artifactType === "JSON") {
+        captureMocks.acquireFiledReturnJsonInMainWorld.mockResolvedValueOnce({
+          ok: false as const,
+          reason: "generation-timeout" as const,
+          safeSignals: [],
+        } as never);
+      } else {
+        captureMocks.acquireGstr3bPdfAfterPreflight.mockResolvedValueOnce({
+          ok: false as const,
+          reason: "control-not-found" as const,
+          safeSignals: [],
+        } as never);
+      }
+      const sendMessageToTabWithInjection = vi.fn(
+        async (_tabId: number, message: { payload: { requestId: string } }) => ({
+          ok: true as const,
+          artifact: {
+            ok: true as const,
+            state: "ready" as const,
+            requestId: message.payload.requestId,
+            safeSignals: [],
+          },
+        }),
+      );
+
+      await expect(
+        triggerAndObserveFiledReturnDownload({
+          activePeriod: "April",
+          artifactType,
+          deps: {
+            sendMessageToTabWithInjection: sendMessageToTabWithInjection as never,
+            storageKeys: {},
+          },
+          scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+          tabId: 17,
+        }),
+      ).rejects.toThrow("artifact acquisition checkpoint clear failed: storage-remove-failed");
+    },
+  );
 
   it.each(["PDF", "JSON"] as const)(
     "blocks raw full-year GSTR-3B %s acquisition before it can create an artifact download",
