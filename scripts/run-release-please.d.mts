@@ -22,15 +22,13 @@ interface ReleaseBranchScope {
 interface OpenedRewriteRecords extends ReleaseBranchScope {
   headsBeforeRegeneration: Map<
     string,
-    { head: string; recordId: number | null; pullRequestNumber: number | null }
+    { head: string; recordId: number; pullRequestNumber: number }
   >;
 }
 
 export function openBranchRewriteRecords(
   options: ReleaseBranchScope,
-): Promise<
-  Map<string, { head: string; recordId: number | null; pullRequestNumber: number | null }>
->;
+): Promise<Map<string, { head: string; recordId: number; pullRequestNumber: number }>>;
 
 /** `false` when it could not confirm what the regeneration is about to discard. */
 export function refreshBranchRewriteRecords(options: OpenedRewriteRecords): Promise<boolean>;
@@ -43,7 +41,7 @@ export function closeBranchRewriteRecords(options: {
     string,
     { record: { id: number; marker: { branch: string; before: string } }; after: string }
   >;
-}): Promise<void>;
+}): Promise<unknown[]>;
 
 export function withReleaseBranchRewriteCas<T>(
   github: {

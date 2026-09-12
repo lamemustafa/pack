@@ -57,25 +57,25 @@ export async function runReleasePlease(env = process.env) {
 
   const releases = (await releaseManifest.createReleases()).filter(Boolean);
   const outputs = buildReleaseOutputs(releases);
-
-  const pullRequestManifest = await Manifest.fromManifest(
-    github,
-    targetBranch,
-    configFile,
-    manifestFile,
-  );
-  // Immediately before the force-push, not at the snapshot above: see
-  // `refreshBranchRewriteRecords` for why the gap between the two is the dangerous part.
-  const recordsNameTheCurrentHeads = await refreshBranchRewriteRecords({
-    env,
-    owner,
-    repo,
-    targetBranch,
-    headsBeforeRegeneration,
-  });
   let pullRequests = [];
   const confirmedRewrites = new Map();
+  let regenerationError = null;
   try {
+    const pullRequestManifest = await Manifest.fromManifest(
+      github,
+      targetBranch,
+      configFile,
+      manifestFile,
+    );
+    // Immediately before the force-push, not at the snapshot above: see
+    // `refreshBranchRewriteRecords` for why the gap between the two is the dangerous part.
+    const recordsNameTheCurrentHeads = await refreshBranchRewriteRecords({
+      env,
+      owner,
+      repo,
+      targetBranch,
+      headsBeforeRegeneration,
+    });
     if (!recordsNameTheCurrentHeads) {
       throw new Error("Could not confirm release branch rewrite records for regeneration.");
     }
@@ -86,15 +86,21 @@ export async function runReleasePlease(env = process.env) {
       async () => (await pullRequestManifest.createPullRequests()).filter(Boolean),
     );
   } catch (error) {
-    // A release already exists only when its outputs can carry the later asset publication steps.
-    if (releases.length === 0) throw error;
-    console.error(
-      `Could not regenerate release pull requests: ${error.message}. Existing release outputs remain available for asset publication.`,
+    regenerationError = error;
+  }
+  const closeErrors = await closeBranchRewriteRecords({ env, owner, repo, confirmedRewrites });
+  if (releases.length === 0 && (regenerationError || closeErrors.length > 0)) {
+    const errors = regenerationError ? [regenerationError, ...closeErrors] : closeErrors;
+    const reasons = errors.map((error) => error?.message ?? String(error)).join("; ");
+    throw new AggregateError(
+      errors,
+      `Could not complete release pull request regeneration: ${reasons}`,
     );
-  } finally {
-    // A successful CAS can precede another release-please error. Its receipt must be closed before
-    // that error propagates, so the review gate never sees a completed rewrite as interrupted.
-    await closeBranchRewriteRecords({ env, owner, repo, confirmedRewrites });
+  }
+  if (regenerationError) {
+    console.error(
+      `Could not regenerate release pull requests: ${regenerationError.message}. Existing release outputs remain available for asset publication.`,
+    );
   }
   outputs.prs_created = String(pullRequests.length > 0);
   if (pullRequests.length > 0) {
@@ -132,13 +138,10 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
       branch,
       targetBranch,
     });
-    if (pullRequestNumber === null) {
-      // A previous release pull request can close while its generated branch remains. This exact
-      // head is a same-run CAS precondition only; it is not continuity evidence and has no marker
-      // to close.
-      opened.set(branch, { head, recordId: null, pullRequestNumber: null });
-      continue;
-    }
+    if (pullRequestNumber === null)
+      throw new Error(
+        `Retained release branch ${branch} has no open release pull request for a durable rewrite record; regeneration remains held.`,
+      );
     const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
     const open = records.find(
       (record) => record.marker.branch === branch && record.marker.after === null,
@@ -173,13 +176,13 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
   return opened;
 }
 
-// Failures here are logged rather than thrown. A release may already exist by this point, and
-// failing the job would strand it without its assets. The cost of not throwing is bounded: the
-// record stays open, the review gate keeps refusing exactly as it would have, and the next run
-// completes it.
+// Every confirmed receipt is attempted even if another close fails. The caller decides whether
+// those named failures remain terminal: no-release runs hold, while already-created releases keep
+// their asset-publication outputs.
 export async function closeBranchRewriteRecords({ env, owner, repo, confirmedRewrites }) {
-  try {
-    for (const receipt of confirmedRewrites.values()) {
+  const errors = [];
+  for (const receipt of confirmedRewrites.values()) {
+    try {
       await writeBranchRewriteRecord({
         env,
         owner,
@@ -187,12 +190,14 @@ export async function closeBranchRewriteRecords({ env, owner, repo, confirmedRew
         record: receipt.record,
         after: receipt.after,
       });
+    } catch (error) {
+      errors.push(error);
+      console.error(
+        `Could not close a release branch rewrite record: ${error.message}. The record remains held for review.`,
+      );
     }
-  } catch (error) {
-    console.error(
-      `Could not close a release branch rewrite record: ${error.message}. The record stays open for review.`,
-    );
   }
+  return errors;
 }
 
 /**
@@ -307,7 +312,7 @@ export async function withReleaseBranchRewriteCas(github, expected, confirmedRew
     if (!result?.updateRefs) {
       throw new Error(`GitHub did not confirm the compare-and-swap update for ${branch}.`);
     }
-    if (record && record.recordId !== null) {
+    if (record) {
       confirmedRewrites.set(branch, {
         record: { id: record.recordId, marker: { branch, before: record.head } },
         after: afterOid,
@@ -333,26 +338,6 @@ async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, exp
     const head = heads.get(branch);
     if (!head)
       throw new Error(`Release branch ${branch} disappeared after its rewrite record was opened.`);
-    if (expectedRecord.recordId === null) {
-      if (head !== expectedRecord.head) {
-        throw new Error(
-          `Retained release branch ${branch} advanced after its exact head was observed; regeneration remains held.`,
-        );
-      }
-      const pullRequestNumber = await findOpenPullRequestNumber({
-        env,
-        owner,
-        repo,
-        branch,
-        targetBranch,
-      });
-      if (pullRequestNumber !== null) {
-        throw new Error(
-          `Retained release branch ${branch} gained a release pull request after observation; regeneration remains held.`,
-        );
-      }
-      continue;
-    }
     const pullRequestNumber = await findOpenPullRequestNumber({
       env,
       owner,

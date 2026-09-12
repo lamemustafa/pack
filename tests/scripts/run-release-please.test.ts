@@ -110,61 +110,6 @@ describe("Release Please workflow wrapper", () => {
     expect(github.octokit.git.createRef).toBe(originalCreate);
   });
 
-  it("uses an exact retained-branch snapshot for a generated-branch CAS", async () => {
-    const branch = "release-please--branches--master--components--pack";
-    const before = "b".repeat(40);
-    const after = "c".repeat(40);
-    const originalCreate = vi.fn();
-    const originalUpdate = vi.fn();
-    const graphql = vi
-      .fn()
-      .mockResolvedValueOnce({ repository: { id: "repo-id" } })
-      .mockResolvedValueOnce({ updateRefs: { clientMutationId: null } });
-    const github = {
-      repository: { owner: "lamemustafa", repo: "pack" },
-      graphql,
-      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
-    };
-    const confirmed = new Map();
-
-    await withReleaseBranchRewriteCas(
-      github,
-      new Map([[branch, { head: before, recordId: null, pullRequestNumber: null }]]),
-      confirmed,
-      async () => github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true }),
-    );
-
-    expect(originalUpdate).not.toHaveBeenCalled();
-    expect(graphql).toHaveBeenLastCalledWith(
-      expect.stringContaining("updateRefs"),
-      expect.objectContaining({ refUpdates: [expect.objectContaining({ beforeOid: before })] }),
-    );
-    expect(confirmed).toEqual(new Map());
-  });
-
-  it("does not let one retained-branch snapshot authorize another generated branch", async () => {
-    const branch = "release-please--branches--master--components--pack";
-    const otherBranch = "release-please--branches--master--components--other";
-    const originalCreate = vi.fn();
-    const originalUpdate = vi.fn();
-    const github = {
-      repository: { owner: "lamemustafa", repo: "pack" },
-      graphql: vi.fn(),
-      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
-    };
-
-    await expect(
-      withReleaseBranchRewriteCas(
-        github,
-        new Map([[otherBranch, { head: "b".repeat(40), recordId: null, pullRequestNumber: null }]]),
-        new Map(),
-        async () => github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: "c".repeat(40) }),
-      ),
-    ).rejects.toThrow(/unrecorded generated branch/iu);
-
-    expect(originalUpdate).not.toHaveBeenCalled();
-  });
-
   it("uses CAS for the first update after creating a generated branch", async () => {
     const branch = "release-please--branches--master--components--pack";
     const initial = "b".repeat(40);
@@ -602,7 +547,7 @@ describe("Release Please workflow wrapper", () => {
         }
         if (path.includes("/comments") && String(init.method ?? "GET") === "PATCH") {
           closedBody = String(init.body);
-          return { ok: true, status: 200, json: async () => ({ id: 99 }) } as unknown as Response;
+          return { ok: false, status: 500 } as unknown as Response;
         }
         if (path.includes("/comments")) {
           return {
@@ -632,7 +577,7 @@ describe("Release Please workflow wrapper", () => {
           GITHUB_TOKEN: "test-token",
           GITHUB_API_URL: "https://api.github.test",
         }),
-      ).rejects.toThrow(/later pull request API failure/iu);
+      ).rejects.toThrow(/Could not complete release pull request regeneration/iu);
 
       expect(originalUpdate).not.toHaveBeenCalled();
       expect(closedBody).toContain(`before=${before}`);
@@ -750,19 +695,14 @@ describe("release branch rewrite records", () => {
     expect(posted?.body).not.toContain("after=");
   });
 
-  it("captures a retained generated branch without inventing a rewrite marker", async () => {
+  it("holds a retained generated branch without a durable rewrite marker", async () => {
     const head = "b".repeat(40);
     const calls = stubGitHub({ heads: head, pulls: [] });
     const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
 
-    const records = await openBranchRewriteRecords({
-      env,
-      owner: "lamemustafa",
-      repo: "pack",
-      targetBranch: "master",
-    });
-
-    expect(records.get(branch)).toEqual({ head, recordId: null, pullRequestNumber: null });
+    await expect(
+      openBranchRewriteRecords({ env, owner: "lamemustafa", repo: "pack", targetBranch: "master" }),
+    ).rejects.toThrow(/no open release pull request.*durable rewrite record/iu);
     expect(calls.find((call) => call.method === "POST")).toBeUndefined();
   });
 
@@ -873,46 +813,6 @@ describe("release branch rewrite records", () => {
 
     expect(proceeded).toBe(false);
     expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
-    expect(calls.find((call) => call.method === "POST")).toBeUndefined();
-  });
-
-  it("refuses a retained generated branch that advanced after observation", async () => {
-    const before = "b".repeat(40);
-    const calls = stubGitHub({ heads: "c".repeat(40), pulls: [] });
-    const { refreshBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
-
-    await expect(
-      refreshBranchRewriteRecords({
-        env,
-        owner: "lamemustafa",
-        repo: "pack",
-        targetBranch: "master",
-        headsBeforeRegeneration: new Map([
-          [branch, { head: before, recordId: null, pullRequestNumber: null }],
-        ]),
-      }),
-    ).resolves.toBe(false);
-
-    expect(calls.find((call) => call.method === "POST")).toBeUndefined();
-  });
-
-  it("refuses a retained generated branch that gained a pull request after observation", async () => {
-    const head = "b".repeat(40);
-    const calls = stubGitHub({ heads: head });
-    const { refreshBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
-
-    await expect(
-      refreshBranchRewriteRecords({
-        env,
-        owner: "lamemustafa",
-        repo: "pack",
-        targetBranch: "master",
-        headsBeforeRegeneration: new Map([
-          [branch, { head, recordId: null, pullRequestNumber: null }],
-        ]),
-      }),
-    ).resolves.toBe(false);
-
     expect(calls.find((call) => call.method === "POST")).toBeUndefined();
   });
 
@@ -1111,10 +1011,9 @@ describe("release branch rewrite records", () => {
     expect(patched?.body).not.toContain(landedSince);
   });
 
-  it("leaves the record open when no event names the head the rewrite created", async () => {
-    // Not knowing is answered the way this module answers it everywhere: the gate ignores an open
-    // record and the next run completes it. Closing with an uncorroborated head would publish a
-    // claim about a rewrite nothing backs.
+  it("does not write a marker without a CAS receipt", async () => {
+    // A receipt is the only attribution evidence. Closing with an uncorroborated head would
+    // publish a claim about a rewrite nothing backs.
     const before = "c".repeat(40);
     const calls = stubGitHub({
       heads: "b".repeat(40),
@@ -1171,6 +1070,6 @@ describe("release branch rewrite records", () => {
         repo: "pack",
         confirmedRewrites: new Map(),
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([]);
   });
 });
