@@ -36,6 +36,7 @@ describe("Release Please workflow wrapper", () => {
     await withReleaseBranchRewriteCas(
       github,
       new Map([[branch, { head: before, recordId: 1, pullRequestNumber: 2 }]]),
+      new Map(),
       async () => github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true }),
     );
 
@@ -74,7 +75,7 @@ describe("Release Please workflow wrapper", () => {
     const records = new Map([[branch, { head: before, recordId: 1, pullRequestNumber: 2 }]]);
 
     await expect(
-      withReleaseBranchRewriteCas(github, records, async () =>
+      withReleaseBranchRewriteCas(github, records, new Map(), async () =>
         github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true }),
       ),
     ).rejects.toThrow(/beforeOid does not match/iu);
@@ -94,7 +95,7 @@ describe("Release Please workflow wrapper", () => {
     };
 
     await expect(
-      withReleaseBranchRewriteCas(github, new Map(), async () =>
+      withReleaseBranchRewriteCas(github, new Map(), new Map(), async () =>
         github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: "c".repeat(40), force: true }),
       ),
     ).rejects.toThrow(/unrecorded generated branch/iu);
@@ -224,7 +225,7 @@ describe("Release Please workflow wrapper", () => {
       // is about to discard. Nothing is written, because this run rewrote no branch.
       const headRead =
         "GET /repos/lamemustafa/pack/git/matching-refs/heads/release-please--branches--master--";
-      expect(fetched).toEqual([headRead, headRead, headRead]);
+      expect(fetched).toEqual([headRead, headRead]);
     } finally {
       vi.unstubAllGlobals();
       log.mockRestore();
@@ -434,7 +435,7 @@ describe("release branch rewrite records", () => {
     expect(posted?.body).not.toContain("after=");
   });
 
-  it("completes an interrupted record from its force-push event, not the current ref", async () => {
+  it("holds an interrupted record when its branch changed", async () => {
     const lostBefore = "c".repeat(40);
     const created = "b".repeat(40);
     const landedSince = "e".repeat(40);
@@ -451,22 +452,15 @@ describe("release branch rewrite records", () => {
     });
     const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
 
-    await openBranchRewriteRecords({
-      env,
-      owner: "lamemustafa",
-      repo: "pack",
-      targetBranch: "master",
-    });
-
-    const patched = calls.find((call) => call.method === "PATCH");
-    expect(patched?.path).toContain("/issues/comments/99");
-    expect(patched?.body).toContain(`before=${lostBefore} after=${created}`);
-    expect(patched?.body).not.toContain(landedSince);
+    await expect(
+      openBranchRewriteRecords({ env, owner: "lamemustafa", repo: "pack", targetBranch: "master" }),
+    ).rejects.toThrow(/interrupted rewrite record no longer matches/iu);
+    expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
   });
 
-  it("refuses interrupted recovery when more than one force-push could match its marker", async () => {
+  it("does not consult timeline events for an unchanged interrupted record", async () => {
     const before = "c".repeat(40);
-    stubGitHub({
+    const calls = stubGitHub({
       heads: before,
       comments: [
         {
@@ -481,7 +475,8 @@ describe("release branch rewrite records", () => {
 
     await expect(
       openBranchRewriteRecords({ env, owner: "lamemustafa", repo: "pack", targetBranch: "master" }),
-    ).rejects.toThrow(/multiple force-push events/iu);
+    ).resolves.toBeInstanceOf(Map);
+    expect(calls.find((call) => call.path.includes("/timeline"))).toBeUndefined();
   });
 
   it("ignores a marker written by anyone but the workflow", async () => {
@@ -653,7 +648,7 @@ describe("release branch rewrite records", () => {
   // A release pull request outlives a hundred comments, and the marker this mechanism just wrote is
   // the newest one -- exactly what a first-page read drops. Losing it leaves the force-push
   // permanently unpaired, because every later run reads the same truncated page.
-  it("reads a rewrite record past the first page of comments", async () => {
+  it("closes only the marker named by a verified CAS receipt", async () => {
     const before = "c".repeat(40);
     const after = "b".repeat(40);
     const marker = `<!-- review-gate-rewrite branch=${branch} before=${before} -->`;
@@ -671,8 +666,9 @@ describe("release branch rewrite records", () => {
       env,
       owner: "lamemustafa",
       repo: "pack",
-      targetBranch: "master",
-      headsBeforeRegeneration: openedRecords(before, 501),
+      confirmedRewrites: new Map([
+        [branch, { record: { id: 501, marker: { branch, before } }, after }],
+      ]),
     });
 
     const patched = calls.find((call) => call.method === "PATCH");
@@ -680,7 +676,7 @@ describe("release branch rewrite records", () => {
     expect(patched?.body).toContain(`after=${after}`);
   });
 
-  it("closes the open record with the head the rewrite created", async () => {
+  it("writes the verified CAS destination into the marker", async () => {
     const before = "c".repeat(40);
     const after = "b".repeat(40);
     const calls = stubGitHub({
@@ -700,15 +696,16 @@ describe("release branch rewrite records", () => {
       env,
       owner: "lamemustafa",
       repo: "pack",
-      targetBranch: "master",
-      headsBeforeRegeneration: openedRecords(before),
+      confirmedRewrites: new Map([
+        [branch, { record: { id: 99, marker: { branch, before } }, after }],
+      ]),
     });
 
     const patched = calls.find((call) => call.method === "PATCH");
     expect(patched?.body).toContain(`before=${before} after=${after}`);
   });
 
-  it("closes with the head the rewrite created, not the one the branch carries now", async () => {
+  it("does not replace a CAS receipt with a later branch head", async () => {
     // The gate looks a record up by the head the force-push created -- the timeline event's
     // `commit_id`. An ordinary commit landing on the branch before this read would otherwise have
     // the record name a head no event mentions, leaving the rewrite as unidentified as if nothing
@@ -733,8 +730,9 @@ describe("release branch rewrite records", () => {
       env,
       owner: "lamemustafa",
       repo: "pack",
-      targetBranch: "master",
-      headsBeforeRegeneration: openedRecords(before),
+      confirmedRewrites: new Map([
+        [branch, { record: { id: 99, marker: { branch, before } }, after: created }],
+      ]),
     });
 
     const patched = calls.find((call) => call.method === "PATCH");
@@ -764,8 +762,7 @@ describe("release branch rewrite records", () => {
       env,
       owner: "lamemustafa",
       repo: "pack",
-      targetBranch: "master",
-      headsBeforeRegeneration: openedRecords(before),
+      confirmedRewrites: new Map(),
     });
 
     expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
@@ -789,26 +786,20 @@ describe("release branch rewrite records", () => {
     expect(lookup?.path).toContain("base=master");
   });
 
-  it("leaves the record open rather than failing a run that already published a release", async () => {
+  it("does not close a marker without a CAS receipt", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: false, status: 500 }) as unknown as Response),
     );
-    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { closeBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
 
-    // Throwing here would abort the workflow after a GitHub release exists, stranding it without
-    // its assets. The open record costs a refusal the gate was already making.
     await expect(
       closeBranchRewriteRecords({
         env,
         owner: "lamemustafa",
         repo: "pack",
-        targetBranch: "master",
-        headsBeforeRegeneration: openedRecords("c".repeat(40)),
+        confirmedRewrites: new Map(),
       }),
     ).resolves.toBeUndefined();
-    expect(errors).toHaveBeenCalledWith(expect.stringContaining("stays open"));
-    errors.mockRestore();
   });
 });

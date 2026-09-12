@@ -33,7 +33,15 @@ export function openBranchRewriteRecords(
 /** `false` when it could not confirm what the regeneration is about to discard. */
 export function refreshBranchRewriteRecords(options: OpenedRewriteRecords): Promise<boolean>;
 
-export function closeBranchRewriteRecords(options: OpenedRewriteRecords): Promise<void>;
+export function closeBranchRewriteRecords(options: {
+  env: ReleaseBranchScope["env"];
+  owner: string;
+  repo: string;
+  confirmedRewrites: Map<
+    string,
+    { record: { id: number; marker: { branch: string; before: string } }; after: string }
+  >;
+}): Promise<void>;
 
 export function withReleaseBranchRewriteCas<T>(
   github: {
@@ -42,5 +50,9 @@ export function withReleaseBranchRewriteCas<T>(
     octokit: { git: { updateRef: (request: Record<string, unknown>) => Promise<unknown> } };
   },
   expected: OpenedRewriteRecords["headsBeforeRegeneration"],
+  confirmedRewrites: Map<
+    string,
+    { record: { id: number; marker: { branch: string; before: string } }; after: string }
+  >,
   operation: () => Promise<T>,
 ): Promise<T>;

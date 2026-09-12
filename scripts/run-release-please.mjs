@@ -74,10 +74,14 @@ export async function runReleasePlease(env = process.env) {
     headsBeforeRegeneration,
   });
   let pullRequests = [];
+  const confirmedRewrites = new Map();
   if (recordsNameTheCurrentHeads) {
     try {
-      pullRequests = await withReleaseBranchRewriteCas(github, headsBeforeRegeneration, async () =>
-        (await pullRequestManifest.createPullRequests()).filter(Boolean),
+      pullRequests = await withReleaseBranchRewriteCas(
+        github,
+        headsBeforeRegeneration,
+        confirmedRewrites,
+        async () => (await pullRequestManifest.createPullRequests()).filter(Boolean),
       );
     } catch (error) {
       // Releases may already exist, and their verified assets are uploaded by later workflow
@@ -88,7 +92,7 @@ export async function runReleasePlease(env = process.env) {
       );
     }
   }
-  await closeBranchRewriteRecords({ env, owner, repo, targetBranch, headsBeforeRegeneration });
+  await closeBranchRewriteRecords({ env, owner, repo, confirmedRewrites });
   outputs.prs_created = String(pullRequests.length > 0);
   if (pullRequests.length > 0) {
     outputs.pr = JSON.stringify(pullRequests[0]);
@@ -112,8 +116,8 @@ export async function runReleasePlease(env = process.env) {
 // across a regeneration instead of refusing every release pull request (#342, #350).
 //
 // Opening the record before the rewrite rather than writing it afterwards is what makes an
-// interrupted run recoverable: a cancellation between the force-push and the write would otherwise
-// lose the discarded SHA permanently, and no later run could reconstruct it.
+// interrupted run diagnosable: a cancellation leaves the discarded SHA recorded, but a later run
+// must hold if it cannot prove the rewrite's created head from its own CAS receipt.
 export async function openBranchRewriteRecords({ env, owner, repo, targetBranch }) {
   const heads = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
   const opened = new Map();
@@ -131,23 +135,13 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
       (record) => record.marker.branch === branch && record.marker.after === null,
     );
     if (open) {
-      const created = await readCorrelatedForcePushedHead({
-        env,
-        owner,
-        repo,
-        pullRequestNumber,
-        after: open.createdAt,
-      });
-      if (created) {
-        await writeBranchRewriteRecord({ env, owner, repo, record: open, after: created });
-      } else if (head === open.marker.before) {
+      if (head === open.marker.before) {
         opened.set(branch, { head, recordId: open.id, pullRequestNumber });
         continue;
-      } else {
-        throw new Error(
-          "GitHub could not correlate an open rewrite record with the branch head now standing; refusing to discard an unrecorded head.",
-        );
       }
+      throw new Error(
+        "An interrupted rewrite record no longer matches its branch head; regeneration remains held.",
+      );
     }
     const created = await githubRequest(
       env,
@@ -174,56 +168,20 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
 // failing the job would strand it without its assets. The cost of not throwing is bounded: the
 // record stays open, the review gate keeps refusing exactly as it would have, and the next run
 // completes it.
-export async function closeBranchRewriteRecords({
-  env,
-  owner,
-  repo,
-  targetBranch,
-  headsBeforeRegeneration,
-}) {
+export async function closeBranchRewriteRecords({ env, owner, repo, confirmedRewrites }) {
   try {
-    await eachOpenBranchRewriteRecord(
-      { env, owner, repo, targetBranch, expected: headsBeforeRegeneration },
-      async ({ pullRequestNumber, record, head }) => {
-        // An unchanged head discarded nothing. Completing the record with `after === before` says
-        // exactly that, and the gate reads it as the non-event it was.
-        if (head === record.marker.before) {
-          await writeBranchRewriteRecord({ env, owner, repo, record, after: head });
-          console.log(
-            `Closed release branch rewrite record on #${pullRequestNumber}: branch unchanged.`,
-          );
-          return;
-        }
-        // Otherwise the head is read from the rewrite itself, not from the branch. The gate looks
-        // this record up by the head the force-push *created* -- it keys on the timeline event's
-        // `commit_id` -- so an ordinary commit landing on the branch before this read would have
-        // the record name a head no event mentions, and the rewrite would stay unidentified
-        // exactly as if nothing had recorded it.
-        const created = await readCorrelatedForcePushedHead({
-          env,
-          owner,
-          repo,
-          pullRequestNumber,
-          after: record.createdAt,
-        });
-        if (!created) {
-          // Leaving it open is the established answer to not knowing: the gate ignores an open
-          // record, and the next run completes it. Closing it with an uncorroborated head would
-          // publish a claim about a rewrite that no event backs.
-          console.error(
-            `Could not name the head the regeneration created on #${pullRequestNumber}. The record stays open and the next run completes it.`,
-          );
-          return;
-        }
-        await writeBranchRewriteRecord({ env, owner, repo, record, after: created });
-        console.log(
-          `Closed release branch rewrite record on #${pullRequestNumber}: ${record.marker.before} -> ${created}`,
-        );
-      },
-    );
+    for (const receipt of confirmedRewrites.values()) {
+      await writeBranchRewriteRecord({
+        env,
+        owner,
+        repo,
+        record: receipt.record,
+        after: receipt.after,
+      });
+    }
   } catch (error) {
     console.error(
-      `Could not close a release branch rewrite record: ${error.message}. The record stays open and the next run completes it.`,
+      `Could not close a release branch rewrite record: ${error.message}. The record stays open for review.`,
     );
   }
 }
@@ -273,7 +231,7 @@ export async function refreshBranchRewriteRecords({
 // even though the marker names the earlier head. GitHub's `updateRefs` mutation accepts `beforeOid`,
 // so replace only those already-recorded generated-branch updates with a compare-and-swap. A
 // mismatch rejects the release run while its open marker remains durable for recovery.
-export async function withReleaseBranchRewriteCas(github, expected, operation) {
+export async function withReleaseBranchRewriteCas(github, expected, confirmedRewrites, operation) {
   const updates = github.octokit?.git?.updateRef;
   if (typeof updates !== "function" || typeof github.graphql !== "function") {
     throw new Error("Release Please did not expose the GitHub clients needed for rewrite CAS.");
@@ -319,6 +277,10 @@ export async function withReleaseBranchRewriteCas(github, expected, operation) {
     if (!result?.updateRefs) {
       throw new Error(`GitHub did not confirm the compare-and-swap update for ${branch}.`);
     }
+    confirmedRewrites.set(branch, {
+      record: { id: record.recordId, marker: { branch, before: record.head } },
+      after: afterOid,
+    });
     return { data: { object: { sha: afterOid } } };
   };
   try {
@@ -326,35 +288,6 @@ export async function withReleaseBranchRewriteCas(github, expected, operation) {
   } finally {
     github.octokit.git.updateRef = updates;
   }
-}
-
-/**
- * The head named by this pull request's most recent force-push, or `null`.
- *
- * `commit_id` on a `head_ref_force_pushed` event is the head that rewrite created -- the same
- * field the review gate keys recorded discards by. Reading it here is what makes the two sides
- * agree about which rewrite a record describes.
- */
-async function readCorrelatedForcePushedHead({ env, owner, repo, pullRequestNumber, after }) {
-  const timeline = await githubList(
-    env,
-    `/repos/${owner}/${repo}/issues/${pullRequestNumber}/timeline`,
-    "pull request timeline for a release branch",
-  );
-  const candidates = [];
-  for (const event of timeline) {
-    if (event?.event !== "head_ref_force_pushed") continue;
-    const sha = String(event.commit_id ?? "").toLowerCase();
-    if (!/^[0-9a-f]{40}$/u.test(sha)) continue;
-    const at = Date.parse(event.created_at ?? "");
-    if (!Number.isFinite(at) || at < after) continue;
-    candidates.push({ sha, at });
-  }
-  if (candidates.length === 0) return null;
-  if (candidates.length !== 1) {
-    throw new Error("GitHub returned multiple force-push events after an open rewrite record.");
-  }
-  return candidates[0].sha;
 }
 
 /**

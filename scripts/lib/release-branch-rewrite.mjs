@@ -16,8 +16,8 @@
 // A record is written in two stages because the rewrite is not atomic with the recording of it.
 // The `before` head is written first, while it is still the branch head; the `after` head is added
 // once the rewrite has produced one. A record stopped in between names a discarded head and no
-// replacement. The gate ignores it until a later run can correlate exactly one subsequent
-// force-push event; the event's `commit_id`, not whichever ref head exists later, supplies `after`.
+// replacement. The gate ignores it until a successful compare-and-swap records the created head;
+// timeline events alone cannot safely attribute a later head to this marker.
 const MARKER_PATTERN =
   /<!--\s*review-gate-rewrite\s+branch=(\S+)\s+before=([0-9a-f]{40})(?:\s+after=([0-9a-f]{40}))?\s*-->/iu;
 
