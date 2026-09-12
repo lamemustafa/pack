@@ -21,6 +21,7 @@ import {
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
+import { hasDurableFullFiscalYearArtifactEvidence } from "./filed-returns-full-fiscal-year-validation";
 import {
   canCompleteFullFiscalYearLedger,
   unplannedEligibleFullFiscalYearPeriods,
@@ -152,6 +153,10 @@ const TARGET_OUTCOMES: Readonly<
   pending: "pending",
 };
 
+export function hasRetainedFullFiscalYearArtifactEvidence(signals: readonly string[]): boolean {
+  return hasDurableFullFiscalYearArtifactEvidence(signals);
+}
+
 export function targetStatusFromFlowStep(
   step: PortalFlowStepResult,
   returnType?: FiledReturnsReturnType,
@@ -257,6 +262,7 @@ export function filedReturnsTargetOutcome(
   missedAnArtifact: boolean,
 ): FiledReturnsTargetOutcome {
   const outcome = TARGET_OUTCOMES[status];
+  if (outcome === "not-generated" && missedAnArtifact) return "needs-review";
   // `summariseFullFiscalYearLedger` reports an interrupted run as blocked while
   // leaving the current target's durable status at `running`. Nothing is
   // running after an MV3 worker interruption, and reading it as "In progress"
@@ -392,9 +398,9 @@ function targetMissedAnArtifact(target: FiledReturnsFullFiscalYearTarget): boole
   // absence fails ledger validation, so this cannot be reached with a real
   // record. A malformed one throwing here is diagnosable; a malformed one
   // silently reading as saved is not.
-  return target.safeSignals.some((signal) =>
-    signal.startsWith("filed-return-artifact-unavailable:"),
-  );
+  return target.status === "not-generated"
+    ? hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals)
+    : target.safeSignals.some((signal) => signal.startsWith("filed-return-artifact-unavailable:"));
 }
 
 export function toFullFiscalYearSummary(

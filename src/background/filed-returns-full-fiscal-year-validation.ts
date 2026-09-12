@@ -116,6 +116,14 @@ export function durableFullFiscalYearArtifactSignals(signals: readonly string[])
   );
 }
 
+export function hasDurableFullFiscalYearArtifactEvidence(signals: readonly string[]): boolean {
+  return signals.some((signal) =>
+    /^(?:filed-return-artifact-downloaded|full-fiscal-year-opfs-staged|all-supported-full-fiscal-year-opfs-staged):(?:PDF|JSON|EXCEL)$/.test(
+      signal,
+    ),
+  );
+}
+
 const MAX_SAFE_MESSAGE_LENGTH = 500;
 const VALID_LEDGER_STATUSES = new Set<FiledReturnsFullFiscalYearLedger["status"]>([
   "running",
@@ -397,6 +405,12 @@ function isFullFiscalYearTarget(
     target.safeSignals,
   );
   if (!durableStatus) return false;
+  if (
+    target.status === "not-generated" &&
+    hasDurableFullFiscalYearArtifactEvidence(target.safeSignals ?? [])
+  ) {
+    return false;
+  }
   if (
     target.safeMessage !== durableStatus.safeMessage &&
     !isHistoricalDurableTargetMessage(

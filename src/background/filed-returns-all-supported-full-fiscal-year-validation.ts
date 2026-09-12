@@ -42,6 +42,7 @@ import {
 import {
   canonicalFullFiscalYearPlanPeriods,
   isCanonicalFullFiscalYearPeriodPlan,
+  hasDurableFullFiscalYearArtifactEvidence,
 } from "./filed-returns-full-fiscal-year-validation";
 import { filedReturnsTargetStatusBehaviour } from "../connectors/gst/filed-returns-contracts";
 
@@ -500,6 +501,12 @@ function isTarget(
     verifiedTarget.safeSignals,
   );
   if (!durableStatus) return false;
+  if (
+    verifiedTarget.status === "not-generated" &&
+    hasDurableFullFiscalYearArtifactEvidence(verifiedTarget.safeSignals)
+  ) {
+    return false;
+  }
   if (
     verifiedTarget.safeMessage !== durableStatus.safeMessage &&
     !isHistoricalDurableTargetMessage(
