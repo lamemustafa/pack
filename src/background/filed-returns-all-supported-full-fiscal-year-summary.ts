@@ -1,10 +1,11 @@
+import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
   FiledReturnsDownloadScope,
-  FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import {
   allSupportedExplicitRetryTarget,
@@ -21,11 +22,6 @@ import type {
   FiledReturnsAllSupportedFullFiscalYearLedger,
   FiledReturnsAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
-
-const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
 
 export interface AllSupportedFullFiscalYearCurrentStateDeps {
   storageKeys: { allSupportedFullFiscalYearLedgerIndex?: string; activeRun?: string };
@@ -129,7 +125,7 @@ export function toAllSupportedFullFiscalYearSummary(
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
     updatedAt: ledger.updatedAt,
     completedTargetIds: ledger.targets
-      .filter((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+      .filter((target) => isResolvedFullFiscalYearTargetStatus(target.status))
       .map((target) => target.targetId),
     targetEvidence: ledger.targets.map((target) => ({
       targetId: target.targetId,
@@ -280,16 +276,15 @@ function targetOutcome(
   target: FiledReturnsAllSupportedFullFiscalYearTarget,
   zipDelivered: boolean,
 ): FiledReturnsAllSupportedFullFiscalYearTargetEvidence["outcome"] {
-  if (target.status === "not-filed") return "not-filed";
-  if (target.status === "downloaded") {
-    if (!zipDelivered) return "captured";
-    return target.safeSignals.some((signal) =>
-      signal.startsWith("filed-return-artifact-unavailable:"),
-    )
-      ? "partly-saved"
-      : "saved";
-  }
-  if (target.status === "pending") return "pending";
-  if (target.status === "running") return "running";
-  return "needs-review";
+  // The same exhaustive mapping the single-return fiscal-year path uses. Two hand-written copies
+  // stood here, each ending in a `needs-review` default that silently absorbed any status they had
+  // not been told about -- so a period the portal declined to generate was reported to the user as
+  // needing review, in the one run type where it could not be. The shared record fails to compile
+  // instead, which is the only reason the single-return path was already right.
+  return filedReturnsTargetOutcome(
+    target.status,
+    zipDelivered,
+    false,
+    target.safeSignals.some((signal) => signal.startsWith("filed-return-artifact-unavailable:")),
+  );
 }

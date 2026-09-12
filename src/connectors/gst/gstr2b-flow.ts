@@ -8,6 +8,7 @@ import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
 import { returnFromMismatchedReturnPage } from "./filed-returns-return-type-navigation";
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
+import { bindGstr2bSummaryRefusal, declinedArtifactStep } from "./filed-returns-declined-artifact";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import {
@@ -21,6 +22,7 @@ import {
   hasGstr2bLoginEvidence,
   isGstr2bAuthRoute,
   isGstr2bSummaryPage,
+  isGstr2bSummaryRoute,
   readDocumentText,
   returnFromMismatchedGstr2bSummary,
   verifyVisibleGstr2bPeriod,
@@ -32,6 +34,40 @@ import {
   isReturnDashboardStillRendering,
   selectGstr2bReturnDashboardFiltersAndSearch,
 } from "./gstr2b-dashboard-filters";
+import { isGstr2bNotGeneratedText } from "./filed-returns-post-click-blocked-state";
+
+/**
+ * `null` when the visible page is the requested period, otherwise the step that leaves it.
+ *
+ * The summary route renders whichever period it last loaded, so both callers must confirm the
+ * header before trusting anything on the page -- one to record a refusal, the other to click a
+ * download. Failing closed is the point: an unreadable header is "could not determine".
+ *
+ * `requireVisibleEvidence` is the difference between them, and it is the refusal that sets it:
+ * see `verifyVisibleGstr2bPeriod`.
+ */
+function leaveUnlessVisiblePeriodMatches(
+  documentRef: Document,
+  normalisedText: string,
+  scope: FiledReturnsDownloadScope,
+  scopeId: string,
+  safeSignals: readonly string[],
+  requireVisibleEvidence = false,
+): PortalFlowStepResult | null {
+  const periodGuard = verifyVisibleGstr2bPeriod(
+    documentRef,
+    normalisedText,
+    scope,
+    requireVisibleEvidence,
+  );
+  if (!periodGuard) return null;
+  return (
+    returnFromMismatchedGstr2bSummary(documentRef, scopeId, [
+      ...safeSignals,
+      ...periodGuard.safeSignals,
+    ]) ?? periodGuard
+  );
+}
 
 const FILED_RETURNS_ROUTE = /\/returns\/auth\/efiledReturns\/?$/i;
 
@@ -73,6 +109,33 @@ export async function runGstr2bDownloadStep(
     };
   }
 
+  // Recognised here, during observation, rather than after a click. The portal renders this panel
+  // instead of the download control, so the flow would otherwise wait out its whole step budget
+  // for a control that is never coming, then stop the fiscal-year run on a period that cannot
+  // produce an artifact. A blocked step ends the wait and lets the period be recorded as absent.
+  //
+  // Bound to the visible period, because this panel keeps rendering the period it was last loaded
+  // for. Unbound, one period's refusal answered for every later period in a fiscal-year run, which
+  // recorded eleven months the run never navigated to. The guard fails closed: an unreadable
+  // period is "could not determine", never "matches".
+  if (isGstr2bSummaryRoute(documentRef) && isGstr2bNotGeneratedText(normalised)) {
+    const binding = bindGstr2bSummaryRefusal(documentRef, normalised, scope);
+    if (!binding.bound) {
+      // A stale panel is not just refused here, it is navigated away from: the run needs the
+      // period it actually asked for, and waiting on this page produces nothing.
+      const mismatchSignals = [...safeSignals, ...binding.mismatch.safeSignals];
+      return (
+        returnFromMismatchedGstr2bSummary(documentRef, scopeId, mismatchSignals) ?? {
+          ...binding.mismatch,
+          safeSignals: mismatchSignals,
+        }
+      );
+    }
+    return declinedArtifactStep(binding.bound, {
+      safeSignals: [...safeSignals, "gstr2b-summary-route"],
+    });
+  }
+
   const mismatchedReturnNavigation = returnFromMismatchedReturnPage(
     documentRef,
     scope,
@@ -81,15 +144,14 @@ export async function runGstr2bDownloadStep(
   if (mismatchedReturnNavigation) return mismatchedReturnNavigation;
 
   if (isGstr2bSummaryPage(documentRef, normalised)) {
-    const periodGuard = verifyVisibleGstr2bPeriod(documentRef, normalised, scope);
-    if (periodGuard) {
-      const recovery = returnFromMismatchedGstr2bSummary(documentRef, scopeId, [
-        ...safeSignals,
-        ...periodGuard.safeSignals,
-      ]);
-      if (recovery) return recovery;
-      return periodGuard;
-    }
+    const leaving = leaveUnlessVisiblePeriodMatches(
+      documentRef,
+      normalised,
+      scope,
+      scopeId,
+      safeSignals,
+    );
+    if (leaving) return leaving;
     return {
       connectorId: "gst",
       scopeId,

@@ -21,7 +21,17 @@ import {
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isValidFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
-const MISSING_ARTIFACT_REASONS = new Set(["artifact-filed-gstr1-excel-no-details-available"]);
+import {
+  DECLINED_ARTIFACT_REASONS as DECLINED_ARTIFACT_REASONS_LIST,
+  DECLINED_ARTIFACT_SIGNALS,
+  declinedArtifactReason,
+} from "../connectors/gst/filed-returns-acquisition-diagnostics";
+const MISSING_ARTIFACT_REASONS = new Set<string>(DECLINED_ARTIFACT_REASONS_LIST);
+
+// The flow signal the portal's refusal carries, and the reason recorded against the artifact.
+const DECLINED_ARTIFACT_REASONS = new Map<string, string>(
+  DECLINED_ARTIFACT_SIGNALS.map((signal) => [signal, declinedArtifactReason(signal)]),
+);
 
 const LEDGER_KEYS = [
   "artifactPlan",
@@ -371,7 +381,7 @@ export function markSinglePeriodBundleArtifactUnavailable(
     return null;
   }
   const diagnostic = optionalArtifactDiagnostic(flowStep, ledger.scope, artifactType);
-  const missingReason = missingArtifactReason(flowStep);
+  const missingReason = missingArtifactReason(flowStep, ledger.scope.returnType);
   if (!missingReason) return null;
   const updated = updateArtifact(ledger, artifactType, now, {
     artifactType,
@@ -853,13 +863,17 @@ function parsedArtifactPlan(
     : null;
 }
 
-function missingArtifactReason(flowStep: PortalFlowStepResult): string | null {
-  return (
-    flowStep.safeSignals.find((signal) => MISSING_ARTIFACT_REASONS.has(signal)) ??
-    (flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available")
-      ? "artifact-filed-gstr1-excel-no-details-available"
-      : null)
-  );
+function missingArtifactReason(
+  flowStep: PortalFlowStepResult,
+  returnType: FiledReturnsDownloadScope["returnType"],
+): string | null {
+  const recorded = flowStep.safeSignals.find((signal) => MISSING_ARTIFACT_REASONS.has(signal));
+  if (recorded) return recorded;
+  const declined = flowStep.safeSignals.find((signal) => DECLINED_ARTIFACT_REASONS.has(signal));
+  const compatible =
+    (declined === "filed-gstr1-excel-no-details-available" && returnType === "GSTR-1") ||
+    (declined === "filed-gstr2b-not-generated" && returnType === "GSTR-2B");
+  return compatible ? (DECLINED_ARTIFACT_REASONS.get(declined) ?? null) : null;
 }
 
 function isMissingReason(value: unknown): value is string {

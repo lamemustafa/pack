@@ -40,8 +40,14 @@ import {
   gstr3bFullFiscalYearAcquisitionNotWiredStep,
   isGstr3bFullFiscalYearAcquisitionScope,
 } from "./gstr3b-artifact-acquisition-block";
+import { DECLINED_ARTIFACT_SIGNALS } from "../connectors/gst/filed-returns-acquisition-diagnostics";
+import { persistSinglePeriodSummary } from "./filed-returns-single-period-summary";
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
+
+// Only the portal's own declined-artifact answers are adopted from a post-click inspection; any
+// other page state leaves the original acquisition failure standing with its reason intact.
+const DECLINED_ARTIFACT_SIGNAL_SET = new Set<string>(DECLINED_ARTIFACT_SIGNALS);
 
 async function persistSingleArtifactRecoveryIntent(
   scope: FiledReturnsDownloadScope,
@@ -672,39 +678,128 @@ async function triggerPageGeneratedSinglePeriodArtifact(
           checkpointHasDownloadId,
           externallyVisibleActionMayHaveOccurred,
         }));
-    return acquired.ok
-      ? {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: filedReturnScopeId(returnType),
-            state: "downloaded",
-            safeSignals: [...artifact.safeSignals, ...acquired.safeSignals],
-            safeMessage: acquired.safeMessage ?? artifactSuccessMessage(returnType, artifactType),
-            ...(hasDownloadDiagnostic(acquired) && acquired.downloadDiagnostic
-              ? { downloadDiagnostic: acquired.downloadDiagnostic }
-              : {}),
-          },
-        }
-      : {
-          ok: true,
-          flowStep: {
-            connectorId: "gst",
-            scopeId: filedReturnScopeId(returnType),
-            state: "blocked",
-            safeSignals: [
-              "artifact-acquisition-failed",
-              `artifact-${acquired.reason}`,
-              ...acquired.safeSignals,
-            ],
-            safeMessage: acquired.safeMessage ?? artifactFailureMessageForDelivery(acquired.reason),
-          },
-        };
+    if (acquired.ok) {
+      return {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnScopeId(returnType),
+          state: "downloaded",
+          safeSignals: [...artifact.safeSignals, ...acquired.safeSignals],
+          safeMessage: acquired.safeMessage ?? artifactSuccessMessage(returnType, artifactType),
+          ...(hasDownloadDiagnostic(acquired) && acquired.downloadDiagnostic
+            ? { downloadDiagnostic: acquired.downloadDiagnostic }
+            : {}),
+        },
+      };
+    }
+
+    // An uncertain acquisition can already own a browser download or a durable intent. A later
+    // page inspection cannot establish that no download occurred, so keep that outcome and its
+    // checkpoint for recovery rather than replacing it with a terminal absence.
+    const declined = retainCheckpointForRecovery
+      ? null
+      : await postClickBlockedStep({
+          artifactType,
+          deps,
+          requestId,
+          returnType,
+          scope,
+          tabId,
+        });
+    if (declined) {
+      // The retain decision above was made about an acquisition failure. This is not one: the
+      // portal has established that no download exists for this target, so there is nothing for a
+      // retry to reconcile. Leaving the intent checkpoint standing would block the next attempt as
+      // `artifact-acquisition-start-unreconciled` -- refusing the retry this very result offers.
+      // A worker can stop after the intent is removed but before the outer flow persists this
+      // terminal answer. Make the answer durable first; only then may `finally` remove the
+      // recovery checkpoint that kept the failed acquisition restart-safe.
+      const completionKey = deps.storageKeys.completion;
+      const persisted = completionKey
+        ? await persistSinglePeriodSummary({ ...scope, artifactType }, declined.flowStep, {
+            storageKeys: { completion: completionKey },
+            ...(deps.now ? { now: deps.now } : {}),
+          })
+        : null;
+      retainCheckpointForRecovery = !persisted;
+      return declined;
+    }
+
+    return {
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId(returnType),
+        state: "blocked",
+        safeSignals: [
+          "artifact-acquisition-failed",
+          `artifact-${acquired.reason}`,
+          ...acquired.safeSignals,
+        ],
+        safeMessage: acquired.safeMessage ?? artifactFailureMessageForDelivery(acquired.reason),
+      },
+    };
   } finally {
     if (tracksBrowserDownload && !retainCheckpointForRecovery) {
       await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
     }
   }
+}
+
+// A terminal no-artifact response is an answer, not a download failure. The content script and
+// ledger can record it as unavailable; this message path connects that result to the runner.
+//
+// This asks, and only when an acquisition has already failed. It cannot turn a failure into a
+// download: the step it returns is still `blocked`, and completion still requires correlated
+// download evidence.
+async function postClickBlockedStep({
+  artifactType,
+  deps,
+  requestId,
+  returnType,
+  scope,
+  tabId,
+}: {
+  artifactType: FiledReturnsConcreteArtifactType;
+  deps: FiledReturnsFlowMessagingDeps;
+  requestId: string;
+  returnType: "GSTR-1" | "GSTR-2B";
+  scope: FiledReturnsDownloadScope;
+  tabId: number;
+}): Promise<FlowStepResponse | null> {
+  const declinable =
+    (returnType === "GSTR-1" && artifactType === "EXCEL") || returnType === "GSTR-2B";
+  if (!declinable) return null;
+  // This runs after an acquisition has already failed, and it can only refine that failure. If the
+  // tab has closed, navigated, or refuses injection, the answer is simply that the failure cannot
+  // be refined -- so the original reason stands. Throwing here would replace a specific, actionable
+  // failure with the generic background error and lose the terminal summary with it.
+  let raw: unknown;
+  try {
+    raw = await deps.sendMessageToTabWithInjection(tabId, {
+      type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3",
+      payload: {
+        actionId: requestId,
+        artifactType,
+        financialYear: scope.financialYear,
+        period: scope.period,
+        returnType,
+      },
+    });
+  } catch {
+    return null;
+  }
+  const response = normaliseContentScriptMessageResponse(
+    raw,
+    "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3",
+  );
+  if (!response.ok || !("flowStep" in response)) return null;
+  // Only the recognised no-details answer is adopted. Any other post-click state leaves the
+  // original acquisition failure standing, reason intact.
+  return response.flowStep.safeSignals.some((signal) => DECLINED_ARTIFACT_SIGNAL_SET.has(signal))
+    ? { ok: true, flowStep: response.flowStep }
+    : null;
 }
 
 async function deliverValidatedArtifact({

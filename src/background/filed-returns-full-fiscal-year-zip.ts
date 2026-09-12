@@ -6,6 +6,7 @@ import type {
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
+import { filedReturnsSummaryOutcomeCategory } from "../connectors/gst/filed-returns-summary-sheet";
 import type { FiledReturnsSummaryStatus } from "../connectors/gst/filed-returns-summary-status";
 import type { FiledReturnsMonth } from "../connectors/gst/filed-returns-scope";
 import {
@@ -268,12 +269,11 @@ function fullFiscalYearStagingRequirement(ledger: FiledReturnsFullFiscalYearLedg
         [artifactType],
       );
       if (!expectedEntry) continue;
-      const outcomeCategory =
-        target.status === "not-filed"
-          ? "not-filed"
-          : signals.has(`filed-return-artifact-unavailable:${artifactType}`)
-            ? "artifact-unavailable"
-            : "staged";
+      const outcomeCategory = filedReturnsSummaryOutcomeCategory(
+        target.status,
+        signals,
+        artifactType,
+      );
       summaryPlan.push({
         artifactType,
         entryNames: outcomeCategory === "staged" ? expectedEntry.entryNames : [],

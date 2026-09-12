@@ -4,9 +4,9 @@ import type {
   FiledReturnsFlowSummary,
   FiledReturnsFullFiscalYearLedger,
   FiledReturnsFullFiscalYearTarget,
-  FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import type {
   FullFiscalYearTargetRecoveryPayload,
   PackMessageResponse,
@@ -25,15 +25,6 @@ import {
   removeLedger as removePlanLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
 
-const RECOVERABLE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "pending",
-  "download-unconfirmed",
-  "running",
-  "blocked",
-  "failed",
-  "cancelled",
-  "manually-observed",
-]);
 const FINAL_SIDE_EFFECT_SIGNALS = new Set([
   "filed-return-download-clicked",
   "filed-return-download-trigger-ambiguous",
@@ -285,7 +276,7 @@ async function readRecoverableFullFiscalYearTarget(
     };
   }
 
-  if (!RECOVERABLE_TARGET_STATUSES.has(target.status)) {
+  if (isResolvedFullFiscalYearTargetStatus(target.status)) {
     return {
       response: recoveryActionUnavailableResponse(
         "full-fiscal-year-target-not-recoverable",

@@ -29,6 +29,7 @@ import {
   hasPositiveFiledReturnsDownloadEvidence,
   isValidFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
+import { isFiledReturnsFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 
 const SUMMARY_KEYS = [
   "artifactAcquisitionCompletion",
@@ -80,17 +81,6 @@ const FLOW_STATES = new Set<PortalFlowStepResult["state"]>([
   "ready",
   "unsupported-page",
   "user-action-required",
-]);
-const TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "blocked",
-  "cancelled",
-  "download-unconfirmed",
-  "downloaded",
-  "failed",
-  "manually-observed",
-  "not-filed",
-  "pending",
-  "running",
 ]);
 
 export function parseDurableFiledReturnsFlowSummary(
@@ -237,6 +227,16 @@ function isConsistentCompleteSummary({
       flowStep.downloadDiagnostics === undefined
     );
   }
+  if (
+    flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available") ||
+    (scope.returnType === "GSTR-2B" && flowStep.safeSignals.includes("filed-gstr2b-not-generated"))
+  ) {
+    return (
+      flowStep.state === "blocked" &&
+      flowStep.downloadDiagnostic === undefined &&
+      flowStep.downloadDiagnostics === undefined
+    );
+  }
   const artifactType = normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType);
   const isSelectedArtifactBundle = artifactType === "PDF_AND_EXCEL";
   const hasExactArtifactReconciliation = hasExactArtifactAcquisitionReconciliationEvidence(
@@ -357,7 +357,7 @@ function parseRecovery(
   }
   if (
     typeof recovery.targetStatus !== "string" ||
-    !TARGET_STATUSES.has(recovery.targetStatus as FiledReturnsFullFiscalYearTargetStatus)
+    !isFiledReturnsFullFiscalYearTargetStatus(recovery.targetStatus)
   ) {
     return null;
   }

@@ -365,7 +365,12 @@ function isFiledReturnsSummaryPlanShape(input: unknown): input is FiledReturnsSu
 function isSummaryOutcomeCategory(
   value: unknown,
 ): value is FiledReturnsSummaryPlanEntry["outcomeCategory"] {
-  return value === "staged" || value === "not-filed" || value === "artifact-unavailable";
+  return (
+    value === "staged" ||
+    value === "not-filed" ||
+    value === "not-generated" ||
+    value === "artifact-unavailable"
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
