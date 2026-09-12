@@ -1,3 +1,4 @@
+import { hasRetainedFullFiscalYearArtifactEvidence } from "../connectors/gst/filed-returns-durable-signals";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
@@ -113,14 +114,6 @@ export function durableFullFiscalYearArtifactSignals(signals: readonly string[])
     (signal) =>
       /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|JSON|EXCEL)$/.test(signal) ||
       /^full-fiscal-year-opfs-staged:(?:PDF|JSON|EXCEL)$/.test(signal),
-  );
-}
-
-export function hasDurableFullFiscalYearArtifactEvidence(signals: readonly string[]): boolean {
-  return durableFullFiscalYearArtifactSignals(signals).some(
-    (signal) =>
-      signal.startsWith("filed-return-artifact-downloaded:") ||
-      signal.startsWith("full-fiscal-year-opfs-staged:"),
   );
 }
 
@@ -407,7 +400,7 @@ function isFullFiscalYearTarget(
   if (!durableStatus) return false;
   if (
     target.status === "not-generated" &&
-    hasDurableFullFiscalYearArtifactEvidence(target.safeSignals ?? [])
+    hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals ?? [])
   ) {
     return false;
   }

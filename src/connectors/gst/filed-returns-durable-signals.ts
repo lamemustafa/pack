@@ -66,6 +66,31 @@ export function isUnconfirmedFiledReturnsDownloadSignal(signal: string): boolean
   return UNCONFIRMED_BROWSER_DOWNLOAD_SIGNALS.has(signal);
 }
 
+/** Existing saved-artifact evidence, excluding legitimate unavailable formats. */
+export function hasRetainedFullFiscalYearArtifactEvidence(signals: readonly string[]): boolean {
+  return signals.some(
+    (signal) =>
+      isDurableFiledReturnsSignal(signal) &&
+      (signal.startsWith("filed-return-artifact-downloaded:") ||
+        signal.startsWith("full-fiscal-year-opfs-staged:") ||
+        signal.startsWith("all-supported-full-fiscal-year-opfs-staged:")),
+  );
+}
+
+export function hasFullFiscalYearRefusalArtifactConflict(
+  returnType: FiledReturnsReturnType | undefined,
+  signals: readonly string[],
+): boolean {
+  return (
+    returnType === "GSTR-2B" &&
+    signals.some(
+      (signal) =>
+        signal === "filed-gstr2b-not-generated" || signal === "artifact-filed-gstr2b-not-generated",
+    ) &&
+    hasRetainedFullFiscalYearArtifactEvidence(signals)
+  );
+}
+
 export type DurableFiledReturnsSignalRejectionReason =
   | "duplicate"
   | "non-string"

@@ -1,5 +1,9 @@
 import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
-import { hasDurableAllSupportedFullFiscalYearArtifactEvidence } from "./filed-returns-all-supported-full-fiscal-year-validation";
+import {
+  hasRetainedFullFiscalYearArtifactEvidence,
+  hasFullFiscalYearRefusalArtifactConflict,
+} from "../connectors/gst/filed-returns-durable-signals";
+import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
@@ -244,13 +248,25 @@ function summaryStep(
         : "Pack confirmed the final fiscal-year ZIP download.",
     };
   }
+  return unresolvedAllSupportedFullFiscalYearStep(ledger);
+}
+
+export function unresolvedAllSupportedFullFiscalYearStep(
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+): PortalFlowStepResult {
+  const target = ledger.targets.find((item) => item.targetId === ledger.currentTargetId);
+  const conflict =
+    target?.status === "blocked" &&
+    hasFullFiscalYearRefusalArtifactConflict(target.returnType, target.safeSignals);
   return {
-    connectorId,
-    scopeId,
+    connectorId: "gst",
+    scopeId: filedReturnScopeId((target ?? ledger.targets[0]!).returnType),
     state: "blocked",
     safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
-    safeMessage:
-      "Pack retained the saved fiscal-year plan and will not repeat unresolved portal targets.",
+    safeMessage: conflict
+      ? canonicalDurableTargetStatus(scopeForTarget(target), target.status, target.safeSignals)
+          .safeMessage
+      : "Pack retained the saved fiscal-year plan and will not repeat unresolved portal targets.",
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: "Resolve the saved fiscal-year plan before starting another one.",
@@ -287,7 +303,7 @@ function targetOutcome(
     zipDelivered,
     false,
     target.status === "not-generated"
-      ? hasDurableAllSupportedFullFiscalYearArtifactEvidence(target.safeSignals)
+      ? hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals)
       : target.safeSignals.some((signal) =>
           signal.startsWith("filed-return-artifact-unavailable:"),
         ),

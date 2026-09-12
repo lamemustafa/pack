@@ -1,3 +1,7 @@
+import {
+  hasRetainedFullFiscalYearArtifactEvidence,
+  hasFullFiscalYearRefusalArtifactConflict,
+} from "../connectors/gst/filed-returns-durable-signals";
 import type {
   FiledReturnsTargetEvidence,
   FiledReturnsTargetOutcome,
@@ -24,8 +28,6 @@ import {
   DURABLE_BOUND_REFUSAL_WITH_RETAINED_ARTIFACT_MESSAGE,
 } from "../connectors/gst/filed-returns-durable-status";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
-import { hasDurableFullFiscalYearArtifactEvidence } from "./filed-returns-full-fiscal-year-validation";
-import { hasDurableAllSupportedFullFiscalYearArtifactEvidence } from "./filed-returns-all-supported-full-fiscal-year-validation";
 import {
   canCompleteFullFiscalYearLedger,
   unplannedEligibleFullFiscalYearPeriods,
@@ -178,10 +180,7 @@ export function targetStatusFromFlowStep(
         signal === "filed-gstr2b-not-generated" || signal === "artifact-filed-gstr2b-not-generated",
     )
   ) {
-    if (
-      hasDurableFullFiscalYearArtifactEvidence(step.safeSignals) ||
-      hasDurableAllSupportedFullFiscalYearArtifactEvidence(step.safeSignals)
-    ) {
+    if (hasFullFiscalYearRefusalArtifactConflict(returnType, step.safeSignals)) {
       return "blocked";
     }
     return "not-generated";
@@ -207,14 +206,7 @@ export function fullFiscalYearTargetFlowStep(
 ): PortalFlowStepResult {
   if (
     targetStatusFromFlowStep(step, returnType) === "blocked" &&
-    returnType === "GSTR-2B" &&
-    step.safeSignals.some(
-      (signal) =>
-        signal === "filed-gstr2b-not-generated" ||
-        signal === "artifact-filed-gstr2b-not-generated",
-    ) &&
-    (hasDurableFullFiscalYearArtifactEvidence(step.safeSignals) ||
-      hasDurableAllSupportedFullFiscalYearArtifactEvidence(step.safeSignals))
+    hasFullFiscalYearRefusalArtifactConflict(returnType, step.safeSignals)
   ) {
     return {
       ...step,
@@ -429,8 +421,7 @@ function targetMissedAnArtifact(target: FiledReturnsFullFiscalYearTarget): boole
   // record. A malformed one throwing here is diagnosable; a malformed one
   // silently reading as saved is not.
   return target.status === "not-generated"
-    ? hasDurableFullFiscalYearArtifactEvidence(target.safeSignals) ||
-        hasDurableAllSupportedFullFiscalYearArtifactEvidence(target.safeSignals)
+    ? hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals)
     : target.safeSignals.some((signal) => signal.startsWith("filed-return-artifact-unavailable:"));
 }
 

@@ -33,7 +33,10 @@ import {
   markAllSupportedFullFiscalYearTargetTerminal,
   nextRunnableAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
-import { allSupportedTerminalPlanRoots } from "./filed-returns-all-supported-full-fiscal-year-summary";
+import {
+  unresolvedAllSupportedFullFiscalYearStep as unresolvedRunStep,
+  allSupportedTerminalPlanRoots,
+} from "./filed-returns-all-supported-full-fiscal-year-summary";
 import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
@@ -972,24 +975,6 @@ function interruptedRunStep(
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: "Review the saved targets before resuming this fiscal-year run.",
-      canResume: true,
-    },
-  };
-}
-
-function unresolvedRunStep(
-  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
-): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(ledger.targets[0]!.returnType),
-    state: "blocked",
-    safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
-    safeMessage:
-      "Pack retained the saved fiscal-year plan and will not repeat unresolved portal targets.",
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message: "Resolve the saved fiscal-year plan before starting another one.",
       canResume: true,
     },
   };

@@ -1,3 +1,4 @@
+import { hasRetainedFullFiscalYearArtifactEvidence } from "../connectors/gst/filed-returns-durable-signals";
 import type {
   FiledReturnsAllSupportedFullFiscalYearIdentity,
   FiledReturnsDownloadDiagnostic,
@@ -42,7 +43,6 @@ import {
 import {
   canonicalFullFiscalYearPlanPeriods,
   isCanonicalFullFiscalYearPeriodPlan,
-  hasDurableFullFiscalYearArtifactEvidence,
 } from "./filed-returns-full-fiscal-year-validation";
 import { filedReturnsTargetStatusBehaviour } from "../connectors/gst/filed-returns-contracts";
 
@@ -136,18 +136,6 @@ export function durableAllSupportedFullFiscalYearArtifactSignals(
   );
 }
 
-export function hasDurableAllSupportedFullFiscalYearArtifactEvidence(
-  signals: readonly string[],
-): boolean {
-  return (
-    hasDurableFullFiscalYearArtifactEvidence(signals) ||
-    durableAllSupportedFullFiscalYearArtifactSignals(signals).some(
-      (signal) =>
-        signal.startsWith("filed-return-artifact-downloaded:") ||
-        signal.startsWith("all-supported-full-fiscal-year-opfs-staged:"),
-    )
-  );
-}
 const ZIP_PHASES = new Set<AllSupportedFullFiscalYearZipPhase>([
   "export-pending",
   "export-retry-pending",
@@ -526,7 +514,7 @@ function isTarget(
   if (!durableStatus) return false;
   if (
     verifiedTarget.status === "not-generated" &&
-    hasDurableAllSupportedFullFiscalYearArtifactEvidence(verifiedTarget.safeSignals)
+    hasRetainedFullFiscalYearArtifactEvidence(verifiedTarget.safeSignals)
   ) {
     return false;
   }

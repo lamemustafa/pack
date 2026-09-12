@@ -32,6 +32,7 @@ import {
   FILED_RETURNS_FILENAME_UNAVAILABLE_SIGNALS,
   FILED_RETURN_ROUTE_MISMATCH_SIGNALS,
   RETURN_TYPE_MISMATCH_RECOVERY_STOPPED_SIGNAL,
+  hasFullFiscalYearRefusalArtifactConflict,
   durableFiledReturnsSignalRejectionReason,
   isUnconfirmedFiledReturnsDownloadSignal,
   parseDurableFiledReturnsSignals,
@@ -278,15 +279,7 @@ function canonicalDurableTargetMessage(
   status: FiledReturnsFullFiscalYearTargetStatus | "target-review",
   signals: readonly string[],
 ): string {
-  if (
-    status === "blocked" &&
-    signals.some((signal) => signal === "filed-gstr2b-not-generated") &&
-    signals.some(
-      (signal) =>
-        signal.startsWith("filed-return-artifact-downloaded:") ||
-        signal.includes("full-fiscal-year-opfs-staged:"),
-    )
-  ) {
+  if (status === "blocked" && hasFullFiscalYearRefusalArtifactConflict(scope.returnType, signals)) {
     return DURABLE_BOUND_REFUSAL_WITH_RETAINED_ARTIFACT_MESSAGE;
   }
   return [
