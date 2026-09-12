@@ -43,6 +43,7 @@ import {
   canonicalFullFiscalYearPlanPeriods,
   isCanonicalFullFiscalYearPeriodPlan,
 } from "./filed-returns-full-fiscal-year-validation";
+import { filedReturnsTargetStatusBehaviour } from "../connectors/gst/filed-returns-contracts";
 
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION =
   "all-supported-filed-returns-targets-v1" as const;
@@ -522,10 +523,13 @@ function isTarget(
   ) {
     return false;
   }
-  return (
-    verifiedTarget.status !== "not-filed" ||
-    verifiedTarget.safeSignals.includes("filed-return-positively-not-filed")
-  );
+  // The evidence a claim needs is a property of the status, not a rule each validator remembers.
+  // Spelled out, only `not-filed` was checked here and in the single-return validator, so a stored
+  // record could assert `not-generated` with nothing behind it -- in both.
+  const requiredEvidenceSignal = filedReturnsTargetStatusBehaviour(
+    verifiedTarget.status,
+  ).requiredEvidenceSignal;
+  return !requiredEvidenceSignal || verifiedTarget.safeSignals.includes(requiredEvidenceSignal);
 }
 
 function hasCanonicalConcreteArtifacts(

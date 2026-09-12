@@ -1,6 +1,5 @@
 import { browser } from "wxt/browser";
 import type { FiledReturnsFullFiscalYearLedger } from "../connectors/gst/filed-returns-contracts";
-import { isCleanedZipPhase } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
   readActiveFiledReturnsRunStorageState,
@@ -29,6 +28,10 @@ import {
   clearAllSupportedFullFiscalYearLedgerPlans,
   readAllSupportedPlanLedgersStorageStateWithinOperation,
 } from "./filed-returns-all-supported-full-fiscal-year-run-state";
+import {
+  isCleanedZipPhase,
+  isResolvedFullFiscalYearTargetStatus,
+} from "../connectors/gst/filed-returns-contracts";
 
 export interface PackLocalDataDeps {
   clearableLocalStorageKeys: readonly string[];
@@ -209,16 +212,10 @@ function hasUnresolvedZipState(ledger: {
 function isUnresolvedFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   if (hasInconsistentFullFiscalYearCompletion(ledger)) return true;
   if (ledger.status === "complete" || ledger.status === "cancelled") return false;
-  return ledger.targets.some((target) =>
-    [
-      "pending",
-      "running",
-      "download-unconfirmed",
-      "blocked",
-      "failed",
-      "manually-observed",
-    ].includes(target.status),
-  );
+  // The same question `filed-returns-current-state.ts` asks when it decides which ledger to show,
+  // and now the same answer. The two lists had drifted: this one omitted `cancelled`, so a ledger
+  // the panel was still surfacing could be cleared from under it.
+  return ledger.targets.some((target) => !isResolvedFullFiscalYearTargetStatus(target.status));
 }
 
 async function readLocalValue<T>(key: string): Promise<T | null> {
