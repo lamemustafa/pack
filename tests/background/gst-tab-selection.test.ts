@@ -449,14 +449,19 @@ describe("Pack GST tab selection", () => {
       listener?.({ type: "PACK_GET_CONTEXT" }, { id: "pack-test-extension" }, resolve);
     });
 
-    expect(response).toEqual({
+    expect(response).toMatchObject({
       ok: false,
       error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
-      safeMessage:
-        "Pack stopped while handling the current GST Portal state. Try the action again.",
       safeSite: "background-message-handler:gst-context",
     });
+    const { safeMessage } = response as { safeMessage: string };
+    expect(safeMessage).toContain(
+      "Pack stopped while handling the current GST Portal state. Try the action again.",
+    );
+    // The rejected detail is the error's message, and it never reaches the reply. The appended
+    // fingerprint carries only the error class and a symbol from Pack's own bundle.
     expect(JSON.stringify(response)).not.toContain("sensitive portal detail");
+    expect(safeMessage).not.toContain("must not be exposed");
   });
 
   it("infers a GSTR-2B observation from the active summary route instead of returning stale wrong-page", async () => {

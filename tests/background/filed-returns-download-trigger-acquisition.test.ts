@@ -94,6 +94,7 @@ import {
 } from "../../src/background/filed-returns-download-trigger";
 import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
+import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
 
 const ARTIFACT_ACQUISITION_RETURN_TYPES = FILED_RETURNS_RETURN_TYPES;
 
@@ -1030,3 +1031,204 @@ function acquiredJson(): PackMessageResponse {
     },
   };
 }
+
+describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
+  // The portal answers this request with an information dialog when the taxpayer reports no
+  // e-invoices. The content script has always recognised it and the ledger has always known how to
+  // record the artifact as unavailable -- but nothing sent the message between them, so the
+  // recognition never ran and the run stalled offering a retry that cannot succeed.
+  //
+  // The message contract was tested; that it is ever sent was not. This pins the send, on the
+  // path that matters: the control was armed and clicked, and the click produced no download.
+  function messagingDeps(postClick: PackMessageResponse) {
+    return vi.fn(async (_tabId: number, message: { type: string }) =>
+      message.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
+        ? postClick
+        : ({
+            ok: true,
+            artifact: {
+              ok: true,
+              state: "ready",
+              requestId: "synthetic-request",
+              safeSignals: ["target-period-verified"],
+            },
+          } as PackMessageResponse),
+    );
+  }
+
+  const noDetailsStep = {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-1"),
+      state: "blocked",
+      safeSignals: ["filed-gstr1-excel-no-details-available"],
+      safeMessage: "The GST Portal reported that no e-invoice details are available.",
+    },
+  } as PackMessageResponse;
+
+  function armDefinitiveNoActionFailure() {
+    captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "control-not-found",
+      safeSignals: [] as string[],
+    } as never);
+  }
+
+  it("asks the page why, and adopts the portal's no-details answer", async () => {
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledWith(
+      17,
+      expect.objectContaining({ type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3" }),
+    );
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["filed-gstr1-excel-no-details-available"]),
+        // Still blocked. This records an absence; it never turns a click into a download.
+        state: "blocked",
+      },
+    });
+  });
+
+  it("persists the declined terminal answer before clearing its acquisition checkpoint", async () => {
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+    const persistedBefore = summaryStorage.set.mock.calls.length;
+    const clearedBefore = captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length;
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: { completion: "completion" } },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(summaryStorage.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        completedPeriods: ["April"],
+        status: "complete",
+      }),
+    });
+    expect(captureMocks.clearArtifactAcquisitionCheckpoint).toHaveBeenCalled();
+    expect(summaryStorage.set.mock.invocationCallOrder[persistedBefore]).toBeLessThan(
+      captureMocks.clearArtifactAcquisitionCheckpoint.mock.invocationCallOrder[clearedBefore]!,
+    );
+  });
+
+  it("retains an uncertain acquisition instead of adopting a later decline", async () => {
+    captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "generation-timeout",
+      safeSignals: [] as string[],
+    } as never);
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+    const persistedBefore = summaryStorage.set.mock.calls.length;
+    const clearedBefore = captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length;
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: { completion: "completion" } },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalledWith(
+      17,
+      expect.objectContaining({ type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3" }),
+    );
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["artifact-generation-timeout"]),
+        state: "blocked",
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow step.");
+    expect(response.flowStep.safeSignals).not.toContain("filed-gstr1-excel-no-details-available");
+    expect(summaryStorage.set.mock.calls.length).toBe(persistedBefore);
+    expect(captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length).toBe(clearedBefore);
+    expect(captureMocks.persistArtifactAcquisitionIntent).toHaveBeenCalled();
+  });
+
+  it("keeps the original failure when the page cannot be asked at all", async () => {
+    // This runs after an acquisition has already failed and can only refine that failure. A tab
+    // that has closed, navigated, or refuses injection means the failure cannot be refined -- not
+    // that a new one happened. Throwing here would replace a specific, actionable reason with the
+    // generic background error and lose the terminal summary with it.
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = vi.fn(
+      async (_tabId: number, message: { type: string }) => {
+        if (message.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3") {
+          throw new Error("Could not establish connection. Receiving end does not exist.");
+        }
+        return {
+          ok: true,
+          artifact: {
+            ok: true,
+            state: "ready",
+            requestId: "synthetic-request",
+            safeSignals: ["target-period-verified"],
+          },
+        } as PackMessageResponse;
+      },
+    );
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-failed",
+          "artifact-control-not-found",
+        ]),
+        state: "blocked",
+      },
+    });
+  });
+
+  it("keeps the original failure when the page reports no recognised block", async () => {
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = messagingDeps({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "filed-returns:gstr-1",
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-post-click-blocked-state-not-found"],
+        safeMessage: "Pack did not find a recognized post-click portal block.",
+      },
+    } as PackMessageResponse);
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["artifact-acquisition-failed"]),
+        state: "blocked",
+      },
+    });
+  });
+});

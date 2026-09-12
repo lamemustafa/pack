@@ -84,6 +84,35 @@ describe("filed-return session write boundary", () => {
     expect(JSON.stringify(storage.session[COMPLETION_KEY])).not.toContain("account-specific");
   });
 
+  it("does not complete a GSTR-2B scope from a GSTR-1 Excel decline signal", async () => {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: "April",
+      returnType: "GSTR-2B" as const,
+    };
+
+    const response = await withPersistedSinglePeriodSummary(
+      scope,
+      {
+        ok: true,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: filedReturnsScopeId(scope.returnType),
+          state: "blocked",
+          safeSignals: ["filed-gstr1-excel-no-details-available"],
+          safeMessage: "Synthetic incompatible decline.",
+        },
+      },
+      deps,
+      true,
+    );
+
+    expect(response).toMatchObject({
+      flowSummary: { completedPeriods: [], status: "blocked" },
+    });
+  });
+
   it("removes stale completion state when a summary contains a non-canonical signal", async () => {
     storage.session[COMPLETION_KEY] = singlePeriodSummary();
 

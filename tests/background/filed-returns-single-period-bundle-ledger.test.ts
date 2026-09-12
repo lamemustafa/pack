@@ -373,6 +373,29 @@ describe("single-period bundle ledger", () => {
     );
   });
 
+  // The portal stating it did not generate a GSTR-2B is an answer about the period, not a fault in
+  // reaching it. Recording it as an absence is what lets the bundle finish and the fiscal-year run
+  // carry on; without this the run stops on a period that can never produce an artifact.
+  it("refuses a GSTR-2B decline on a GSTR-1 bundle", () => {
+    const initial = requiredLedger();
+    const running = markSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT)!;
+
+    const updated = markSinglePeriodBundleArtifactUnavailable(
+      running,
+      "PDF",
+      {
+        connectorId: "gst",
+        safeMessage: "The GST Portal reported that it did not generate a GSTR-2B for this period.",
+        safeSignals: ["filed-gstr2b-not-generated"],
+        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+        state: "blocked",
+      },
+      PDF_STAGED_AT,
+    );
+
+    expect(updated).toBeNull();
+  });
+
   it("rejects non-enumerated artifact signals before they can enter durable state", () => {
     const initial = requiredLedger();
     const running = markSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT)!;
