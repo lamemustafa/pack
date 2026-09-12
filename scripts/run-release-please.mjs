@@ -74,7 +74,11 @@ export async function runReleasePlease(env = process.env) {
     headsBeforeRegeneration,
   });
   const pullRequests = recordsNameTheCurrentHeads
-    ? (await pullRequestManifest.createPullRequests()).filter(Boolean)
+    ? headsBeforeRegeneration.size > 0
+      ? await withReleaseBranchRewriteCas(github, headsBeforeRegeneration, async () =>
+          (await pullRequestManifest.createPullRequests()).filter(Boolean),
+        )
+      : (await pullRequestManifest.createPullRequests()).filter(Boolean)
     : [];
   await closeBranchRewriteRecords({ env, owner, repo, targetBranch, headsBeforeRegeneration });
   outputs.prs_created = String(pullRequests.length > 0);
@@ -237,6 +241,8 @@ export async function refreshBranchRewriteRecords({
       async ({ pullRequestNumber, record, head }) => {
         if (head === record.marker.before) return;
         await writeBranchRewriteRecord({ env, owner, repo, record, before: head });
+        const expectedRecord = headsBeforeRegeneration.get(record.marker.branch);
+        if (expectedRecord && typeof expectedRecord !== "string") expectedRecord.head = head;
         console.log(
           `Refreshed release branch rewrite record on #${pullRequestNumber}: before=${head}`,
         );
@@ -248,6 +254,58 @@ export async function refreshBranchRewriteRecords({
       `Could not confirm what the regeneration is about to discard: ${error.message}. Skipping the release pull request so nothing is discarded unrecorded; the next run retries.`,
     );
     return false;
+  }
+}
+
+// Release Please delegates generated-branch updates to an unconditional REST force-push. That
+// leaves a race after the marker is refreshed: a commit that arrives before the push is discarded
+// even though the marker names the earlier head. GitHub's `updateRefs` mutation accepts `beforeOid`,
+// so replace only those already-recorded generated-branch updates with a compare-and-swap. A
+// mismatch rejects the release run while its open marker remains durable for recovery.
+export async function withReleaseBranchRewriteCas(github, expected, operation) {
+  const updates = github.octokit?.git?.updateRef;
+  if (typeof updates !== "function" || typeof github.graphql !== "function") {
+    throw new Error("Release Please did not expose the GitHub clients needed for rewrite CAS.");
+  }
+  const repository = await github.graphql(
+    "query ReleaseBranchRewriteRepository($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }",
+    { owner: github.repository.owner, name: github.repository.repo },
+  );
+  const repositoryId = repository?.repository?.id;
+  if (typeof repositoryId !== "string" || !repositoryId) {
+    throw new Error("GitHub did not return a repository id for release branch rewrite CAS.");
+  }
+  github.octokit.git.updateRef = async (request) => {
+    const branch = String(request?.ref ?? "").replace(/^heads\//u, "");
+    const record = expected.get(branch);
+    if (!record || typeof record === "string") return updates.call(github.octokit.git, request);
+    const afterOid = String(request?.sha ?? "").toLowerCase();
+    if (!/^[0-9a-f]{40}$/u.test(afterOid)) {
+      throw new Error(`Release Please gave rewrite CAS an invalid destination for ${branch}.`);
+    }
+    const result = await github.graphql(
+      "mutation ReleaseBranchRewriteCas($repositoryId: ID!, $refUpdates: [RefUpdate!]!) { updateRefs(input: { repositoryId: $repositoryId, refUpdates: $refUpdates }) { clientMutationId } }",
+      {
+        repositoryId,
+        refUpdates: [
+          {
+            name: `refs/heads/${branch}`,
+            beforeOid: record.head,
+            afterOid,
+            force: true,
+          },
+        ],
+      },
+    );
+    if (!result?.updateRefs) {
+      throw new Error(`GitHub did not confirm the compare-and-swap update for ${branch}.`);
+    }
+    return { data: { object: { sha: afterOid } } };
+  };
+  try {
+    return await operation();
+  } finally {
+    github.octokit.git.updateRef = updates;
   }
 }
 

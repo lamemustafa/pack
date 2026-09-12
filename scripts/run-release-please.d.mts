@@ -34,3 +34,13 @@ export function openBranchRewriteRecords(
 export function refreshBranchRewriteRecords(options: OpenedRewriteRecords): Promise<boolean>;
 
 export function closeBranchRewriteRecords(options: OpenedRewriteRecords): Promise<void>;
+
+export function withReleaseBranchRewriteCas<T>(
+  github: {
+    repository: { owner: string; repo: string };
+    graphql: (query: string, variables: Record<string, unknown>) => Promise<unknown>;
+    octokit: { git: { updateRef: (request: Record<string, unknown>) => Promise<unknown> } };
+  },
+  expected: OpenedRewriteRecords["headsBeforeRegeneration"],
+  operation: () => Promise<T>,
+): Promise<T>;

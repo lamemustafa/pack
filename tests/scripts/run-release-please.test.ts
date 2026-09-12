@@ -7,6 +7,7 @@ import {
   resolveReleaseTargetBranch,
   runReleasePlease,
   serializeGitHubOutput,
+  withReleaseBranchRewriteCas,
 } from "../../scripts/run-release-please.mjs";
 
 const require = createRequire(import.meta.url);
@@ -17,6 +18,72 @@ const releasePlease = require("release-please");
 const RECORDER = "github-actions[bot]";
 
 describe("Release Please workflow wrapper", () => {
+  it("uses beforeOid CAS only for a recorded generated branch", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const before = "b".repeat(40);
+    const after = "c".repeat(40);
+    const originalUpdate = vi.fn().mockResolvedValue({ data: { object: { sha: after } } });
+    const graphql = vi
+      .fn()
+      .mockResolvedValueOnce({ repository: { id: "repo-id" } })
+      .mockResolvedValueOnce({ updateRefs: { clientMutationId: null } });
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql,
+      octokit: { git: { updateRef: originalUpdate } },
+    };
+
+    await withReleaseBranchRewriteCas(
+      github,
+      new Map([[branch, { head: before, recordId: 1, pullRequestNumber: 2 }]]),
+      async () => github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true }),
+    );
+
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(graphql).toHaveBeenLastCalledWith(
+      expect.stringContaining("updateRefs"),
+      expect.objectContaining({
+        repositoryId: "repo-id",
+        refUpdates: [
+          expect.objectContaining({
+            name: `refs/heads/${branch}`,
+            beforeOid: before,
+            afterOid: after,
+            force: true,
+          }),
+        ],
+      }),
+    );
+    expect(github.octokit.git.updateRef).toBe(originalUpdate);
+  });
+
+  it("rejects a raced generated-branch update and leaves the caller's record intact", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const before = "b".repeat(40);
+    const after = "c".repeat(40);
+    const originalUpdate = vi.fn();
+    const graphql = vi
+      .fn()
+      .mockResolvedValueOnce({ repository: { id: "repo-id" } })
+      .mockRejectedValueOnce(new Error("Reference update failed: beforeOid does not match"));
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql,
+      octokit: { git: { updateRef: originalUpdate } },
+    };
+    const records = new Map([[branch, { head: before, recordId: 1, pullRequestNumber: 2 }]]);
+
+    await expect(
+      withReleaseBranchRewriteCas(github, records, async () =>
+        github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true }),
+      ),
+    ).rejects.toThrow(/beforeOid does not match/iu);
+
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(records.get(branch)).toMatchObject({ head: before, recordId: 1 });
+    expect(github.octokit.git.updateRef).toBe(originalUpdate);
+  });
+
   it("emits root release outputs compatible with release-please-action", () => {
     const outputs = buildReleaseOutputs([
       {
