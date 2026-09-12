@@ -197,4 +197,15 @@ describe("the copy a declined artifact carries", () => {
       expect(message).not.toContain("Browser Downloads");
     },
   );
+
+  it("does not turn blocked refusal recovery into a settled absence", () => {
+    const message = canonicalDurableSummaryMessage(SCOPE, "blocked", [
+      "filed-gstr2b-not-generated",
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+    ]);
+
+    expect(message).toContain("needs an explicit recovery action");
+    expect(message).not.toContain("there is nothing for Pack to download");
+  });
 });
