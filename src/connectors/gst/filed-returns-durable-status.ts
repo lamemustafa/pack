@@ -123,7 +123,7 @@ export function parseDurableTargetStatus(
   if (!safeSignals) return null;
   if (
     status === "not-generated" &&
-    (scope.returnType !== "GSTR-2B" || !safeSignals.includes("filed-gstr2b-not-generated"))
+    getBoundDeclinedArtifactSignal(scope, safeSignals) !== "filed-gstr2b-not-generated"
   ) {
     return null;
   }
