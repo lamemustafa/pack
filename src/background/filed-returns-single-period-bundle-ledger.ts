@@ -21,7 +21,17 @@ import {
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { isValidFiledReturnsDownloadDiagnosticState } from "./filed-returns-download-diagnostic-state";
 import { PACK_LOCAL_STORAGE_KEYS } from "./storage-keys";
-const MISSING_ARTIFACT_REASONS = new Set(["artifact-filed-gstr1-excel-no-details-available"]);
+import {
+  DECLINED_ARTIFACT_REASONS as DECLINED_ARTIFACT_REASONS_LIST,
+  DECLINED_ARTIFACT_SIGNALS,
+  declinedArtifactReason,
+} from "../connectors/gst/filed-returns-acquisition-diagnostics";
+const MISSING_ARTIFACT_REASONS = new Set<string>(DECLINED_ARTIFACT_REASONS_LIST);
+
+// The flow signal the portal's refusal carries, and the reason recorded against the artifact.
+const DECLINED_ARTIFACT_REASONS = new Map<string, string>(
+  DECLINED_ARTIFACT_SIGNALS.map((signal) => [signal, declinedArtifactReason(signal)]),
+);
 
 const LEDGER_KEYS = [
   "artifactPlan",
@@ -209,6 +219,21 @@ export async function persistSinglePeriodBundleArtifactUnavailable(
   );
 }
 
+/**
+ * A bound GSTR-2B refusal answers the period, rather than one format within it.
+ * It is only safe to apply while no sibling has staged evidence that would
+ * contradict the refusal.
+ */
+export async function persistSinglePeriodBundlePeriodUnavailable(
+  expectedLedger: SinglePeriodBundleLedger,
+  flowStep: PortalFlowStepResult,
+  now = new Date(),
+): Promise<SinglePeriodBundleLedger | null> {
+  return transitionStoredLedger(expectedLedger, (ledger) =>
+    markSinglePeriodBundlePeriodUnavailable(ledger, flowStep, now),
+  );
+}
+
 export async function persistSinglePeriodBundleArtifactReview(
   expectedLedger: SinglePeriodBundleLedger,
   artifactType: FiledReturnsConcreteArtifactType,
@@ -371,7 +396,7 @@ export function markSinglePeriodBundleArtifactUnavailable(
     return null;
   }
   const diagnostic = optionalArtifactDiagnostic(flowStep, ledger.scope, artifactType);
-  const missingReason = missingArtifactReason(flowStep);
+  const missingReason = missingArtifactReason(flowStep, ledger.scope.returnType, artifactType);
   if (!missingReason) return null;
   const updated = updateArtifact(ledger, artifactType, now, {
     artifactType,
@@ -385,6 +410,39 @@ export function markSinglePeriodBundleArtifactUnavailable(
   });
   if (!updated) return null;
   return allArtifactsTerminal(updated) ? { ...updated, phase: "ready-for-zip" } : updated;
+}
+
+export function markSinglePeriodBundlePeriodUnavailable(
+  ledger: SinglePeriodBundleLedger,
+  flowStep: PortalFlowStepResult,
+  now: Date,
+): SinglePeriodBundleLedger | null {
+  if (
+    ledger.phase !== "collecting" ||
+    ledger.scope.returnType !== "GSTR-2B" ||
+    !flowStep.safeSignals.includes("filed-gstr2b-not-generated") ||
+    !ledger.artifacts.some((artifact) => artifact.status === "running") ||
+    ledger.artifacts.some((artifact) => artifact.status === "staged")
+  ) {
+    return null;
+  }
+  const missingReasons = ledger.artifacts.map((artifact) =>
+    missingArtifactReason(flowStep, ledger.scope.returnType, artifact.artifactType),
+  );
+  if (missingReasons.some((missingReason) => !missingReason)) return null;
+  const timestamp = now.toISOString();
+  const updated = nextLedger(ledger, now, {
+    artifacts: ledger.artifacts.map((artifact, index) => ({
+      artifactType: artifact.artifactType,
+      completedAt: timestamp,
+      missingReason: missingReasons[index]!,
+      safeSignals: ["single-period-bundle-artifact-unavailable"],
+      startedAt: artifact.startedAt ?? timestamp,
+      status: "unavailable" as const,
+      updatedAt: timestamp,
+    })),
+  });
+  return updated ? { ...updated, phase: "ready-for-zip" } : null;
 }
 
 export function markSinglePeriodBundleArtifactReview(
@@ -489,6 +547,11 @@ export function singlePeriodBundleFlowStep(
             : [
                 `filed-return-artifact-unavailable:${artifact.artifactType}`,
                 artifact.missingReason!,
+                ...(artifact.missingReason === "artifact-filed-gstr2b-not-generated"
+                  ? ["filed-gstr2b-not-generated"]
+                  : artifact.missingReason === "artifact-filed-gstr1-excel-no-details-available"
+                    ? ["filed-gstr1-excel-no-details-available"]
+                    : []),
               ],
         ),
       ]),
@@ -613,6 +676,9 @@ function parseArtifact(
   }
   const diagnostic = optionalArtifactDiagnostic(artifact, scope, expectedArtifactType);
   if (artifact.downloadDiagnostic !== undefined && !diagnostic) return null;
+  const missingReason = isMissingReason(artifact.missingReason)
+    ? normaliseArtifactMissingReason(artifact.missingReason, scope.returnType, expectedArtifactType)
+    : null;
 
   if (artifact.status === "pending") {
     if (
@@ -633,11 +699,7 @@ function parseArtifact(
     if (expectedArtifactType === "PDF" && diagnostic.mimeClass !== "pdf") return null;
     if (expectedArtifactType === "JSON" && diagnostic.mimeClass !== "json") return null;
     if (expectedArtifactType === "EXCEL" && diagnostic.mimeClass !== "spreadsheet") return null;
-  } else if (
-    !artifact.startedAt ||
-    !artifact.completedAt ||
-    !isMissingReason(artifact.missingReason)
-  ) {
+  } else if (!artifact.startedAt || !artifact.completedAt || !missingReason) {
     return null;
   }
 
@@ -645,7 +707,7 @@ function parseArtifact(
     artifactType: expectedArtifactType,
     ...(artifact.completedAt ? { completedAt: artifact.completedAt } : {}),
     ...(diagnostic ? { downloadDiagnostic: diagnostic } : {}),
-    ...(artifact.missingReason ? { missingReason: artifact.missingReason } : {}),
+    ...(missingReason ? { missingReason } : {}),
     safeSignals: expectedSignals,
     ...(artifact.startedAt ? { startedAt: artifact.startedAt } : {}),
     status: artifact.status,
@@ -853,13 +915,38 @@ function parsedArtifactPlan(
     : null;
 }
 
-function missingArtifactReason(flowStep: PortalFlowStepResult): string | null {
-  return (
-    flowStep.safeSignals.find((signal) => MISSING_ARTIFACT_REASONS.has(signal)) ??
-    (flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available")
-      ? "artifact-filed-gstr1-excel-no-details-available"
-      : null)
-  );
+function missingArtifactReason(
+  flowStep: PortalFlowStepResult,
+  returnType: FiledReturnsDownloadScope["returnType"],
+  artifactType: FiledReturnsConcreteArtifactType,
+): string | null {
+  const reasons = flowStep.safeSignals
+    .map(canonicalArtifactMissingReason)
+    .filter((reason): reason is string => reason !== null);
+  if (new Set(reasons).size !== 1) return null;
+  return normaliseArtifactMissingReason(reasons[0]!, returnType, artifactType);
+}
+
+function normaliseArtifactMissingReason(
+  value: unknown,
+  returnType: FiledReturnsDownloadScope["returnType"],
+  artifactType: FiledReturnsConcreteArtifactType,
+): string | null {
+  const reason = canonicalArtifactMissingReason(value);
+  if (!reason) return null;
+  if (reason === declinedArtifactReason("filed-gstr1-excel-no-details-available")) {
+    return returnType === "GSTR-1" && artifactType === "EXCEL" ? reason : null;
+  }
+  return reason === declinedArtifactReason("filed-gstr2b-not-generated") && returnType === "GSTR-2B"
+    ? reason
+    : null;
+}
+
+function canonicalArtifactMissingReason(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return MISSING_ARTIFACT_REASONS.has(value)
+    ? value
+    : (DECLINED_ARTIFACT_REASONS.get(value) ?? null);
 }
 
 function isMissingReason(value: unknown): value is string {

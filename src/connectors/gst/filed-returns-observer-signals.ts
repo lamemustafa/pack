@@ -1,6 +1,7 @@
 import { filedReturnScopedSignal } from "./filed-returns-return-descriptors";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 import type { FiledReturnsObservationHints } from "./filed-returns-observer-types";
+import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 
 // Fixed classifier vocabulary only. These tokens carry no portal text or taxpayer
 // data and are shared by the observation and durable-recovery boundaries.
@@ -86,11 +87,18 @@ function addReturnTextSignals(text: string, signals: string[]): void {
 }
 
 function addDownloadControlSignals(text: string, signals: string[]): void {
-  if (/download filed gstr[\s-]?3b/.test(text)) signals.push("download-filed-gstr-3b");
-  if (/download filed gstr[\s-]?1\b/.test(text)) signals.push("download-filed-gstr-1");
+  // Read the control patterns from the descriptors rather than restating them. This file used to
+  // carry its own copies, so a portal label the descriptor learned about stayed unrecognised here
+  // -- which is how `DOWNLOAD FILED (PDF)` was missed by both layers at once.
+  const gstr1 = filedReturnDescriptor("GSTR-1");
+  if (filedReturnDescriptor("GSTR-3B").explicitDownloadPattern.test(text)) {
+    signals.push("download-filed-gstr-3b");
+  }
+  if (gstr1.explicitDownloadPattern.test(text)) signals.push("download-filed-gstr-1");
   if (
     signals.includes("gstr-1-summary-route") &&
-    (/\bdownload\s*\(?\s*pdf\s*\)?\b/.test(text) || /\bdownload\b.*\bsummary\b.*\bpdf\b/.test(text))
+    ((gstr1.secondaryDownloadPattern?.test(text) ?? false) ||
+      /\bdownload\b.*\bsummary\b.*\bpdf\b/.test(text))
   ) {
     signals.push("download-pdf-gstr-1");
   }

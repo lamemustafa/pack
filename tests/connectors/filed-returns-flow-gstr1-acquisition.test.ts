@@ -468,6 +468,101 @@ describe("filed returns flow — GSTR-1 artifact acquisition", () => {
     expect(back).not.toHaveBeenCalled();
   });
 
+  it("still uses View Summary when the filed-PDF label is only text", async () => {
+    // The label appearing on the page is not the page offering the download. Skipping the real
+    // View Summary control because some non-actionable copy carries the words strands a target
+    // whose PDF was reachable: acquisition then finds no control to click and blocks it.
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-1</h1>
+          <div>Status - Filed</div>
+          <div>Financial Year - 2025-26</div>
+          <div>Return Period - April</div>
+          <p>Use DOWNLOAD FILED (PDF) once the summary has been generated.</p>
+          <button data-summary>VIEW SUMMARY</button>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    makeLayoutVisible(documentRef);
+    let summaryClicked = 0;
+    documentRef.querySelector("[data-summary]")?.addEventListener("click", () => {
+      summaryClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-1",
+    });
+
+    expect(summaryClicked).toBe(1);
+    expect(result.safeSignals).toContain("filed-gstr1-summary-view-clicked");
+  });
+
+  it("still uses View Summary when the direct filed-PDF control is disabled", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-1</h1>
+          <div>Status - Filed</div>
+          <div>Financial Year - 2025-26</div>
+          <div>Return Period - April</div>
+          <button data-summary>VIEW SUMMARY</button>
+          <button disabled>DOWNLOAD FILED (PDF)</button>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    makeLayoutVisible(documentRef);
+    let summaryClicked = 0;
+    documentRef.querySelector("[data-summary]")?.addEventListener("click", () => {
+      summaryClicked += 1;
+    });
+
+    await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-1",
+    });
+
+    expect(summaryClicked).toBe(1);
+  });
+
+  it("skips View Summary when the detail route offers a filed-PDF control to click", async () => {
+    const documentRef = createGstDocument(
+      `
+        <main>
+          <h1>GSTR-1</h1>
+          <div>Status - Filed</div>
+          <div>Financial Year - 2025-26</div>
+          <div>Return Period - April</div>
+          <button data-summary>VIEW SUMMARY</button>
+          <button>DOWNLOAD FILED (PDF)</button>
+        </main>
+      `,
+      "https://return.gst.gov.in/returns/auth/gstr1",
+    );
+    makeLayoutVisible(documentRef);
+    let summaryClicked = 0;
+    documentRef.querySelector("[data-summary]")?.addEventListener("click", () => {
+      summaryClicked += 1;
+    });
+
+    const result = await runFiledReturnsDownloadStep(documentRef, {
+      artifactType: "PDF",
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-1",
+    });
+
+    expect(summaryClicked).toBe(0);
+    expect(result.safeSignals).not.toContain("filed-gstr1-summary-view-clicked");
+  });
+
   it("does not leave a filed GSTR-1 summary when its visible scope is incomplete", async () => {
     const documentRef = createGstDocument(
       `
@@ -544,6 +639,69 @@ describe("filed returns flow — GSTR-1 artifact acquisition", () => {
       ]),
     );
     expect(excelClicked).toBe(1);
+  });
+
+  it("refuses the no-details dialog for a target the visible page is not about", async () => {
+    // The detail route does not change per period and a dialog outlives the target that raised it.
+    // Answering from body text alone lets one period's refusal mark another period's artifact
+    // unavailable, and a composite or full-year run then carries on having omitted an artifact the
+    // portal never declined for it.
+    const documentRef = createDocument(`
+      <main>
+        <nav>Returns / Filed Returns</nav>
+        <h1>GSTR-1</h1>
+        <div>Status - Filed</div>
+        <div>Financial Year - 2025-26</div>
+        <div>Return Period - May</div>
+        <section role="dialog">
+          <h2>Information</h2>
+          <p>No details available for download (This is relevant only if you have reported e-invoices).</p>
+          <button>OK</button>
+        </section>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+
+    const result = detectPostClickBlockedState(
+      documentRef,
+      {
+        actionId: "test-action",
+        artifactType: "EXCEL" as const,
+        financialYear: "2025-26",
+        period: "June",
+        returnType: "GSTR-1" as const,
+      },
+      [],
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("refuses the no-details dialog when the detail header cannot be read", async () => {
+    // Fail closed: a page that does not name its period is "could not determine", never "matches".
+    const documentRef = createDocument(`
+      <main>
+        <section role="dialog">
+          <h2>Information</h2>
+          <p>No details available for download (This is relevant only if you have reported e-invoices).</p>
+        </section>
+      </main>
+    `);
+    makeLayoutVisible(documentRef);
+
+    const result = detectPostClickBlockedState(
+      documentRef,
+      {
+        actionId: "test-action",
+        artifactType: "EXCEL" as const,
+        financialYear: "2025-26",
+        period: "May",
+        returnType: "GSTR-1" as const,
+      },
+      [],
+    );
+
+    expect(result).toBeNull();
   });
 
   it("returns from a mismatched detail page before running the requested exact period", async () => {

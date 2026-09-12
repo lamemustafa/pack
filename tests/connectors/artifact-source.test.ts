@@ -432,7 +432,7 @@ describe("GSTR-1 artifact acquisition", () => {
       ok: false,
       reason: "control-not-found",
       requestId: request.requestId,
-      safeSignals: ["target-period-verified"],
+      safeSignals: ["target-period-verified", "gstr1-control-label-unmatched"],
     });
     expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
   });
@@ -468,7 +468,7 @@ describe("GSTR-1 artifact acquisition", () => {
       ok: false,
       reason: "control-not-found",
       requestId: request.requestId,
-      safeSignals: ["target-period-verified"],
+      safeSignals: ["target-period-verified", "gstr1-control-label-unmatched"],
     });
     expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
   });
@@ -483,7 +483,7 @@ describe("GSTR-1 artifact acquisition", () => {
       ok: false,
       reason: "control-not-found",
       requestId: request.requestId,
-      safeSignals: ["target-period-verified"],
+      safeSignals: ["target-period-verified", "gstr1-control-label-ambiguous"],
     });
     expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(0);
   });
@@ -519,6 +519,24 @@ describe("GSTR-1 artifact acquisition", () => {
     expect(artifactControl?.textContent).toBe("DOWNLOAD DETAILS FROM E-INVOICES (EXCEL)");
     expect(artifactControl?.getAttribute("data-pack-artifact-request")).toBe(request.requestId);
     expect(documentRef.querySelectorAll("[data-pack-artifact-request]").length).toBe(1);
+  });
+
+  it("accepts the supported trailing-slash detail route for a direct filed PDF", async () => {
+    const { documentRef } = gstr1Page(
+      gstr1Json("042026"),
+      "https://return.gst.gov.in/returns/auth/gstr1/",
+      "DOWNLOAD FILED (PDF)",
+    );
+
+    await expect(acquireFiledReturnArtifact(documentRef, request)).resolves.toMatchObject({
+      ok: true,
+      state: "ready",
+    });
+    expect(
+      documentRef
+        .querySelector("[data-testid='artifact-control']")
+        ?.getAttribute("data-pack-artifact-request"),
+    ).toBe(request.requestId);
   });
 });
 

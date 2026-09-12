@@ -34,6 +34,17 @@ import {
   requireFullFiscalYearArtifactsStaged,
   scopeForFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-staging";
+import { isResolvedFullFiscalYearTargetStatus } from "../../src/connectors/gst/filed-returns-contracts";
+import { FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES } from "../../src/connectors/gst/filed-returns-contracts";
+import { isFiledReturnsFullFiscalYearTargetStatus } from "../../src/connectors/gst/filed-returns-contracts";
+
+function boundGstr2bNotGeneratedSignals() {
+  return [
+    "filed-gstr2b-not-generated",
+    "gstr2b-summary-route-verified",
+    "gstr2b-visible-period-verified",
+  ];
+}
 
 describe("full fiscal year ledger", () => {
   it("requires the canonical GSTR-2B all-formats artifact set before staging succeeds", () => {
@@ -869,6 +880,29 @@ describe("full fiscal year ledger", () => {
     notFiledWithoutPositiveSignal.targets[0]!.safeSignals = [];
     expect(isFullFiscalYearLedger(notFiledWithoutPositiveSignal)).toBe(false);
 
+    for (const missingProof of [
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+    ]) {
+      const notGeneratedWithoutBinding = createLedger([["April", "not-generated"]], {
+        returnType: "GSTR-2B",
+      });
+      notGeneratedWithoutBinding.targets[0]!.safeSignals = boundGstr2bNotGeneratedSignals().filter(
+        (signal) => signal !== missingProof,
+      );
+      expect(isFullFiscalYearLedger(notGeneratedWithoutBinding)).toBe(false);
+    }
+
+    const boundNotGenerated = createLedger([["April", "not-generated"]], {
+      returnType: "GSTR-2B",
+    });
+    const boundSignals = boundGstr2bNotGeneratedSignals();
+    boundNotGenerated.targets[0] = {
+      ...boundNotGenerated.targets[0]!,
+      ...canonicalDurableTargetStatus(boundNotGenerated.targets[0]!, "not-generated", boundSignals),
+    };
+    expect(isFullFiscalYearLedger(boundNotGenerated)).toBe(true);
+
     expect(
       isFullFiscalYearLedger({
         ...createLedger([["April", "downloaded"]]),
@@ -1424,3 +1458,95 @@ function diagnosticStep(
     downloadDiagnostic,
   };
 }
+
+describe("a period the portal never drafted", () => {
+  // GSTR-2B is auto-drafted, so a period with no statement is not the taxpayer failing to submit
+  // one. It gets its own status: mapping it to `not-filed` would print a claim about them that
+  // the portal never made, and mapping it to `blocked` stops a fiscal-year run on a period that
+  // no re-run can change.
+  it("maps the portal's refusal to its own status", () => {
+    expect(
+      targetStatusFromFlowStep(
+        {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr2b-private-v0",
+          state: "blocked",
+          safeSignals: ["gstr2b-summary-route", "filed-gstr2b-not-generated"],
+          safeMessage:
+            "The GST Portal reported that it did not generate a GSTR-2B for this period.",
+        },
+        "GSTR-2B",
+      ),
+    ).toBe("not-generated");
+  });
+
+  it("does not resolve the GSTR-2B signal for another return type", () => {
+    expect(
+      targetStatusFromFlowStep(
+        {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+          state: "blocked",
+          safeSignals: ["filed-gstr2b-not-generated"],
+          safeMessage: "Synthetic declined artifact.",
+        },
+        "GSTR-1",
+      ),
+    ).toBe("blocked");
+  });
+
+  it("does not report it as a return the taxpayer did not submit", () => {
+    expect(
+      targetStatusFromFlowStep({
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr2b-private-v0",
+        state: "blocked",
+        safeSignals: ["filed-gstr2b-not-generated"],
+        safeMessage: "…",
+      }),
+    ).not.toBe("not-filed");
+  });
+
+  it("lets the fiscal-year run carry on past it", () => {
+    expect(isResolvedFullFiscalYearTargetStatus("not-generated")).toBe(true);
+    expect(isResolvedFullFiscalYearTargetStatus("downloaded")).toBe(true);
+    expect(isResolvedFullFiscalYearTargetStatus("not-filed")).toBe(true);
+    // Everything a re-run might still change must keep stopping the run.
+    expect(isResolvedFullFiscalYearTargetStatus("blocked")).toBe(false);
+    expect(isResolvedFullFiscalYearTargetStatus("failed")).toBe(false);
+    expect(isResolvedFullFiscalYearTargetStatus("download-unconfirmed")).toBe(false);
+  });
+});
+
+describe("runtime status allowlists stay exhaustive", () => {
+  // A `Set<FiledReturnsFullFiscalYearTargetStatus>` literal does not have to list every member, so
+  // a status can be added to the union, pass type-checking everywhere, and still be rejected by a
+  // hand-kept runtime allowlist. That is what happened: a persisted run summary carrying a new
+  // status failed to parse, the start handler threw, and the run vanished from the panel.
+  it("parses a persisted summary for every status the union allows", () => {
+    for (const status of FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES) {
+      const summary = {
+        version: 1 as const,
+        financialYear: "2025-26",
+        returnType: "GSTR-2B" as const,
+        targets: [
+          {
+            targetId: "t1",
+            financialYear: "2025-26",
+            period: "April",
+            returnType: "GSTR-2B" as const,
+            status,
+          },
+        ],
+      };
+      expect(
+        JSON.stringify(summary).includes(status),
+        `${status} must be representable in a persisted summary`,
+      ).toBe(true);
+      expect(
+        isFiledReturnsFullFiscalYearTargetStatus(status),
+        `${status} must survive durable parsing`,
+      ).toBe(true);
+    }
+  });
+});

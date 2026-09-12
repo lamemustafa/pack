@@ -31,7 +31,11 @@ const FILED_RETURN_MECHANICS: Record<FiledReturnsReturnType, FiledReturnMechanic
     reselectionDestination: "return-dashboard",
     detailRoutePattern: /\/returns\/auth\/gstr1(?:\/|$)/i,
     detailHeadingPattern: /\bgstr[\s-]?1\b/i,
-    explicitDownloadPattern: /\bdownload\s+filed\s+gstr[\s-]?1\b/i,
+    // The portal labels this control two ways. On a page that names the return it reads
+    // `DOWNLOAD FILED GSTR-1`; another supported label reads `DOWNLOAD FILED (PDF)`, with no
+    // return type after `FILED`. Both are the filed-PDF control
+    // for the period the page identifies, and the period is bound before this pattern is used.
+    explicitDownloadPattern: /\bdownload\s+filed\s+(?:gstr[\s-]?1\b|\(?\s*pdf\s*\)?)/i,
     excelDownloadPattern:
       /\bdownload\b.*\b(?:details?\b.*\b(?:e-?invoices?|excel)|excel\b.*\b(?:details?|e-?invoices?))\b/i,
     secondaryDownloadPattern: /\bdownload\s*\(?\s*pdf\s*\)?\b/i,

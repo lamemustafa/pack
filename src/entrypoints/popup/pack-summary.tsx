@@ -15,6 +15,7 @@ import {
   hasPersistedFullFiscalYearZipDownloadId,
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
+import { getBoundDeclinedArtifactSignal } from "../../connectors/gst/filed-returns-declined-artifact";
 
 export function PackSummary({
   scope,
@@ -57,6 +58,12 @@ export function PackSummary({
 
 function getSinglePeriodMeta(summary: FiledReturnsFlowSummary | null): string {
   const signals = new Set(summary?.flowStep.safeSignals ?? []);
+  if (
+    summary?.status === "complete" &&
+    getBoundDeclinedArtifactSignal(summary.scope, summary.flowStep.safeSignals)
+  ) {
+    return "No artifact available";
+  }
   if (hasConfirmedSinglePeriodBrowserDownload(summary)) {
     return "Saved by your browser";
   }

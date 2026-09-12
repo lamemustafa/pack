@@ -21,6 +21,7 @@ import {
 import { durableFullFiscalYearArtifactSignals } from "./filed-returns-full-fiscal-year-validation";
 import { discardFullFiscalYearFiledReturnsZip } from "./filed-returns-full-fiscal-year-zip";
 import { readCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
+import { statesFullFiscalYearTargetAbsence } from "../connectors/gst/filed-returns-contracts";
 
 const FULL_YEAR_STAGED_SIGNAL_PREFIX = "full-fiscal-year-opfs-staged:";
 
@@ -267,7 +268,7 @@ export function markFullFiscalYearRestagingRequired(
 ): FiledReturnsFullFiscalYearLedger {
   const timestamp = now.toISOString();
   const targets = ledger.targets.map((target) =>
-    target.status === "not-filed"
+    statesFullFiscalYearTargetAbsence(target.status)
       ? target
       : {
           ...target,

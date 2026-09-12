@@ -13,7 +13,10 @@ import {
   type ArtifactFailureReason,
 } from "../../src/connectors/gst/artifact-source";
 import { isDurableFiledReturnsSignal } from "../../src/connectors/gst/filed-returns-durable-signals";
-import type { FiledReturnsFlowSummary } from "../../src/connectors/gst/filed-returns-contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsFlowSummary,
+} from "../../src/connectors/gst/filed-returns-contracts";
 import {
   FILED_RETURNS_RETURN_TYPES,
   filedReturnsScopeId,
@@ -66,6 +69,73 @@ describe("filed-return session write boundary", () => {
     vi.clearAllMocks();
   });
 
+  it.each([
+    [
+      "GSTR-1 Excel without detail proof",
+      "GSTR-1",
+      "EXCEL",
+      ["filed-gstr1-excel-no-details-available"],
+    ],
+    ["GSTR-2B without proof", "GSTR-2B", "PDF", ["filed-gstr2b-not-generated"]],
+    [
+      "GSTR-2B without route proof",
+      "GSTR-2B",
+      "PDF",
+      ["filed-gstr2b-not-generated", "gstr2b-visible-period-verified"],
+    ],
+    [
+      "GSTR-2B without period proof",
+      "GSTR-2B",
+      "PDF",
+      ["filed-gstr2b-not-generated", "gstr2b-summary-route-verified"],
+    ],
+    [
+      "GSTR-1 with the wrong binding proof",
+      "GSTR-1",
+      "EXCEL",
+      [
+        "filed-gstr1-excel-no-details-available",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ],
+    ],
+    [
+      "GSTR-1 with conflicting refusal signals",
+      "GSTR-1",
+      "EXCEL",
+      [
+        "filed-gstr1-excel-no-details-available",
+        "filed-gstr2b-not-generated",
+        "filed-gstr1-detail-period-verified",
+      ],
+    ],
+  ] as const)(
+    "rejects recovered completion for %s",
+    async (_label, returnType, artifactType, signals) => {
+      const scope = singlePeriodScope(returnType, artifactType);
+      const summary = gstr1ExcelNoDetailsCompleteSummary(scope);
+      summary.flowStep.safeSignals = [...signals];
+      storage.session[COMPLETION_KEY] = summary;
+
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toBeNull();
+      expect(storage.session[COMPLETION_KEY]).toBeUndefined();
+    },
+  );
+
+  it("accepts recovered GSTR-2B absence only with both binding proofs", async () => {
+    const scope = singlePeriodScope("GSTR-2B", "PDF");
+    const summary = gstr1ExcelNoDetailsCompleteSummary(scope);
+    summary.flowStep.safeSignals = [
+      "filed-gstr2b-not-generated",
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+    ];
+    storage.session[COMPLETION_KEY] = summary;
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+    });
+  });
+
   it("reconstructs summary prose before direct persistence", async () => {
     const summary = await persistCanonicalFiledReturnsFlowSummary(
       COMPLETION_KEY,
@@ -82,6 +152,30 @@ describe("filed-return session write boundary", () => {
     });
     expect(JSON.stringify(storage.session[COMPLETION_KEY])).not.toContain("Synthetic Taxpayer Co.");
     expect(JSON.stringify(storage.session[COMPLETION_KEY])).not.toContain("account-specific");
+  });
+
+  it.each<[string, FiledReturnsDownloadScope]>([
+    ["a GSTR-2B PDF target", singlePeriodScope("GSTR-2B", "PDF")],
+    ["a GSTR-1 PDF target", singlePeriodScope("GSTR-1", "PDF")],
+    ["a GSTR-1 selected-artifact bundle", singlePeriodScope("GSTR-1", "PDF_AND_EXCEL")],
+    ["a GSTR-3B PDF target", singlePeriodScope("GSTR-3B", "PDF")],
+  ])(
+    "rejects a stale complete summary for %s with a GSTR-1 Excel decline signal",
+    async (_label, scope) => {
+      storage.session[COMPLETION_KEY] = gstr1ExcelNoDetailsCompleteSummary(scope);
+
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toBeNull();
+      expect(storage.session[COMPLETION_KEY]).toBeUndefined();
+    },
+  );
+
+  it("accepts the GSTR-1 Excel decline only for its exact selected target", async () => {
+    const scope = singlePeriodScope("GSTR-1", "EXCEL");
+
+    storage.session[COMPLETION_KEY] = gstr1ExcelNoDetailsCompleteSummary(scope);
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+    });
   });
 
   it("removes stale completion state when a summary contains a non-canonical signal", async () => {
@@ -1433,6 +1527,38 @@ describe("filed-return session write boundary", () => {
     );
   });
 });
+
+function singlePeriodScope(
+  returnType: FiledReturnsDownloadScope["returnType"],
+  artifactType: NonNullable<FiledReturnsDownloadScope["artifactType"]>,
+): FiledReturnsDownloadScope {
+  return {
+    artifactType,
+    financialYear: "2026-27",
+    period: "April",
+    returnType,
+  };
+}
+
+function gstr1ExcelNoDetailsCompleteSummary(
+  scope: FiledReturnsDownloadScope,
+): FiledReturnsFlowSummary {
+  return {
+    scope,
+    status: "complete",
+    completedAt: "2026-07-24T00:00:00.000Z",
+    completedPeriods: [scope.period],
+    currentPeriod: scope.period,
+    totalPeriods: 1,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnsScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["filed-gstr1-excel-no-details-available", "filed-gstr1-detail-period-verified"],
+      safeMessage: "Synthetic scoped decline.",
+    },
+  };
+}
 
 function singlePeriodSummary(
   flowStepOverrides: Record<string, unknown> = {},

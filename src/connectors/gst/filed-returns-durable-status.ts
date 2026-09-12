@@ -1,4 +1,8 @@
 import {
+  declinedArtifactSafeMessage,
+  getBoundDeclinedArtifactSignal,
+} from "./filed-returns-declined-artifact";
+import {
   FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
   filedReturnsFilterActionRequiredMessage,
 } from "./filed-returns-filter-status";
@@ -56,6 +60,7 @@ type DurableMessageKey =
   | "full-year-tab-session-unavailable"
   | "full-year-zip-review"
   | "not-filed"
+  | "not-generated"
   | "partial"
   | "target-cancelled"
   | "target-blocked"
@@ -116,6 +121,12 @@ export function parseDurableTargetStatus(
 ): { safeMessage: string; safeSignals: string[] } | null {
   const safeSignals = parseDurableFiledReturnsSignals(inputSignals);
   if (!safeSignals) return null;
+  if (
+    status === "not-generated" &&
+    getBoundDeclinedArtifactSignal(scope, safeSignals) !== "filed-gstr2b-not-generated"
+  ) {
+    return null;
+  }
   return {
     safeSignals,
     safeMessage: canonicalDurableTargetMessage(scope, status, safeSignals),
@@ -159,6 +170,9 @@ export function canonicalDurableSummaryMessage(
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
 ): string {
+  const declinedArtifactSignal =
+    status === "complete" ? getBoundDeclinedArtifactSignal(scope, signals) : null;
+  if (declinedArtifactSignal) return declinedArtifactSafeMessage(declinedArtifactSignal);
   const mismatchedReturnType = visibleReturnTypeMismatch(scope, status, signals);
   if (mismatchedReturnType) {
     return incompleteReturnTypeMismatchRecoveryMessage(scope, mismatchedReturnType);
@@ -476,6 +490,7 @@ function messageKeyForTarget(
   if (signals.includes("filed-return-positively-not-filed") || status === "not-filed") {
     return "not-filed";
   }
+  if (status === "not-generated") return "not-generated";
   if (status === "pending") return "target-pending";
   if (status === "running") return "target-running";
   if (status === "downloaded") return "target-downloaded";
@@ -647,6 +662,9 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "full-year-zip-review":
       "Pack could not confirm the final fiscal-year ZIP. Check the exact browser download before retrying.",
     "not-filed": "The GST Portal reported no filed return for the selected period.",
+    // The portal declined to produce the artifact, in its own words. Retrying cannot change that,
+    // so the copy must not send the user to Downloads looking for a file that was never created.
+    "not-generated": declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
     partial: `Pack retained verified artifact progress for ${period}; the selection is not complete.`,
     "target-cancelled": `Pack cancelled the unresolved filed-return target for ${period}.`,
     "target-blocked": `Pack paused the saved full-year run at ${period}. Resolve the GST Portal page before retrying this period.`,

@@ -282,8 +282,18 @@ export function clearFiledReturnsTargetReviewWithReason(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsTargetReviewDeps,
   expectedRevision?: number,
+  expectedOwnedAttempt?: Extract<
+    FiledReturnsTargetDownloadAttempt,
+    { kind: "single-artifact"; phase: "download-intent-persisted" }
+  >,
 ): Promise<FiledReturnsTargetReviewClearResult> {
-  return clearFiledReturnsTargetReviewAttempt(scope, deps, expectedRevision, "name-storage-errors");
+  return clearFiledReturnsTargetReviewAttempt(
+    scope,
+    deps,
+    expectedRevision,
+    "name-storage-errors",
+    expectedOwnedAttempt,
+  );
 }
 
 async function clearFiledReturnsTargetReviewAttempt(
@@ -291,6 +301,10 @@ async function clearFiledReturnsTargetReviewAttempt(
   deps: FiledReturnsTargetReviewDeps,
   expectedRevision: number | undefined,
   storageErrorMode: "name-storage-errors" | "throw-storage-errors",
+  expectedOwnedAttempt?: Extract<
+    FiledReturnsTargetDownloadAttempt,
+    { kind: "single-artifact"; phase: "download-intent-persisted" }
+  >,
 ): Promise<FiledReturnsTargetReviewClearResult> {
   const key = deps.storageKeys.targetReview;
   if (!key) return targetReviewClearFailure("storage-key-missing");
@@ -330,6 +344,12 @@ async function clearFiledReturnsTargetReviewAttempt(
     if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
       return targetReviewClearFailure("revision-mismatch");
     }
+    if (
+      expectedOwnedAttempt &&
+      !sameOwnedSingleArtifactIntent(state.review.downloadAttempt, expectedOwnedAttempt)
+    ) {
+      return targetReviewClearFailure("revision-mismatch");
+    }
     try {
       await browser.storage.local.remove(key);
     } catch (error) {
@@ -338,6 +358,22 @@ async function clearFiledReturnsTargetReviewAttempt(
     }
     return { ok: true };
   });
+}
+
+function sameOwnedSingleArtifactIntent(
+  actual: FiledReturnsTargetDownloadAttempt | undefined,
+  expected: Extract<
+    FiledReturnsTargetDownloadAttempt,
+    { kind: "single-artifact"; phase: "download-intent-persisted" }
+  >,
+): boolean {
+  return (
+    actual?.kind === "single-artifact" &&
+    actual.phase === "download-intent-persisted" &&
+    actual.actionId === expected.actionId &&
+    actual.artifactType === expected.artifactType &&
+    actual.requestedAt === expected.requestedAt
+  );
 }
 
 function targetReviewClearFailure(

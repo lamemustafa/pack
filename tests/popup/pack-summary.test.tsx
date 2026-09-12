@@ -66,6 +66,41 @@ describe("popup pack summary", () => {
     expect(markup).not.toContain("Saved by your browser");
   });
 
+  it.each([
+    [
+      "GSTR-2B",
+      "PDF",
+      [
+        "filed-gstr2b-not-generated",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ],
+    ],
+    [
+      "GSTR-1",
+      "EXCEL",
+      ["filed-gstr1-excel-no-details-available", "filed-gstr1-detail-period-verified"],
+    ],
+  ] as const)(
+    "labels a bound %s absence as unavailable",
+    (returnType, artifactType, safeSignals) => {
+      const scope = {
+        ...singlePeriodScope,
+        returnType,
+        artifactType,
+      } as const;
+      const summary = singlePeriodSummary("complete");
+      summary.scope = scope;
+      summary.flowStep.safeSignals = [...safeSignals];
+
+      const markup = renderToStaticMarkup(<PackSummary scope={scope} summary={summary} />);
+
+      expect(markup.match(/No artifact available/g)).toHaveLength(1);
+      expect(markup).not.toContain("Browser download not confirmed");
+      expect(markup).not.toContain("Saved by your browser");
+    },
+  );
+
   it("keeps confirmed single-period ZIP copy when only local cleanup remains blocked", () => {
     const summary = singlePeriodSummary("blocked");
     summary.flowStep.safeSignals = [

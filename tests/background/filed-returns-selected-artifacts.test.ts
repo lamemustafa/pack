@@ -8,11 +8,13 @@ import {
   concreteFiledReturnsArtifactTypesForSelection,
   type FiledReturnsConcreteArtifactType,
 } from "../../src/connectors/gst/filed-returns-artifacts";
+import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import type * as FiledReturnsArtifactProgressModule from "../../src/background/filed-returns-artifact-progress";
 
 type SyntheticBundleArtifact = {
   artifactType: FiledReturnsConcreteArtifactType;
+  missingReason?: string;
   safeSignals: string[];
   status: "pending" | "running" | "staged" | "unavailable";
 };
@@ -27,6 +29,7 @@ type SyntheticBundleLedger = {
 };
 
 const mocks = vi.hoisted(() => ({
+  reconcileArtifactAcquisitionCheckpoint: vi.fn(async () => ({ state: "none" })),
   combineDownloadedArtifactFlowSteps: vi.fn(
     (combined: PortalFlowStepResult | null, next: PortalFlowStepResult) => ({
       ...next,
@@ -88,13 +91,25 @@ const bundleMocks = vi.hoisted(() => {
     if (staged.length + missing.length === 0) return null;
     return {
       connectorId: "gst",
-      scopeId: "gst-gstr2b-private-v0",
+      scopeId: filedReturnScopeId("GSTR-2B"),
       state: missing.length > 0 ? "partial" : "downloaded",
-      safeSignals: staged.flatMap((artifact) => [
-        "single-period-opfs-staged",
-        `single-period-opfs-staged:${artifact.artifactType}`,
-        `filed-return-artifact-downloaded:${artifact.artifactType}`,
-      ]),
+      safeSignals: Array.from(
+        new Set([
+          "single-period-bundle-recovered",
+          ...staged.flatMap((artifact) => [
+            "single-period-opfs-staged",
+            `single-period-opfs-staged:${artifact.artifactType}`,
+            `filed-return-artifact-downloaded:${artifact.artifactType}`,
+          ]),
+          ...missing.flatMap((artifact) => [
+            `filed-return-artifact-unavailable:${artifact.artifactType}`,
+            artifact.missingReason!,
+            ...(artifact.missingReason === "artifact-filed-gstr2b-not-generated"
+              ? ["filed-gstr2b-not-generated"]
+              : []),
+          ]),
+        ]),
+      ),
       safeMessage:
         missing.length > 0
           ? `Pack prepared a partial ZIP; missing ${missing
@@ -128,6 +143,16 @@ const bundleMocks = vi.hoisted(() => {
       async (ledger: SyntheticBundleLedger, artifactType: FiledReturnsConcreteArtifactType) =>
         transition(ledger, artifactType, "unavailable"),
     ),
+    persistSinglePeriodBundlePeriodUnavailable: vi.fn(async (ledger: SyntheticBundleLedger) => ({
+      ...ledger,
+      artifacts: ledger.artifacts.map((artifact) => ({
+        ...artifact,
+        missingReason: "artifact-filed-gstr2b-not-generated",
+        status: "unavailable" as const,
+      })),
+      phase: "ready-for-zip" as const,
+      revision: ledger.revision + 1,
+    })),
     persistSinglePeriodBundleCleanupPending: vi.fn(async (ledger: SyntheticBundleLedger) => ledger),
     persistSinglePeriodBundleZipDownloadId: vi.fn(async (ledger: SyntheticBundleLedger) => ledger),
     persistSinglePeriodBundleZipIntent: vi.fn(async (ledger: SyntheticBundleLedger) => ledger),
@@ -169,7 +194,32 @@ const bundleMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("wxt/browser", () => ({ browser: { storage: { local: {}, session: {} } } }));
+const sessionState = vi.hoisted(() => ({ values: {} as Record<string, unknown> }));
+const browserMocks = vi.hoisted(() => ({
+  sessionGet: vi.fn(async (key: string) => ({ [key]: sessionState.values[key] })),
+  sessionRemove: vi.fn(async (key: string) => {
+    delete sessionState.values[key];
+  }),
+  sessionSet: vi.fn(async (values: Record<string, unknown>) => {
+    Object.assign(sessionState.values, values);
+  }),
+}));
+
+vi.mock("wxt/browser", () => ({
+  browser: {
+    storage: {
+      local: {},
+      session: {
+        get: browserMocks.sessionGet,
+        remove: browserMocks.sessionRemove,
+        set: browserMocks.sessionSet,
+      },
+    },
+  },
+}));
+vi.mock("../../src/background/artifact-acquisition-state", () => ({
+  reconcileArtifactAcquisitionCheckpoint: mocks.reconcileArtifactAcquisitionCheckpoint,
+}));
 vi.mock("../../src/background/filed-returns-artifact-progress", async (importOriginal) => ({
   ...(await importOriginal<typeof FiledReturnsArtifactProgressModule>()),
   ...mocks,
@@ -187,6 +237,8 @@ import {
   preflightSelectedArtifactsRecovery,
   triggerSelectedArtifacts,
 } from "../../src/background/filed-returns-selected-artifacts";
+import { startSinglePeriodFiledReturnsDownloadFlow } from "../../src/background/filed-returns-single-period-flow";
+import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 
 const gstr2bAllFormatsArtifacts = concreteFiledReturnsArtifactTypesForSelection(
   "GSTR-2B",
@@ -196,6 +248,16 @@ const gstr2bAllFormatsArtifacts = concreteFiledReturnsArtifactTypesForSelection(
 describe("GSTR-2B all-format selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionState.values = {};
+    browserMocks.sessionGet.mockImplementation(async (key) => ({
+      [key]: sessionState.values[key],
+    }));
+    browserMocks.sessionRemove.mockImplementation(async (key) => {
+      delete sessionState.values[key];
+    });
+    browserMocks.sessionSet.mockImplementation(async (values) => {
+      Object.assign(sessionState.values, values);
+    });
     mocks.readPersistedArtifactProgress.mockResolvedValue(null);
     mocks.persistPartialArtifactSummary.mockImplementation(async (scope, flowStep) => ({
       scope,
@@ -483,6 +545,385 @@ describe("GSTR-2B all-format selection", () => {
     });
   });
 
+  it("resolves a bound GSTR-2B absence for the whole selection without making an empty ZIP", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockResolvedValueOnce(
+      blocked("PDF", "filed-gstr2b-not-generated"),
+    );
+
+    const response = await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      tabId: 17,
+    });
+
+    expect(mocks.triggerAndObserveFiledReturnDownload).toHaveBeenCalledOnce();
+    expect(bundleMocks.persistSinglePeriodBundlePeriodUnavailable).toHaveBeenCalledOnce();
+    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(bundleMocks.clearSinglePeriodBundleLedger).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["artifact-filed-gstr2b-not-generated"]),
+        state: "blocked",
+      },
+      flowSummary: { status: "complete" },
+    });
+  });
+
+  it("retains an all-unavailable ledger whose binding proof cannot be recovered", async () => {
+    const ledger = allUnavailableGstr2bBundle();
+    await seedPersistedAbsenceProof(ledger);
+    bundleMocks.reserveSinglePeriodBundleLedger.mockResolvedValueOnce({
+      ledger: ledger as never,
+      state: "existing",
+    });
+    const sendMessageToTabWithInjection = vi.fn();
+
+    const response = await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        sendMessageToTabWithInjection,
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: ledger.scope,
+      tabId: 17,
+    });
+
+    expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
+    expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["single-period-opfs-retained"]),
+        state: "blocked",
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(browserMocks.sessionSet).not.toHaveBeenCalled();
+    expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+  });
+
+  it.each(["closed tab", "visible refusal"])(
+    "holds unproved absence recovery before looking for a portal with %s",
+    async (portalState) => {
+      const ledger = allUnavailableGstr2bBundle();
+      await seedPersistedAbsenceProof(ledger);
+      bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+        ledger,
+        state: "valid",
+      });
+      const getActiveGstTab = vi.fn(async () => (portalState === "closed tab" ? null : { id: 17 }));
+      const sendMessageToTabWithInjection = vi.fn(async () =>
+        blocked("PDF", "filed-gstr2b-not-generated"),
+      );
+
+      const response = await startSinglePeriodFiledReturnsDownloadFlow(ledger.scope, {
+        getActiveGstTab,
+        sendMessageToTabWithInjection,
+        storageKeys: { completion: "completion" },
+      } as never);
+
+      expect(response).toMatchObject({ flowSummary: { status: "blocked" } });
+      expect(getActiveGstTab).not.toHaveBeenCalled();
+      expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+      expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
+      expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+      expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["false", "throw", "summary write"])(
+    "retains current refusal proof and blocks its summary after %s failure",
+    async (failure) => {
+      const ledger = allUnavailableGstr2bBundle();
+      bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+        ledger,
+        state: "valid",
+      });
+      if (failure === "false")
+        bundleMocks.clearSinglePeriodBundleLedger.mockResolvedValueOnce(false);
+      if (failure === "throw") {
+        bundleMocks.clearSinglePeriodBundleLedger.mockRejectedValueOnce(
+          new Error("Synthetic clear failure."),
+        );
+      }
+      if (failure === "summary write") {
+        browserMocks.sessionSet.mockRejectedValueOnce(new Error("Synthetic summary failure."));
+      }
+      const getActiveGstTab = vi.fn(async () => null);
+      const deps = { getActiveGstTab, storageKeys: { completion: "completion" } } as never;
+
+      mocks.triggerAndObserveFiledReturnDownload.mockResolvedValueOnce(
+        blocked("PDF", "filed-gstr2b-not-generated"),
+      );
+      const response = await triggerSelectedArtifacts({
+        activePeriod: "June",
+        deps,
+        scope: ledger.scope,
+        tabId: 17,
+      });
+      if (!response.ok || !("flowStep" in response)) throw new Error("Expected a flow response.");
+      const failed = await withPersistedSinglePeriodSummary(ledger.scope, response, deps, true);
+      expect(failed).toMatchObject({
+        flowStep: { state: "blocked", userAction: { canResume: false } },
+        flowSummary: { status: "blocked" },
+      });
+      if (failure === "summary write") {
+        expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+      }
+      const retried = await startSinglePeriodFiledReturnsDownloadFlow(ledger.scope, deps);
+      expect(retried).toMatchObject({
+        flowSummary: { status: "blocked" },
+        flowStep: { userAction: { canResume: false } },
+      });
+      expect(bundleMocks.clearSinglePeriodBundleLedger).toHaveBeenCalledTimes(
+        failure === "summary write" ? 0 : 1,
+      );
+      expect(getActiveGstTab).not.toHaveBeenCalled();
+      expect(mocks.triggerAndObserveFiledReturnDownload).toHaveBeenCalledOnce();
+      expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "missing",
+    "wrong scope",
+    "incomplete proof",
+    "legacy refusal",
+    "unrelated blocked state",
+    "prior run with the same scope",
+  ])("retains all-unavailable recovery with %s session proof", async (failure) => {
+    const ledger = allUnavailableGstr2bBundle();
+    await seedPersistedAbsenceProof(ledger);
+    const saved = sessionState.values.completion as FiledReturnsFlowSummary;
+    if (failure === "missing") delete sessionState.values.completion;
+    if (failure === "wrong scope") saved.scope.period = "July";
+    if (failure === "incomplete proof") {
+      saved.flowStep.safeSignals = saved.flowStep.safeSignals.filter(
+        (signal) => signal !== "gstr2b-visible-period-verified",
+      );
+    }
+    if (failure === "legacy refusal") {
+      saved.flowStep.safeSignals = saved.flowStep.safeSignals.filter(
+        (signal) => !signal.startsWith("gstr2b-"),
+      );
+    }
+    if (failure === "unrelated blocked state") saved.status = "blocked";
+    bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+      ledger,
+      state: "valid",
+    });
+    const getActiveGstTab = vi.fn();
+    const response = await startSinglePeriodFiledReturnsDownloadFlow(ledger.scope, {
+      getActiveGstTab,
+      storageKeys: { completion: "completion" },
+    } as never);
+    expect(response).toMatchObject({
+      flowStep: { state: "blocked", userAction: { canResume: false } },
+      flowSummary: { status: "blocked" },
+    });
+    expect(sessionState.values.completion).toMatchObject({ status: "blocked" });
+    expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+    expect(getActiveGstTab).not.toHaveBeenCalled();
+    expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
+    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+  });
+
+  it("retains absence recovery when no terminal summary key is available", async () => {
+    const ledger = allUnavailableGstr2bBundle();
+    bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+      ledger,
+      state: "valid",
+    });
+    const response = await preflightSelectedArtifactsRecovery({
+      deps: { storageKeys: {} } as never,
+      scope: ledger.scope,
+    });
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["single-period-bundle-artifact-result-unavailable"]),
+        state: "blocked",
+        userAction: { canResume: false },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+    expect(browserMocks.sessionSet).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a retained bundle with staged files as zero-artifact cleanup", async () => {
+    const ledger = { ...retainedGstr2bBundle(), phase: "ready-for-zip" as const };
+    bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+      ledger,
+      state: "valid",
+    });
+    await expect(
+      preflightSelectedArtifactsRecovery({ deps: {} as never, scope: ledger.scope }),
+    ).resolves.toBeNull();
+    expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+    expect(browserMocks.sessionSet).not.toHaveBeenCalled();
+  });
+
+  it("keeps the completed absence ledger for review when its terminal summary cannot persist", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockResolvedValueOnce(
+      blocked("PDF", "filed-gstr2b-not-generated"),
+    );
+    browserMocks.sessionSet.mockRejectedValueOnce(new Error("Synthetic session write failure."));
+
+    const response = await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      tabId: 17,
+    });
+
+    expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "single-period-bundle-state-persist-failed",
+          "single-period-opfs-retained",
+        ]),
+        state: "blocked",
+      },
+      flowSummary: { status: "blocked" },
+    });
+  });
+
+  it("retains the completed absence ledger when its exact clear returns false", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockResolvedValueOnce(
+      blocked("PDF", "filed-gstr2b-not-generated"),
+    );
+    bundleMocks.clearSinglePeriodBundleLedger.mockResolvedValueOnce(false);
+
+    const response = await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      tabId: 17,
+    });
+
+    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.sessionSet).toHaveBeenCalledWith({
+      completion: expect.objectContaining({ status: "complete" }),
+    });
+    expect(bundleMocks.clearSinglePeriodBundleLedger).toHaveBeenCalledOnce();
+    expect(browserMocks.sessionSet.mock.invocationCallOrder[0]).toBeLessThan(
+      bundleMocks.clearSinglePeriodBundleLedger.mock.invocationCallOrder[0]!,
+    );
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "single-period-bundle-state-persist-failed",
+          "single-period-opfs-retained",
+        ]),
+        state: "blocked",
+      },
+      flowSummary: { status: "blocked" },
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      response as never,
+      {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      true,
+    );
+    expect(persisted).toMatchObject({ flowSummary: { status: "blocked" } });
+    expect(browserMocks.sessionSet).toHaveBeenLastCalledWith({
+      completion: expect.objectContaining({ status: "blocked" }),
+    });
+  });
+
+  it("retains the completed absence ledger when its exact clear throws", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockResolvedValueOnce(
+      blocked("PDF", "filed-gstr2b-not-generated"),
+    );
+    bundleMocks.clearSinglePeriodBundleLedger.mockRejectedValueOnce(
+      new Error("Synthetic ledger clear failure."),
+    );
+
+    const response = await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      tabId: 17,
+    });
+
+    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.sessionSet).toHaveBeenCalledWith({
+      completion: expect.objectContaining({ status: "complete" }),
+    });
+    expect(bundleMocks.clearSinglePeriodBundleLedger).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "single-period-bundle-state-persist-failed",
+          "single-period-opfs-retained",
+        ]),
+        state: "blocked",
+      },
+      flowSummary: { status: "blocked" },
+    });
+  });
+
   it("does not reuse direct-download progress while staging a fiscal-year artifact ledger", async () => {
     mocks.readPersistedArtifactProgress.mockResolvedValue({
       completedArtifactTypes: ["PDF"],
@@ -626,7 +1067,12 @@ function blocked(artifactType: string, safeSignal = "artifact-generation-timeout
       connectorId: "gst",
       scopeId: "gst-gstr2b-private-v0",
       state: "blocked",
-      safeSignals: [safeSignal],
+      safeSignals: [
+        safeSignal,
+        ...(safeSignal === "filed-gstr2b-not-generated"
+          ? ["gstr2b-summary-route-verified", "gstr2b-visible-period-verified"]
+          : []),
+      ],
       safeMessage: `${artifactType} failed.`,
     },
   };
@@ -650,4 +1096,40 @@ function retainedGstr2bBundle(): SyntheticBundleLedger {
       returnType: "GSTR-2B",
     },
   };
+}
+
+function allUnavailableGstr2bBundle(): SyntheticBundleLedger {
+  return {
+    ...retainedGstr2bBundle(),
+    artifacts: retainedGstr2bBundle().artifacts.map((artifact) => ({
+      ...artifact,
+      missingReason: "artifact-filed-gstr2b-not-generated",
+      safeSignals: ["single-period-bundle-artifact-unavailable"],
+      status: "unavailable" as const,
+    })),
+    phase: "ready-for-zip",
+    revision: 8,
+  };
+}
+
+async function seedPersistedAbsenceProof(ledger: SyntheticBundleLedger): Promise<void> {
+  const flowStep = bundleMocks.singlePeriodBundleFlowStep(ledger)!;
+  await withPersistedSinglePeriodSummary(
+    ledger.scope,
+    {
+      ok: true,
+      flowStep: {
+        ...flowStep,
+        state: "blocked",
+        safeSignals: [
+          ...flowStep.safeSignals,
+          "gstr2b-summary-route-verified",
+          "gstr2b-visible-period-verified",
+        ],
+      },
+    },
+    { storageKeys: { completion: "completion" } } as never,
+    true,
+  );
+  browserMocks.sessionSet.mockClear();
 }

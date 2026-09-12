@@ -72,6 +72,17 @@ const DESCRIPTION_COPY_FLOOR = [
 
 const TEXT_FILE = /\.(ts|tsx|js|mjs|cjs|json|md|svg|html|yml|yaml)$/;
 
+function misclassifiesGstr2b(sentence: string): boolean {
+  // Quoted machine signals are identifiers, not product copy. Remove only the
+  // token so an incorrect claim elsewhere on the same line still fails.
+  const prose = sentence.replace(/(["'`])filed-[a-z0-9]+(?:-[a-z0-9]+)*\1/g, "");
+  if (!prose.includes("GSTR-2B") || !/\bfiled\b/i.test(prose)) return false;
+  if (/filed-return/i.test(prose) || /\bFiled Returns\b/.test(prose)) return false;
+  return !(
+    /auto-drafted[^.]{0,25}GSTR-2B/i.test(prose) || /GSTR-2B[^.]{0,25}\bstatement/i.test(prose)
+  );
+}
+
 function trackedTextFiles(): string[] {
   return execFileSync("git", ["ls-files"], { cwd: rootDir, encoding: "utf8" })
     .split("\n")
@@ -437,6 +448,15 @@ describe("public scope copy", () => {
   // the rule is positive instead: where a sentence says "filed" and names
   // GSTR-2B, the copy must separately mark GSTR-2B as auto-drafted or as a
   // statement. That is what every correct sentence in this repo already does.
+  it.each([
+    ['scope.returnType === "GSTR-2B" && signals.includes("filed-gstr2b-not-generated")', false],
+    ['"Filed GSTR-2B JSON"', true],
+    ['"filed-gstr2b-not-generated"; message = "Filed GSTR-2B JSON"', true],
+    ["Save filed GSTR-1 returns and auto-drafted GSTR-2B statements.", false],
+  ])("distinguishes copy from machine signals in %s", (sentence, rejected) => {
+    expect(misclassifiesGstr2b(sentence)).toBe(rejected);
+  });
+
   it("never classifies GSTR-2B as a filed return", async () => {
     const misclassified: string[] = [];
 
@@ -471,18 +491,9 @@ describe("public scope copy", () => {
             .replace(/\n\s*\|/g, ". |")
             .split(".");
       for (const sentence of segments) {
-        if (!sentence.includes("GSTR-2B") || !/\bfiled\b/i.test(sentence)) continue;
-        // Two shapes are not prose about GSTR-2B and must not be flagged:
-        // a hyphenated identifier such as `filed-return-detail-type`, and the
-        // portal's own control name "View Filed Returns", which Pack quotes
-        // when it explains which page it left.
-        if (/filed-return/i.test(sentence)) continue;
-        if (/\bFiled Returns\b/.test(sentence)) continue;
-
-        const marked =
-          /auto-drafted[^.]{0,25}GSTR-2B/i.test(sentence) ||
-          /GSTR-2B[^.]{0,25}\bstatement/i.test(sentence);
-        if (!marked) misclassified.push(`${relativePath}\n    ${sentence.trim()}`);
+        if (misclassifiesGstr2b(sentence)) {
+          misclassified.push(`${relativePath}\n    ${sentence.trim()}`);
+        }
       }
     }
 

@@ -8,9 +8,12 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
+  isResolvedFullFiscalYearTargetStatus,
+  needsExplicitFullFiscalYearRetry,
   isCleanedZipPhase,
   zipPhaseProvesDelivery,
 } from "../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import {
   filedReturnsArtifactLabel,
   normaliseFiledReturnsArtifactType,
@@ -24,6 +27,7 @@ import {
   hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedgerStale,
 } from "./filed-returns-full-fiscal-year-ledger";
+import { statesFullFiscalYearTargetAbsence } from "../connectors/gst/filed-returns-contracts";
 
 export function fullFiscalYearZipPhaseStep(
   ledger: FiledReturnsFullFiscalYearLedger,
@@ -121,11 +125,6 @@ const RUN_INDETERMINATE_SIGNALS: readonly string[] = [
   "filed-returns-active-run-malformed",
 ];
 
-const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
-
 /**
  * The nine internal statuses collapsed to what a reader is deciding about.
  *
@@ -141,6 +140,7 @@ const TARGET_OUTCOMES: Readonly<
   // OPFS, not delivered to the browser.
   downloaded: "saved",
   "not-filed": "not-filed",
+  "not-generated": "not-generated",
   // A person reporting what they saw is not correlated download evidence, so
   // this sits with the failures rather than with `saved`.
   "manually-observed": "needs-review",
@@ -154,6 +154,7 @@ const TARGET_OUTCOMES: Readonly<
 
 export function targetStatusFromFlowStep(
   step: PortalFlowStepResult,
+  returnType?: FiledReturnsReturnType,
 ): FiledReturnsFullFiscalYearTargetStatus {
   if (step.state === "downloaded") return "downloaded";
   if (step.state === "download-unconfirmed") return "download-unconfirmed";
@@ -162,6 +163,17 @@ export function targetStatusFromFlowStep(
   }
   if (step.safeSignals.includes("filed-return-positively-not-filed")) {
     return "not-filed";
+  }
+  // The portal stated it produced nothing for this period. A positive answer, like
+  // `filed-return-positively-not-filed` above -- not an inability to determine.
+  if (
+    returnType === "GSTR-2B" &&
+    step.safeSignals.some(
+      (signal) =>
+        signal === "filed-gstr2b-not-generated" || signal === "artifact-filed-gstr2b-not-generated",
+    )
+  ) {
+    return "not-generated";
   }
   if (step.safeSignals.some(isUnconfirmedBrowserDownloadSignal)) {
     return "download-unconfirmed";
@@ -238,7 +250,7 @@ export function needsResumeConfirmation(ledger: FiledReturnsFullFiscalYearLedger
  * ZIP afterwards. So `downloaded` means "Pack holds these bytes" until the ZIP
  * delivery signal appears, and only then does it mean the browser has them.
  */
-function targetOutcome(
+export function filedReturnsTargetOutcome(
   status: FiledReturnsFullFiscalYearTargetStatus,
   zipDelivered: boolean,
   runInterrupted: boolean,
@@ -327,8 +339,11 @@ export function fullFiscalYearTargetEvidence(
   // run produced. Everything that depended on a file Pack no longer has goes.
   if (runDiscarded || (clearedWithoutDelivery && hadStagedFiles)) {
     return ledger.targets
-      .filter((target) => target.status === "not-filed")
-      .map((target) => ({ period: target.period, outcome: "not-filed" as const }));
+      .filter((target) => statesFullFiscalYearTargetAbsence(target.status))
+      .map((target) => ({
+        period: target.period,
+        outcome: filedReturnsTargetOutcome(target.status, false, false, false),
+      }));
   }
   // From the step as well as the ledger. An MV3 interruption produces a blocked
   // summary while the persisted ledger normally still reads `running`, so
@@ -343,7 +358,7 @@ export function fullFiscalYearTargetEvidence(
     RUN_INDETERMINATE_SIGNALS.some((signal) => flowStep.safeSignals.includes(signal));
   return ledger.targets.map((target) => ({
     period: target.period,
-    outcome: targetOutcome(
+    outcome: filedReturnsTargetOutcome(
       target.status,
       zipDelivered,
       runInterrupted,
@@ -388,7 +403,7 @@ export function toFullFiscalYearSummary(
 ): FiledReturnsFlowSummary {
   ledger = recoveryLedgerView(ledger);
   const completedPeriods = ledger.targets
-    .filter((target) => COMPLETED_SUMMARY_TARGET_STATUSES.has(target.status))
+    .filter((target) => isResolvedFullFiscalYearTargetStatus(target.status))
     .map((target) => target.period);
   const recoveryTarget = fullFiscalYearRecoveryTarget(
     ledger,
@@ -456,7 +471,7 @@ export function completeFullFiscalYearStep(
       ...(unplanned.length > 0 ? ["full-fiscal-year-plan-narrower-than-eligible"] : []),
       ...(ledger.zipPhase === "cleaned-without-export" &&
       ledger.targets.length > 0 &&
-      ledger.targets.every((target) => target.status === "not-filed")
+      ledger.targets.every((target) => statesFullFiscalYearTargetAbsence(target.status))
         ? ["full-fiscal-year-no-zip-artifacts"]
         : []),
     ],
@@ -494,24 +509,14 @@ function fullFiscalYearRecoveryTarget(
     : ledger.targets.find(isRecoverableFullFiscalYearTarget);
 }
 
+// The exact complement of resolved, so it is derived rather than restated. Written out, this was a
+// seven-line list that had to be edited every time the union grew.
 function isRecoverableFullFiscalYearTarget(target: FiledReturnsFullFiscalYearTarget): boolean {
-  return (
-    target.status === "pending" ||
-    target.status === "download-unconfirmed" ||
-    target.status === "running" ||
-    target.status === "blocked" ||
-    target.status === "failed" ||
-    target.status === "cancelled" ||
-    target.status === "manually-observed"
-  );
+  return !isResolvedFullFiscalYearTargetStatus(target.status);
 }
 
 function hasRecoverableActionRequiredTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
-  return ledger.targets.some((target) =>
-    ["blocked", "failed", "cancelled", "download-unconfirmed", "manually-observed"].includes(
-      target.status,
-    ),
-  );
+  return ledger.targets.some((target) => needsExplicitFullFiscalYearRetry(target.status));
 }
 
 export function activeFullFiscalYearStep(

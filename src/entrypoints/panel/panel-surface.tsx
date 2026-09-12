@@ -241,8 +241,10 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
               </>
             )}
             {allSupportedNeedsRecovery ? (
+              // Named for its own run. Both blocks can render at once, and unlabelled their
+              // independent reasons read as one contradictory statement.
               <p className="panel-recovery-reason">
-                Why Pack paused: {allSupportedSummary?.flowStep.safeMessage}
+                Why the all-returns year plan paused: {allSupportedSummary?.flowStep.safeMessage}
               </p>
             ) : null}
             {hasRecoveryActions(summary ?? null) ? (

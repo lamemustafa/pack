@@ -1,3 +1,4 @@
+import { REFUSAL_BINDING_SIGNALS } from "./filed-returns-declined-artifact";
 import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "./offscreen-blob-url";
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
@@ -25,6 +26,25 @@ import {
   FILED_RETURNS_TARGET_REVIEW_CLEAR_FAILURE_STAGES,
   filedReturnsTargetReviewClearFailureSignal,
 } from "./filed-returns-target-review-clear";
+import {
+  ARTIFACT_ACQUISITION_DIAGNOSTIC_SIGNALS,
+  DECLINED_ARTIFACT_REASONS,
+  DECLINED_ARTIFACT_SIGNALS,
+} from "./filed-returns-acquisition-diagnostics";
+
+// The reasons and methods those templates can produce. Enumerated here beside the allowlist so a
+// new one is a compile-time change in one place rather than a signal that silently fails to
+// persist.
+export const RETURNS_DASHBOARD_ANCHOR_FAILURE_REASONS = [
+  "ambiguous",
+  "not-found",
+  "timeout",
+  "unavailable",
+] as const;
+export const PORTAL_BLOB_SHIM_SUPPRESSION_METHODS = ["dispatchEvent", "click"] as const;
+
+export type ReturnsDashboardAnchorFailureReason =
+  (typeof RETURNS_DASHBOARD_ANCHOR_FAILURE_REASONS)[number];
 
 const MAX_DURABLE_SIGNAL_COUNT = 32;
 
@@ -132,7 +152,10 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-gstr1-download-status-not-filed",
   "filed-gstr1-download-trigger-ambiguous",
   "filed-gstr1-excel-control-pending",
-  "filed-gstr1-excel-no-details-available",
+  // Both portal refusals, from the list that defines them, so registering a new one is not a
+  // separate step someone can forget -- which is how the last one halted a run.
+  ...DECLINED_ARTIFACT_SIGNALS,
+  ...REFUSAL_BINDING_SIGNALS,
   GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   "filed-gstr1-result-view-auto-attempt-failed",
   "filed-gstr1-result-view-auto-clicked",
@@ -345,6 +368,18 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "gstr1-artifact-response-missing",
   "gstr1-artifact-state-invalid",
   "gstr2b-detail-heading",
+  // Page-identity evidence for the GSTR-2B summary route. These were transient while the only
+  // step that carried them was the "ready" hand-off to acquisition, whose signals never reach
+  // durable state. Recording the portal's refusal made them terminal, and one unregistered token
+  // rejects the whole array -- which blocked every period the portal declined to generate.
+  "gstr2b-visible-period-verified",
+  "gstr2b-visible-period-mismatch",
+  "gstr2b-labelled-period-evidence-missing",
+  "gstr2b-server-period-mismatch",
+  "gstr2b-server-visible-period-conflict",
+  "gstr2b-summary-period-mismatch",
+  "gstr2b-summary-dashboard-back-clicked",
+  "gstr2b-summary-back-clicked",
   "gstr2b-detail-route",
   "gstr2b-dashboard-period-select-found",
   "gstr2b-dashboard-period-select-missing",
@@ -387,10 +422,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "return-dashboard-after-returns-menu",
   "return-dashboard-after-services-menu",
   "return-dashboard-initial-scan",
-  "returns-dashboard-anchor-ambiguous",
-  "returns-dashboard-anchor-not-found",
-  "returns-dashboard-anchor-timeout",
-  "returns-dashboard-anchor-unavailable",
+  ...RETURNS_DASHBOARD_ANCHOR_FAILURE_REASONS.map((reason) => `returns-dashboard-anchor-${reason}`),
   "return-filing-period-left-unselected",
   "return-type-selected",
   "safe-dialog-dismissed",
@@ -634,7 +666,7 @@ const SCOPED_RETURN_SIGNAL_SUFFIXES = new Set([
 ]);
 const ARTIFACT_FAILURE_SIGNALS = new Set([
   "artifact-acquisition-failed",
-  "artifact-filed-gstr1-excel-no-details-available",
+  ...DECLINED_ARTIFACT_REASONS,
   // Artifact-acquisition recovery exists to survive service-worker death, so
   // its outcomes must be persistable. Without these the blocked summary that
   // routes an interrupted acquisition to review is rejected by
@@ -662,6 +694,20 @@ const ARTIFACT_FAILURE_SIGNALS = new Set([
   "artifact-acquisition-download-completed-unpersisted",
   "artifact-acquisition-download-reconciled",
   ...Object.keys(ARTIFACT_FAILURE_MESSAGES).map((reason) => `artifact-${reason}`),
+  // Why an acquisition was refused, not just that it was. Spread from the same list the emitters
+  // read, so a new diagnostic cannot be added without becoming persistable -- an unregistered one
+  // rejects the whole array and halts the run on non-canonical recovery metadata.
+  ...ARTIFACT_ACQUISITION_DIAGNOSTIC_SIGNALS,
+  // Built by template rather than written as literals, which is why a scan for unregistered
+  // signal strings never found them. Each accompanies a blocked step that has to persist, and an
+  // unregistered one rejects the whole array -- the run then halts on non-canonical recovery
+  // metadata rather than on the navigation problem it was describing.
+  ...PORTAL_BLOB_SHIM_SUPPRESSION_METHODS.map(
+    (method) => `portal-blob-shim-suppressed-via-${method}`,
+  ),
+  // Passed as the step-limit signal for the GSTR-1 Excel detail wait. Its `gstr1` prefix puts it
+  // in the navigation rejection category, so an unregistered one rejects the whole array.
+  "gstr1-excel-detail-step-limit-reached",
 ]);
 
 export function parseDurableFiledReturnsSignals(input: unknown): string[] | null {
@@ -686,6 +732,13 @@ export function durableFiledReturnsSignalRejectionReason(
 // persisted or rendered. It distinguishes Pack-owned producer families during
 // live recovery without admitting portal-derived text into durable state.
 function durableUnknownSignalCategory(signal: string): DurableFiledReturnsSignalRejectionReason {
+  // The token itself is never logged. This boundary exists precisely because it cannot know what
+  // it has been handed -- a legacy or malformed entry read back from storage is exactly the input
+  // it is here to refuse -- so repeating it in a console sink undoes the refusal it just made.
+  //
+  // The diagnostic this replaces was written when an unregistered signal could only be found at
+  // runtime. It no longer can: the signal lists are now types, and a producer emitting a token the
+  // allowlist does not carry fails to compile. A category is what remains useful at runtime.
   if (signal.startsWith("filed-return-detail-")) return "unknown-detail-identity";
   if (
     /^(?:artifact-|filed-gstr|page-|browser-download|full-fiscal-year-opfs|single-period-opfs)/.test(
