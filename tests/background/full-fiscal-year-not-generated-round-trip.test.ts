@@ -98,7 +98,11 @@ describe("a full-year run whose period the portal never generated", () => {
     await expect(persistLedger(deps, ledger)).resolves.toBeUndefined();
   });
 
-  it("rejects a not-generated period that still retains staged artifact evidence", () => {
+  it.each([
+    "full-fiscal-year-opfs-staged:PDF",
+    "all-supported-full-fiscal-year-opfs-staged:PDF",
+    "filed-return-artifact-downloaded:PDF",
+  ])("rejects a not-generated period retaining %s", (retainedSignal) => {
     const ledger = createFullFiscalYearLedger(scope, new Date("2026-09-10T00:00:00.000Z"), [
       "April",
     ]);
@@ -109,7 +113,7 @@ describe("a full-year run whose period the portal never generated", () => {
         "filed-gstr2b-not-generated",
         "gstr2b-summary-route-verified",
         "gstr2b-visible-period-verified",
-        "full-fiscal-year-opfs-staged:PDF",
+        retainedSignal,
       ],
       safeMessage: declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
     };

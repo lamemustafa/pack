@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
-import { startFullFiscalYearDownloadFlow } from "../../src/background/filed-returns-full-fiscal-year";
+import {
+  type SinglePeriodRunner,
+  startFullFiscalYearDownloadFlow,
+} from "../../src/background/filed-returns-full-fiscal-year";
 import {
   prepareFullFiscalYearTargetRetry,
   resolveFullFiscalYearTarget,
 } from "../../src/background/filed-returns-full-fiscal-year-recovery";
 import { responseForExistingLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
-import { summariseFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-summary";
+import {
+  fullFiscalYearTargetFlowStep,
+  summariseFullFiscalYearLedger,
+} from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import {
@@ -276,6 +282,89 @@ describe("full-year Start preserves existing recovery", () => {
 
     expect(runSinglePeriod).toHaveBeenCalledTimes(1);
   });
+
+  it("preserves an unrelated blocked reason despite retained staging", () => {
+    const step = {
+      connectorId: "gst" as const,
+      scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+      state: "login-required" as const,
+      safeSignals: ["full-fiscal-year-opfs-staged:PDF", "portal-blocked-or-session-expired"],
+      safeMessage: "Synthetic session boundary requires the reader's attention.",
+    };
+    expect(fullFiscalYearTargetFlowStep(step, "GSTR-2B")).toEqual(step);
+    expect(
+      canonicalDurableTargetStatus(
+        { ...RECOVERY_SCOPE, returnType: "GSTR-2B" },
+        "blocked",
+        step.safeSignals,
+      ).safeMessage,
+    ).not.toContain("retained a captured artifact");
+  });
+
+  it.each(["filed-gstr2b-not-generated", "artifact-filed-gstr2b-not-generated"])(
+    "stops a fresh ordinary year run when staged output conflicts with %s",
+    async (refusal) => {
+      const scope = {
+        ...RECOVERY_SCOPE,
+        returnType: "GSTR-2B" as const,
+        artifactType: "PDF_AND_EXCEL" as const,
+      };
+      const runner = vi.fn<SinglePeriodRunner>(async (_scope, childDeps) => {
+        expect(childDeps.stageCapturedDownloads).toMatchObject({
+          bundleKind: "full-fiscal-year",
+          ledgerId: expect.any(String),
+        });
+        return {
+          ok: true as const,
+          flowStep: {
+            connectorId: "gst" as const,
+            scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+            state: "candidate-not-found" as const,
+            safeSignals: [
+              "filed-return-artifact-downloaded:PDF",
+              "full-fiscal-year-opfs-staged:PDF",
+              refusal,
+              "gstr2b-summary-route-verified",
+              "gstr2b-visible-period-verified",
+            ],
+            safeMessage: "Synthetic later-format refusal.",
+          },
+        };
+      });
+      const response = await startFullFiscalYearDownloadFlow(scope, deps, runner);
+      expect(runner).toHaveBeenCalledOnce();
+      expect(isFullFiscalYearLedger(storage.local.ledger)).toBe(true);
+      if (!isFullFiscalYearLedger(storage.local.ledger)) throw new Error("Expected valid ledger.");
+      const ledger = structuredClone(storage.local.ledger);
+      const target = ledger.targets[0]!;
+      expect(target).toMatchObject({
+        status: "blocked",
+        safeMessage: expect.stringContaining("retained a captured artifact"),
+        safeSignals: expect.arrayContaining([
+          "full-fiscal-year-opfs-staged:PDF",
+          "filed-return-artifact-downloaded:PDF",
+          refusal,
+        ]),
+      });
+      expect(ledger.targets.slice(1).every((item) => item.status === "pending")).toBe(true);
+      expect(ledger.zipPhase).toBeUndefined();
+      expect(response).toMatchObject({
+        flowStep: { state: "blocked", safeMessage: target.safeMessage },
+      });
+      expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+      expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+
+      runner.mockClear();
+      const reopened = await startFullFiscalYearDownloadFlow(scope, deps, runner);
+      expect(reopened).toMatchObject({
+        flowStep: { state: "blocked", safeMessage: target.safeMessage },
+      });
+      expect(runner).not.toHaveBeenCalled();
+      expect(storage.local.ledger).toEqual(ledger);
+      expect(zipMocks.exportFullFiscalYearZip).not.toHaveBeenCalled();
+      expect(zipMocks.discardFullFiscalYearFiledReturnsZip).not.toHaveBeenCalled();
+    },
+  );
 
   it("blocks an ordinary active retry after staged evidence and does not export", async () => {
     const scope = { ...RECOVERY_SCOPE, returnType: "GSTR-2B" as const };

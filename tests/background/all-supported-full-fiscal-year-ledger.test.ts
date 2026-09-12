@@ -654,7 +654,11 @@ describe("a period the portal declined to generate, in an all-returns year", () 
     expect(evidence?.outcome).not.toBe("needs-review");
   });
 
-  it("keeps a bound refusal under review when staged artifact evidence remains", () => {
+  it.each([
+    "full-fiscal-year-opfs-staged:PDF",
+    "all-supported-full-fiscal-year-opfs-staged:PDF",
+    "filed-return-artifact-downloaded:PDF",
+  ])("rejects a stored whole-target refusal retaining %s", (retainedSignal) => {
     const ledger = createLedger();
     const target = ledger.targets.find((candidate) => candidate.returnType === "GSTR-2B");
     if (!target) throw new Error("expected a GSTR-2B target in the all-returns plan");
@@ -669,13 +673,14 @@ describe("a period the portal declined to generate, in an all-returns year", () 
                 "filed-gstr2b-not-generated",
                 "gstr2b-summary-route-verified",
                 "gstr2b-visible-period-verified",
-                "full-fiscal-year-opfs-staged:PDF",
+                retainedSignal,
               ]),
             }
           : candidate,
       ),
     };
 
+    expect(isAllSupportedFullFiscalYearLedger(staged)).toBe(false);
     const summary = toAllSupportedFullFiscalYearSummary(staged);
     expect(summary.targetEvidence.find((row) => row.targetId === target.targetId)?.outcome).toBe(
       "needs-review",

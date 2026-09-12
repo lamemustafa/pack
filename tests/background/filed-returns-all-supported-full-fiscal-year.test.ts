@@ -690,6 +690,73 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(savedLedger().revision).toBeGreaterThan(blocked.revision);
   });
 
+  it.each(["filed-gstr2b-not-generated", "artifact-filed-gstr2b-not-generated"])(
+    "stops a fresh all-supported run when staged output conflicts with %s",
+    async (refusal) => {
+      const runner = vi.fn<SinglePeriodRunner>(async (scope, childDeps) => {
+        if (scope.returnType !== "GSTR-2B") return notFiledStep();
+        expect(childDeps.stageCapturedDownloads).toMatchObject({
+          bundleKind: "all-supported-full-fiscal-year",
+          ledgerId: expect.any(String),
+        });
+        // The selected-artifact runner accumulates the first format's staging evidence
+        // before returning the subsequent format's refusal to this active year loop.
+        return {
+          ok: true as const,
+          flowStep: {
+            connectorId: "gst" as const,
+            scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+            state: "candidate-not-found" as const,
+            safeSignals: [
+              "filed-return-artifact-downloaded:PDF",
+              "all-supported-full-fiscal-year-opfs-staged:PDF",
+              refusal,
+              "gstr2b-summary-route-verified",
+              "gstr2b-visible-period-verified",
+            ],
+            safeMessage: "Synthetic later-format refusal.",
+          },
+        };
+      });
+
+      const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+      const ledger = savedLedger();
+      const blockedIndex = ledger.targets.findIndex((target) => target.returnType === "GSTR-2B");
+      expect(blockedIndex).toBeGreaterThanOrEqual(0);
+      const target = ledger.targets[blockedIndex]!;
+      expect(runner).toHaveBeenCalledTimes(blockedIndex + 1);
+      expect(target).toMatchObject({
+        status: "blocked",
+        safeMessage: expect.stringContaining("retained a captured artifact"),
+        safeSignals: expect.arrayContaining([
+          "all-supported-full-fiscal-year-opfs-staged:PDF",
+          "filed-return-artifact-downloaded:PDF",
+          refusal,
+        ]),
+      });
+      expect(
+        ledger.targets.slice(blockedIndex + 1).every((item) => item.status === "pending"),
+      ).toBe(true);
+      expect(ledger.zipPhase).toBeUndefined();
+      expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
+      expect(response).toMatchObject({
+        flowStep: { state: "blocked", safeMessage: target.safeMessage },
+      });
+      expect(zip.export).not.toHaveBeenCalled();
+      expect(zip.discard).not.toHaveBeenCalled();
+
+      runner.mockClear();
+      const reopened = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+      expect(reopened).toMatchObject({
+        flowStep: { state: "blocked", safeMessage: target.safeMessage },
+      });
+      expect(runner).not.toHaveBeenCalled();
+      expect(savedLedger()).toEqual(ledger);
+      expect(zip.export).not.toHaveBeenCalled();
+      expect(zip.discard).not.toHaveBeenCalled();
+    },
+  );
+
   it("blocks a later bound GSTR-2B refusal after a staged artifact without exporting again", async () => {
     const firstRunner = vi.fn<SinglePeriodRunner>(async (scope) =>
       scope.returnType === "GSTR-2B"
