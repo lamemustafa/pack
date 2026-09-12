@@ -463,10 +463,23 @@ export async function triggerSelectedArtifacts({
       );
     }
     if (summary) {
-      await clearSinglePeriodBundleLedger(
-        singlePeriodBundleLedger.ledgerId,
-        singlePeriodBundleLedger.revision,
-      );
+      let bundleCleared = false;
+      try {
+        bundleCleared = await clearSinglePeriodBundleLedger(
+          singlePeriodBundleLedger.ledgerId,
+          singlePeriodBundleLedger.revision,
+        );
+      } catch {
+        bundleCleared = false;
+      }
+      if (!bundleCleared) {
+        return singlePeriodBundleBlockedResponse(
+          scope,
+          ["single-period-bundle-clear-failed", "single-period-opfs-retained"],
+          "Pack recorded that no files were available, but could not clear the saved recovery state.",
+          true,
+        );
+      }
     }
     return {
       ...response,

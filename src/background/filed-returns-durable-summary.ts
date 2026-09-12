@@ -227,8 +227,12 @@ function isConsistentCompleteSummary({
       flowStep.downloadDiagnostics === undefined
     );
   }
+  const isGstr1ExcelNoDetails =
+    scope.returnType === "GSTR-1" &&
+    normaliseFiledReturnsArtifactType(scope.returnType, scope.artifactType) === "EXCEL" &&
+    flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available");
   if (
-    flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available") ||
+    isGstr1ExcelNoDetails ||
     (scope.returnType === "GSTR-2B" && flowStep.safeSignals.includes("filed-gstr2b-not-generated"))
   ) {
     return (
