@@ -9,7 +9,9 @@ import {
   bindGstr2bSummaryRefusal,
   declinedArtifactSafeMessage,
   declinedArtifactStep,
+  getBoundDeclinedArtifactSignal,
 } from "../../src/connectors/gst/filed-returns-declined-artifact";
+import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-scope";
 import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
 import { createGstDocument, makeLayoutVisible } from "./filed-returns-flow.test-helpers";
 import { normaliseText } from "../../src/connectors/gst/filed-returns-dom";
@@ -110,6 +112,35 @@ describe("a declined artifact cannot be recorded unbound", () => {
       safeSignals: ["gstr2b-summary-route"],
     });
 
+    expect(getBoundDeclinedArtifactSignal(SCOPE, step.safeSignals)).toBe(
+      "filed-gstr2b-not-generated",
+    );
+    expect(
+      getBoundDeclinedArtifactSignal(
+        { ...SCOPE, period: FULL_FISCAL_YEAR_PERIOD },
+        step.safeSignals,
+      ),
+    ).toBeNull();
+    for (const missing of ["gstr2b-summary-route-verified", "gstr2b-visible-period-verified"]) {
+      expect(
+        getBoundDeclinedArtifactSignal(
+          SCOPE,
+          step.safeSignals.filter((signal) => signal !== missing),
+        ),
+      ).toBeNull();
+    }
+    expect(
+      getBoundDeclinedArtifactSignal(SCOPE, [
+        ...step.safeSignals,
+        "filed-gstr1-detail-period-verified",
+      ]),
+    ).toBeNull();
+    expect(
+      getBoundDeclinedArtifactSignal(SCOPE, [
+        ...step.safeSignals,
+        "filed-return-positively-not-filed",
+      ]),
+    ).toBeNull();
     expect(step.state).toBe("blocked");
     expect(step.safeSignals).toContain("gstr2b-summary-route-verified");
     expect(step.safeSignals).toContain("gstr2b-visible-period-verified");
