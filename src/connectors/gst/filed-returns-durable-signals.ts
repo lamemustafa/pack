@@ -1,3 +1,4 @@
+import { REFUSAL_BINDING_SIGNALS } from "./filed-returns-declined-artifact";
 import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "./offscreen-blob-url";
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
@@ -154,6 +155,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   // Both portal refusals, from the list that defines them, so registering a new one is not a
   // separate step someone can forget -- which is how the last one halted a run.
   ...DECLINED_ARTIFACT_SIGNALS,
+  ...REFUSAL_BINDING_SIGNALS,
   GSTR1_PERIOD_MISMATCH_RECOVERY_STOPPED_SIGNAL,
   "filed-gstr1-result-view-auto-attempt-failed",
   "filed-gstr1-result-view-auto-clicked",
