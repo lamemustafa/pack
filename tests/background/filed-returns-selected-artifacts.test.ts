@@ -29,6 +29,7 @@ type SyntheticBundleLedger = {
 };
 
 const mocks = vi.hoisted(() => ({
+  reconcileArtifactAcquisitionCheckpoint: vi.fn(async () => ({ state: "none" })),
   combineDownloadedArtifactFlowSteps: vi.fn(
     (combined: PortalFlowStepResult | null, next: PortalFlowStepResult) => ({
       ...next,
@@ -206,6 +207,9 @@ vi.mock("wxt/browser", () => ({
     },
   },
 }));
+vi.mock("../../src/background/artifact-acquisition-state", () => ({
+  reconcileArtifactAcquisitionCheckpoint: mocks.reconcileArtifactAcquisitionCheckpoint,
+}));
 vi.mock("../../src/background/filed-returns-artifact-progress", async (importOriginal) => ({
   ...(await importOriginal<typeof FiledReturnsArtifactProgressModule>()),
   ...mocks,
@@ -223,6 +227,7 @@ import {
   preflightSelectedArtifactsRecovery,
   triggerSelectedArtifacts,
 } from "../../src/background/filed-returns-selected-artifacts";
+import { startSinglePeriodFiledReturnsDownloadFlow } from "../../src/background/filed-returns-single-period-flow";
 import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 
 const gstr2bAllFormatsArtifacts = concreteFiledReturnsArtifactTypesForSelection(
@@ -595,6 +600,115 @@ describe("GSTR-2B all-format selection", () => {
     expect(browserMocks.sessionSet.mock.invocationCallOrder[0]).toBeLessThan(
       bundleMocks.clearSinglePeriodBundleLedger.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it.each(["closed tab", "visible refusal"])(
+    "retries absence cleanup before looking for a portal with %s",
+    async (portalState) => {
+      const ledger = allUnavailableGstr2bBundle();
+      bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+        ledger,
+        state: "valid",
+      });
+      const getActiveGstTab = vi.fn(async () => (portalState === "closed tab" ? null : { id: 17 }));
+      const sendMessageToTabWithInjection = vi.fn(async () =>
+        blocked("PDF", "filed-gstr2b-not-generated"),
+      );
+
+      const response = await startSinglePeriodFiledReturnsDownloadFlow(ledger.scope, {
+        getActiveGstTab,
+        sendMessageToTabWithInjection,
+        storageKeys: { completion: "completion" },
+      } as never);
+
+      expect(response).toMatchObject({ flowSummary: { status: "complete" } });
+      expect(getActiveGstTab).not.toHaveBeenCalled();
+      expect(sendMessageToTabWithInjection).not.toHaveBeenCalled();
+      expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
+      expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+      expect(bundleMocks.clearSinglePeriodBundleLedger).toHaveBeenCalledExactlyOnceWith(
+        ledger.ledgerId,
+        ledger.revision,
+      );
+      expect(browserMocks.sessionSet.mock.invocationCallOrder[0]).toBeLessThan(
+        bundleMocks.clearSinglePeriodBundleLedger.mock.invocationCallOrder[0]!,
+      );
+    },
+  );
+
+  it.each(["false", "throw", "summary write"])(
+    "can retry retained absence cleanup locally after %s failure",
+    async (failure) => {
+      const ledger = allUnavailableGstr2bBundle();
+      bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+        ledger,
+        state: "valid",
+      });
+      if (failure === "false")
+        bundleMocks.clearSinglePeriodBundleLedger.mockResolvedValueOnce(false);
+      if (failure === "throw") {
+        bundleMocks.clearSinglePeriodBundleLedger.mockRejectedValueOnce(
+          new Error("Synthetic clear failure."),
+        );
+      }
+      if (failure === "summary write") {
+        browserMocks.sessionSet.mockRejectedValueOnce(new Error("Synthetic summary failure."));
+      }
+      const getActiveGstTab = vi.fn(async () => null);
+      const deps = { getActiveGstTab, storageKeys: { completion: "completion" } } as never;
+
+      const failed = await startSinglePeriodFiledReturnsDownloadFlow(ledger.scope, deps);
+      expect(failed).toMatchObject({
+        flowStep: { state: "blocked", userAction: { canResume: true } },
+        flowSummary: { status: "blocked" },
+      });
+      if (failure === "summary write") {
+        expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+      }
+      const retried = await startSinglePeriodFiledReturnsDownloadFlow(ledger.scope, deps);
+      expect(retried).toMatchObject({ flowSummary: { status: "complete" } });
+      expect(bundleMocks.clearSinglePeriodBundleLedger).toHaveBeenCalledTimes(
+        failure === "summary write" ? 1 : 2,
+      );
+      expect(getActiveGstTab).not.toHaveBeenCalled();
+      expect(mocks.triggerAndObserveFiledReturnDownload).not.toHaveBeenCalled();
+      expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains absence recovery when no terminal summary key is available", async () => {
+    const ledger = allUnavailableGstr2bBundle();
+    bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+      ledger,
+      state: "valid",
+    });
+    const response = await preflightSelectedArtifactsRecovery({
+      deps: { storageKeys: {} } as never,
+      scope: ledger.scope,
+    });
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["single-period-bundle-state-persist-failed"]),
+        state: "blocked",
+        userAction: { canResume: true },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+    expect(browserMocks.sessionSet).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a retained bundle with staged files as zero-artifact cleanup", async () => {
+    const ledger = { ...retainedGstr2bBundle(), phase: "ready-for-zip" as const };
+    bundleMocks.readSinglePeriodBundleLedgerStorageState.mockResolvedValue({
+      ledger,
+      state: "valid",
+    });
+    await expect(
+      preflightSelectedArtifactsRecovery({ deps: {} as never, scope: ledger.scope }),
+    ).resolves.toBeNull();
+    expect(bundleMocks.clearSinglePeriodBundleLedger).not.toHaveBeenCalled();
+    expect(browserMocks.sessionSet).not.toHaveBeenCalled();
   });
 
   it("keeps the completed absence ledger resumable when its terminal summary cannot persist", async () => {
