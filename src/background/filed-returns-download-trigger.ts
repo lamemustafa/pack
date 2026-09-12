@@ -1,6 +1,7 @@
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsDownloadDiagnostic,
+  FiledReturnsTargetDownloadAttempt,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { normaliseContentScriptMessageResponse } from "./content-script-message-response";
@@ -36,12 +37,18 @@ import {
   persistFiledReturnsTargetDownloadId,
   persistFiledReturnsTargetDownloadIntent,
 } from "./filed-returns-target-download-attempt";
+import { clearFiledReturnsTargetReviewWithReason } from "./filed-returns-target-review";
+import {
+  FiledReturnsTargetReviewClearError,
+  filedReturnsTargetReviewClearFailureSignal,
+} from "../connectors/gst/filed-returns-target-review-clear";
 import {
   gstr3bFullFiscalYearAcquisitionNotWiredStep,
   isGstr3bFullFiscalYearAcquisitionScope,
 } from "./gstr3b-artifact-acquisition-block";
 import { DECLINED_ARTIFACT_SIGNALS } from "../connectors/gst/filed-returns-acquisition-diagnostics";
 import { persistSinglePeriodSummary } from "./filed-returns-single-period-summary";
+import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
@@ -51,20 +58,16 @@ const DECLINED_ARTIFACT_SIGNAL_SET = new Set<string>(DECLINED_ARTIFACT_SIGNALS);
 
 async function persistSingleArtifactRecoveryIntent(
   scope: FiledReturnsDownloadScope,
-  artifactType: FiledReturnsConcreteArtifactType,
-  actionId: string,
+  intent: Extract<
+    FiledReturnsTargetDownloadAttempt,
+    { kind: "single-artifact"; phase: "download-intent-persisted" }
+  >,
   deps: FiledReturnsFlowMessagingDeps,
 ): Promise<boolean> {
   if (!deps.storageKeys.targetReview || deps.stageCapturedDownloads) return true;
   return persistFiledReturnsTargetDownloadIntent(
-    scope,
-    {
-      actionId,
-      artifactType,
-      kind: "single-artifact",
-      phase: "download-intent-persisted",
-      requestedAt: (deps.now?.() ?? new Date()).toISOString(),
-    },
+    { ...scope, artifactType: intent.artifactType },
+    intent,
     deps,
   );
 }
@@ -573,8 +576,18 @@ async function triggerPageGeneratedSinglePeriodArtifact(
   // OPFS staging has a separate durable bundle ledger. Only a browser-created
   // download needs this exact-ID checkpoint for recovery.
   const tracksBrowserDownload = !deps.stageCapturedDownloads;
+  const recoveryIntent = {
+    actionId: requestId,
+    artifactType,
+    kind: "single-artifact",
+    phase: "download-intent-persisted",
+    requestedAt: (deps.now?.() ?? new Date()).toISOString(),
+  } satisfies Extract<
+    FiledReturnsTargetDownloadAttempt,
+    { kind: "single-artifact"; phase: "download-intent-persisted" }
+  >;
   if (tracksBrowserDownload) {
-    if (!(await persistSingleArtifactRecoveryIntent(scope, artifactType, requestId, deps))) {
+    if (!(await persistSingleArtifactRecoveryIntent(scope, recoveryIntent, deps))) {
       return {
         ok: true,
         flowStep: {
@@ -719,13 +732,68 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       // checkpoint intact; only a confirmed durable terminal result permits its removal.
       retainCheckpointForRecovery = true;
       const completionKey = deps.storageKeys.completion;
-      const persisted = completionKey
-        ? await persistSinglePeriodSummary({ ...scope, artifactType }, declined.flowStep, {
-            storageKeys: { completion: completionKey },
-            ...(deps.now ? { now: deps.now } : {}),
-          })
-        : null;
-      if (persisted) retainCheckpointForRecovery = false;
+      const persisted =
+        tracksBrowserDownload && completionKey
+          ? await persistSinglePeriodSummary({ ...scope, artifactType }, declined.flowStep, {
+              storageKeys: { completion: completionKey },
+              ...(deps.now ? { now: deps.now } : {}),
+            })
+          : null;
+      if (persisted && completionKey) {
+        const targetScope = { ...scope, artifactType };
+        let reviewClear: { ok: true } | { error: FiledReturnsTargetReviewClearError; ok: false };
+        try {
+          reviewClear = deps.storageKeys.targetReview
+            ? await clearFiledReturnsTargetReviewWithReason(
+                targetScope,
+                deps,
+                undefined,
+                recoveryIntent,
+              )
+            : { ok: true };
+        } catch {
+          reviewClear = {
+            error: new FiledReturnsTargetReviewClearError("storage-read-failed"),
+            ok: false,
+          };
+        }
+        if (!reviewClear.ok) {
+          const clearFailureStep: PortalFlowStepResult = {
+            ...declined.flowStep,
+            state: "download-unconfirmed",
+            safeSignals: [
+              ...declined.flowStep.safeSignals,
+              "filed-returns-target-review-clear-failed",
+              filedReturnsTargetReviewClearFailureSignal(reviewClear.error.stage),
+            ],
+            safeMessage:
+              "Pack saved the terminal result but could not clear its saved recovery state.",
+            userAction: {
+              type: "RETRY_PORTAL_GENERATION",
+              message: "Retry so Pack can reconcile the saved target recovery checkpoint.",
+              canResume: true,
+            },
+          };
+          // Keep the original terminal-refusal proof on the returned step. The explicit blocked
+          // summary preserves that proof while preventing the outer boundary from reclassifying
+          // a retained cleanup failure as a completed absence.
+          const clearFailureSummary = await persistCanonicalFiledReturnsFlowSummary(completionKey, {
+            completedPeriods: [],
+            currentPeriod: scope.period,
+            flowStep: clearFailureStep,
+            scope: { ...scope, artifactType },
+            status: "blocked",
+            totalPeriods: 1,
+            updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+          });
+          return {
+            ok: true,
+            flowStep: clearFailureStep,
+            ...(clearFailureSummary ? { flowSummary: clearFailureSummary } : {}),
+          };
+        }
+        retainCheckpointForRecovery = false;
+      }
       return declined;
     }
 
