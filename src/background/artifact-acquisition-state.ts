@@ -45,6 +45,8 @@ const ARTIFACT_ACQUISITION_CHECKPOINT_BASE_KEYS = [
   "state",
 ] as const;
 
+let artifactAcquisitionCheckpointMutationCriticalSection = Promise.resolve();
+
 export type ArtifactAcquisitionTarget = Pick<
   FiledReturnsDownloadScope,
   "artifactType" | "financialYear" | "period" | "returnType"
@@ -182,52 +184,85 @@ export async function clearMalformedArtifactAcquisitionCheckpoint(
 export async function persistArtifactAcquisitionIntent(
   input: Omit<ArtifactAcquisitionCheckpoint, "armedAt" | "state" | "downloadId">,
 ): Promise<void> {
-  const key = artifactAcquisitionCheckpointKey(input);
-  await browser.storage.session.set({
-    [key]: {
-      ...input,
-      armedAt: new Date().toISOString(),
-      state: "intent",
-    } satisfies ArtifactAcquisitionCheckpoint,
+  await runArtifactAcquisitionCheckpointMutation(async () => {
+    const key = artifactAcquisitionCheckpointKey(input);
+    await browser.storage.session.set({
+      [key]: {
+        ...input,
+        armedAt: new Date().toISOString(),
+        state: "intent",
+      } satisfies ArtifactAcquisitionCheckpoint,
+    });
   });
 }
 
 export async function persistArtifactAcquisitionDownloadId(
   input: Omit<ArtifactAcquisitionCheckpoint, "armedAt">,
 ): Promise<void> {
-  const key = artifactAcquisitionCheckpointKey(input);
-  const stored = await browser.storage.session.get(key);
-  await browser.storage.session.set({
-    [key]: {
-      ...input,
-      armedAt: armedAtFromCheckpoint(stored[key]) ?? new Date().toISOString(),
-      state: "download-observing",
-    } satisfies ArtifactAcquisitionCheckpoint,
+  await runArtifactAcquisitionCheckpointMutation(async () => {
+    const key = artifactAcquisitionCheckpointKey(input);
+    const stored = await browser.storage.session.get(key);
+    await browser.storage.session.set({
+      [key]: {
+        ...input,
+        armedAt: armedAtFromCheckpoint(stored[key]) ?? new Date().toISOString(),
+        state: "download-observing",
+      } satisfies ArtifactAcquisitionCheckpoint,
+    });
   });
 }
 
 export async function persistArtifactAcquisitionUnconfirmedDownload(
   input: Omit<ArtifactAcquisitionCheckpoint, "armedAt">,
 ): Promise<void> {
-  const key = artifactAcquisitionCheckpointKey(input);
-  const stored = await browser.storage.session.get(key);
-  await browser.storage.session.set({
-    [key]: {
-      ...input,
-      armedAt: armedAtFromCheckpoint(stored[key]) ?? new Date().toISOString(),
-      state: "download-unconfirmed",
-    } satisfies ArtifactAcquisitionCheckpoint,
+  await runArtifactAcquisitionCheckpointMutation(async () => {
+    const key = artifactAcquisitionCheckpointKey(input);
+    const stored = await browser.storage.session.get(key);
+    await browser.storage.session.set({
+      [key]: {
+        ...input,
+        armedAt: armedAtFromCheckpoint(stored[key]) ?? new Date().toISOString(),
+        state: "download-unconfirmed",
+      } satisfies ArtifactAcquisitionCheckpoint,
+    });
   });
 }
 
 export async function clearArtifactAcquisitionCheckpoint(
   target: ArtifactAcquisitionTarget,
   requestId: string,
-): Promise<void> {
-  const key = artifactAcquisitionCheckpointKey(target);
-  const stored = await browser.storage.session.get(key);
-  if ((stored[key] as { requestId?: unknown } | undefined)?.requestId === requestId) {
-    await browser.storage.session.remove(key);
+): Promise<{ ok: true } | { ok: false; reason: ArtifactAcquisitionCheckpointClearFailureReason }> {
+  return runArtifactAcquisitionCheckpointMutation(async () => {
+    const key = artifactAcquisitionCheckpointKey(target);
+    let stored: Record<string, unknown>;
+    try {
+      stored = await browser.storage.session.get(key);
+    } catch {
+      return { ok: false, reason: "storage-read-failed" };
+    }
+    if ((stored[key] as { requestId?: unknown } | undefined)?.requestId !== requestId) {
+      return { ok: false, reason: "checkpoint-invalid" };
+    }
+    try {
+      await browser.storage.session.remove(key);
+    } catch {
+      return { ok: false, reason: "storage-remove-failed" };
+    }
+    return { ok: true };
+  });
+}
+
+async function runArtifactAcquisitionCheckpointMutation<T>(action: () => Promise<T>): Promise<T> {
+  const previous = artifactAcquisitionCheckpointMutationCriticalSection;
+  let release: () => void = () => undefined;
+  artifactAcquisitionCheckpointMutationCriticalSection = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await action();
+  } finally {
+    release();
   }
 }
 

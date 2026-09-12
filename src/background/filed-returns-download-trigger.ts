@@ -49,6 +49,7 @@ import {
 import { DECLINED_ARTIFACT_SIGNALS } from "../connectors/gst/filed-returns-acquisition-diagnostics";
 import { persistSinglePeriodSummary } from "./filed-returns-single-period-summary";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
+import { artifactAcquisitionCheckpointClearFailureSignal } from "../connectors/gst/artifact-acquisition-checkpoint-clear";
 
 type FlowStepResponse = Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>;
 
@@ -606,6 +607,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
   let externallyVisibleActionMayHaveOccurred =
     artifact.state === "ready" && (artifactType === "PDF" || artifactType === "EXCEL");
   let retainCheckpointForRecovery = false;
+  let checkpointCleared = false;
   try {
     const callbacks = {
       onStarted: async (downloadId: number) => {
@@ -741,6 +743,44 @@ async function triggerPageGeneratedSinglePeriodArtifact(
           : null;
       if (persisted && completionKey) {
         const targetScope = { ...scope, artifactType };
+        const checkpointClear = await clearArtifactAcquisitionCheckpoint(
+          checkpointTarget,
+          requestId,
+        );
+        if (!checkpointClear.ok) {
+          const clearFailureStep: PortalFlowStepResult = {
+            ...declined.flowStep,
+            state: "download-unconfirmed",
+            safeSignals: [
+              ...declined.flowStep.safeSignals,
+              "filed-returns-target-review-clear-failed",
+              artifactAcquisitionCheckpointClearFailureSignal(checkpointClear.reason),
+            ],
+            safeMessage:
+              "Pack saved the terminal result but could not clear its saved recovery checkpoint.",
+            userAction: {
+              type: "RETRY_PORTAL_GENERATION",
+              message:
+                "Review or cancel the saved target recovery checkpoint before starting another download.",
+              canResume: false,
+            },
+          };
+          const clearFailureSummary = await persistCanonicalFiledReturnsFlowSummary(completionKey, {
+            completedPeriods: [],
+            currentPeriod: scope.period,
+            flowStep: clearFailureStep,
+            scope: targetScope,
+            status: "blocked",
+            totalPeriods: 1,
+            updatedAt: (deps.now?.() ?? new Date()).toISOString(),
+          });
+          return {
+            ok: true,
+            flowStep: clearFailureStep,
+            ...(clearFailureSummary ? { flowSummary: clearFailureSummary } : {}),
+          };
+        }
+        checkpointCleared = true;
         let reviewClear: { ok: true } | { error: FiledReturnsTargetReviewClearError; ok: false };
         try {
           reviewClear = deps.storageKeys.targetReview
@@ -770,8 +810,9 @@ async function triggerPageGeneratedSinglePeriodArtifact(
               "Pack saved the terminal result but could not clear its saved recovery state.",
             userAction: {
               type: "RETRY_PORTAL_GENERATION",
-              message: "Retry so Pack can reconcile the saved target recovery checkpoint.",
-              canResume: true,
+              message:
+                "Review or cancel the saved target recovery checkpoint before starting another download.",
+              canResume: false,
             },
           };
           // Keep the original terminal-refusal proof on the returned step. The explicit blocked
@@ -812,7 +853,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       },
     };
   } finally {
-    if (tracksBrowserDownload && !retainCheckpointForRecovery) {
+    if (tracksBrowserDownload && !retainCheckpointForRecovery && !checkpointCleared) {
       await clearArtifactAcquisitionCheckpoint(checkpointTarget, requestId);
     }
   }
