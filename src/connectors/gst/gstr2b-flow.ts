@@ -8,6 +8,7 @@ import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import { detectFiledReturnsPortalAvailabilityIssue } from "./filed-returns-portal-availability";
 import { returnFromMismatchedReturnPage } from "./filed-returns-return-type-navigation";
 import { findMatchingActionableFiledReturnRows } from "./filed-returns-result-rows";
+import { bindGstr2bSummaryRefusal, declinedArtifactStep } from "./filed-returns-declined-artifact";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import {
@@ -33,10 +34,7 @@ import {
   isReturnDashboardStillRendering,
   selectGstr2bReturnDashboardFiltersAndSearch,
 } from "./gstr2b-dashboard-filters";
-import {
-  GSTR2B_NOT_GENERATED_SAFE_MESSAGE,
-  isGstr2bNotGeneratedText,
-} from "./filed-returns-post-click-blocked-state";
+import { isGstr2bNotGeneratedText } from "./filed-returns-post-click-blocked-state";
 
 /**
  * `null` when the visible page is the requested period, otherwise the step that leaves it.
@@ -121,33 +119,23 @@ export async function runGstr2bDownloadStep(
   // recorded eleven months the run never navigated to. The guard fails closed: an unreadable
   // period is "could not determine", never "matches".
   if (isGstr2bSummaryRoute(documentRef) && isGstr2bNotGeneratedText(normalised)) {
-    const leaving = leaveUnlessVisiblePeriodMatches(
-      documentRef,
-      normalised,
-      scope,
-      scopeId,
-      safeSignals,
-      true,
-    );
-    if (leaving) return leaving;
-    return {
-      connectorId: "gst",
-      scopeId,
-      state: "blocked",
-      safeSignals: [
-        ...safeSignals,
-        "gstr2b-summary-route",
-        "gstr2b-visible-period-verified",
-        "filed-gstr2b-not-generated",
-      ],
-      safeMessage: GSTR2B_NOT_GENERATED_SAFE_MESSAGE,
-      userAction: {
-        type: "RETRY_PORTAL_GENERATION",
-        message:
-          "Check the GST Portal's stated reason for this period. Retry only once the portal generates a GSTR-2B for it.",
-        canResume: true,
-      },
-    };
+    const binding = bindGstr2bSummaryRefusal(documentRef, normalised, scope);
+    if (!binding.bound) {
+      // A stale panel is not just refused here, it is navigated away from: the run needs the
+      // period it actually asked for, and waiting on this page produces nothing.
+      const mismatchSignals = [...safeSignals, ...binding.mismatch.safeSignals];
+      return (
+        returnFromMismatchedGstr2bSummary(documentRef, scopeId, mismatchSignals) ?? {
+          ...binding.mismatch,
+          safeSignals: mismatchSignals,
+        }
+      );
+    }
+    return declinedArtifactStep(binding.bound, {
+      signal: "filed-gstr2b-not-generated",
+      returnType: scope.returnType,
+      safeSignals: [...safeSignals, "gstr2b-summary-route"],
+    });
   }
 
   const mismatchedReturnNavigation = returnFromMismatchedReturnPage(

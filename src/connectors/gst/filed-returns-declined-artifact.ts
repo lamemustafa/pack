@@ -1,0 +1,152 @@
+import type { PortalDownloadTriggerResult } from "../../core/contracts";
+import type {
+  FiledReturnsDownloadScope,
+  FiledReturnsDownloadTarget,
+} from "./filed-returns-contracts";
+import { type DeclinedArtifactSignal } from "./filed-returns-acquisition-diagnostics";
+import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
+import { filedReturnScopeId } from "./filed-returns-return-descriptors";
+import { verifyVisibleGstr2bPeriod } from "./gstr2b-summary";
+
+// Recording a refusal resolves a target outright: the period is answered, the run advances, and
+// no artifact ever follows to corroborate it. The visible page is therefore the whole of the
+// evidence, and a refusal read from a page that was never checked against the target is a wrong
+// answer that looks exactly like a right one.
+//
+// Three emitters each learned that separately, one reported defect at a time, and nothing stopped
+// a fourth from not learning it. So the check is no longer something an emitter remembers to do:
+// a declined result cannot be constructed without presenting proof that it was done.
+
+declare const boundToVisibleTarget: unique symbol;
+
+/**
+ * Proof that the visible page was checked against the target this refusal is about.
+ *
+ * The brand is a type-only symbol declared here and exported nowhere, so no object literal
+ * written in another module satisfies this interface and no emitter can reach
+ * `declinedArtifactStep` without first having run a guard below. A deliberate
+ * `as unknown as VisibleTargetBinding` would still get through -- this makes the check
+ * impossible to *forget*, which is how all four of these defects happened, not impossible to
+ * circumvent on purpose.
+ */
+export interface VisibleTargetBinding {
+  readonly [boundToVisibleTarget]: true;
+  /** What the guard established, carried into the result so the record says how it was checked. */
+  readonly safeSignals: readonly RefusalBindingSignal[];
+}
+
+/**
+ * What each binder establishes, named so the durable record says *how* the refusal was checked.
+ *
+ * Registered by derivation rather than by hand: the durable allowlist spreads this list, so a new
+ * binder's signal is admitted the moment it is written here. One unregistered token rejects the
+ * entire array it travels in, and a refusal is a terminal step whose signals are persisted --
+ * which is how seven periods a live run had correctly answered came back as "needs review".
+ */
+export const REFUSAL_BINDING_SIGNALS = [
+  "filed-gstr1-detail-period-verified",
+  "gstr2b-visible-period-verified",
+] as const;
+
+export type RefusalBindingSignal = (typeof REFUSAL_BINDING_SIGNALS)[number];
+
+export type RefusalBinding =
+  | { readonly bound: VisibleTargetBinding }
+  | { readonly bound: null; readonly mismatch: PortalDownloadTriggerResult };
+
+// The brand exists only in the type system, so it is asserted rather than written. This is the
+// one place allowed to make that assertion, which is what the brand is for.
+function bound(safeSignals: readonly RefusalBindingSignal[]): RefusalBinding {
+  return { bound: { safeSignals } as unknown as VisibleTargetBinding };
+}
+
+/**
+ * The filed GSTR-1 detail route, against the target whose artifact was declined.
+ *
+ * The same guard that binds a download click on that page, asked the same question: this return
+ * type, this period, this financial year, as the page itself shows them. It fails closed -- an
+ * unreadable detail header is "could not determine", never "matches".
+ */
+export function bindGstr1DetailRefusal(
+  documentRef: Document,
+  target: FiledReturnsDownloadTarget,
+): RefusalBinding {
+  const mismatch = verifyFiledReturnsDownloadTarget(documentRef, target, []);
+  return mismatch ? { bound: null, mismatch } : bound(["filed-gstr1-detail-period-verified"]);
+}
+
+/**
+ * The GSTR-2B summary route, against the period whose statement the portal declined to draft.
+ *
+ * Visible evidence is required rather than accepted from the page's own inline configuration:
+ * a download click may lean on that configuration because the file it produces is correlated to
+ * the target afterwards, and a refusal has no such second source.
+ */
+export function bindGstr2bSummaryRefusal(
+  documentRef: Document,
+  normalisedText: string,
+  scope: FiledReturnsDownloadScope,
+): RefusalBinding {
+  const mismatch = verifyVisibleGstr2bPeriod(documentRef, normalisedText, scope, true);
+  return mismatch ? { bound: null, mismatch } : bound(["gstr2b-visible-period-verified"]);
+}
+
+/**
+ * What a reader is told when the portal declines, and what Pack offers them to do about it.
+ *
+ * A `Record` over the declined signals, so a third refusal cannot be registered without deciding
+ * both. The GSTR-2B wording lived in two places before this and was identical in both, which is
+ * the duplicate nothing could contradict: no test compares one emitter's copy with another's.
+ */
+const DECLINED_ARTIFACT_COPY: Readonly<
+  Record<DeclinedArtifactSignal, { safeMessage: string; userActionMessage: string }>
+> = {
+  "filed-gstr1-excel-no-details-available": {
+    safeMessage:
+      "The GST Portal reported that no e-invoice details are available for this filed GSTR-1 period, so Pack did not record an Excel download. Retry after e-invoice details are available, or run PDF-only for this period.",
+    userActionMessage:
+      "Close the GST Portal information dialog, then retry the GSTR-1 Excel download after e-invoice details are available.",
+  },
+  "filed-gstr2b-not-generated": {
+    safeMessage:
+      "The GST Portal reported that it did not generate the auto-drafted GSTR-2B statement for this period, so there is nothing for Pack to download. Pack recorded the period as unavailable rather than retrying.",
+    userActionMessage:
+      "Check the GST Portal's stated reason for this period. Retry only once the portal generates a GSTR-2B for it.",
+  },
+};
+
+/** The wording a reader is given, for the durable record that outlives the flow step. */
+export function declinedArtifactSafeMessage(signal: DeclinedArtifactSignal): string {
+  return DECLINED_ARTIFACT_COPY[signal].safeMessage;
+}
+
+/**
+ * The only way to build a declined-artifact result, and it takes the proof as its first argument.
+ *
+ * Always `blocked`: this records an absence the portal stated, never a download. Completion still
+ * requires correlated download evidence, which an absence by definition does not have.
+ */
+export function declinedArtifactStep(
+  binding: VisibleTargetBinding,
+  options: {
+    signal: DeclinedArtifactSignal;
+    returnType: FiledReturnsDownloadScope["returnType"];
+    safeSignals: readonly string[];
+  },
+): PortalDownloadTriggerResult {
+  const copy = DECLINED_ARTIFACT_COPY[options.signal];
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(options.returnType),
+    state: "blocked",
+    safeSignals: Array.from(
+      new Set([...options.safeSignals, ...binding.safeSignals, options.signal]),
+    ),
+    safeMessage: copy.safeMessage,
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: copy.userActionMessage,
+      canResume: true,
+    },
+  };
+}

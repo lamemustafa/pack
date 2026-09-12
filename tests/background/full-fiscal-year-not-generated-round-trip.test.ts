@@ -32,7 +32,7 @@ import {
   markFullFiscalYearTargetTerminal,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import { exportFullFiscalYearZip } from "../../src/background/filed-returns-full-fiscal-year-zip";
-import { GSTR2B_NOT_GENERATED_SAFE_MESSAGE } from "../../src/connectors/gst/filed-returns-post-click-blocked-state";
+import { declinedArtifactSafeMessage } from "../../src/connectors/gst/filed-returns-declined-artifact";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 
 const deps = {
@@ -54,7 +54,7 @@ function notGeneratedStep() {
     scopeId: "gst-gstr2b-private-v0",
     state: "blocked" as const,
     safeSignals: ["gstr2b-summary-route", "filed-gstr2b-not-generated"],
-    safeMessage: GSTR2B_NOT_GENERATED_SAFE_MESSAGE,
+    safeMessage: declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
   };
 }
 
