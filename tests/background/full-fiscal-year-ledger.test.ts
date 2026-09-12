@@ -38,6 +38,14 @@ import { isResolvedFullFiscalYearTargetStatus } from "../../src/connectors/gst/f
 import { FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES } from "../../src/connectors/gst/filed-returns-contracts";
 import { isFiledReturnsFullFiscalYearTargetStatus } from "../../src/connectors/gst/filed-returns-contracts";
 
+function boundGstr2bNotGeneratedSignals() {
+  return [
+    "filed-gstr2b-not-generated",
+    "gstr2b-summary-route-verified",
+    "gstr2b-visible-period-verified",
+  ];
+}
+
 describe("full fiscal year ledger", () => {
   it("requires the canonical GSTR-2B all-formats artifact set before staging succeeds", () => {
     const expectedArtifacts = concreteFiledReturnsArtifactTypesForSelection(
@@ -871,6 +879,29 @@ describe("full fiscal year ledger", () => {
     const notFiledWithoutPositiveSignal = createLedger([["April", "not-filed"]]);
     notFiledWithoutPositiveSignal.targets[0]!.safeSignals = [];
     expect(isFullFiscalYearLedger(notFiledWithoutPositiveSignal)).toBe(false);
+
+    for (const missingProof of [
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+    ]) {
+      const notGeneratedWithoutBinding = createLedger([["April", "not-generated"]], {
+        returnType: "GSTR-2B",
+      });
+      notGeneratedWithoutBinding.targets[0]!.safeSignals = boundGstr2bNotGeneratedSignals().filter(
+        (signal) => signal !== missingProof,
+      );
+      expect(isFullFiscalYearLedger(notGeneratedWithoutBinding)).toBe(false);
+    }
+
+    const boundNotGenerated = createLedger([["April", "not-generated"]], {
+      returnType: "GSTR-2B",
+    });
+    const boundSignals = boundGstr2bNotGeneratedSignals();
+    boundNotGenerated.targets[0] = {
+      ...boundNotGenerated.targets[0]!,
+      ...canonicalDurableTargetStatus(boundNotGenerated.targets[0]!, "not-generated", boundSignals),
+    };
+    expect(isFullFiscalYearLedger(boundNotGenerated)).toBe(true);
 
     expect(
       isFullFiscalYearLedger({

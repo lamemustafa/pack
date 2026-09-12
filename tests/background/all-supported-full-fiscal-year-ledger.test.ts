@@ -73,6 +73,14 @@ function createReturnSpecificLedger(now = NOW) {
   );
 }
 
+function boundGstr2bNotGeneratedSignals() {
+  return [
+    "filed-gstr2b-not-generated",
+    "gstr2b-summary-route-verified",
+    "gstr2b-visible-period-verified",
+  ];
+}
+
 describe("all-supported full-fiscal-year ledger", () => {
   beforeEach(() => {
     stored.current = {};
@@ -633,7 +641,7 @@ describe("a period the portal declined to generate, in an all-returns year", () 
         connectorId: "gst",
         scopeId: "gst-gstr2b-private-v0",
         state: "blocked",
-        safeSignals: ["gstr2b-summary-route", "filed-gstr2b-not-generated"],
+        safeSignals: boundGstr2bNotGeneratedSignals(),
         safeMessage: "x",
       } as never,
       NOW,
@@ -644,6 +652,50 @@ describe("a period the portal declined to generate, in an all-returns year", () 
 
     expect(evidence?.outcome).toBe("not-generated");
     expect(evidence?.outcome).not.toBe("needs-review");
+  });
+
+  it("requires the bound route and visible-period proof for a stored not-generated target", () => {
+    const ledger = createLedger();
+    const target = ledger.targets.find((candidate) => candidate.returnType === "GSTR-2B");
+    if (!target) throw new Error("expected a GSTR-2B target in the all-returns plan");
+
+    for (const missingProof of [
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+    ]) {
+      const invalid = {
+        ...ledger,
+        targets: ledger.targets.map((candidate) =>
+          candidate.targetId === target.targetId
+            ? {
+                ...candidate,
+                status: "not-generated" as const,
+                ...canonicalDurableTargetStatus(
+                  candidate,
+                  "not-generated",
+                  boundGstr2bNotGeneratedSignals().filter((signal) => signal !== missingProof),
+                ),
+              }
+            : candidate,
+        ),
+      };
+      expect(isAllSupportedFullFiscalYearLedger(invalid)).toBe(false);
+    }
+
+    const boundSignals = boundGstr2bNotGeneratedSignals();
+    const valid = {
+      ...ledger,
+      targets: ledger.targets.map((candidate) =>
+        candidate.targetId === target.targetId
+          ? {
+              ...candidate,
+              status: "not-generated" as const,
+              ...canonicalDurableTargetStatus(candidate, "not-generated", boundSignals),
+            }
+          : candidate,
+      ),
+    };
+    expect(isAllSupportedFullFiscalYearLedger(valid)).toBe(true);
   });
 
   it("rejects a not-generated signal on a non-GSTR-2B stored target", () => {

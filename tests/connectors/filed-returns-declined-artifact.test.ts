@@ -15,7 +15,10 @@ import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-
 import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
 import { createGstDocument, makeLayoutVisible } from "./filed-returns-flow.test-helpers";
 import { normaliseText } from "../../src/connectors/gst/filed-returns-dom";
-import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
+import {
+  canonicalDurableSummaryMessage,
+  parseDurableTargetStatus,
+} from "../../src/connectors/gst/filed-returns-durable-status";
 
 const SCOPE = {
   artifactType: "PDF_AND_EXCEL",
@@ -149,6 +152,10 @@ describe("a declined artifact cannot be recorded unbound", () => {
     // A refusal is terminal, so its signals are persisted. One token the allowlist has never been
     // told about rejects the whole array, which is why the binding signals register by derivation.
     expect(parseDurableFiledReturnsSignals(step.safeSignals)).not.toBeNull();
+    expect(parseDurableTargetStatus(SCOPE, "not-generated", step.safeSignals)).toMatchObject({
+      safeSignals: step.safeSignals,
+      safeMessage: declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
+    });
   });
 });
 
