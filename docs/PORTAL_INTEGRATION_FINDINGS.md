@@ -412,3 +412,36 @@ read-only live probe confirms a stable, scope-bound source for the necessary fac
 cadences and registration states. Until then, the evidence supports neither replacing the calendar
 threshold nor suppressing a reader-selected period; record a bounded, user-visible not-filed or
 unresolved outcome when the acquisition flow establishes one.
+
+## Filed GSTR-1 detail route can be the download surface itself (2026-09-10)
+
+Captured live, authenticated, source-surfaces build v0.6.0, on the GSTR-1 detail route
+(`/returns/auth/gstr1`). No value read from the page is reproduced here: this file records what the
+portal's surfaces do, not what any return says.
+
+**The page carried the filed-PDF control and no navigation step.** Its control row offered a back
+action, an e-invoice details Excel download, a disabled reset, and a filed-PDF download labelled
+`DOWNLOAD FILED (PDF)`. There was no `VIEW SUMMARY` control anywhere on it — confirmed against the
+full page, header band through footer.
+
+**What this falsifies.** `LIVE_FILED_RETURNS_SPIKE.md` recorded the opposite from an earlier
+capture: that the detail page never exposes the PDF and must be navigated through `View Summary`.
+That paragraph is accurate for the page it saw and wrong as a general rule. The detail route has two
+shapes. `clickFiledGstr1SummaryForPdf` searched for a control that does not exist on this one and
+re-emitted `filed-gstr1-summary-view-pending` every step until the flow step limit, so the run
+reported `blocked` / `user-action-required` with no action a user could take. Observed signals:
+`gstr-1-detail-route`, `filed-gstr1-summary-view-pending`, `flow-step-limit-reached`.
+
+**Why both layers missed the control.** The label is `DOWNLOAD FILED (PDF)` — no return type after
+`FILED`. `explicitDownloadPattern` for GSTR-1 required `download filed gstr1`, and
+`secondaryDownloadPattern` required `download` immediately before `pdf`, so the intervening `filed`
+defeated it. The observer carried its own inline copy of that second pattern rather than reading the
+descriptor, so the same fact had to be wrong in two places at once.
+
+**The fix keys off the control, not the shape.** Whether this variant belongs to a particular filing
+cadence is unestablished — one page was captured — so the flow asks whether a filed-PDF control is
+present and clickable rather than inferring it from the route or from page text. A label appearing
+in page copy is not a control: decoy or non-actionable text carrying the same words would otherwise
+suppress a real `View Summary` step and strand a target whose PDF was reachable.
+
+**Not yet established.** Which periods render which shape, and whether a page can offer both.

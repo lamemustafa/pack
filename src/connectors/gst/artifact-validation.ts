@@ -103,6 +103,11 @@ export function describeJsonArtifactRejection(
   returnType: FiledReturnsReturnType,
 ): JsonArtifactRejectionSignal[] {
   if (bytes.byteLength === 0) return ["json-body-empty"];
+  // The size cap is a processing bound, not only a verdict. Decoding and parsing a body this
+  // function has already been told is too large spends exactly the work the cap exists to refuse,
+  // on the one path where the input is known to be unreasonable. The band is the whole diagnostic
+  // here: nothing inside an oversized body would change what a reader does about it.
+  if (bytes.byteLength > MAX_ARTIFACT_BYTES) return ["json-body-oversized"];
   // Report the size band and keep going. Stopping here says only that the body is small, which
   // cannot distinguish a legitimately compact envelope from a truncated or unrelated response --
   // and that distinction is the whole question when a return has nothing in it.

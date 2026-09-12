@@ -22,6 +22,7 @@ export const JSON_ARTIFACT_REJECTION_SIGNALS = [
   // can still contain it, and an unregistered token rejects the whole array it travels in.
   "json-body-under-minimum",
   "json-body-empty",
+  "json-body-oversized",
   "json-parse-failed",
   "json-status-unexpected",
   "json-envelope-missing",

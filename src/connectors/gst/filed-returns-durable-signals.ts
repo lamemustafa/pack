@@ -730,11 +730,13 @@ export function durableFiledReturnsSignalRejectionReason(
 // persisted or rendered. It distinguishes Pack-owned producer families during
 // live recovery without admitting portal-derived text into durable state.
 function durableUnknownSignalCategory(signal: string): DurableFiledReturnsSignalRejectionReason {
-  // The published reason stays a fixed projection -- naming the token in durable state or in the
-  // panel would admit arbitrary text into both. But a rejection nobody can attribute costs a build
-  // and a live run per attempt to locate, which is how three unregistered signals stayed hidden.
-  // The console is neither persisted nor rendered, so the token can be named there.
-  console.warn(`review-gate: unregistered durable signal rejected: ${signal}`);
+  // The token itself is never logged. This boundary exists precisely because it cannot know what
+  // it has been handed -- a legacy or malformed entry read back from storage is exactly the input
+  // it is here to refuse -- so repeating it in a console sink undoes the refusal it just made.
+  //
+  // The diagnostic this replaces was written when an unregistered signal could only be found at
+  // runtime. It no longer can: the signal lists are now types, and a producer emitting a token the
+  // allowlist does not carry fails to compile. A category is what remains useful at runtime.
   if (signal.startsWith("filed-return-detail-")) return "unknown-detail-identity";
   if (
     /^(?:artifact-|filed-gstr|page-|browser-download|full-fiscal-year-opfs|single-period-opfs)/.test(

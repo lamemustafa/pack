@@ -1099,6 +1099,48 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
     });
   });
 
+  it("keeps the original failure when the page cannot be asked at all", async () => {
+    // This runs after an acquisition has already failed and can only refine that failure. A tab
+    // that has closed, navigated, or refuses injection means the failure cannot be refined -- not
+    // that a new one happened. Throwing here would replace a specific, actionable reason with the
+    // generic background error and lose the terminal summary with it.
+    armClickWithoutDownload();
+    const sendMessageToTabWithInjection = vi.fn(
+      async (_tabId: number, message: { type: string }) => {
+        if (message.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3") {
+          throw new Error("Could not establish connection. Receiving end does not exist.");
+        }
+        return {
+          ok: true,
+          artifact: {
+            ok: true,
+            state: "ready",
+            requestId: "synthetic-request",
+            safeSignals: ["target-period-verified"],
+          },
+        } as PackMessageResponse;
+      },
+    );
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-failed",
+          "artifact-generation-timeout",
+        ]),
+        state: "blocked",
+      },
+    });
+  });
+
   it("keeps the original failure when the page reports no recognised block", async () => {
     armClickWithoutDownload();
     const sendMessageToTabWithInjection = messagingDeps({
