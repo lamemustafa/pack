@@ -60,22 +60,25 @@ jobs:
 
       - name: Download verified release package
         run: >-
-          gh release download "${{ inputs.tag }}"
+          gh release download
           --pattern "*chrome.zip"
           --pattern "*.sha256"
           --pattern "pack-release-provenance.v1.json"
           --dir .release
+          -- "$RELEASE_TAG"
         env:
+          RELEASE_TAG: ${{ inputs.tag }}
           GH_TOKEN: ${{ github.token }}
 
       - name: Verify downloaded release package
         run: >-
           node scripts/verify-github-release-assets.mjs
-          --tag "${{ inputs.tag }}"
+          --tag "$RELEASE_TAG"
           --zip .release/*chrome.zip
           --checksum .release/*.sha256
           --provenance .release/pack-release-provenance.v1.json
         env:
+          RELEASE_TAG: ${{ inputs.tag }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
@@ -95,8 +98,9 @@ jobs:
           node scripts/publish-chrome-web-store.mjs
           --zip .release/*chrome.zip
           --provenance .release/pack-release-provenance.v1.json
-          --dry-run "${{ inputs.dry_run }}"
+          --dry-run "$CWS_DRY_RUN"
         env:
+          CWS_DRY_RUN: ${{ inputs.dry_run }}
           CWS_EXTENSION_ID: nfnbhekccajjfgkppolomflaeledoccb
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
           CWS_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
