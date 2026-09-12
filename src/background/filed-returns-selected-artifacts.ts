@@ -114,6 +114,15 @@ export async function preflightSelectedArtifactsRecovery({
   if (!compatibleDurableSinglePeriodBundle) {
     return conflictingSinglePeriodBundleResponse(ledger);
   }
+  if (
+    ledger.phase === "ready-for-zip" &&
+    singlePeriodBundleEntryPlan(ledger)?.artifactTypes.length === 0
+  ) {
+    const flowStep = singlePeriodBundleFlowStep(ledger);
+    return flowStep
+      ? completeUnavailableSinglePeriodBundle(ledger, { ok: true, flowStep }, deps)
+      : staleSinglePeriodBundleResponse(ledger);
+  }
   return null;
 }
 
@@ -440,52 +449,7 @@ export async function triggerSelectedArtifacts({
   const entryPlan = singlePeriodBundleEntryPlan(singlePeriodBundleLedger);
   if (!entryPlan) return staleSinglePeriodBundleResponse(singlePeriodBundleLedger);
   if (entryPlan.artifactTypes.length === 0) {
-    const terminalStep: PortalFlowStepResult = {
-      ...response.flowStep,
-      state: "blocked",
-      safeMessage:
-        "Pack recorded the selected artifacts as unavailable, so it did not create a ZIP.",
-    };
-    let summary;
-    try {
-      summary = await persistCanonicalSinglePeriodCompletion(
-        artifactDeps.storageKeys.completion,
-        scope,
-        terminalStep,
-        deps.now?.() ?? new Date(),
-      );
-    } catch {
-      return singlePeriodBundleBlockedResponse(
-        scope,
-        ["single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
-        "Pack retained the selected-file recovery state because it could not save the terminal absence.",
-        true,
-      );
-    }
-    if (summary) {
-      let bundleCleared = false;
-      try {
-        bundleCleared = await clearSinglePeriodBundleLedger(
-          singlePeriodBundleLedger.ledgerId,
-          singlePeriodBundleLedger.revision,
-        );
-      } catch {
-        bundleCleared = false;
-      }
-      if (!bundleCleared) {
-        return singlePeriodBundleBlockedResponse(
-          scope,
-          ["single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
-          "Pack recorded that no files were available, but could not clear the saved recovery state.",
-          true,
-        );
-      }
-    }
-    return {
-      ...response,
-      flowStep: terminalStep,
-      ...(summary ? { flowSummary: summary } : {}),
-    };
+    return completeUnavailableSinglePeriodBundle(singlePeriodBundleLedger, response, artifactDeps);
   }
   if (!response.flowStep.safeSignals.includes("single-period-opfs-staged")) {
     return staleSinglePeriodBundleResponse(singlePeriodBundleLedger);
@@ -647,6 +611,53 @@ export async function triggerSelectedArtifacts({
     flowStep: zipFlowStep,
     ...(flowSummary ? { flowSummary } : {}),
   };
+}
+
+async function completeUnavailableSinglePeriodBundle(
+  ledger: SinglePeriodBundleLedger,
+  response: Extract<PackMessageResponse, { ok: true; flowStep: PortalFlowStepResult }>,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<PackMessageResponse> {
+  const scope = ledger.scope;
+  const terminalStep: PortalFlowStepResult = {
+    ...response.flowStep,
+    state: "blocked",
+    safeMessage: "Pack recorded the selected artifacts as unavailable, so it did not create a ZIP.",
+  };
+  let summary;
+  try {
+    summary = await persistCanonicalSinglePeriodCompletion(
+      deps.storageKeys.completion,
+      scope,
+      terminalStep,
+      deps.now?.() ?? new Date(),
+    );
+  } catch {
+    summary = null;
+  }
+  if (!summary) {
+    return singlePeriodBundleBlockedResponse(
+      scope,
+      ["single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
+      "Pack retained the selected-file recovery state because it could not save the terminal absence.",
+      true,
+    );
+  }
+  let bundleCleared = false;
+  try {
+    bundleCleared = await clearSinglePeriodBundleLedger(ledger.ledgerId, ledger.revision);
+  } catch {
+    bundleCleared = false;
+  }
+  if (!bundleCleared) {
+    return singlePeriodBundleBlockedResponse(
+      scope,
+      ["single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
+      "Pack recorded that no files were available, but could not clear the saved recovery state.",
+      true,
+    );
+  }
+  return { ...response, flowStep: terminalStep, flowSummary: summary };
 }
 
 function withArtifactOutcome(
