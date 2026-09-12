@@ -934,10 +934,10 @@ function normaliseArtifactMissingReason(
 ): string | null {
   const reason = canonicalArtifactMissingReason(value);
   if (!reason) return null;
-  if (reason === "artifact-filed-gstr1-excel-no-details-available") {
+  if (reason === declinedArtifactReason("filed-gstr1-excel-no-details-available")) {
     return returnType === "GSTR-1" && artifactType === "EXCEL" ? reason : null;
   }
-  return reason === "artifact-filed-gstr2b-not-generated" && returnType === "GSTR-2B"
+  return reason === declinedArtifactReason("filed-gstr2b-not-generated") && returnType === "GSTR-2B"
     ? reason
     : null;
 }
