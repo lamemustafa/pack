@@ -219,6 +219,21 @@ export async function persistSinglePeriodBundleArtifactUnavailable(
   );
 }
 
+/**
+ * A bound GSTR-2B refusal answers the period, rather than one format within it.
+ * It is only safe to apply while no sibling has staged evidence that would
+ * contradict the refusal.
+ */
+export async function persistSinglePeriodBundlePeriodUnavailable(
+  expectedLedger: SinglePeriodBundleLedger,
+  flowStep: PortalFlowStepResult,
+  now = new Date(),
+): Promise<SinglePeriodBundleLedger | null> {
+  return transitionStoredLedger(expectedLedger, (ledger) =>
+    markSinglePeriodBundlePeriodUnavailable(ledger, flowStep, now),
+  );
+}
+
 export async function persistSinglePeriodBundleArtifactReview(
   expectedLedger: SinglePeriodBundleLedger,
   artifactType: FiledReturnsConcreteArtifactType,
@@ -397,6 +412,37 @@ export function markSinglePeriodBundleArtifactUnavailable(
   return allArtifactsTerminal(updated) ? { ...updated, phase: "ready-for-zip" } : updated;
 }
 
+export function markSinglePeriodBundlePeriodUnavailable(
+  ledger: SinglePeriodBundleLedger,
+  flowStep: PortalFlowStepResult,
+  now: Date,
+): SinglePeriodBundleLedger | null {
+  if (
+    ledger.phase !== "collecting" ||
+    ledger.scope.returnType !== "GSTR-2B" ||
+    !flowStep.safeSignals.includes("filed-gstr2b-not-generated") ||
+    !ledger.artifacts.some((artifact) => artifact.status === "running") ||
+    ledger.artifacts.some((artifact) => artifact.status === "staged")
+  ) {
+    return null;
+  }
+  const missingReason = missingArtifactReason(flowStep, ledger.scope.returnType);
+  if (!missingReason) return null;
+  const timestamp = now.toISOString();
+  const updated = nextLedger(ledger, now, {
+    artifacts: ledger.artifacts.map((artifact) => ({
+      artifactType: artifact.artifactType,
+      completedAt: timestamp,
+      missingReason,
+      safeSignals: ["single-period-bundle-artifact-unavailable"],
+      startedAt: artifact.startedAt ?? timestamp,
+      status: "unavailable" as const,
+      updatedAt: timestamp,
+    })),
+  });
+  return updated ? { ...updated, phase: "ready-for-zip" } : null;
+}
+
 export function markSinglePeriodBundleArtifactReview(
   ledger: SinglePeriodBundleLedger,
   artifactType: FiledReturnsConcreteArtifactType,
@@ -499,6 +545,11 @@ export function singlePeriodBundleFlowStep(
             : [
                 `filed-return-artifact-unavailable:${artifact.artifactType}`,
                 artifact.missingReason!,
+                ...(artifact.missingReason === "artifact-filed-gstr2b-not-generated"
+                  ? ["filed-gstr2b-not-generated"]
+                  : artifact.missingReason === "artifact-filed-gstr1-excel-no-details-available"
+                    ? ["filed-gstr1-excel-no-details-available"]
+                    : []),
               ],
         ),
       ]),

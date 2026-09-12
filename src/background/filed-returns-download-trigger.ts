@@ -694,9 +694,9 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       };
     }
 
-    // An uncertain acquisition can already own a browser download or a durable intent. A later
-    // page inspection cannot establish that no download occurred, so keep that outcome and its
-    // checkpoint for recovery rather than replacing it with a terminal absence.
+    // A later page refusal cannot rule out another side effect after an uncertain acquisition.
+    // Keep the original target-bound checkpoint for recovery unless acquisition itself was
+    // definitive; only then can an inspected refusal replace the failure.
     const declined = retainCheckpointForRecovery
       ? null
       : await postClickBlockedStep({
@@ -715,6 +715,9 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       // A worker can stop after the intent is removed but before the outer flow persists this
       // terminal answer. Make the answer durable first; only then may `finally` remove the
       // recovery checkpoint that kept the failed acquisition restart-safe.
+      // Set this before the write. A rejected storage write must leave the existing recovery
+      // checkpoint intact; only a confirmed durable terminal result permits its removal.
+      retainCheckpointForRecovery = true;
       const completionKey = deps.storageKeys.completion;
       const persisted = completionKey
         ? await persistSinglePeriodSummary({ ...scope, artifactType }, declined.flowStep, {
@@ -722,7 +725,7 @@ async function triggerPageGeneratedSinglePeriodArtifact(
             ...(deps.now ? { now: deps.now } : {}),
           })
         : null;
-      retainCheckpointForRecovery = !persisted;
+      if (persisted) retainCheckpointForRecovery = false;
       return declined;
     }
 

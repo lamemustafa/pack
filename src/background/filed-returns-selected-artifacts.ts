@@ -55,6 +55,7 @@ import {
   persistSinglePeriodBundleArtifactRunning,
   persistSinglePeriodBundleArtifactStaged,
   persistSinglePeriodBundleArtifactUnavailable,
+  persistSinglePeriodBundlePeriodUnavailable,
   persistSinglePeriodBundleCleanupPending,
   persistSinglePeriodBundleZipDownloadId,
   persistSinglePeriodBundleZipIntent,
@@ -274,6 +275,46 @@ export async function triggerSelectedArtifacts({
     }
     if (response.flowStep.state !== "downloaded") {
       if (singlePeriodBundleLedger) {
+        const periodWideRefusal =
+          scope.returnType === "GSTR-2B" &&
+          response.flowStep.safeSignals.includes("filed-gstr2b-not-generated");
+        if (periodWideRefusal) {
+          const unavailableLedger = await persistSinglePeriodBundlePeriodUnavailable(
+            singlePeriodBundleLedger,
+            response.flowStep,
+            deps.now?.() ?? new Date(),
+          );
+          if (!unavailableLedger) {
+            const reviewLedger = await persistSinglePeriodBundleArtifactReview(
+              singlePeriodBundleLedger,
+              artifactType,
+              response.flowStep,
+              deps.now?.() ?? new Date(),
+            );
+            return persistAmbiguousSinglePeriodBundleResponse(
+              reviewLedger ?? singlePeriodBundleLedger,
+              deps,
+              response.flowStep,
+            );
+          }
+          singlePeriodBundleLedger = unavailableLedger;
+          const bundleFlowStep = singlePeriodBundleFlowStep(unavailableLedger);
+          if (!bundleFlowStep) return staleSinglePeriodBundleResponse(unavailableLedger);
+          // Keep the bound period-wide proof alongside the per-artifact ledger result. The
+          // terminal summary validates the refusal itself, not merely the derived reason string.
+          combinedFlowStep = {
+            ...bundleFlowStep,
+            safeSignals: Array.from(
+              new Set([...bundleFlowStep.safeSignals, ...response.flowStep.safeSignals]),
+            ),
+          };
+          lastResponse = { ...response, flowStep: combinedFlowStep };
+          for (const artifact of unavailableLedger.artifacts) {
+            if (artifact.status === "unavailable")
+              completedArtifactTypes.add(artifact.artifactType);
+          }
+          continue;
+        }
         const unavailableLedger = await persistSinglePeriodBundleArtifactUnavailable(
           singlePeriodBundleLedger,
           artifactType,
@@ -395,23 +436,46 @@ export async function triggerSelectedArtifacts({
       ? staleSinglePeriodBundleResponse(singlePeriodBundleLedger)
       : response;
   }
-  if (!response.flowStep.safeSignals.includes("single-period-opfs-staged")) {
-    return singlePeriodBundleLedger
-      ? staleSinglePeriodBundleResponse(singlePeriodBundleLedger)
-      : response;
-  }
   if (!singlePeriodBundleLedger) return staleSinglePeriodBundleResponse(null, scope);
   const entryPlan = singlePeriodBundleEntryPlan(singlePeriodBundleLedger);
   if (!entryPlan) return staleSinglePeriodBundleResponse(singlePeriodBundleLedger);
   if (entryPlan.artifactTypes.length === 0) {
+    const terminalStep: PortalFlowStepResult = {
+      ...response.flowStep,
+      state: "blocked",
+      safeMessage:
+        "Pack recorded the selected artifacts as unavailable, so it did not create a ZIP.",
+    };
+    let summary;
+    try {
+      summary = await persistCanonicalSinglePeriodCompletion(
+        artifactDeps.storageKeys.completion,
+        scope,
+        terminalStep,
+        deps.now?.() ?? new Date(),
+      );
+    } catch {
+      return singlePeriodBundleBlockedResponse(
+        scope,
+        ["single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
+        "Pack retained the selected-file recovery state because it could not save the terminal absence.",
+        true,
+      );
+    }
+    if (summary) {
+      await clearSinglePeriodBundleLedger(
+        singlePeriodBundleLedger.ledgerId,
+        singlePeriodBundleLedger.revision,
+      );
+    }
     return {
       ...response,
-      flowStep: {
-        ...response.flowStep,
-        state: "blocked",
-        safeMessage: `${response.flowStep.safeMessage} Pack could not create a ZIP because every selected artifact was missing.`,
-      },
+      flowStep: terminalStep,
+      ...(summary ? { flowSummary: summary } : {}),
     };
+  }
+  if (!response.flowStep.safeSignals.includes("single-period-opfs-staged")) {
+    return staleSinglePeriodBundleResponse(singlePeriodBundleLedger);
   }
 
   const zipCheckpointDeps = {

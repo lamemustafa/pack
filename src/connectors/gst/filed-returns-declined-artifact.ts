@@ -6,7 +6,7 @@ import type {
 import { type DeclinedArtifactSignal } from "./filed-returns-acquisition-diagnostics";
 import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
 import { filedReturnScopeId } from "./filed-returns-return-descriptors";
-import { verifyVisibleGstr2bPeriod } from "./gstr2b-summary";
+import { isGstr2bSummaryRoute, verifyVisibleGstr2bPeriod } from "./gstr2b-summary";
 
 // Recording a refusal resolves a target outright: the period is answered, the run advances, and
 // no artifact ever follows to corroborate it. The visible page is therefore the whole of the
@@ -52,6 +52,7 @@ export interface VisibleTargetBinding<
  */
 export const REFUSAL_BINDING_SIGNALS = [
   "filed-gstr1-detail-period-verified",
+  "gstr2b-summary-route-verified",
   "gstr2b-visible-period-verified",
 ] as const;
 
@@ -129,10 +130,26 @@ export function bindGstr2bSummaryRefusal(
 ): RefusalBinding<"filed-gstr2b-not-generated", "GSTR-2B"> {
   if (scope.returnType !== "GSTR-2B")
     return { bound: null, mismatch: incompatibleScope(scope.returnType) };
+  if (!isGstr2bSummaryRoute(documentRef)) {
+    return {
+      bound: null,
+      mismatch: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId("GSTR-2B"),
+        state: "blocked",
+        safeSignals: ["page-target-unverified"],
+        safeMessage:
+          "Pack could not verify that this portal refusal is on the GSTR-2B summary page.",
+      },
+    };
+  }
   const mismatch = verifyVisibleGstr2bPeriod(documentRef, normalisedText, scope, true);
   return mismatch
     ? { bound: null, mismatch }
-    : bound("filed-gstr2b-not-generated", "GSTR-2B", ["gstr2b-visible-period-verified"]);
+    : bound("filed-gstr2b-not-generated", "GSTR-2B", [
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ]);
 }
 
 /**
