@@ -229,21 +229,42 @@ export async function refreshBranchRewriteRecords({
 // Release Please delegates generated-branch updates to an unconditional REST force-push. That
 // leaves a race after the marker is refreshed: a commit that arrives before the push is discarded
 // even though the marker names the earlier head. GitHub's `updateRefs` mutation accepts `beforeOid`,
-// so replace only those already-recorded generated-branch updates with a compare-and-swap. A
-// mismatch rejects the release run while its open marker remains durable for recovery.
+// so replace recorded rewrites and the first update after a confirmed generated-branch creation
+// with a compare-and-swap. A mismatch rejects the release run while an open marker remains
+// durable for recovery.
 export async function withReleaseBranchRewriteCas(github, expected, confirmedRewrites, operation) {
   const updates = github.octokit?.git?.updateRef;
-  if (typeof updates !== "function" || typeof github.graphql !== "function") {
+  const creates = github.octokit?.git?.createRef;
+  if (
+    typeof updates !== "function" ||
+    typeof creates !== "function" ||
+    typeof github.graphql !== "function"
+  ) {
     throw new Error("Release Please did not expose the GitHub clients needed for rewrite CAS.");
   }
   let repositoryId = null;
+  const createdBranches = new Map();
+  github.octokit.git.createRef = async (request) => {
+    const branch = String(request?.ref ?? "").replace(/^refs\/heads\//u, "");
+    if (!branch.startsWith("release-please--branches--")) {
+      return creates.call(github.octokit.git, request);
+    }
+    const result = await creates.call(github.octokit.git, request);
+    const head = String(result?.data?.object?.sha ?? "").toLowerCase();
+    if (!/^[0-9a-f]{40}$/u.test(head)) {
+      throw new Error(`GitHub did not confirm the initial head for generated branch ${branch}.`);
+    }
+    createdBranches.set(branch, head);
+    return result;
+  };
   github.octokit.git.updateRef = async (request) => {
     const branch = String(request?.ref ?? "").replace(/^heads\//u, "");
     if (!branch.startsWith("release-please--branches--")) {
       return updates.call(github.octokit.git, request);
     }
     const record = expected.get(branch);
-    if (!record) {
+    const createdHead = createdBranches.get(branch);
+    if (!record && !createdHead) {
       throw new Error(`Release Please tried to rewrite unrecorded generated branch ${branch}.`);
     }
     const afterOid = String(request?.sha ?? "").toLowerCase();
@@ -267,7 +288,7 @@ export async function withReleaseBranchRewriteCas(github, expected, confirmedRew
         refUpdates: [
           {
             name: `refs/heads/${branch}`,
-            beforeOid: record.head,
+            beforeOid: record?.head ?? createdHead,
             afterOid,
             force: true,
           },
@@ -277,16 +298,19 @@ export async function withReleaseBranchRewriteCas(github, expected, confirmedRew
     if (!result?.updateRefs) {
       throw new Error(`GitHub did not confirm the compare-and-swap update for ${branch}.`);
     }
-    confirmedRewrites.set(branch, {
-      record: { id: record.recordId, marker: { branch, before: record.head } },
-      after: afterOid,
-    });
+    if (record) {
+      confirmedRewrites.set(branch, {
+        record: { id: record.recordId, marker: { branch, before: record.head } },
+        after: afterOid,
+      });
+    }
     return { data: { object: { sha: afterOid } } };
   };
   try {
     return await operation();
   } finally {
     github.octokit.git.updateRef = updates;
+    github.octokit.git.createRef = creates;
   }
 }
 

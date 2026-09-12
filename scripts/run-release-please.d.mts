@@ -47,7 +47,12 @@ export function withReleaseBranchRewriteCas<T>(
   github: {
     repository: { owner: string; repo: string };
     graphql: (query: string, variables: Record<string, unknown>) => Promise<unknown>;
-    octokit: { git: { updateRef: (request: Record<string, unknown>) => Promise<unknown> } };
+    octokit: {
+      git: {
+        createRef: (request: Record<string, unknown>) => Promise<unknown>;
+        updateRef: (request: Record<string, unknown>) => Promise<unknown>;
+      };
+    };
   },
   expected: OpenedRewriteRecords["headsBeforeRegeneration"],
   confirmedRewrites: Map<

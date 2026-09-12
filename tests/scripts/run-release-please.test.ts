@@ -22,6 +22,7 @@ describe("Release Please workflow wrapper", () => {
     const branch = "release-please--branches--master--components--pack";
     const before = "b".repeat(40);
     const after = "c".repeat(40);
+    const originalCreate = vi.fn();
     const originalUpdate = vi.fn().mockResolvedValue({ data: { object: { sha: after } } });
     const graphql = vi
       .fn()
@@ -30,7 +31,7 @@ describe("Release Please workflow wrapper", () => {
     const github = {
       repository: { owner: "lamemustafa", repo: "pack" },
       graphql,
-      octokit: { git: { updateRef: originalUpdate } },
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
     };
 
     await withReleaseBranchRewriteCas(
@@ -56,12 +57,14 @@ describe("Release Please workflow wrapper", () => {
       }),
     );
     expect(github.octokit.git.updateRef).toBe(originalUpdate);
+    expect(github.octokit.git.createRef).toBe(originalCreate);
   });
 
   it("rejects a raced generated-branch update and leaves the caller's record intact", async () => {
     const branch = "release-please--branches--master--components--pack";
     const before = "b".repeat(40);
     const after = "c".repeat(40);
+    const originalCreate = vi.fn();
     const originalUpdate = vi.fn();
     const graphql = vi
       .fn()
@@ -70,7 +73,7 @@ describe("Release Please workflow wrapper", () => {
     const github = {
       repository: { owner: "lamemustafa", repo: "pack" },
       graphql,
-      octokit: { git: { updateRef: originalUpdate } },
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
     };
     const records = new Map([[branch, { head: before, recordId: 1, pullRequestNumber: 2 }]]);
 
@@ -83,15 +86,17 @@ describe("Release Please workflow wrapper", () => {
     expect(originalUpdate).not.toHaveBeenCalled();
     expect(records.get(branch)).toMatchObject({ head: before, recordId: 1 });
     expect(github.octokit.git.updateRef).toBe(originalUpdate);
+    expect(github.octokit.git.createRef).toBe(originalCreate);
   });
 
   it("refuses an unrecorded generated-branch force update", async () => {
     const branch = "release-please--branches--master--components--pack";
+    const originalCreate = vi.fn();
     const originalUpdate = vi.fn();
     const github = {
       repository: { owner: "lamemustafa", repo: "pack" },
       graphql: vi.fn(),
-      octokit: { git: { updateRef: originalUpdate } },
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
     };
 
     await expect(
@@ -102,6 +107,116 @@ describe("Release Please workflow wrapper", () => {
 
     expect(originalUpdate).not.toHaveBeenCalled();
     expect(github.graphql).not.toHaveBeenCalled();
+    expect(github.octokit.git.createRef).toBe(originalCreate);
+  });
+
+  it("uses CAS for the first update after creating a generated branch", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const initial = "b".repeat(40);
+    const after = "c".repeat(40);
+    const originalCreate = vi.fn().mockResolvedValue({ data: { object: { sha: initial } } });
+    const originalUpdate = vi.fn();
+    const graphql = vi
+      .fn()
+      .mockResolvedValueOnce({ repository: { id: "repo-id" } })
+      .mockResolvedValueOnce({ updateRefs: { clientMutationId: null } });
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql,
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
+    };
+
+    await withReleaseBranchRewriteCas(github, new Map(), new Map(), async () => {
+      await github.octokit.git.createRef({ ref: `refs/heads/${branch}`, sha: initial });
+      await github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true });
+    });
+
+    expect(originalCreate).toHaveBeenCalledOnce();
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(graphql).toHaveBeenLastCalledWith(
+      expect.stringContaining("updateRefs"),
+      expect.objectContaining({
+        refUpdates: [expect.objectContaining({ beforeOid: initial, afterOid: after, force: true })],
+      }),
+    );
+    expect(github.octokit.git.createRef).toBe(originalCreate);
+    expect(github.octokit.git.updateRef).toBe(originalUpdate);
+  });
+
+  it("rejects a raced first generated-branch update after creation", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const initial = "b".repeat(40);
+    const originalCreate = vi.fn().mockResolvedValue({ data: { object: { sha: initial } } });
+    const originalUpdate = vi.fn();
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql: vi
+        .fn()
+        .mockResolvedValueOnce({ repository: { id: "repo-id" } })
+        .mockRejectedValueOnce(new Error("Reference update failed: beforeOid does not match")),
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
+    };
+
+    await expect(
+      withReleaseBranchRewriteCas(github, new Map(), new Map(), async () => {
+        await github.octokit.git.createRef({ ref: `refs/heads/${branch}`, sha: initial });
+        return github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: "c".repeat(40) });
+      }),
+    ).rejects.toThrow(/beforeOid does not match/iu);
+
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(github.octokit.git.createRef).toBe(originalCreate);
+    expect(github.octokit.git.updateRef).toBe(originalUpdate);
+  });
+
+  it("does not authorize an update when generated-branch creation is unconfirmed", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const originalCreate = vi.fn().mockResolvedValue({ data: { object: { sha: "unknown" } } });
+    const originalUpdate = vi.fn();
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql: vi.fn(),
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
+    };
+
+    await expect(
+      withReleaseBranchRewriteCas(github, new Map(), new Map(), async () => {
+        await expect(
+          github.octokit.git.createRef({ ref: `refs/heads/${branch}`, sha: "b".repeat(40) }),
+        ).rejects.toThrow(/did not confirm the initial head/iu);
+        return github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: "c".repeat(40) });
+      }),
+    ).rejects.toThrow(/unrecorded generated branch/iu);
+
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(github.graphql).not.toHaveBeenCalled();
+    expect(github.octokit.git.createRef).toBe(originalCreate);
+    expect(github.octokit.git.updateRef).toBe(originalUpdate);
+  });
+
+  it("does not authorize an update when generated-branch creation is refused", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const originalCreate = vi.fn().mockRejectedValue(new Error("reference already exists"));
+    const originalUpdate = vi.fn();
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql: vi.fn(),
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
+    };
+
+    await expect(
+      withReleaseBranchRewriteCas(github, new Map(), new Map(), async () => {
+        await expect(
+          github.octokit.git.createRef({ ref: `refs/heads/${branch}`, sha: "b".repeat(40) }),
+        ).rejects.toThrow(/reference already exists/iu);
+        return github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: "c".repeat(40) });
+      }),
+    ).rejects.toThrow(/unrecorded generated branch/iu);
+
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(github.graphql).not.toHaveBeenCalled();
+    expect(github.octokit.git.createRef).toBe(originalCreate);
+    expect(github.octokit.git.updateRef).toBe(originalUpdate);
   });
 
   it("emits root release outputs compatible with release-please-action", () => {
@@ -239,6 +354,7 @@ describe("Release Please workflow wrapper", () => {
     const branch = "release-please--branches--master--components--pack";
     const before = "b".repeat(40);
     const marker = `<!-- review-gate-rewrite branch=${branch} before=${before} -->`;
+    const originalCreate = vi.fn();
     const originalUpdate = vi.fn();
     const github = {
       repository: { owner: "lamemustafa", repo: "pack", defaultBranch: "master" },
@@ -246,7 +362,7 @@ describe("Release Please workflow wrapper", () => {
         .fn()
         .mockResolvedValueOnce({ repository: { id: "repo-id" } })
         .mockRejectedValueOnce(new Error("Reference update failed: beforeOid does not match")),
-      octokit: { git: { updateRef: originalUpdate } },
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
     };
     const createReleases = vi
       .fn()
