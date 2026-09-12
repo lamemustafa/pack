@@ -6,6 +6,7 @@ import type {
   FiledReturnsFullFiscalYearLedger,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import { isCleanedZipPhase } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
@@ -32,9 +33,13 @@ import {
 } from "./filed-returns-full-fiscal-year-summary";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
 
+// A target the run should not silently discard: the portal answered, or a person reported what they
+// saw. Written as a list, this said `not-filed` but not `not-generated` -- two answers of the same
+// kind, one of which would have let a cancelled run holding it be replaced without asking.
 export function hasTerminalPositiveTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
-  return ledger.targets.some((target) =>
-    ["downloaded", "manually-observed", "not-filed"].includes(target.status),
+  return ledger.targets.some(
+    (target) =>
+      isResolvedFullFiscalYearTargetStatus(target.status) || target.status === "manually-observed",
   );
 }
 

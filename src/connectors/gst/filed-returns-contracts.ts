@@ -227,16 +227,66 @@ export interface FiledReturnsDownloadDiagnostic {
   errorCategory?: string;
 }
 
+// One list, and the type derived from it. A `Set<FiledReturnsFullFiscalYearTargetStatus>` literal
+// does not have to be exhaustive, so a status added to a union alone can pass type-checking while
+// a runtime allowlist elsewhere silently rejects it -- which is how a persisted run summary became
+// unparseable and took its whole run with it.
+export const FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES = [
+  "pending",
+  "running",
+  "downloaded",
+  "manually-observed",
+  "not-filed",
+  // The portal states there is no artifact for this period, as distinct from a taxpayer not
+  // having submitted one. The auto-drafted GSTR-2B statement is drafted by the portal, never
+  // submitted by the taxpayer, so recording it as unfiled would print a claim about them that
+  // the portal never made.
+  "not-generated",
+  "download-unconfirmed",
+  "blocked",
+  "failed",
+  "cancelled",
+] as const;
+
 export type FiledReturnsFullFiscalYearTargetStatus =
-  | "pending"
-  | "running"
-  | "downloaded"
-  | "manually-observed"
-  | "not-filed"
-  | "download-unconfirmed"
-  | "blocked"
-  | "failed"
-  | "cancelled";
+  (typeof FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES)[number];
+
+/** Membership in the list above, so a validator cannot be told a status the list already allows. */
+export function isFiledReturnsFullFiscalYearTargetStatus(
+  value: unknown,
+): value is FiledReturnsFullFiscalYearTargetStatus {
+  return (FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES as readonly unknown[]).includes(value);
+}
+
+// A target the portal has answered for. Retrying one cannot change its outcome, so a run counts it
+// as done. Nine modules each kept their own copy of this pair, every copy spelled `downloaded` and
+// `not-filed`, and none of them learned about `not-generated` -- which is how a live run stopped on
+// the first period the portal declined to draft.
+const RESOLVED_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
+  "downloaded",
+  "not-filed",
+  "not-generated",
+]);
+
+export function isResolvedFullFiscalYearTargetStatus(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+): boolean {
+  return RESOLVED_TARGET_STATUSES.has(status);
+}
+
+/**
+ * Unresolved, and not a state the run reaches by itself. What is left needs the user to choose.
+ *
+ * Derived rather than listed: a status that is neither resolved nor pending/running belongs here by
+ * definition, so a new one cannot land in neither bucket.
+ */
+export function needsExplicitFullFiscalYearRetry(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+): boolean {
+  return (
+    !isResolvedFullFiscalYearTargetStatus(status) && status !== "pending" && status !== "running"
+  );
+}
 
 export interface FiledReturnsFullFiscalYearTarget {
   targetId: string;
@@ -374,6 +424,9 @@ export type FiledReturnsTargetOutcome =
   // offered is not a fault a re-run corrects, and routing it to review would
   // send someone looking for a problem that is not theirs.
   | "partly-saved"
+  // The portal never drafted anything for this period. Separate from `not-filed`, which says
+  // something about the taxpayer, and from `needs-review`, which says a re-run might help.
+  | "not-generated"
   | "captured"
   | "not-filed"
   | "needs-review"

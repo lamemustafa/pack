@@ -1,3 +1,4 @@
+import type { FiledReturnsFullFiscalYearTargetStatus } from "./filed-returns-contracts";
 import {
   CsvSizeLimitError,
   csvEmptyString,
@@ -46,7 +47,28 @@ export const FILED_RETURNS_SUMMARY_HEADERS = [
   "value_number",
 ] as const;
 
-export type FiledReturnsSummaryOutcomeCategory = "staged" | "not-filed" | "artifact-unavailable";
+export type FiledReturnsSummaryOutcomeCategory =
+  "staged" | "not-filed" | "not-generated" | "artifact-unavailable";
+
+/**
+ * What the ZIP should say about one artifact of one period.
+ *
+ * Both fiscal-year planners asked this in the same four branches. Only `staged` promises a file,
+ * so every other outcome has to be named rather than defaulted -- a period the portal declined to
+ * draft, defaulted to `staged`, becomes a file the run then reports itself as having failed to
+ * produce, and blocks the ZIP for a whole year on it.
+ */
+export function filedReturnsSummaryOutcomeCategory(
+  targetStatus: FiledReturnsFullFiscalYearTargetStatus,
+  safeSignals: ReadonlySet<string>,
+  artifactType: FiledReturnsConcreteArtifactType,
+): FiledReturnsSummaryOutcomeCategory {
+  if (targetStatus === "not-filed") return "not-filed";
+  if (targetStatus === "not-generated") return "not-generated";
+  return safeSignals.has(`filed-return-artifact-unavailable:${artifactType}`)
+    ? "artifact-unavailable"
+    : "staged";
+}
 
 export interface FiledReturnsSummaryPlanEntry {
   artifactType: FiledReturnsConcreteArtifactType;
