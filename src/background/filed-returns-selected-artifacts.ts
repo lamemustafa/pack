@@ -475,7 +475,7 @@ export async function triggerSelectedArtifacts({
       if (!bundleCleared) {
         return singlePeriodBundleBlockedResponse(
           scope,
-          ["single-period-bundle-clear-failed", "single-period-opfs-retained"],
+          ["single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
           "Pack recorded that no files were available, but could not clear the saved recovery state.",
           true,
         );
