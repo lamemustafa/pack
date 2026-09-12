@@ -104,6 +104,7 @@ export async function runReleasePlease(env = process.env) {
 // lose the discarded SHA permanently, and no later run could reconstruct it.
 export async function openBranchRewriteRecords({ env, owner, repo, targetBranch }) {
   const heads = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
+  const opened = new Map();
   for (const [branch, head] of heads) {
     const pullRequestNumber = await findOpenPullRequestNumber({
       env,
@@ -114,22 +115,47 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
     });
     if (pullRequestNumber === null) continue;
     const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
-    // A record left open by an interrupted run names a discarded head and no replacement. The
-    // branch head standing here now is exactly what that rewrite created, because this workflow is
-    // the only thing that rewrites the branch and it has not run since.
-    for (const record of records) {
-      if (record.marker.branch !== branch || record.marker.after !== null) continue;
-      await writeBranchRewriteRecord({ env, owner, repo, record, after: head });
+    const open = records.find(
+      (record) => record.marker.branch === branch && record.marker.after === null,
+    );
+    if (open) {
+      const created = await readLatestForcePushedHead({
+        env,
+        owner,
+        repo,
+        pullRequestNumber,
+        after: open.createdAt,
+      });
+      if (created) {
+        await writeBranchRewriteRecord({ env, owner, repo, record: open, after: created });
+      } else if (head === open.marker.before) {
+        opened.set(branch, { head, recordId: open.id, pullRequestNumber });
+        continue;
+      } else {
+        throw new Error(
+          "GitHub could not correlate an open rewrite record with the branch head now standing; refusing to discard an unrecorded head.",
+        );
+      }
     }
-    await githubRequest(env, `/repos/${owner}/${repo}/issues/${pullRequestNumber}/comments`, {
-      method: "POST",
-      body: JSON.stringify({
-        body: formatReleaseBranchRewriteMarker({ branch, before: head }),
-      }),
-    });
+    const created = await githubRequest(
+      env,
+      `/repos/${owner}/${repo}/issues/${pullRequestNumber}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          body: formatReleaseBranchRewriteMarker({ branch, before: head }),
+        }),
+      },
+    );
+    if (!Number.isInteger(created?.id)) {
+      throw new Error(
+        "GitHub did not return an identifier for the opened release branch rewrite record.",
+      );
+    }
+    opened.set(branch, { head, recordId: created.id, pullRequestNumber });
     console.log(`Opened release branch rewrite record on #${pullRequestNumber}: before=${head}`);
   }
-  return heads;
+  return opened;
 }
 
 // Failures here are logged rather than thrown. A release may already exist by this point, and
@@ -145,7 +171,7 @@ export async function closeBranchRewriteRecords({
 }) {
   try {
     await eachOpenBranchRewriteRecord(
-      { env, owner, repo, targetBranch, branches: headsBeforeRegeneration.keys() },
+      { env, owner, repo, targetBranch, expected: headsBeforeRegeneration },
       async ({ pullRequestNumber, record, head }) => {
         // An unchanged head discarded nothing. Completing the record with `after === before` says
         // exactly that, and the gate reads it as the non-event it was.
@@ -207,7 +233,7 @@ export async function refreshBranchRewriteRecords({
 }) {
   try {
     await eachOpenBranchRewriteRecord(
-      { env, owner, repo, targetBranch, branches: headsBeforeRegeneration.keys() },
+      { env, owner, repo, targetBranch, expected: headsBeforeRegeneration },
       async ({ pullRequestNumber, record, head }) => {
         if (head === record.marker.before) return;
         await writeBranchRewriteRecord({ env, owner, repo, record, before: head });
@@ -232,7 +258,7 @@ export async function refreshBranchRewriteRecords({
  * field the review gate keys recorded discards by. Reading it here is what makes the two sides
  * agree about which rewrite a record describes.
  */
-async function readLatestForcePushedHead({ env, owner, repo, pullRequestNumber }) {
+async function readLatestForcePushedHead({ env, owner, repo, pullRequestNumber, after = 0 }) {
   const timeline = await githubList(
     env,
     `/repos/${owner}/${repo}/issues/${pullRequestNumber}/timeline`,
@@ -244,7 +270,7 @@ async function readLatestForcePushedHead({ env, owner, repo, pullRequestNumber }
     const sha = String(event.commit_id ?? "").toLowerCase();
     if (!/^[0-9a-f]{40}$/u.test(sha)) continue;
     const at = Date.parse(event.created_at ?? "");
-    if (!Number.isFinite(at)) continue;
+    if (!Number.isFinite(at) || at < after) continue;
     if (!latest || at > latest.at) latest = { sha, at };
   }
   return latest?.sha ?? null;
@@ -254,11 +280,18 @@ async function readLatestForcePushedHead({ env, owner, repo, pullRequestNumber }
  * The walk the refresh and the close share: each branch's open record, paired with the head its
  * branch carries right now. They differ only in what they write to it.
  */
-async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, branches }, visit) {
+async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, expected }, visit) {
   const heads = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
-  for (const branch of branches) {
+  for (const [branch, expectedRecord] of expected) {
+    // String entries keep the exported helper compatible with older callers while production runs
+    // always retain the marker id returned when the record was opened.
+    const expectedInfo =
+      typeof expectedRecord === "string"
+        ? { head: expectedRecord, recordId: null, pullRequestNumber: null }
+        : expectedRecord;
     const head = heads.get(branch);
-    if (!head) continue;
+    if (!head)
+      throw new Error(`Release branch ${branch} disappeared after its rewrite record was opened.`);
     const pullRequestNumber = await findOpenPullRequestNumber({
       env,
       owner,
@@ -266,12 +299,28 @@ async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, bra
       branch,
       targetBranch,
     });
-    if (pullRequestNumber === null) continue;
+    if (
+      pullRequestNumber === null ||
+      (expectedInfo.pullRequestNumber !== null &&
+        pullRequestNumber !== expectedInfo.pullRequestNumber)
+    ) {
+      throw new Error(
+        `Release pull request for ${branch} changed after its rewrite record was opened.`,
+      );
+    }
     const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
     const open = records.find(
-      (record) => record.marker.branch === branch && record.marker.after === null,
+      (record) =>
+        (expectedInfo.recordId === null || record.id === expectedInfo.recordId) &&
+        record.marker.branch === branch &&
+        record.marker.after === null,
     );
-    if (open) await visit({ pullRequestNumber, record: open, head });
+    if (!open) {
+      throw new Error(
+        `Release branch ${branch} lost the rewrite record opened for this regeneration.`,
+      );
+    }
+    await visit({ pullRequestNumber, record: open, head });
   }
 }
 
@@ -305,7 +354,14 @@ async function readBranchRewriteRecords({ env, owner, repo, pullRequestNumber })
     // overwritten, or an uneditable one would abort the run before any release work began.
     if (!isTrustedRewriteRecord(comment)) continue;
     const marker = readReleaseBranchRewriteMarker(comment?.body);
-    if (marker && Number.isInteger(comment?.id)) records.push({ id: comment.id, marker });
+    const createdAt = Date.parse(comment?.created_at ?? "");
+    if (marker && Number.isInteger(comment?.id)) {
+      records.push({
+        id: comment.id,
+        marker,
+        createdAt: Number.isFinite(createdAt) ? createdAt : 0,
+      });
+    }
   }
   return records;
 }

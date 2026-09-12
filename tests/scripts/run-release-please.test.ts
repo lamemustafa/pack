@@ -200,6 +200,13 @@ describe("release branch rewrite records", () => {
           } as unknown as Response;
         }
         if (path.includes("/issues/") && path.includes("/comments")) {
+          if (String(init.method ?? "GET") === "POST") {
+            return {
+              ok: true,
+              status: 201,
+              json: async () => ({ id: 999 }),
+            } as unknown as Response;
+          }
           if (handlers.commentPages) {
             const page = Number(new URL(String(url)).searchParams.get("page") ?? "1");
             return {
@@ -236,18 +243,19 @@ describe("release branch rewrite records", () => {
       targetBranch: "master",
     });
 
-    expect(heads.get(branch)).toBe(head);
+    expect(heads.get(branch)).toMatchObject({ head, pullRequestNumber: 337, recordId: 999 });
     const posted = calls.find((call) => call.method === "POST");
     expect(posted?.path).toContain("/issues/337/comments");
     expect(posted?.body).toContain(`review-gate-rewrite branch=${branch} before=${head}`);
     expect(posted?.body).not.toContain("after=");
   });
 
-  it("completes a record an interrupted run left open, from the head standing now", async () => {
+  it("completes an interrupted record from its force-push event, not the current ref", async () => {
     const lostBefore = "c".repeat(40);
-    const head = "b".repeat(40);
+    const created = "b".repeat(40);
+    const landedSince = "e".repeat(40);
     const calls = stubGitHub({
-      heads: head,
+      heads: landedSince,
       comments: [
         {
           id: 99,
@@ -255,6 +263,7 @@ describe("release branch rewrite records", () => {
           body: `<!-- review-gate-rewrite branch=${branch} before=${lostBefore} -->`,
         },
       ],
+      forcePushedHeads: [{ commit_id: created }],
     });
     const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
 
@@ -265,11 +274,10 @@ describe("release branch rewrite records", () => {
       targetBranch: "master",
     });
 
-    // The branch head standing here is exactly what the lost rewrite created, because nothing but
-    // this workflow rewrites the branch and it has not run since.
     const patched = calls.find((call) => call.method === "PATCH");
     expect(patched?.path).toContain("/issues/comments/99");
-    expect(patched?.body).toContain(`before=${lostBefore} after=${head}`);
+    expect(patched?.body).toContain(`before=${lostBefore} after=${created}`);
+    expect(patched?.body).not.toContain(landedSince);
   });
 
   it("ignores a marker written by anyone but the workflow", async () => {
@@ -359,6 +367,25 @@ describe("release branch rewrite records", () => {
     });
 
     expect(proceeded).toBe(false);
+  });
+
+  it("refuses to regenerate when its opened marker is no longer present", async () => {
+    // A successful POST is not durable evidence if a later read cannot find that exact comment.
+    // Continuing would force-push the head the marker was meant to preserve.
+    stubGitHub({ heads: "b".repeat(40), comments: [] });
+    const { refreshBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await expect(
+      refreshBranchRewriteRecords({
+        env,
+        owner: "lamemustafa",
+        repo: "pack",
+        targetBranch: "master",
+        headsBeforeRegeneration: new Map([
+          [branch, { head: "b".repeat(40), recordId: 999, pullRequestNumber: 337 }],
+        ]),
+      }),
+    ).resolves.toBe(false);
   });
 
   it("refuses to regenerate when the head list is malformed", async () => {

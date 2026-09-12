@@ -18,12 +18,17 @@ interface ReleaseBranchScope {
   targetBranch: string;
 }
 
-/** The heads the run snapshotted, which the later two stages bring up to date and close. */
+/** The heads and durable marker identities opened for this regeneration. */
 interface OpenedRewriteRecords extends ReleaseBranchScope {
-  headsBeforeRegeneration: Map<string, string>;
+  headsBeforeRegeneration: Map<
+    string,
+    { head: string; recordId: number; pullRequestNumber: number } | string
+  >;
 }
 
-export function openBranchRewriteRecords(options: ReleaseBranchScope): Promise<Map<string, string>>;
+export function openBranchRewriteRecords(
+  options: ReleaseBranchScope,
+): Promise<Map<string, { head: string; recordId: number; pullRequestNumber: number }>>;
 
 /** `false` when it could not confirm what the regeneration is about to discard. */
 export function refreshBranchRewriteRecords(options: OpenedRewriteRecords): Promise<boolean>;
