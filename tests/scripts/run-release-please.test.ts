@@ -110,6 +110,61 @@ describe("Release Please workflow wrapper", () => {
     expect(github.octokit.git.createRef).toBe(originalCreate);
   });
 
+  it("uses an exact retained-branch snapshot for a generated-branch CAS", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const before = "b".repeat(40);
+    const after = "c".repeat(40);
+    const originalCreate = vi.fn();
+    const originalUpdate = vi.fn();
+    const graphql = vi
+      .fn()
+      .mockResolvedValueOnce({ repository: { id: "repo-id" } })
+      .mockResolvedValueOnce({ updateRefs: { clientMutationId: null } });
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql,
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
+    };
+    const confirmed = new Map();
+
+    await withReleaseBranchRewriteCas(
+      github,
+      new Map([[branch, { head: before, recordId: null, pullRequestNumber: null }]]),
+      confirmed,
+      async () => github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true }),
+    );
+
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(graphql).toHaveBeenLastCalledWith(
+      expect.stringContaining("updateRefs"),
+      expect.objectContaining({ refUpdates: [expect.objectContaining({ beforeOid: before })] }),
+    );
+    expect(confirmed).toEqual(new Map());
+  });
+
+  it("does not let one retained-branch snapshot authorize another generated branch", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const otherBranch = "release-please--branches--master--components--other";
+    const originalCreate = vi.fn();
+    const originalUpdate = vi.fn();
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql: vi.fn(),
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
+    };
+
+    await expect(
+      withReleaseBranchRewriteCas(
+        github,
+        new Map([[otherBranch, { head: "b".repeat(40), recordId: null, pullRequestNumber: null }]]),
+        new Map(),
+        async () => github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: "c".repeat(40) }),
+      ),
+    ).rejects.toThrow(/unrecorded generated branch/iu);
+
+    expect(originalUpdate).not.toHaveBeenCalled();
+  });
+
   it("uses CAS for the first update after creating a generated branch", async () => {
     const branch = "release-please--branches--master--components--pack";
     const initial = "b".repeat(40);
@@ -495,6 +550,99 @@ describe("Release Please workflow wrapper", () => {
       create.mockRestore();
     }
   });
+
+  it("closes a confirmed CAS receipt before propagating a later no-release failure", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const before = "b".repeat(40);
+    const after = "c".repeat(40);
+    const marker = `<!-- review-gate-rewrite branch=${branch} before=${before} -->`;
+    const originalCreate = vi.fn();
+    const originalUpdate = vi.fn();
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack", defaultBranch: "master" },
+      graphql: vi
+        .fn()
+        .mockResolvedValueOnce({ repository: { id: "repo-id" } })
+        .mockResolvedValueOnce({ updateRefs: { clientMutationId: null } }),
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
+    };
+    const createReleases = vi.fn().mockResolvedValue([]);
+    const createPullRequests = vi.fn(async () => {
+      await github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true });
+      throw new Error("later pull request API failure");
+    });
+    const create = vi.spyOn(releasePlease.GitHub, "create").mockResolvedValue(github);
+    const fromManifest = vi
+      .spyOn(releasePlease.Manifest, "fromManifest")
+      .mockResolvedValueOnce({ createReleases })
+      .mockResolvedValueOnce({ createPullRequests });
+    let markerExists = false;
+    let closedBody = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        const path = new URL(String(url)).pathname;
+        if (path.includes("matching-refs")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [{ ref: `refs/heads/${branch}`, object: { sha: before } }],
+          } as unknown as Response;
+        }
+        if (path.includes("/pulls")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [{ number: 337 }],
+          } as unknown as Response;
+        }
+        if (path.includes("/comments") && String(init.method ?? "GET") === "POST") {
+          markerExists = true;
+          return { ok: true, status: 201, json: async () => ({ id: 99 }) } as unknown as Response;
+        }
+        if (path.includes("/comments") && String(init.method ?? "GET") === "PATCH") {
+          closedBody = String(init.body);
+          return { ok: true, status: 200, json: async () => ({ id: 99 }) } as unknown as Response;
+        }
+        if (path.includes("/comments")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () =>
+              markerExists
+                ? [
+                    {
+                      id: 99,
+                      created_at: "2026-09-12T00:00:00Z",
+                      user: { login: RECORDER },
+                      body: marker,
+                    },
+                  ]
+                : [],
+          } as unknown as Response;
+        }
+        throw new Error(`Unexpected GitHub request: ${path}`);
+      }),
+    );
+
+    try {
+      await expect(
+        runReleasePlease({
+          GITHUB_REPOSITORY: "lamemustafa/pack",
+          GITHUB_TOKEN: "test-token",
+          GITHUB_API_URL: "https://api.github.test",
+        }),
+      ).rejects.toThrow(/later pull request API failure/iu);
+
+      expect(originalUpdate).not.toHaveBeenCalled();
+      expect(closedBody).toContain(`before=${before}`);
+      expect(closedBody).toContain(`after=${after}`);
+    } finally {
+      vi.unstubAllGlobals();
+      fromManifest.mockRestore();
+      create.mockRestore();
+    }
+  });
 });
 
 describe("release branch rewrite records", () => {
@@ -600,6 +748,22 @@ describe("release branch rewrite records", () => {
     expect(posted?.path).toContain("/issues/337/comments");
     expect(posted?.body).toContain(`review-gate-rewrite branch=${branch} before=${head}`);
     expect(posted?.body).not.toContain("after=");
+  });
+
+  it("captures a retained generated branch without inventing a rewrite marker", async () => {
+    const head = "b".repeat(40);
+    const calls = stubGitHub({ heads: head, pulls: [] });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    const records = await openBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+    });
+
+    expect(records.get(branch)).toEqual({ head, recordId: null, pullRequestNumber: null });
+    expect(calls.find((call) => call.method === "POST")).toBeUndefined();
   });
 
   it("holds an interrupted record when its branch changed", async () => {
@@ -709,6 +873,46 @@ describe("release branch rewrite records", () => {
 
     expect(proceeded).toBe(false);
     expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
+    expect(calls.find((call) => call.method === "POST")).toBeUndefined();
+  });
+
+  it("refuses a retained generated branch that advanced after observation", async () => {
+    const before = "b".repeat(40);
+    const calls = stubGitHub({ heads: "c".repeat(40), pulls: [] });
+    const { refreshBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await expect(
+      refreshBranchRewriteRecords({
+        env,
+        owner: "lamemustafa",
+        repo: "pack",
+        targetBranch: "master",
+        headsBeforeRegeneration: new Map([
+          [branch, { head: before, recordId: null, pullRequestNumber: null }],
+        ]),
+      }),
+    ).resolves.toBe(false);
+
+    expect(calls.find((call) => call.method === "POST")).toBeUndefined();
+  });
+
+  it("refuses a retained generated branch that gained a pull request after observation", async () => {
+    const head = "b".repeat(40);
+    const calls = stubGitHub({ heads: head });
+    const { refreshBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await expect(
+      refreshBranchRewriteRecords({
+        env,
+        owner: "lamemustafa",
+        repo: "pack",
+        targetBranch: "master",
+        headsBeforeRegeneration: new Map([
+          [branch, { head, recordId: null, pullRequestNumber: null }],
+        ]),
+      }),
+    ).resolves.toBe(false);
+
     expect(calls.find((call) => call.method === "POST")).toBeUndefined();
   });
 
