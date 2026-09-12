@@ -182,7 +182,7 @@ describe("Pack CI workflow", () => {
     expect(submitWorkflow).toContain("--provenance .release/pack-release-provenance.v1.json");
 
     // The variable still gates real uploads; dry runs validate without it.
-    expect(submitWorkflow).toContain('--dry-run "${{ inputs.dry_run }}"');
+    expect(submitWorkflow).toContain('--dry-run "$CWS_DRY_RUN"');
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED");
     expect(releaseRunbook).toContain("CWS_SUBMIT_ENABLED=true");
   });
