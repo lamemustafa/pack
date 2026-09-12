@@ -15,6 +15,7 @@ import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-
 import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
 import { createGstDocument, makeLayoutVisible } from "./filed-returns-flow.test-helpers";
 import { normaliseText } from "../../src/connectors/gst/filed-returns-dom";
+import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
 
 const SCOPE = {
   artifactType: "PDF_AND_EXCEL",
@@ -159,4 +160,41 @@ describe("the copy a declined artifact carries", () => {
   it("registers every binding signal for durable storage", () => {
     expect(parseDurableFiledReturnsSignals([...REFUSAL_BINDING_SIGNALS])).not.toBeNull();
   });
+
+  it.each([
+    [
+      "GSTR-2B",
+      "PDF",
+      [
+        "filed-gstr2b-not-generated",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ],
+      "filed-gstr2b-not-generated" as const,
+    ],
+    [
+      "GSTR-1",
+      "EXCEL",
+      ["filed-gstr1-excel-no-details-available", "filed-gstr1-detail-period-verified"],
+      "filed-gstr1-excel-no-details-available" as const,
+    ],
+  ] as const)(
+    "durably presents a %s absence without download completion copy",
+    (returnType, artifactType, signals, declinedSignal) => {
+      const message = canonicalDurableSummaryMessage(
+        {
+          artifactType,
+          financialYear: "2025-26",
+          period: "April",
+          returnType,
+        },
+        "complete",
+        signals,
+      );
+
+      expect(message).toBe(declinedArtifactSafeMessage(declinedSignal));
+      expect(message).not.toContain("completed the local filed-return download");
+      expect(message).not.toContain("Browser Downloads");
+    },
+  );
 });

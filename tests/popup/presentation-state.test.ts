@@ -170,6 +170,87 @@ describe("popup presentation state", () => {
     });
     expect(state.body).not.toContain("Browser Downloads");
   });
+
+  it.each([
+    [
+      "GSTR-2B",
+      "PDF",
+      [
+        "filed-gstr2b-not-generated",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ],
+    ],
+    [
+      "GSTR-1",
+      "EXCEL",
+      ["filed-gstr1-excel-no-details-available", "filed-gstr1-detail-period-verified"],
+    ],
+  ] as const)(
+    "presents a bound %s absence without a browser-download warning",
+    (returnType, artifactType, safeSignals) => {
+      const state = getPopupPresentationState(
+        supportedContext(),
+        summary("complete", [...safeSignals], {
+          returnType,
+          artifactType,
+        }),
+        null,
+      );
+
+      expect(state).toMatchObject({
+        badge: "Unavailable",
+        kind: "unavailable",
+        title: "No artifact available",
+        tone: "neutral",
+      });
+      expect(state.body).toContain("no");
+      expect(state.body).not.toContain("Browser Downloads");
+      expect(state.body).not.toContain("saved by your browser");
+    },
+  );
+
+  it("keeps an ordinary unconfirmed completion warning when absence proof is incomplete", () => {
+    const state = getPopupPresentationState(
+      supportedContext(),
+      summary("complete", ["filed-gstr2b-not-generated"], {
+        returnType: "GSTR-2B",
+        artifactType: "PDF",
+      }),
+      null,
+    );
+
+    expect(state).toMatchObject({
+      badge: "Download unconfirmed",
+      kind: "complete",
+      title: "Browser download not confirmed",
+      tone: "warning",
+    });
+    expect(state.body).toContain("Browser Downloads");
+  });
+
+  it("keeps a blocked recovery state actionable even when it carries absence proof", () => {
+    const state = getPopupPresentationState(
+      supportedContext(),
+      summary(
+        "blocked",
+        [
+          "filed-gstr2b-not-generated",
+          "gstr2b-summary-route-verified",
+          "gstr2b-visible-period-verified",
+        ],
+        {
+          returnType: "GSTR-2B",
+          artifactType: "PDF",
+        },
+      ),
+      null,
+    );
+
+    expect(state.kind).toBe("blocked");
+    expect(state.title).toContain("needs attention");
+    expect(state.body).toContain("Retry");
+  });
 });
 
 function supportedContext(): PortalContext {
@@ -200,6 +281,7 @@ function accessDeniedContext(): PortalContext {
 function summary(
   status: FiledReturnsFlowSummary["status"],
   safeSignals: string[],
+  scopeOverrides: Partial<FiledReturnsFlowSummary["scope"]> = {},
 ): FiledReturnsFlowSummary {
   const base: Omit<FiledReturnsFlowSummary, "currentPeriod"> = {
     scope: {
@@ -207,6 +289,7 @@ function summary(
       period: "May",
       returnType: "GSTR-3B",
       artifactType: "PDF",
+      ...scopeOverrides,
     },
     status,
     completedPeriods: status === "complete" ? ["May"] : [],

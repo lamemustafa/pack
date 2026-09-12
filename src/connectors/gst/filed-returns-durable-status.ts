@@ -1,4 +1,7 @@
-import { declinedArtifactSafeMessage } from "./filed-returns-declined-artifact";
+import {
+  declinedArtifactSafeMessage,
+  getBoundDeclinedArtifactSignal,
+} from "./filed-returns-declined-artifact";
 import {
   FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
   filedReturnsFilterActionRequiredMessage,
@@ -167,6 +170,9 @@ export function canonicalDurableSummaryMessage(
   status: FiledReturnsFlowSummary["status"],
   signals: readonly string[],
 ): string {
+  const declinedArtifactSignal =
+    status === "complete" ? getBoundDeclinedArtifactSignal(scope, signals) : null;
+  if (declinedArtifactSignal) return declinedArtifactSafeMessage(declinedArtifactSignal);
   const mismatchedReturnType = visibleReturnTypeMismatch(scope, status, signals);
   if (mismatchedReturnType) {
     return incompleteReturnTypeMismatchRecoveryMessage(scope, mismatchedReturnType);
