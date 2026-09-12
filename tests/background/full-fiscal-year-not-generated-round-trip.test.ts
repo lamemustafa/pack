@@ -33,6 +33,7 @@ import {
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import { exportFullFiscalYearZip } from "../../src/background/filed-returns-full-fiscal-year-zip";
 import { declinedArtifactSafeMessage } from "../../src/connectors/gst/filed-returns-declined-artifact";
+import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-validation";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 
 const deps = {
@@ -95,6 +96,24 @@ describe("a full-year run whose period the portal never generated", () => {
     // out of the background message handler and the run's details vanished from the panel.
     expect(await readPlanLedgersStorageState(deps)).toMatchObject({ state: "valid" });
     await expect(persistLedger(deps, ledger)).resolves.toBeUndefined();
+  });
+
+  it("rejects a not-generated period that still retains staged artifact evidence", () => {
+    const ledger = createFullFiscalYearLedger(scope, new Date("2026-09-10T00:00:00.000Z"), [
+      "April",
+    ]);
+    ledger.targets[0] = {
+      ...ledger.targets[0]!,
+      status: "not-generated",
+      safeSignals: [
+        "filed-gstr2b-not-generated",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+        "full-fiscal-year-opfs-staged:PDF",
+      ],
+      safeMessage: declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
+    };
+    expect(isFullFiscalYearLedger(ledger)).toBe(false);
   });
 
   it("does not block its ZIP on an artifact the portal never produced", async () => {

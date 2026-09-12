@@ -654,6 +654,34 @@ describe("a period the portal declined to generate, in an all-returns year", () 
     expect(evidence?.outcome).not.toBe("needs-review");
   });
 
+  it("keeps a bound refusal under review when staged artifact evidence remains", () => {
+    const ledger = createLedger();
+    const target = ledger.targets.find((candidate) => candidate.returnType === "GSTR-2B");
+    if (!target) throw new Error("expected a GSTR-2B target in the all-returns plan");
+    const staged = {
+      ...ledger,
+      targets: ledger.targets.map((candidate) =>
+        candidate.targetId === target.targetId
+          ? {
+              ...candidate,
+              status: "not-generated" as const,
+              ...canonicalDurableTargetStatus(candidate, "not-generated", [
+                "filed-gstr2b-not-generated",
+                "gstr2b-summary-route-verified",
+                "gstr2b-visible-period-verified",
+                "full-fiscal-year-opfs-staged:PDF",
+              ]),
+            }
+          : candidate,
+      ),
+    };
+
+    const summary = toAllSupportedFullFiscalYearSummary(staged);
+    expect(summary.targetEvidence.find((row) => row.targetId === target.targetId)?.outcome).toBe(
+      "needs-review",
+    );
+  });
+
   it("requires the bound route and visible-period proof for a stored not-generated target", () => {
     const ledger = createLedger();
     const target = ledger.targets.find((candidate) => candidate.returnType === "GSTR-2B");

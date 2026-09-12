@@ -129,6 +129,20 @@ describe("per-target evidence in the flow summary", () => {
     expect(delivered.targetEvidence?.map((entry) => entry.outcome)).toEqual(["saved", "saved"]);
   });
 
+  it("does not resolve a bound refusal when staged artifact evidence remains", () => {
+    const ledger = ledgerWith(["not-generated"]);
+    ledger.targets[0]!.safeSignals = [
+      "filed-gstr2b-not-generated",
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+      "full-fiscal-year-opfs-staged:PDF",
+    ];
+
+    const summary = toFullFiscalYearSummary(ledger, FLOW_STEP);
+
+    expect(summary.targetEvidence).toEqual([{ period: "April", outcome: "needs-review" }]);
+  });
+
   // An interrupted run leaves the current target's durable status at `running`
   // while the ledger reports blocked. Nothing is running, so reading it as in
   // progress both misdescribes it and hides it from the needs-review count.
