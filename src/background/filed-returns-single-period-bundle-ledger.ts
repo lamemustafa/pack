@@ -676,11 +676,9 @@ function parseArtifact(
   }
   const diagnostic = optionalArtifactDiagnostic(artifact, scope, expectedArtifactType);
   if (artifact.downloadDiagnostic !== undefined && !diagnostic) return null;
-  const missingReason = normaliseArtifactMissingReason(
-    artifact.missingReason,
-    scope.returnType,
-    expectedArtifactType,
-  );
+  const missingReason = isMissingReason(artifact.missingReason)
+    ? normaliseArtifactMissingReason(artifact.missingReason, scope.returnType, expectedArtifactType)
+    : null;
 
   if (artifact.status === "pending") {
     if (
@@ -922,11 +920,11 @@ function missingArtifactReason(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: FiledReturnsConcreteArtifactType,
 ): string | null {
-  return (
-    flowStep.safeSignals
-      .map((signal) => normaliseArtifactMissingReason(signal, returnType, artifactType))
-      .find((reason): reason is string => reason !== null) ?? null
-  );
+  const reasons = flowStep.safeSignals
+    .map(canonicalArtifactMissingReason)
+    .filter((reason): reason is string => reason !== null);
+  if (new Set(reasons).size !== 1) return null;
+  return normaliseArtifactMissingReason(reasons[0]!, returnType, artifactType);
 }
 
 function normaliseArtifactMissingReason(
@@ -934,10 +932,7 @@ function normaliseArtifactMissingReason(
   returnType: FiledReturnsDownloadScope["returnType"],
   artifactType: FiledReturnsConcreteArtifactType,
 ): string | null {
-  if (typeof value !== "string") return null;
-  const reason = MISSING_ARTIFACT_REASONS.has(value)
-    ? value
-    : (DECLINED_ARTIFACT_REASONS.get(value) ?? null);
+  const reason = canonicalArtifactMissingReason(value);
   if (!reason) return null;
   if (reason === "artifact-filed-gstr1-excel-no-details-available") {
     return returnType === "GSTR-1" && artifactType === "EXCEL" ? reason : null;
@@ -945,6 +940,17 @@ function normaliseArtifactMissingReason(
   return reason === "artifact-filed-gstr2b-not-generated" && returnType === "GSTR-2B"
     ? reason
     : null;
+}
+
+function canonicalArtifactMissingReason(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return MISSING_ARTIFACT_REASONS.has(value)
+    ? value
+    : (DECLINED_ARTIFACT_REASONS.get(value) ?? null);
+}
+
+function isMissingReason(value: unknown): value is string {
+  return typeof value === "string" && MISSING_ARTIFACT_REASONS.has(value);
 }
 
 function bundleSafeMessage(ledger: SinglePeriodBundleLedger): string {
