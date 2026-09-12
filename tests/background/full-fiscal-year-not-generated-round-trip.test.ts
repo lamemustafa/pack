@@ -53,7 +53,12 @@ function notGeneratedStep() {
     connectorId: "gst" as const,
     scopeId: "gst-gstr2b-private-v0",
     state: "blocked" as const,
-    safeSignals: ["gstr2b-summary-route", "filed-gstr2b-not-generated"],
+    safeSignals: [
+      "gstr2b-summary-route",
+      "filed-gstr2b-not-generated",
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+    ],
     safeMessage: declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
   };
 }

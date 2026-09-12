@@ -668,6 +668,30 @@ describe("artifact acquisition checkpoint", () => {
     );
   });
 
+  it("does not let an old exact clear delete a newer same-target intent", async () => {
+    const key = artifactAcquisitionCheckpointKey(MAY_PDF);
+    await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(20) });
+    let releaseRead: (() => void) | undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      mocks.browser.storage.session.get.mockImplementationOnce(async (keys) => {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseRead = release;
+        });
+        return { [String(keys)]: mocks.session[String(keys)] };
+      });
+    });
+
+    const oldClear = clearArtifactAcquisitionCheckpoint(MAY_PDF, actionId(20));
+    await readStarted;
+    const newIntent = persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(21) });
+    releaseRead?.();
+
+    await expect(oldClear).resolves.toEqual({ ok: true });
+    await newIntent;
+    expect(mocks.session[key]).toEqual(expect.objectContaining({ requestId: actionId(21) }));
+  });
+
   it("clears every concrete interrupted checkpoint when a composite target review is cancelled", async () => {
     await persistArtifactAcquisitionDownloadId({
       ...MAY_COMPOSITE,

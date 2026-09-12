@@ -41,7 +41,7 @@ const captureMocks = vi.hoisted(() => ({
     safeMessage: undefined as string | undefined,
     safeSignals: [] as string[],
   })),
-  clearArtifactAcquisitionCheckpoint: vi.fn(async () => undefined),
+  clearArtifactAcquisitionCheckpoint: vi.fn(async () => ({ ok: true as const })),
   persistArtifactAcquisitionDownloadId: vi.fn(async () => undefined),
   persistArtifactAcquisitionIntent: vi.fn(async () => undefined),
   persistArtifactAcquisitionUnconfirmedDownload: vi.fn(async () => undefined),
@@ -1244,9 +1244,9 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
           "filed-returns-target-review-clear-failed:storage-remove-failed",
         ]),
         state: "download-unconfirmed",
-        userAction: { canResume: true, type: "RETRY_PORTAL_GENERATION" },
+        userAction: { canResume: false, type: "RETRY_PORTAL_GENERATION" },
       },
-      flowSummary: { status: "blocked" },
+      flowSummary: { flowStep: { userAction: { canResume: false } }, status: "blocked" },
     });
     expect(
       summaryStorage.values[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary],
@@ -1256,6 +1256,49 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
     expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
       scope: { ...scope, artifactType: "EXCEL" },
     });
+  });
+
+  it("retains the owned review when its exact acquisition checkpoint cannot be cleared", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    captureMocks.clearArtifactAcquisitionCheckpoint.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "storage-remove-failed" as const,
+    } as never);
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-1" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection: messagingDeps(noDetailsStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "EXCEL" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-checkpoint-clear-failed:storage-remove-failed",
+        ]),
+        userAction: { canResume: false },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "EXCEL" },
+    });
+    expect(reviewStorage.remove).not.toHaveBeenCalled();
   });
 
   it("keeps a target-review read throw blocked and resumable through outer summary persistence", async () => {
@@ -1291,7 +1334,7 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
           "filed-gstr1-excel-no-details-available",
           "filed-returns-target-review-clear-failed:storage-read-failed",
         ]),
-        userAction: { canResume: true },
+        userAction: { canResume: false },
       },
       flowSummary: { status: "blocked" },
     });
@@ -1333,7 +1376,7 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
           "filed-gstr2b-not-generated",
           "filed-returns-target-review-clear-failed:storage-remove-failed",
         ]),
-        userAction: { canResume: true },
+        userAction: { canResume: false },
       },
       flowSummary: { status: "blocked" },
     });
@@ -1375,7 +1418,7 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
           "filed-gstr2b-not-generated",
           "filed-returns-target-review-clear-failed:storage-read-failed",
         ]),
-        userAction: { canResume: true },
+        userAction: { canResume: false },
       },
       flowSummary: { status: "blocked" },
     });
