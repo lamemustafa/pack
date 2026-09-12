@@ -258,7 +258,7 @@ export async function clearArtifactAcquisitionCheckpointOrThrow(
   requestId: string,
 ): Promise<void> {
   const result = await clearArtifactAcquisitionCheckpoint(target, requestId);
-  if (!result.ok) {
+  if (!result.ok && result.reason !== "checkpoint-invalid") {
     throw new Error(`artifact acquisition checkpoint clear failed: ${result.reason}`);
   }
 }
