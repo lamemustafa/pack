@@ -633,6 +633,93 @@ describe("GSTR-2B all-format selection", () => {
     });
   });
 
+  it("retains the completed absence ledger when its exact clear returns false", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockResolvedValueOnce(
+      blocked("PDF", "filed-gstr2b-not-generated"),
+    );
+    bundleMocks.clearSinglePeriodBundleLedger.mockResolvedValueOnce(false);
+
+    const response = await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      tabId: 17,
+    });
+
+    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.sessionSet).toHaveBeenCalledWith({
+      completion: expect.objectContaining({ status: "complete" }),
+    });
+    expect(bundleMocks.clearSinglePeriodBundleLedger).toHaveBeenCalledOnce();
+    expect(browserMocks.sessionSet.mock.invocationCallOrder[0]).toBeLessThan(
+      bundleMocks.clearSinglePeriodBundleLedger.mock.invocationCallOrder[0]!,
+    );
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "single-period-bundle-clear-failed",
+          "single-period-opfs-retained",
+        ]),
+        state: "blocked",
+      },
+      flowSummary: { status: "blocked" },
+    });
+  });
+
+  it("retains the completed absence ledger when its exact clear throws", async () => {
+    mocks.triggerAndObserveFiledReturnDownload.mockResolvedValueOnce(
+      blocked("PDF", "filed-gstr2b-not-generated"),
+    );
+    bundleMocks.clearSinglePeriodBundleLedger.mockRejectedValueOnce(
+      new Error("Synthetic ledger clear failure."),
+    );
+
+    const response = await triggerSelectedArtifacts({
+      activePeriod: "June",
+      deps: {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      scope: {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      tabId: 17,
+    });
+
+    expect(bundleMocks.exportSinglePeriodFiledReturnsZip).not.toHaveBeenCalled();
+    expect(browserMocks.sessionSet).toHaveBeenCalledWith({
+      completion: expect.objectContaining({ status: "complete" }),
+    });
+    expect(bundleMocks.clearSinglePeriodBundleLedger).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "single-period-bundle-clear-failed",
+          "single-period-opfs-retained",
+        ]),
+        state: "blocked",
+      },
+      flowSummary: { status: "blocked" },
+    });
+  });
+
   it("does not reuse direct-download progress while staging a fiscal-year artifact ledger", async () => {
     mocks.readPersistedArtifactProgress.mockResolvedValue({
       completedArtifactTypes: ["PDF"],
