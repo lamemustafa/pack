@@ -45,6 +45,10 @@ const GSTR1_SCOPE = {
   period: "April",
   returnType: "GSTR-1",
 } as const satisfies FiledReturnsDownloadScope;
+const GSTR2B_SCOPE = {
+  ...GSTR1_SCOPE,
+  returnType: "GSTR-2B",
+} as const satisfies FiledReturnsDownloadScope;
 const CREATED_AT = new Date("2026-07-24T00:00:00.000Z");
 const PDF_RUNNING_AT = new Date("2026-07-24T00:00:01.000Z");
 const PDF_STAGED_AT = new Date("2026-07-24T00:00:02.000Z");
@@ -457,6 +461,53 @@ describe("single-period bundle ledger", () => {
     expect(updated).toBeNull();
   });
 
+  it("refuses a prefixed GSTR-2B reason on a GSTR-1 artifact", () => {
+    const initial = requiredLedger();
+    const running = markSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT)!;
+
+    expect(
+      markSinglePeriodBundleArtifactUnavailable(
+        running,
+        "PDF",
+        {
+          connectorId: "gst",
+          safeMessage: "Synthetic incompatible decline.",
+          safeSignals: ["artifact-filed-gstr2b-not-generated"],
+          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+          state: "blocked",
+        },
+        PDF_STAGED_AT,
+      ),
+    ).toBeNull();
+  });
+
+  it("fails closed when a GSTR-1 Excel artifact carries conflicting declined reasons", () => {
+    const initial = requiredLedger();
+    const pdfRunning = markSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT)!;
+    const pdfStaged = markSinglePeriodBundleArtifactStaged(
+      pdfRunning,
+      "PDF",
+      stagedStep(GSTR1_SCOPE, "PDF"),
+      PDF_STAGED_AT,
+    )!;
+    const running = markSinglePeriodBundleArtifactRunning(pdfStaged, "EXCEL", EXCEL_RUNNING_AT)!;
+
+    expect(
+      markSinglePeriodBundleArtifactUnavailable(
+        running,
+        "EXCEL",
+        {
+          connectorId: "gst",
+          safeMessage: "Synthetic conflicting decline.",
+          safeSignals: ["filed-gstr1-excel-no-details-available", "filed-gstr2b-not-generated"],
+          scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+          state: "blocked",
+        },
+        EXCEL_STAGED_AT,
+      ),
+    ).toBeNull();
+  });
+
   it("refuses to record the GSTR-1 Excel decline against a PDF artifact", () => {
     const initial = requiredLedger();
     const running = markSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT)!;
@@ -502,6 +553,54 @@ describe("single-period bundle ledger", () => {
       state: "malformed",
     });
   });
+
+  it.each([
+    ["GSTR-1", GSTR1_SCOPE, "PDF", "artifact-filed-gstr2b-not-generated"],
+    ["GSTR-2B", GSTR2B_SCOPE, "PDF", "artifact-filed-gstr1-excel-no-details-available"],
+  ] as const)(
+    "keeps a stored cross-return refusal reason malformed for %s",
+    async (_returnType, scope, artifactType, missingReason) => {
+      const ledger = unavailableLedger(scope, artifactType, missingReason);
+      localValues[STORAGE_KEY] = ledger;
+
+      await expect(readSinglePeriodBundleLedgerStorageState()).resolves.toMatchObject({
+        recoverableLedgerId: ledger.ledgerId,
+        state: "malformed",
+      });
+    },
+  );
+
+  it("does not normalize a raw persisted decline signal into durable state", async () => {
+    const ledger = unavailableLedger(
+      GSTR1_SCOPE,
+      "EXCEL",
+      "filed-gstr1-excel-no-details-available",
+    );
+    localValues[STORAGE_KEY] = ledger;
+
+    await expect(readSinglePeriodBundleLedgerStorageState()).resolves.toMatchObject({
+      recoverableLedgerId: ledger.ledgerId,
+      state: "malformed",
+    });
+  });
+
+  it.each([
+    [GSTR1_SCOPE, "EXCEL", "artifact-filed-gstr1-excel-no-details-available"],
+    [GSTR2B_SCOPE, "PDF", "artifact-filed-gstr2b-not-generated"],
+  ] as const)(
+    "restores a compatible canonical missing reason",
+    async (scope, artifactType, missingReason) => {
+      const ledger = unavailableLedger(scope, artifactType, missingReason);
+      localValues[STORAGE_KEY] = ledger;
+
+      const restored = await readSinglePeriodBundleLedgerStorageState();
+      expect(restored).toMatchObject({ state: "valid" });
+      if (restored.state !== "valid") throw new Error("Expected compatible ledger.");
+      expect(restored.ledger.artifacts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ missingReason })]),
+      );
+    },
+  );
 
   it("rejects non-enumerated artifact signals before they can enter durable state", () => {
     const initial = requiredLedger();
@@ -687,6 +786,48 @@ describe("single-period bundle ledger", () => {
 
 function requiredLedger() {
   return createSinglePeriodBundleLedger(GSTR1_SCOPE, "single-period:12345678-durable", CREATED_AT)!;
+}
+
+function unavailableLedger(
+  scope: FiledReturnsDownloadScope,
+  artifactType: "PDF" | "EXCEL" | "JSON",
+  missingReason: string,
+) {
+  const initial = createSinglePeriodBundleLedger(
+    scope,
+    "single-period:12345678-durable",
+    CREATED_AT,
+  )!;
+  return {
+    ...initial,
+    artifacts: initial.artifacts.map((artifact) => {
+      if (artifact.artifactType === artifactType) {
+        return {
+          ...artifact,
+          completedAt: PDF_STAGED_AT.toISOString(),
+          missingReason,
+          safeSignals: ["single-period-bundle-artifact-unavailable"],
+          startedAt: PDF_RUNNING_AT.toISOString(),
+          status: "unavailable" as const,
+          updatedAt: PDF_STAGED_AT.toISOString(),
+        };
+      }
+      if (artifactType === "EXCEL" && artifact.artifactType === "PDF") {
+        return {
+          ...artifact,
+          completedAt: PDF_STAGED_AT.toISOString(),
+          downloadDiagnostic: diagnostic(scope, "PDF", "downloaded"),
+          safeSignals: ["single-period-bundle-artifact-staged", "single-period-opfs-staged:PDF"],
+          startedAt: PDF_RUNNING_AT.toISOString(),
+          status: "staged" as const,
+          updatedAt: PDF_STAGED_AT.toISOString(),
+        };
+      }
+      return artifact;
+    }),
+    revision: 2,
+    updatedAt: PDF_STAGED_AT.toISOString(),
+  };
 }
 
 async function persistBothArtifacts() {
