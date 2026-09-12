@@ -1,4 +1,4 @@
-import { GSTR2B_NOT_GENERATED_SAFE_MESSAGE } from "./filed-returns-post-click-blocked-state";
+import { declinedArtifactSafeMessage } from "./filed-returns-declined-artifact";
 import {
   FILED_RETURNS_FILTER_DEADLINE_EXPIRED_MESSAGE,
   filedReturnsFilterActionRequiredMessage,
@@ -652,7 +652,7 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "not-filed": "The GST Portal reported no filed return for the selected period.",
     // The portal declined to produce the artifact, in its own words. Retrying cannot change that,
     // so the copy must not send the user to Downloads looking for a file that was never created.
-    "not-generated": GSTR2B_NOT_GENERATED_SAFE_MESSAGE,
+    "not-generated": declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
     partial: `Pack retained verified artifact progress for ${period}; the selection is not complete.`,
     "target-cancelled": `Pack cancelled the unresolved filed-return target for ${period}.`,
     "target-blocked": `Pack paused the saved full-year run at ${period}. Resolve the GST Portal page before retrying this period.`,

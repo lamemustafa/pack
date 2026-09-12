@@ -1,9 +1,12 @@
 import type { PortalDownloadTriggerResult } from "../../core/contracts";
 import type { FiledReturnsDownloadTarget } from "./filed-returns-contracts";
+import {
+  bindGstr1DetailRefusal,
+  bindGstr2bSummaryRefusal,
+  declinedArtifactStep,
+} from "./filed-returns-declined-artifact";
 import { normaliseText } from "./filed-returns-dom";
-import { filedReturnScopeId } from "./filed-returns-return-descriptors";
-import { verifyFiledReturnsDownloadTarget } from "./filed-returns-download-target";
-import { readDocumentText, verifyVisibleGstr2bPeriod } from "./gstr2b-summary";
+import { readDocumentText } from "./gstr2b-summary";
 
 // The portal declining to produce an artifact, in its own words.
 //
@@ -16,10 +19,6 @@ import { readDocumentText, verifyVisibleGstr2bPeriod } from "./gstr2b-summary";
 // Recognising a declined artifact records its absence with the portal's own reason. It never
 // records a download: every result here is `blocked`, and completion still requires correlated
 // download evidence.
-
-function withSignal(safeSignals: string[], signal: string): string[] {
-  return safeSignals.includes(signal) ? [...safeSignals] : [...safeSignals, signal];
-}
 
 export function detectPostClickBlockedState(
   documentRef: Document,
@@ -55,27 +54,14 @@ function detectGstr1ExcelNoDetails(
   // change per period, and a dialog left standing by an earlier target would otherwise mark this
   // artifact unavailable -- letting a composite or full-year run carry on having silently omitted
   // an artifact the portal never declined for it.
-  //
-  // This is the same guard that binds a download click, asked the same question: the visible page
-  // must be this return type, this period, this financial year. Recording a refusal resolves the
-  // target outright and no artifact follows to corroborate it, so it is held to the same bar. It
-  // fails closed -- an unreadable detail header is "could not determine", never "matches".
-  if (verifyFiledReturnsDownloadTarget(documentRef, target, [])) return null;
+  const binding = bindGstr1DetailRefusal(documentRef, target);
+  if (!binding.bound) return null;
 
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(target.returnType),
-    state: "blocked",
-    safeSignals: withSignal(safeSignals, "filed-gstr1-excel-no-details-available"),
-    safeMessage:
-      "The GST Portal reported that no e-invoice details are available for this filed GSTR-1 period, so Pack did not record an Excel download. Retry after e-invoice details are available, or run PDF-only for this period.",
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message:
-        "Close the GST Portal information dialog, then retry the GSTR-1 Excel download after e-invoice details are available.",
-      canResume: true,
-    },
-  };
+  return declinedArtifactStep(binding.bound, {
+    signal: "filed-gstr1-excel-no-details-available",
+    returnType: target.returnType,
+    safeSignals,
+  });
 }
 
 // Captured live on 2026-09-10. The summary page renders an error panel naming the system's own
@@ -89,16 +75,6 @@ export function isGstr2bNotGeneratedText(pageText: string): boolean {
   return /\bgstr[\s-]?2b\s+could\s+not\s+be\s+generated\b/i.test(pageText);
 }
 
-/**
- * One wording, used by the step that observes the refusal and by the record it becomes.
- *
- * These were two strings saying the same thing differently -- the kind of duplicate nothing in
- * this repo can contradict, because no test compares a transient message with the durable one
- * that replaces it.
- */
-export const GSTR2B_NOT_GENERATED_SAFE_MESSAGE =
-  "The GST Portal reported that it did not generate the auto-drafted GSTR-2B statement for this period, so there is nothing for Pack to download. Pack recorded the period as unavailable rather than retrying.";
-
 function detectGstr2bNotGenerated(
   documentRef: Document,
   normalised: string,
@@ -110,24 +86,13 @@ function detectGstr2bNotGenerated(
   // The refusal panel is not bound to the target by the fact that it is on screen. The summary
   // route does not change per period and keeps rendering the panel -- and the header naming the
   // period it belongs to -- until a new search settles, so a stale panel will answer for whichever
-  // target asks. Recording it resolves that target outright, with no artifact to corroborate it
-  // afterwards, which makes the visible header the whole of the evidence.
-  //
-  // A target is a scope with an action id, so the same guard the observation path uses applies
-  // unchanged here. It fails closed: an unreadable header is "could not determine".
-  if (verifyVisibleGstr2bPeriod(documentRef, normalised, target, true)) return null;
+  // target asks.
+  const binding = bindGstr2bSummaryRefusal(documentRef, normalised, target);
+  if (!binding.bound) return null;
 
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(target.returnType),
-    state: "blocked",
-    safeSignals: withSignal(safeSignals, "filed-gstr2b-not-generated"),
-    safeMessage: GSTR2B_NOT_GENERATED_SAFE_MESSAGE,
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message:
-        "Check the GST Portal's stated reason for this period. Retry only once the portal generates a GSTR-2B for it.",
-      canResume: true,
-    },
-  };
+  return declinedArtifactStep(binding.bound, {
+    signal: "filed-gstr2b-not-generated",
+    returnType: target.returnType,
+    safeSignals,
+  });
 }
