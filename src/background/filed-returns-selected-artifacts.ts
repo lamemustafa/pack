@@ -32,6 +32,7 @@ import {
   readFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
 import { persistCanonicalSinglePeriodCompletion } from "./filed-returns-session-summary";
+import { getBoundDeclinedArtifactSignal } from "../connectors/gst/filed-returns-declined-artifact";
 import {
   persistFiledReturnsTargetDownloadId,
   persistFiledReturnsTargetDownloadIntent,
@@ -619,8 +620,18 @@ async function completeUnavailableSinglePeriodBundle(
   deps: FiledReturnsFlowRunnerDeps,
 ): Promise<PackMessageResponse> {
   const scope = ledger.scope;
+  const proofSignals = response.flowStep.safeSignals;
+  if (!getBoundDeclinedArtifactSignal(scope, proofSignals)) {
+    return singlePeriodBundleBlockedResponse(
+      scope,
+      ["single-period-bundle-artifact-result-unavailable", "single-period-opfs-retained"],
+      "Pack could not verify the recorded refusal proof, so it retained the selected-file recovery state for review.",
+      false,
+    );
+  }
   const terminalStep: PortalFlowStepResult = {
     ...response.flowStep,
+    safeSignals: proofSignals,
     state: "blocked",
     safeMessage: "Pack recorded the selected artifacts as unavailable, so it did not create a ZIP.",
   };
@@ -638,9 +649,9 @@ async function completeUnavailableSinglePeriodBundle(
   if (!summary) {
     return singlePeriodBundleBlockedResponse(
       scope,
-      ["single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
-      "Pack retained the selected-file recovery state because it could not save the terminal absence.",
-      true,
+      [...proofSignals, "single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
+      "Pack retained the selected-file recovery state for review because it could not save the terminal absence.",
+      false,
     );
   }
   let bundleCleared = false;
@@ -652,9 +663,9 @@ async function completeUnavailableSinglePeriodBundle(
   if (!bundleCleared) {
     return singlePeriodBundleBlockedResponse(
       scope,
-      ["single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
-      "Pack recorded that no files were available, but could not clear the saved recovery state.",
-      true,
+      [...proofSignals, "single-period-bundle-state-persist-failed", "single-period-opfs-retained"],
+      "Pack recorded that no files were available, but could not clear the saved recovery state. Review the retained state before starting again.",
+      false,
     );
   }
   return { ...response, flowStep: terminalStep, flowSummary: summary };
@@ -881,6 +892,7 @@ function singlePeriodBundleResponse(
       scope,
       status: "blocked",
       totalPeriods: 1,
+      updatedAt: new Date().toISOString(),
     },
   };
 }
