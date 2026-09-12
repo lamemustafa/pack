@@ -72,6 +72,19 @@ describe("a declined artifact cannot be recorded unbound", () => {
     expect(binding.bound).toBeNull();
   });
 
+  it("refuses to bind matching text outside the GSTR-2B summary route", () => {
+    const documentRef = refusalPage("April");
+    documentRef.defaultView?.history.replaceState({}, "", "/returns/auth/filed-returns");
+
+    const binding = bindGstr2bSummaryRefusal(
+      documentRef,
+      normaliseText(documentRef.body.innerText || documentRef.body.textContent || ""),
+      SCOPE,
+    );
+
+    expect(binding.bound).toBeNull();
+  });
+
   it("refuses an Excel-only GSTR-1 decline for a PDF target", () => {
     const binding = bindGstr1DetailRefusal(refusalPage("April"), {
       actionId: "synthetic-action",
@@ -98,6 +111,7 @@ describe("a declined artifact cannot be recorded unbound", () => {
     });
 
     expect(step.state).toBe("blocked");
+    expect(step.safeSignals).toContain("gstr2b-summary-route-verified");
     expect(step.safeSignals).toContain("gstr2b-visible-period-verified");
     expect(step.safeSignals).toContain("filed-gstr2b-not-generated");
     // A refusal is terminal, so its signals are persisted. One token the allowlist has never been

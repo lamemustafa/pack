@@ -11,9 +11,11 @@ import {
   markSinglePeriodBundleArtifactRunning,
   markSinglePeriodBundleArtifactStaged,
   markSinglePeriodBundleArtifactUnavailable,
+  markSinglePeriodBundlePeriodUnavailable,
   persistSinglePeriodBundleArtifactRunning,
   persistSinglePeriodBundleArtifactStaged,
   persistSinglePeriodBundleArtifactUnavailable,
+  persistSinglePeriodBundlePeriodUnavailable,
   persistSinglePeriodBundleCleanupPending,
   persistSinglePeriodBundleZipDownloadId,
   persistSinglePeriodBundleZipIntent,
@@ -370,6 +372,65 @@ describe("single-period bundle ledger", () => {
     });
     expect(singlePeriodBundleFlowStep(ready!)?.safeMessage).toContain(
       "EXCEL (artifact-filed-gstr1-excel-no-details-available)",
+    );
+  });
+
+  it("resolves an evidenced GSTR-2B absence across every pending bundle artifact", () => {
+    const scope = { ...GSTR1_SCOPE, returnType: "GSTR-2B" } as const;
+    const initial = createSinglePeriodBundleLedger(
+      scope,
+      "single-period:12345678-gstr2b",
+      CREATED_AT,
+    )!;
+    const running = markSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT)!;
+
+    const resolved = markSinglePeriodBundlePeriodUnavailable(
+      running,
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr2b-private-v0",
+        state: "blocked",
+        safeSignals: ["filed-gstr2b-not-generated"],
+        safeMessage: "Synthetic declined statement.",
+      },
+      PDF_STAGED_AT,
+    );
+
+    expect(resolved?.phase).toBe("ready-for-zip");
+    expect(resolved?.artifacts.every((artifact) => artifact.status === "unavailable")).toBe(true);
+    expect(singlePeriodBundleEntryPlan(resolved!)).toEqual({
+      artifactTypes: [],
+      unavailableArtifactTypes: ["PDF", "EXCEL", "JSON"],
+    });
+  });
+
+  it("rebuilds the bound GSTR-2B absence after a restart between ledger and summary writes", async () => {
+    const scope = { ...GSTR1_SCOPE, returnType: "GSTR-2B" } as const;
+    const initial = createSinglePeriodBundleLedger(
+      scope,
+      "single-period:12345678-gstr2b",
+      CREATED_AT,
+    )!;
+    localValues[STORAGE_KEY] = initial;
+    const running = await persistSinglePeriodBundleArtifactRunning(initial, "PDF", PDF_RUNNING_AT);
+    const resolved = await persistSinglePeriodBundlePeriodUnavailable(
+      running!,
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr2b-private-v0",
+        state: "blocked",
+        safeSignals: ["filed-gstr2b-not-generated"],
+        safeMessage: "Synthetic declined statement.",
+      },
+      PDF_STAGED_AT,
+    );
+
+    const reloaded = await readSinglePeriodBundleLedgerStorageState();
+
+    expect(reloaded).toMatchObject({ state: "valid", ledger: { revision: resolved?.revision } });
+    if (reloaded.state !== "valid") throw new Error("Expected retained ledger.");
+    expect(singlePeriodBundleFlowStep(reloaded.ledger)?.safeSignals).toContain(
+      "filed-gstr2b-not-generated",
     );
   });
 

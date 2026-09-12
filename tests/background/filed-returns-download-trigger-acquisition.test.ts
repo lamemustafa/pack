@@ -1033,13 +1033,8 @@ function acquiredJson(): PackMessageResponse {
 }
 
 describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
-  // The portal answers this request with an information dialog when the taxpayer reports no
-  // e-invoices. The content script has always recognised it and the ledger has always known how to
-  // record the artifact as unavailable -- but nothing sent the message between them, so the
-  // recognition never ran and the run stalled offering a retry that cannot succeed.
-  //
-  // The message contract was tested; that it is ever sent was not. This pins the send, on the
-  // path that matters: the control was armed and clicked, and the click produced no download.
+  // A definitive acquisition failure may be refined by the typed, target-bound inspection result.
+  // An uncertain acquisition takes the recovery branch tested below and never reaches this path.
   function messagingDeps(postClick: PackMessageResponse) {
     return vi.fn(async (_tabId: number, message: { type: string }) =>
       message.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
@@ -1075,7 +1070,7 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
     } as never);
   }
 
-  it("asks the page why, and adopts the portal's no-details answer", async () => {
+  it("adopts a target-bound no-details answer after a definitive acquisition failure", async () => {
     armDefinitiveNoActionFailure();
     const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
 
@@ -1159,6 +1154,25 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
     expect(summaryStorage.set.mock.calls.length).toBe(persistedBefore);
     expect(captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length).toBe(clearedBefore);
     expect(captureMocks.persistArtifactAcquisitionIntent).toHaveBeenCalled();
+  });
+
+  it("retains the checkpoint when terminal-decline persistence throws", async () => {
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+    const clearedBefore = captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length;
+    summaryStorage.set.mockRejectedValueOnce(new Error("Synthetic storage failure."));
+
+    await expect(
+      triggerAndObserveFiledReturnDownload({
+        activePeriod: "April",
+        artifactType: "EXCEL",
+        deps: { sendMessageToTabWithInjection, storageKeys: { completion: "completion" } },
+        scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+        tabId: 17,
+      }),
+    ).rejects.toThrow("Synthetic storage failure.");
+
+    expect(captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length).toBe(clearedBefore);
   });
 
   it("keeps the original failure when the page cannot be asked at all", async () => {
