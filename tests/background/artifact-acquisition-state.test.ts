@@ -29,6 +29,7 @@ import {
   PACK_ARTIFACT_ACQUISITION_KEY_PREFIX,
   artifactAcquisitionCheckpointKey,
   clearArtifactAcquisitionCheckpoint,
+  clearArtifactAcquisitionCheckpointOrThrow,
   clearArtifactAcquisitionCheckpoints,
   clearArtifactAcquisitionCheckpointsAfterPersistedSummary,
   clearMalformedArtifactAcquisitionCheckpoint,
@@ -667,6 +668,35 @@ describe("artifact acquisition checkpoint", () => {
       expect.objectContaining({ requestId: actionId(11) }),
     );
   });
+
+  it("keeps ordinary cleanup a no-op for a missing or newer request checkpoint", async () => {
+    await expect(
+      clearArtifactAcquisitionCheckpointOrThrow(MAY_PDF, actionId(10)),
+    ).resolves.toBeUndefined();
+    await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(21) });
+    await expect(
+      clearArtifactAcquisitionCheckpointOrThrow(MAY_PDF, actionId(20)),
+    ).resolves.toBeUndefined();
+    expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toEqual(
+      expect.objectContaining({ requestId: actionId(21) }),
+    );
+  });
+
+  it.each(["storage-read-failed", "storage-remove-failed"] as const)(
+    "rejects ordinary cleanup with only the bounded %s reason",
+    async (reason) => {
+      await persistArtifactAcquisitionIntent({ ...MAY_PDF, requestId: actionId(22) });
+      if (reason === "storage-read-failed") {
+        mocks.browser.storage.session.get.mockRejectedValueOnce(new Error("raw storage detail"));
+      } else {
+        mocks.browser.storage.session.remove.mockRejectedValueOnce(new Error("raw storage detail"));
+      }
+      await expect(
+        clearArtifactAcquisitionCheckpointOrThrow(MAY_PDF, actionId(22)),
+      ).rejects.toThrow(`artifact acquisition checkpoint clear failed: ${reason}`);
+      expect(mocks.session[artifactAcquisitionCheckpointKey(MAY_PDF)]).toBeDefined();
+    },
+  );
 
   it("does not let an old exact clear delete a newer same-target intent", async () => {
     const key = artifactAcquisitionCheckpointKey(MAY_PDF);

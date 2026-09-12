@@ -215,7 +215,10 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
       const response = await triggerAndObserveFiledReturnDownload({
         activePeriod: null,
         artifactType,
-        deps: { sendMessageToTabWithInjection, storageKeys: {} },
+        deps: {
+          sendMessageToTabWithInjection: sendMessageToTabWithInjection as never,
+          storageKeys: {},
+        },
         scope: { financialYear: "2026-27", period: "ALL", returnType: "GSTR-3B" },
         tabId: 17,
       });
@@ -822,6 +825,44 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
       );
     },
   );
+
+  it("surfaces a bounded read failure from the page-generated cleanup caller", async () => {
+    vi.clearAllMocks();
+    captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "control-not-found" as const,
+      safeSignals: [],
+    } as never);
+    captureMocks.clearArtifactAcquisitionCheckpointOrThrow.mockRejectedValueOnce(
+      new Error("artifact acquisition checkpoint clear failed: storage-read-failed"),
+    );
+    const sendMessageToTabWithInjection = vi.fn(
+      async (_tabId: number, message: { payload: { requestId: string } }) =>
+        ({
+          ok: true,
+          artifact: {
+            ok: true,
+            state: "ready",
+            requestId: message.payload.requestId,
+            safeSignals: [],
+          },
+        }) as PackMessageResponse,
+    );
+
+    await expect(
+      triggerAndObserveFiledReturnDownload({
+        activePeriod: "April",
+        artifactType: "PDF",
+        deps: {
+          sendMessageToTabWithInjection: sendMessageToTabWithInjection as never,
+          storageKeys: {},
+        },
+        scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-2B" },
+        tabId: 17,
+      }),
+    ).rejects.toThrow("artifact acquisition checkpoint clear failed: storage-read-failed");
+    expect(captureMocks.clearArtifactAcquisitionCheckpointOrThrow).toHaveBeenCalled();
+  });
 
   it("writes GSTR-2B portal data with its data suffix", async () => {
     const response = await triggerAndObserveFiledReturnDownload({
