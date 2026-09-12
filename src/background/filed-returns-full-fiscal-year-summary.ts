@@ -26,6 +26,7 @@ import {
   hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedgerStale,
 } from "./filed-returns-full-fiscal-year-ledger";
+import { statesFullFiscalYearTargetAbsence } from "../connectors/gst/filed-returns-contracts";
 
 export function fullFiscalYearZipPhaseStep(
   ledger: FiledReturnsFullFiscalYearLedger,
@@ -330,7 +331,7 @@ export function fullFiscalYearTargetEvidence(
   // run produced. Everything that depended on a file Pack no longer has goes.
   if (runDiscarded || (clearedWithoutDelivery && hadStagedFiles)) {
     return ledger.targets
-      .filter((target) => target.status === "not-filed")
+      .filter((target) => statesFullFiscalYearTargetAbsence(target.status))
       .map((target) => ({ period: target.period, outcome: "not-filed" as const }));
   }
   // From the step as well as the ledger. An MV3 interruption produces a blocked
@@ -459,7 +460,7 @@ export function completeFullFiscalYearStep(
       ...(unplanned.length > 0 ? ["full-fiscal-year-plan-narrower-than-eligible"] : []),
       ...(ledger.zipPhase === "cleaned-without-export" &&
       ledger.targets.length > 0 &&
-      ledger.targets.every((target) => target.status === "not-filed")
+      ledger.targets.every((target) => statesFullFiscalYearTargetAbsence(target.status))
         ? ["full-fiscal-year-no-zip-artifacts"]
         : []),
     ],

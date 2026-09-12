@@ -18,6 +18,7 @@ import {
   readRetainedPlanLedgers,
 } from "./filed-returns-full-fiscal-year-run-state";
 import { readCurrentFiledReturnsTargetReviewSummary } from "./filed-returns-target-review";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 
 export interface FiledReturnsCurrentStateDeps {
   storageKeys: {
@@ -143,17 +144,10 @@ function isRetainedZipRetrySummary(
 
 function isActionableFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYearLedger): boolean {
   if (ledger.status === "complete") return false;
-  return ledger.targets.some((target) =>
-    [
-      "pending",
-      "running",
-      "download-unconfirmed",
-      "blocked",
-      "failed",
-      "cancelled",
-      "manually-observed",
-    ].includes(target.status),
-  );
+  // The complement of "answered", asked as such. This was a hand-written list of seven members,
+  // and `local-data.ts` kept a second copy of the same idea that had six -- so a cancelled target
+  // made a ledger actionable here while leaving it clearable there.
+  return ledger.targets.some((target) => !isResolvedFullFiscalYearTargetStatus(target.status));
 }
 
 function isNewerSinglePeriodSummary(

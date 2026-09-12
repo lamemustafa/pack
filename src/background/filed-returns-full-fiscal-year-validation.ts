@@ -36,6 +36,7 @@ import {
   hasPositiveFiledReturnsDownloadEvidence,
   isValidFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
+import { filedReturnsTargetStatusBehaviour } from "../connectors/gst/filed-returns-contracts";
 
 export const FULL_FISCAL_YEAR_PLAN_VERSION = "filed-returns-targets-v3";
 
@@ -441,10 +442,13 @@ function isFullFiscalYearTarget(
   ) {
     return false;
   }
-  if (
-    target.status === "not-filed" &&
-    !target.safeSignals?.includes("filed-return-positively-not-filed")
-  ) {
+  // A status is a claim, and the evidence each claim needs is a property of the status rather
+  // than a rule this file remembers. Spelled out here, only `not-filed` was ever checked, so a
+  // stored record could assert `not-generated` with nothing behind it.
+  const requiredEvidenceSignal = filedReturnsTargetStatusBehaviour(
+    target.status,
+  ).requiredEvidenceSignal;
+  if (requiredEvidenceSignal && !target.safeSignals?.includes(requiredEvidenceSignal)) {
     return false;
   }
   return true;
