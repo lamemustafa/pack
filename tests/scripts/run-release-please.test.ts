@@ -350,6 +350,57 @@ describe("Release Please workflow wrapper", () => {
     }
   });
 
+  it("propagates regeneration failure when no release was created", async () => {
+    const configContents = await readFile(
+      new URL("../../release-please-config.json", import.meta.url),
+      "utf8",
+    );
+    const manifestContents = await readFile(
+      new URL("../../.release-please-manifest.json", import.meta.url),
+      "utf8",
+    );
+    const createReleases = vi.fn().mockResolvedValue([]);
+    const createPullRequests = vi.fn().mockRejectedValue(new Error("regeneration failed"));
+    const getFileContentsOnBranch = vi
+      .spyOn(releasePlease.GitHub.prototype, "getFileContentsOnBranch")
+      .mockImplementation(async (...args: unknown[]) => {
+        const [path] = args;
+        if (path === "release-please-config.json") return { parsedContent: configContents };
+        if (path === ".release-please-manifest.json") return { parsedContent: manifestContents };
+        throw new Error(`Unexpected release-please file request: ${String(path)}`);
+      });
+    const releaseManifest = vi
+      .spyOn(releasePlease.Manifest.prototype, "createReleases")
+      .mockImplementation(createReleases);
+    const pullRequestManifest = vi
+      .spyOn(releasePlease.Manifest.prototype, "createPullRequests")
+      .mockImplementation(createPullRequests);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => [] }) as unknown as Response),
+    );
+
+    try {
+      await expect(
+        runReleasePlease({
+          GITHUB_REPOSITORY: "lamemustafa/pack",
+          RELEASE_PLEASE_TOKEN: "test-token",
+          RELEASE_PLEASE_TARGET_BRANCH: "master",
+        }),
+      ).rejects.toThrow(/regeneration failed/iu);
+
+      expect(createReleases).toHaveBeenCalledOnce();
+      expect(createPullRequests).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      log.mockRestore();
+      pullRequestManifest.mockRestore();
+      releaseManifest.mockRestore();
+      getFileContentsOnBranch.mockRestore();
+    }
+  });
+
   it("keeps release outputs when generated-branch CAS rejects the regeneration", async () => {
     const branch = "release-please--branches--master--components--pack";
     const before = "b".repeat(40);

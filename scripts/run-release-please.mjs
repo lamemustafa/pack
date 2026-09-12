@@ -75,7 +75,13 @@ export async function runReleasePlease(env = process.env) {
   });
   let pullRequests = [];
   const confirmedRewrites = new Map();
-  if (recordsNameTheCurrentHeads) {
+  if (!recordsNameTheCurrentHeads) {
+    const error = new Error("Could not confirm release branch rewrite records for regeneration.");
+    if (releases.length === 0) throw error;
+    console.error(
+      `${error.message} Existing release outputs remain available for asset publication.`,
+    );
+  } else {
     try {
       pullRequests = await withReleaseBranchRewriteCas(
         github,
@@ -87,6 +93,7 @@ export async function runReleasePlease(env = process.env) {
       // Releases may already exist, and their verified assets are uploaded by later workflow
       // steps using the outputs below. A rejected regeneration leaves the branch unchanged and
       // must not strand that release; its marker remains available for the next run to retry.
+      if (releases.length === 0) throw error;
       console.error(
         `Could not regenerate release pull requests: ${error.message}. Existing release outputs remain available for asset publication.`,
       );
