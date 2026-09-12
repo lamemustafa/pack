@@ -223,6 +223,7 @@ import {
   preflightSelectedArtifactsRecovery,
   triggerSelectedArtifacts,
 } from "../../src/background/filed-returns-selected-artifacts";
+import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 
 const gstr2bAllFormatsArtifacts = concreteFiledReturnsArtifactTypesForSelection(
   "GSTR-2B",
@@ -668,12 +669,33 @@ describe("GSTR-2B all-format selection", () => {
     expect(response).toMatchObject({
       flowStep: {
         safeSignals: expect.arrayContaining([
-          "single-period-bundle-clear-failed",
+          "single-period-bundle-state-persist-failed",
           "single-period-opfs-retained",
         ]),
         state: "blocked",
       },
       flowSummary: { status: "blocked" },
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      {
+        artifactType: "PDF_AND_EXCEL",
+        financialYear: "2026-27",
+        period: "June",
+        returnType: "GSTR-2B",
+      },
+      response as never,
+      {
+        storageKeys: {
+          completion: "completion",
+          fullFiscalYearLedger: "ledger",
+          observation: "observation",
+        },
+      } as never,
+      true,
+    );
+    expect(persisted).toMatchObject({ flowSummary: { status: "blocked" } });
+    expect(browserMocks.sessionSet).toHaveBeenLastCalledWith({
+      completion: expect.objectContaining({ status: "blocked" }),
     });
   });
 
@@ -711,7 +733,7 @@ describe("GSTR-2B all-format selection", () => {
     expect(response).toMatchObject({
       flowStep: {
         safeSignals: expect.arrayContaining([
-          "single-period-bundle-clear-failed",
+          "single-period-bundle-state-persist-failed",
           "single-period-opfs-retained",
         ]),
         state: "blocked",
