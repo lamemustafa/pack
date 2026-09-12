@@ -22,7 +22,7 @@ interface ReleaseBranchScope {
 interface OpenedRewriteRecords extends ReleaseBranchScope {
   headsBeforeRegeneration: Map<
     string,
-    { head: string; recordId: number; pullRequestNumber: number } | string
+    { head: string; recordId: number; pullRequestNumber: number }
   >;
 }
 

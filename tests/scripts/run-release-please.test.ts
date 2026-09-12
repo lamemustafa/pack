@@ -84,6 +84,25 @@ describe("Release Please workflow wrapper", () => {
     expect(github.octokit.git.updateRef).toBe(originalUpdate);
   });
 
+  it("refuses an unrecorded generated-branch force update", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const originalUpdate = vi.fn();
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql: vi.fn(),
+      octokit: { git: { updateRef: originalUpdate } },
+    };
+
+    await expect(
+      withReleaseBranchRewriteCas(github, new Map(), async () =>
+        github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: "c".repeat(40), force: true }),
+      ),
+    ).rejects.toThrow(/unrecorded generated branch/iu);
+
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(github.graphql).not.toHaveBeenCalled();
+  });
+
   it("emits root release outputs compatible with release-please-action", () => {
     const outputs = buildReleaseOutputs([
       {
@@ -214,11 +233,109 @@ describe("Release Please workflow wrapper", () => {
       getFileContentsOnBranch.mockRestore();
     }
   });
+
+  it("keeps release outputs when generated-branch CAS rejects the regeneration", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const before = "b".repeat(40);
+    const marker = `<!-- review-gate-rewrite branch=${branch} before=${before} -->`;
+    const originalUpdate = vi.fn();
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack", defaultBranch: "master" },
+      graphql: vi
+        .fn()
+        .mockResolvedValueOnce({ repository: { id: "repo-id" } })
+        .mockRejectedValueOnce(new Error("Reference update failed: beforeOid does not match")),
+      octokit: { git: { updateRef: originalUpdate } },
+    };
+    const createReleases = vi
+      .fn()
+      .mockResolvedValue([{ path: ".", tagName: "v0.1.1", version: "0.1.1" }]);
+    const createPullRequests = vi.fn(async () =>
+      github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: "c".repeat(40), force: true }),
+    );
+    const create = vi.spyOn(releasePlease.GitHub, "create").mockResolvedValue(github);
+    const fromManifest = vi
+      .spyOn(releasePlease.Manifest, "fromManifest")
+      .mockResolvedValueOnce({ createReleases })
+      .mockResolvedValueOnce({ createPullRequests });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let markerExists = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        const path = new URL(String(url)).pathname;
+        if (path.includes("matching-refs")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [{ ref: `refs/heads/${branch}`, object: { sha: before } }],
+          } as unknown as Response;
+        }
+        if (path.includes("/pulls")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [{ number: 337 }],
+          } as unknown as Response;
+        }
+        if (path.includes("/comments") && String(init.method ?? "GET") === "POST") {
+          markerExists = true;
+          return { ok: true, status: 201, json: async () => ({ id: 99 }) } as unknown as Response;
+        }
+        if (path.includes("/comments") && String(init.method ?? "GET") === "PATCH") {
+          return { ok: true, status: 200, json: async () => ({ id: 99 }) } as unknown as Response;
+        }
+        if (path.includes("/comments")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () =>
+              markerExists
+                ? [
+                    {
+                      id: 99,
+                      created_at: "2026-09-12T00:00:00Z",
+                      user: { login: RECORDER },
+                      body: marker,
+                    },
+                  ]
+                : [],
+          } as unknown as Response;
+        }
+        throw new Error(`Unexpected GitHub request: ${path}`);
+      }),
+    );
+
+    try {
+      const outputs = await runReleasePlease({
+        GITHUB_REPOSITORY: "lamemustafa/pack",
+        GITHUB_TOKEN: "test-token",
+        GITHUB_API_URL: "https://api.github.test",
+      });
+
+      expect(createReleases).toHaveBeenCalledOnce();
+      expect(createPullRequests).toHaveBeenCalledOnce();
+      expect(outputs).toMatchObject({ release_created: "true", prs_created: "false" });
+      expect(originalUpdate).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining("Existing release outputs remain"),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      error.mockRestore();
+      fromManifest.mockRestore();
+      create.mockRestore();
+    }
+  });
 });
 
 describe("release branch rewrite records", () => {
   const branch = "release-please--branches--master--components--pack";
   const env = { GITHUB_TOKEN: "t", GITHUB_API_URL: "https://api.github.test" };
+
+  function openedRecords(head: string, recordId = 99) {
+    return new Map([[branch, { head, recordId, pullRequestNumber: 337 }]]);
+  }
 
   function stubGitHub(handlers: {
     heads?: string | null;
@@ -347,6 +464,26 @@ describe("release branch rewrite records", () => {
     expect(patched?.body).not.toContain(landedSince);
   });
 
+  it("refuses interrupted recovery when more than one force-push could match its marker", async () => {
+    const before = "c".repeat(40);
+    stubGitHub({
+      heads: before,
+      comments: [
+        {
+          id: 99,
+          user: { login: RECORDER },
+          body: `<!-- review-gate-rewrite branch=${branch} before=${before} -->`,
+        },
+      ],
+      forcePushedHeads: [{ commit_id: "b".repeat(40) }, { commit_id: "d".repeat(40) }],
+    });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    await expect(
+      openBranchRewriteRecords({ env, owner: "lamemustafa", repo: "pack", targetBranch: "master" }),
+    ).rejects.toThrow(/multiple force-push events/iu);
+  });
+
   it("ignores a marker written by anyone but the workflow", async () => {
     // The author is the whole of a marker's authority: anyone who can comment can write the text.
     // Treating a stranger's comment as an open record would rewrite that comment in place, or --
@@ -409,7 +546,7 @@ describe("release branch rewrite records", () => {
       owner: "lamemustafa",
       repo: "pack",
       targetBranch: "master",
-      headsBeforeRegeneration: new Map([[branch, snapshot]]),
+      headsBeforeRegeneration: openedRecords(snapshot),
     });
 
     expect(proceeded).toBe(true);
@@ -430,7 +567,7 @@ describe("release branch rewrite records", () => {
       owner: "lamemustafa",
       repo: "pack",
       targetBranch: "master",
-      headsBeforeRegeneration: new Map([[branch, "b".repeat(40)]]),
+      headsBeforeRegeneration: openedRecords("b".repeat(40)),
     });
 
     expect(proceeded).toBe(false);
@@ -510,7 +647,7 @@ describe("release branch rewrite records", () => {
       owner: "lamemustafa",
       repo: "pack",
       targetBranch: "master",
-      headsBeforeRegeneration: new Map([[branch, before]]),
+      headsBeforeRegeneration: openedRecords(before, 501),
     });
 
     const patched = calls.find((call) => call.method === "PATCH");
@@ -539,7 +676,7 @@ describe("release branch rewrite records", () => {
       owner: "lamemustafa",
       repo: "pack",
       targetBranch: "master",
-      headsBeforeRegeneration: new Map([[branch, before]]),
+      headsBeforeRegeneration: openedRecords(before),
     });
 
     const patched = calls.find((call) => call.method === "PATCH");
@@ -572,7 +709,7 @@ describe("release branch rewrite records", () => {
       owner: "lamemustafa",
       repo: "pack",
       targetBranch: "master",
-      headsBeforeRegeneration: new Map([[branch, before]]),
+      headsBeforeRegeneration: openedRecords(before),
     });
 
     const patched = calls.find((call) => call.method === "PATCH");
@@ -603,7 +740,7 @@ describe("release branch rewrite records", () => {
       owner: "lamemustafa",
       repo: "pack",
       targetBranch: "master",
-      headsBeforeRegeneration: new Map([[branch, before]]),
+      headsBeforeRegeneration: openedRecords(before),
     });
 
     expect(calls.find((call) => call.method === "PATCH")).toBeUndefined();
@@ -643,7 +780,7 @@ describe("release branch rewrite records", () => {
         owner: "lamemustafa",
         repo: "pack",
         targetBranch: "master",
-        headsBeforeRegeneration: new Map([[branch, "c".repeat(40)]]),
+        headsBeforeRegeneration: openedRecords("c".repeat(40)),
       }),
     ).resolves.toBeUndefined();
     expect(errors).toHaveBeenCalledWith(expect.stringContaining("stays open"));

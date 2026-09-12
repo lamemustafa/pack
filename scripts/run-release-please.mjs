@@ -73,13 +73,21 @@ export async function runReleasePlease(env = process.env) {
     targetBranch,
     headsBeforeRegeneration,
   });
-  const pullRequests = recordsNameTheCurrentHeads
-    ? headsBeforeRegeneration.size > 0
-      ? await withReleaseBranchRewriteCas(github, headsBeforeRegeneration, async () =>
-          (await pullRequestManifest.createPullRequests()).filter(Boolean),
-        )
-      : (await pullRequestManifest.createPullRequests()).filter(Boolean)
-    : [];
+  let pullRequests = [];
+  if (recordsNameTheCurrentHeads) {
+    try {
+      pullRequests = await withReleaseBranchRewriteCas(github, headsBeforeRegeneration, async () =>
+        (await pullRequestManifest.createPullRequests()).filter(Boolean),
+      );
+    } catch (error) {
+      // Releases may already exist, and their verified assets are uploaded by later workflow
+      // steps using the outputs below. A rejected regeneration leaves the branch unchanged and
+      // must not strand that release; its marker remains available for the next run to retry.
+      console.error(
+        `Could not regenerate release pull requests: ${error.message}. Existing release outputs remain available for asset publication.`,
+      );
+    }
+  }
   await closeBranchRewriteRecords({ env, owner, repo, targetBranch, headsBeforeRegeneration });
   outputs.prs_created = String(pullRequests.length > 0);
   if (pullRequests.length > 0) {
@@ -123,7 +131,7 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
       (record) => record.marker.branch === branch && record.marker.after === null,
     );
     if (open) {
-      const created = await readLatestForcePushedHead({
+      const created = await readCorrelatedForcePushedHead({
         env,
         owner,
         repo,
@@ -191,7 +199,13 @@ export async function closeBranchRewriteRecords({
         // `commit_id` -- so an ordinary commit landing on the branch before this read would have
         // the record name a head no event mentions, and the rewrite would stay unidentified
         // exactly as if nothing had recorded it.
-        const created = await readLatestForcePushedHead({ env, owner, repo, pullRequestNumber });
+        const created = await readCorrelatedForcePushedHead({
+          env,
+          owner,
+          repo,
+          pullRequestNumber,
+          after: record.createdAt,
+        });
         if (!created) {
           // Leaving it open is the established answer to not knowing: the gate ignores an open
           // record, and the next run completes it. Closing it with an uncorroborated head would
@@ -267,21 +281,29 @@ export async function withReleaseBranchRewriteCas(github, expected, operation) {
   if (typeof updates !== "function" || typeof github.graphql !== "function") {
     throw new Error("Release Please did not expose the GitHub clients needed for rewrite CAS.");
   }
-  const repository = await github.graphql(
-    "query ReleaseBranchRewriteRepository($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }",
-    { owner: github.repository.owner, name: github.repository.repo },
-  );
-  const repositoryId = repository?.repository?.id;
-  if (typeof repositoryId !== "string" || !repositoryId) {
-    throw new Error("GitHub did not return a repository id for release branch rewrite CAS.");
-  }
+  let repositoryId = null;
   github.octokit.git.updateRef = async (request) => {
     const branch = String(request?.ref ?? "").replace(/^heads\//u, "");
+    if (!branch.startsWith("release-please--branches--")) {
+      return updates.call(github.octokit.git, request);
+    }
     const record = expected.get(branch);
-    if (!record || typeof record === "string") return updates.call(github.octokit.git, request);
+    if (!record) {
+      throw new Error(`Release Please tried to rewrite unrecorded generated branch ${branch}.`);
+    }
     const afterOid = String(request?.sha ?? "").toLowerCase();
     if (!/^[0-9a-f]{40}$/u.test(afterOid)) {
       throw new Error(`Release Please gave rewrite CAS an invalid destination for ${branch}.`);
+    }
+    if (repositoryId === null) {
+      const repository = await github.graphql(
+        "query ReleaseBranchRewriteRepository($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }",
+        { owner: github.repository.owner, name: github.repository.repo },
+      );
+      repositoryId = repository?.repository?.id;
+      if (typeof repositoryId !== "string" || !repositoryId) {
+        throw new Error("GitHub did not return a repository id for release branch rewrite CAS.");
+      }
     }
     const result = await github.graphql(
       "mutation ReleaseBranchRewriteCas($repositoryId: ID!, $refUpdates: [RefUpdate!]!) { updateRefs(input: { repositoryId: $repositoryId, refUpdates: $refUpdates }) { clientMutationId } }",
@@ -316,22 +338,26 @@ export async function withReleaseBranchRewriteCas(github, expected, operation) {
  * field the review gate keys recorded discards by. Reading it here is what makes the two sides
  * agree about which rewrite a record describes.
  */
-async function readLatestForcePushedHead({ env, owner, repo, pullRequestNumber, after = 0 }) {
+async function readCorrelatedForcePushedHead({ env, owner, repo, pullRequestNumber, after }) {
   const timeline = await githubList(
     env,
     `/repos/${owner}/${repo}/issues/${pullRequestNumber}/timeline`,
     "pull request timeline for a release branch",
   );
-  let latest = null;
+  const candidates = [];
   for (const event of timeline) {
     if (event?.event !== "head_ref_force_pushed") continue;
     const sha = String(event.commit_id ?? "").toLowerCase();
     if (!/^[0-9a-f]{40}$/u.test(sha)) continue;
     const at = Date.parse(event.created_at ?? "");
     if (!Number.isFinite(at) || at < after) continue;
-    if (!latest || at > latest.at) latest = { sha, at };
+    candidates.push({ sha, at });
   }
-  return latest?.sha ?? null;
+  if (candidates.length === 0) return null;
+  if (candidates.length !== 1) {
+    throw new Error("GitHub returned multiple force-push events after an open rewrite record.");
+  }
+  return candidates[0].sha;
 }
 
 /**
@@ -341,12 +367,6 @@ async function readLatestForcePushedHead({ env, owner, repo, pullRequestNumber, 
 async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, expected }, visit) {
   const heads = await readReleaseBranchHeads({ env, owner, repo, targetBranch });
   for (const [branch, expectedRecord] of expected) {
-    // String entries keep the exported helper compatible with older callers while production runs
-    // always retain the marker id returned when the record was opened.
-    const expectedInfo =
-      typeof expectedRecord === "string"
-        ? { head: expectedRecord, recordId: null, pullRequestNumber: null }
-        : expectedRecord;
     const head = heads.get(branch);
     if (!head)
       throw new Error(`Release branch ${branch} disappeared after its rewrite record was opened.`);
@@ -357,11 +377,7 @@ async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, exp
       branch,
       targetBranch,
     });
-    if (
-      pullRequestNumber === null ||
-      (expectedInfo.pullRequestNumber !== null &&
-        pullRequestNumber !== expectedInfo.pullRequestNumber)
-    ) {
+    if (pullRequestNumber === null || pullRequestNumber !== expectedRecord.pullRequestNumber) {
       throw new Error(
         `Release pull request for ${branch} changed after its rewrite record was opened.`,
       );
@@ -369,7 +385,7 @@ async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, exp
     const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
     const open = records.find(
       (record) =>
-        (expectedInfo.recordId === null || record.id === expectedInfo.recordId) &&
+        record.id === expectedRecord.recordId &&
         record.marker.branch === branch &&
         record.marker.after === null,
     );
