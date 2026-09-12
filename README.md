@@ -48,7 +48,7 @@ uploaded `v0.3.2` with upload state `SUCCEEDED`, publish state
 publication email on 2026-07-06 records item ID
 `nfnbhekccajjfgkppolomflaeledoccb`, item name
 `ComplyEaze Pack: GSTR-1/GSTR-3B Downloader`, version `0.3.2`, and visibility
-`Public`. The repository source is now the `v0.5.1` pre-1.0 beta release. <!-- x-release-please-version -->
+`Public`. The repository source is now the `v0.6.0` pre-1.0 beta release. <!-- x-release-please-version -->
 That superseded release's evidence chain is the fully recorded one. The current
 `v0.5.0` publication is maintainer-observed; see
 `docs/PUBLICATION_READINESS.md` for exactly which evidence fields remain

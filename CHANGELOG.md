@@ -4,6 +4,117 @@ All notable changes to ComplyEaze Pack are documented here.
 
 ## Unreleased
 
+## [0.6.0](https://github.com/lamemustafa/pack/compare/v0.5.1...v0.6.0) (2026-09-12)
+
+
+### Features
+
+* **design:** add the design contract, capability table, and Phase A panel ([#169](https://github.com/lamemustafa/pack/issues/169)) ([f4b0d3b](https://github.com/lamemustafa/pack/commit/f4b0d3b16a1b25bab5ff24caaf24d011a922d7bf))
+* **filed-returns:** add all-supported fiscal-year runner ([#243](https://github.com/lamemustafa/pack/issues/243)) ([68b7ad5](https://github.com/lamemustafa/pack/commit/68b7ad525b8ac75f0f8e8bb4e9ac06f9fd838ab9))
+* **filed-returns:** reconcile catalogue-driven recovery plan ([#239](https://github.com/lamemustafa/pack/issues/239)) ([188de14](https://github.com/lamemustafa/pack/commit/188de1454bef8fcdd064ccec33e1b0a4437d8fa9))
+* **gst:** add an ITC summary sheet and a reconciliation key to the GSTR-2B workbook ([#199](https://github.com/lamemustafa/pack/issues/199)) ([9ef47cb](https://github.com/lamemustafa/pack/commit/9ef47cba2bfc70cc700c6b919404f76ba5bfe05b))
+* **gst:** add GSTR-2B invoice workbook ([#196](https://github.com/lamemustafa/pack/issues/196)) ([ceb6ada](https://github.com/lamemustafa/pack/commit/ceb6adaa35346c97f8402998a59268e3a74cccdb))
+* **panel:** gate full-year source surfaces ([#246](https://github.com/lamemustafa/pack/issues/246)) ([1a15762](https://github.com/lamemustafa/pack/commit/1a157628e2da6c05ceff0e9a450b29061af892e2))
+* **panel:** open the side panel from the action and fold the popup in ([#189](https://github.com/lamemustafa/pack/issues/189)) ([6ee8f5b](https://github.com/lamemustafa/pack/commit/6ee8f5b1236b8b37130dd60b7b7a88fa2094767f))
+* **panel:** prioritize complete-year recipe ([#258](https://github.com/lamemustafa/pack/issues/258)) ([649bb80](https://github.com/lamemustafa/pack/commit/649bb80658bbb58ac68ae82a2ab5dadf59ec7607))
+* **panel:** quiet presets and show run progress ([#259](https://github.com/lamemustafa/pack/issues/259)) ([d9bfb4f](https://github.com/lamemustafa/pack/commit/d9bfb4f4e9f557c7eb0b6bf6be2c30abb1fee0e1))
+* **panel:** record why cleanup happened and what a period actually got ([#212](https://github.com/lamemustafa/pack/issues/212)) ([ec29528](https://github.com/lamemustafa/pack/commit/ec29528b33456c166c5c3e6b1150ee2dbe2621f9))
+* **panel:** restart completed all-supported plans ([#261](https://github.com/lamemustafa/pack/issues/261)) ([0490a51](https://github.com/lamemustafa/pack/commit/0490a51f82080e2fdb01a75657c424defa01fc80))
+* **panel:** show what Pack can prove for each period ([#207](https://github.com/lamemustafa/pack/issues/207)) ([f615c1c](https://github.com/lamemustafa/pack/commit/f615c1c11e5fc19cb1c06c3c48a10c43e80d1210))
+* **summary:** add full-year workbook ([#145](https://github.com/lamemustafa/pack/issues/145)) ([4c291a1](https://github.com/lamemustafa/pack/commit/4c291a1e09580f7c85fc930feb39e931be8b8634))
+
+
+### Fixes
+
+* **background:** prefer newer ordinary completion ([#266](https://github.com/lamemustafa/pack/issues/266)) ([7d11d7f](https://github.com/lamemustafa/pack/commit/7d11d7f45c4ff343fa4af7670ed0be0c48a0948d))
+* **build:** disable module preload hints ([#155](https://github.com/lamemustafa/pack/issues/155)) ([3a46db9](https://github.com/lamemustafa/pack/commit/3a46db9d16431b795816cf6b77ae1c7ead48ba74))
+* **build:** make the alpha build a production build ([#260](https://github.com/lamemustafa/pack/issues/260)) ([b0d03bc](https://github.com/lamemustafa/pack/commit/b0d03bc83aba52586e638f06c12e3c484bbb3448))
+* **ci:** decouple Chrome Web Store submission from the release pipeline ([#338](https://github.com/lamemustafa/pack/issues/338)) ([336d257](https://github.com/lamemustafa/pack/commit/336d257095ca2b7d42d99f2621584e5429a23fb3))
+* **ci:** fail closed on incomplete review evaluation ([#147](https://github.com/lamemustafa/pack/issues/147)) ([677f231](https://github.com/lamemustafa/pack/commit/677f231673201986d3c8b1ff439a15337eebda6a))
+* **ci:** pass Store dispatch inputs as literal arguments ([#358](https://github.com/lamemustafa/pack/issues/358)) ([c5df536](https://github.com/lamemustafa/pack/commit/c5df53634ac8a1479779d53bdeb5c65507c5209f))
+* **ci:** retain deleted review findings ([#238](https://github.com/lamemustafa/pack/issues/238)) ([164005e](https://github.com/lamemustafa/pack/commit/164005e6c43a0f1a09736ecdb48cab3f4f1940ca))
+* **deps:** raise the js-yaml floor past GHSA-2883-xcg3-v3hh ([#344](https://github.com/lamemustafa/pack/issues/344)) ([d59a16e](https://github.com/lamemustafa/pack/commit/d59a16e3d321667d2280aaa0f5b0b5a8917f3115))
+* **deps:** resolve browserslist past the prototype-write advisories ([#277](https://github.com/lamemustafa/pack/issues/277)) ([b81d2b6](https://github.com/lamemustafa/pack/commit/b81d2b69cc48b05ecac39bc4af6b8dbf16680f90))
+* **filed-returns:** complete full-year terminal outcomes ([#300](https://github.com/lamemustafa/pack/issues/300)) ([11eb351](https://github.com/lamemustafa/pack/commit/11eb351c70f622e4182856b77261976a38ac679e))
+* **filed-returns:** re-land bounded acquisition safety ([#312](https://github.com/lamemustafa/pack/issues/312)) ([1b64fab](https://github.com/lamemustafa/pack/commit/1b64fabde99870bf6c21e6118576f7152f65c9f5))
+* **filed-returns:** simplify selection and completion paths ([#304](https://github.com/lamemustafa/pack/issues/304)) ([b78b13d](https://github.com/lamemustafa/pack/commit/b78b13d621dd6c12df147b9531d4ab5ee639f98d))
+* **flow:** keep the workbook-only signal in durable state ([#201](https://github.com/lamemustafa/pack/issues/201)) ([cd3a4db](https://github.com/lamemustafa/pack/commit/cd3a4db4b1bdab2a93e92a75fe94446f5cbcc666))
+* **gst:** close four GSTR-2B correctness gaps from post-merge review ([#210](https://github.com/lamemustafa/pack/issues/210)) ([9218160](https://github.com/lamemustafa/pack/commit/92181600d58dde060ccbbe18a34eef6d709ad97d))
+* **gst:** defer current-year filed periods ([#294](https://github.com/lamemustafa/pack/issues/294)) ([e3a144e](https://github.com/lamemustafa/pack/commit/e3a144eb9025ef1c3204a2bee86eb918687a61bd))
+* **gst:** normalise JSON number tokens before judging them ([#198](https://github.com/lamemustafa/pack/issues/198)) ([675b119](https://github.com/lamemustafa/pack/commit/675b119d5e0106bd51ba3a71258313e4a4462487))
+* **gst:** refuse totals for unreadable periods ([#185](https://github.com/lamemustafa/pack/issues/185)) ([b947542](https://github.com/lamemustafa/pack/commit/b9475421315f82a51ff92eb8fb467d8a52645a0c))
+* **gst:** scope summary identities to the return owner ([#184](https://github.com/lamemustafa/pack/issues/184)) ([599a09d](https://github.com/lamemustafa/pack/commit/599a09d214ec72952ee93743ce42225dbe46b480))
+* **panel:** clarify blocked and restart plans ([#293](https://github.com/lamemustafa/pack/issues/293)) ([2686207](https://github.com/lamemustafa/pack/commit/26862079711bd7461d9d66bd358f442035eccfca))
+* **panel:** close deferred panel defects from the panel lane ([#186](https://github.com/lamemustafa/pack/issues/186)) ([6cb4f58](https://github.com/lamemustafa/pack/commit/6cb4f588af744d354d745c5bcd71baf7a7767140))
+* **panel:** disclose all-supported run diagnostics ([#296](https://github.com/lamemustafa/pack/issues/296)) ([090cd1c](https://github.com/lamemustafa/pack/commit/090cd1ce6de67d2cbf9110e06ed18c84fe0f777a))
+* **panel:** stop the recipe cards reading as warnings ([#256](https://github.com/lamemustafa/pack/issues/256)) ([ae13bf2](https://github.com/lamemustafa/pack/commit/ae13bf210ef1444b046ccda4233ce876780c754b))
+* **panel:** trim all-returns summary and catalogue ([#257](https://github.com/lamemustafa/pack/issues/257)) ([12302ce](https://github.com/lamemustafa/pack/commit/12302ce991f643c68e4d638d0c0d28936fd7da91))
+* **popup:** require a reason for every portal-gated inline action ([#168](https://github.com/lamemustafa/pack/issues/168)) ([3dac81e](https://github.com/lamemustafa/pack/commit/3dac81eddfb4cb1ce39895bf0ee8f9c258eb469b))
+* **popup:** stop claiming a ZIP was saved before any download is correlated ([#193](https://github.com/lamemustafa/pack/issues/193)) ([68f4c54](https://github.com/lamemustafa/pack/commit/68f4c54acf5ff0c17609e727cd8583b2aed7d82d))
+* **popup:** stop gating local target-review retries on portal readiness ([#173](https://github.com/lamemustafa/pack/issues/173)) ([60543bf](https://github.com/lamemustafa/pack/commit/60543bf1bacac626ab6e6ad8d3e2abd5875fb277))
+* **recovery:** keep withheld full-year guidance accurate ([#263](https://github.com/lamemustafa/pack/issues/263)) ([8de1d4b](https://github.com/lamemustafa/pack/commit/8de1d4b1e49334d2441b00547dcca69fbe586a08))
+* **recovery:** name blocked target causes ([#157](https://github.com/lamemustafa/pack/issues/157)) ([e72438b](https://github.com/lamemustafa/pack/commit/e72438b3439a0c18a20424cce54fdc1e587b1078))
+* **recovery:** preserve partial component proof ([#241](https://github.com/lamemustafa/pack/issues/241)) ([1a74c3a](https://github.com/lamemustafa/pack/commit/1a74c3a6087fbac425212cea95e9bcf0c73cb08d))
+* **recovery:** reject incompatible checkpoints ([#242](https://github.com/lamemustafa/pack/issues/242)) ([273bcc6](https://github.com/lamemustafa/pack/commit/273bcc6da2b9954e59bc0d168df52ab1e2542f2d))
+* **recovery:** restore initial observing summary outcomes ([#233](https://github.com/lamemustafa/pack/issues/233)) ([edad122](https://github.com/lamemustafa/pack/commit/edad122e61914e8a88e93c00e50f4449bbc8a2c5))
+* **recovery:** retain all-supported plan provenance ([#280](https://github.com/lamemustafa/pack/issues/280)) ([42f35e4](https://github.com/lamemustafa/pack/commit/42f35e411f36928ec455a61cf3d6bb12b385fa96))
+* **recovery:** retain the pre-search timeout reason after reload ([#317](https://github.com/lamemustafa/pack/issues/317)) ([3672d12](https://github.com/lamemustafa/pack/commit/3672d12f95361a21614a63ea53003f8c4ddd488f))
+* **recovery:** retry reviewed all-supported target ([#264](https://github.com/lamemustafa/pack/issues/264)) ([14b7cec](https://github.com/lamemustafa/pack/commit/14b7cec357b40c3bb4f1be23c17e4dd3b10ac89e))
+* **recovery:** surface malformed plan index ([#283](https://github.com/lamemustafa/pack/issues/283)) ([2d76390](https://github.com/lamemustafa/pack/commit/2d76390e419009caabdbc67f9d5bf7c5c5f71161))
+* **release:** unblock the v0.6.0 release and bind public version copy ([#341](https://github.com/lamemustafa/pack/issues/341)) ([ff9b505](https://github.com/lamemustafa/pack/commit/ff9b50569b071f75877858e8ee55de9d41cb6eb2))
+* **review-gate:** recover prior heads a force-push names but does not record ([#349](https://github.com/lamemustafa/pack/issues/349)) ([d3d66a0](https://github.com/lamemustafa/pack/commit/d3d66a043ec8b64f5a532d4b7a7c58b18466e4fa))
+* **review-gate:** recover untraceable force-pushes ([#318](https://github.com/lamemustafa/pack/issues/318)) ([4527569](https://github.com/lamemustafa/pack/commit/4527569f93fe3b501d174d54d9c5ff383bca85aa))
+* **review-gate:** require strict current-head review ([#216](https://github.com/lamemustafa/pack/issues/216)) ([78b74d1](https://github.com/lamemustafa/pack/commit/78b74d117e63cdaf4aba1d70a1431ba546e21bf0))
+* **review-gate:** scope the durable-state search to heads that can carry it ([#351](https://github.com/lamemustafa/pack/issues/351)) ([26eeb7c](https://github.com/lamemustafa/pack/commit/26eeb7cc59c8c661c3fa7dc8fb5a431c8aa48dd4))
+* **summary:** identify CSV financial year ([#214](https://github.com/lamemustafa/pack/issues/214)) ([dbcd0cb](https://github.com/lamemustafa/pack/commit/dbcd0cbcf282cda8ac2658de3f918c2533811b7b))
+* **tests:** typecheck .tsx test files under tsc ([#176](https://github.com/lamemustafa/pack/issues/176)) ([a477b4b](https://github.com/lamemustafa/pack/commit/a477b4b812a044a038ed91ae3c009733abf667fe)), refs [#174](https://github.com/lamemustafa/pack/issues/174)
+* **verifier:** parse packaged HTML references ([#319](https://github.com/lamemustafa/pack/issues/319)) ([9f6ec17](https://github.com/lamemustafa/pack/commit/9f6ec17a0ca4b8d4a9c5f1510582553635aae5d5))
+* **workbook:** show the decimals a value actually has ([#213](https://github.com/lamemustafa/pack/issues/213)) ([01e3582](https://github.com/lamemustafa/pack/commit/01e3582f76cdd9e9829c81adfaa227f05f5cbd97))
+
+
+### Documentation
+
+* **agents:** bind policy review to its source ([#305](https://github.com/lamemustafa/pack/issues/305)) ([535294f](https://github.com/lamemustafa/pack/commit/535294f76e946e63a5ef7318a45af16e2072b6ed))
+* **governance:** clarify portal landing navigation ([#182](https://github.com/lamemustafa/pack/issues/182)) ([2a861f5](https://github.com/lamemustafa/pack/commit/2a861f5439029dc2c2eb535054e7c3ae52106c5e))
+* **governance:** drop unenforced DCO requirement ([#229](https://github.com/lamemustafa/pack/issues/229)) ([dce1142](https://github.com/lamemustafa/pack/commit/dce1142af3ede3519d71727bb2b455879587503d))
+* **governance:** require disposition for every review ask ([#162](https://github.com/lamemustafa/pack/issues/162)) ([8d55cf1](https://github.com/lamemustafa/pack/commit/8d55cf1f1d8d9aad425a4a32f9390b49c98eea96))
+* **gst:** record filing-profile discovery hold ([#302](https://github.com/lamemustafa/pack/issues/302)) ([c039151](https://github.com/lamemustafa/pack/commit/c03915156e1aa14ddf8c6cd37ec967c9bb9d6e52))
+* **readiness:** record v0.5.0 as published and bring GSTR-2B into scope ([#188](https://github.com/lamemustafa/pack/issues/188)) ([e50161b](https://github.com/lamemustafa/pack/commit/e50161bf9d4f5a722987c653af22bbb87e059438))
+* **repo:** record autonomous session evidence ([#230](https://github.com/lamemustafa/pack/issues/230)) ([20f9a70](https://github.com/lamemustafa/pack/commit/20f9a70e0795c16aa81e2c2a0459b4625ba48529))
+* **session:** close validation ledger ([#237](https://github.com/lamemustafa/pack/issues/237)) ([0d9fbf2](https://github.com/lamemustafa/pack/commit/0d9fbf2f4dba2fa767471fc9851b380a4db27875))
+* **session:** record autonomous validation evidence ([#236](https://github.com/lamemustafa/pack/issues/236)) ([3a8bc4b](https://github.com/lamemustafa/pack/commit/3a8bc4b0cd5c92f107b8238f324b4e90b33b3c24))
+* **session:** record verified overnight progress and blockers ([#235](https://github.com/lamemustafa/pack/issues/235)) ([19271b8](https://github.com/lamemustafa/pack/commit/19271b8791addd918fc26564c2b4fadd54b6907f))
+* **store:** clarify supported GST downloads ([#292](https://github.com/lamemustafa/pack/issues/292)) ([6c37566](https://github.com/lamemustafa/pack/commit/6c375662fcf2445bdb3907f580c6a18d4d8dd81d))
+* **store:** correct the listing to the published beta and GSTR-2B scope ([#192](https://github.com/lamemustafa/pack/issues/192)) ([8bdcc39](https://github.com/lamemustafa/pack/commit/8bdcc39f2cc6fb032ba49b6cb69ba5f8b95fdb82))
+
+
+### Tests
+
+* **guards:** pin remaining audit guards ([#279](https://github.com/lamemustafa/pack/issues/279)) ([7c2faf5](https://github.com/lamemustafa/pack/commit/7c2faf5ee35104404a50019db3c3b1bf25631c79))
+* **panel:** cover mixed all-supported evidence ([#265](https://github.com/lamemustafa/pack/issues/265)) ([781f951](https://github.com/lamemustafa/pack/commit/781f951e5da3e5c5e467c13ed4d3a8873b2e0e3e))
+* **recovery:** enumerate withheld copy surfaces ([#272](https://github.com/lamemustafa/pack/issues/272)) ([9dd3450](https://github.com/lamemustafa/pack/commit/9dd3450b39b2c49984417d9772ce508521018695))
+* **repo:** guard against unreferenced source modules ([#217](https://github.com/lamemustafa/pack/issues/217)) ([e3eaf40](https://github.com/lamemustafa/pack/commit/e3eaf4061351e8e8dbff3d94c24d014100050d76))
+* **restart:** assert restart refusal messages ([#278](https://github.com/lamemustafa/pack/issues/278)) ([4a07611](https://github.com/lamemustafa/pack/commit/4a076119b8ba457eb6719e7317e4f5654c9f87ea))
+* **runtime:** budget measured heavy artifact checks ([#232](https://github.com/lamemustafa/pack/issues/232)) ([3b689eb](https://github.com/lamemustafa/pack/commit/3b689eb9027d0d08144d85986c4d596938e47373))
+* **styles:** enforce design token literals ([#245](https://github.com/lamemustafa/pack/issues/245)) ([f1459f3](https://github.com/lamemustafa/pack/commit/f1459f31ee379e4258303e997b10bb0094418518))
+* **verifier:** assert an exact Playwright pin, not a version ([#326](https://github.com/lamemustafa/pack/issues/326)) ([f8af3cb](https://github.com/lamemustafa/pack/commit/f8af3cbae8c70f3285f4aaa58115a18cfdeaf4f8))
+* **verify:** pin alpha panel reachability ([#275](https://github.com/lamemustafa/pack/issues/275)) ([4de6bdb](https://github.com/lamemustafa/pack/commit/4de6bdb3137255907c451f6c7aa5881d3ee08d83))
+
+
+### Maintenance
+
+* **deps-dev:** apply the dev-tooling group updates ([#332](https://github.com/lamemustafa/pack/issues/332)) ([7357532](https://github.com/lamemustafa/pack/commit/73575325b6046ac2ac267d937ad3cfbc6567c50a))
+* **deps-dev:** bump @types/chrome from 0.2.6 to 0.2.7 ([#223](https://github.com/lamemustafa/pack/issues/223)) ([214aabd](https://github.com/lamemustafa/pack/commit/214aabdf77dd3884a44db62878bab4345a2da970))
+* **deps-dev:** bump vitest from 4.1.10 to 4.1.11 ([#224](https://github.com/lamemustafa/pack/issues/224)) ([0cc40d9](https://github.com/lamemustafa/pack/commit/0cc40d923ea2953c701306e81233dc945a299285))
+* **deps-dev:** take four dev-dependency bumps as one unit ([#273](https://github.com/lamemustafa/pack/issues/273)) ([4c367ff](https://github.com/lamemustafa/pack/commit/4c367ffe2f9656f3385987c26d429af87dab8d2f))
+* **deps-dev:** upgrade vitest to 5.0.0 ([#330](https://github.com/lamemustafa/pack/issues/330)) ([c9e30e2](https://github.com/lamemustafa/pack/commit/c9e30e2df0a89eb8f1683035091e368fb9453891))
+* **deps:** bump pnpm/action-setup to 6.1.0 in the github-actions group ([#335](https://github.com/lamemustafa/pack/issues/335)) ([930439a](https://github.com/lamemustafa/pack/commit/930439a0141118af5587833aa1086d76a7f81ec2))
+* **deps:** consolidate validated dev dependency updates ([#165](https://github.com/lamemustafa/pack/issues/165)) ([2abfb66](https://github.com/lamemustafa/pack/commit/2abfb66e8dbde39702b1b223a6241b7a31bf6fe0))
+* **deps:** group dependabot updates by risk tier ([#327](https://github.com/lamemustafa/pack/issues/327)) ([f706e00](https://github.com/lamemustafa/pack/commit/f706e006cd679a930e0c1268df715b7a29fc2b4d))
+* **deps:** ignore @types/node majors and guard the alignment ([#331](https://github.com/lamemustafa/pack/issues/331)) ([937aae9](https://github.com/lamemustafa/pack/commit/937aae948acf0862d1c22fd4288e92a9ca1e58cc))
+* **deps:** override @xmldom/xmldom to a patched release ([#284](https://github.com/lamemustafa/pack/issues/284)) ([ffbb42c](https://github.com/lamemustafa/pack/commit/ffbb42caab485b1549e7abc43ae35606cd14b27f))
+* **node:** move the toolchain floor to Node 24 LTS ([#274](https://github.com/lamemustafa/pack/issues/274)) ([c2f9bd3](https://github.com/lamemustafa/pack/commit/c2f9bd39b70341e4ef08ea9a7ac48a0bc3f88755))
+
 ## [0.5.1](https://github.com/lamemustafa/pack/compare/v0.5.0...v0.5.1) (2026-08-17)
 
 
