@@ -465,6 +465,59 @@ describe("live run evidence", () => {
     expect(result).toMatchObject({ ok: true });
   });
 
+  it("preserves V1 counts and accepts an all-not-generated GSTR-2B V2 pass", () => {
+    const v1WithNewCount = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      counts: { ...createValidEvidence().counts, notGenerated: 0 },
+    });
+    const v2 = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      schemaVersion: 2,
+      returnType: "GSTR-2B",
+      artifactType: "PDF",
+      counts: {
+        eligibleTargets: 12,
+        downloaded: 0,
+        notFiled: 0,
+        notGenerated: 12,
+        manuallyObserved: 0,
+        blocked: 0,
+        failed: 0,
+        duplicates: 0,
+      },
+      downloadEvidence: [],
+    });
+
+    expect(v1WithNewCount.ok).toBe(false);
+    if (!v1WithNewCount.ok) expect(v1WithNewCount.errors).toContain("counts.notGenerated is not allowed");
+    expect(v2).toMatchObject({ ok: true });
+  });
+
+  it("requires V2 notGenerated, rejects it outside GSTR-2B, and keeps totals complete", () => {
+    const missing = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      schemaVersion: 2,
+    });
+    const otherReturn = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      schemaVersion: 2,
+      counts: { ...createValidEvidence().counts, notGenerated: 1, notFiled: 9 },
+    });
+    const incomplete = validateLiveRunEvidence({
+      ...createValidEvidence(),
+      schemaVersion: 2,
+      returnType: "GSTR-2B",
+      counts: { ...createValidEvidence().counts, notGenerated: 1, notFiled: 9 },
+    });
+
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.errors).toContain("counts.notGenerated must be a non-negative integer");
+    expect(otherReturn.ok).toBe(false);
+    if (!otherReturn.ok) expect(otherReturn.errors).toContain("counts.notGenerated can be nonzero only for GSTR-2B");
+    expect(incomplete.ok).toBe(false);
+    if (!incomplete.ok) expect(incomplete.errors).toContain("pass evidence must reconcile every eligible target");
+  });
+
   it("rejects duplicate downloaded target and action identities", () => {
     const first = createValidEvidence().downloadEvidence[0];
     const result = validateLiveRunEvidence({

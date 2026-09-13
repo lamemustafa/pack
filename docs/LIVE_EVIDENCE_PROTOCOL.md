@@ -80,7 +80,10 @@ For a one-month or full-year exploratory run, record:
   each use one JSON row;
 - scenario: `single-period` or `full-year`;
 - outcome counts: eligible targets, downloaded, not filed, manually observed,
-  blocked, failed, duplicates;
+  blocked, failed, duplicates; schema V2 additionally records GSTR-2B
+  not-generated targets. V2 passing totals reconcile downloaded, not filed,
+  not generated, and manually observed targets to eligible targets. V1 evidence
+  remains valid without a synthesized not-generated count;
 - human verification checks;
 - service-worker and browser-restart checks for full-year runs;
 - clear-local-data result;

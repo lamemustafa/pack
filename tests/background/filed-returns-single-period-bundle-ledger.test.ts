@@ -806,7 +806,7 @@ function unavailableLedger(
           ...artifact,
           completedAt: PDF_STAGED_AT.toISOString(),
           missingReason,
-          safeSignals: ["single-period-bundle-artifact-unavailable"],
+          safeSignals: unavailableSafeSignals(scope, artifactType, missingReason),
           startedAt: PDF_RUNNING_AT.toISOString(),
           status: "unavailable" as const,
           updatedAt: PDF_STAGED_AT.toISOString(),
@@ -828,6 +828,31 @@ function unavailableLedger(
     revision: 2,
     updatedAt: PDF_STAGED_AT.toISOString(),
   };
+}
+
+function unavailableSafeSignals(
+  scope: FiledReturnsDownloadScope,
+  artifactType: "PDF" | "EXCEL" | "JSON",
+  missingReason: string,
+) {
+  if (
+    scope.returnType === "GSTR-1" &&
+    artifactType === "EXCEL" &&
+    missingReason === "artifact-filed-gstr1-excel-no-details-available"
+  ) {
+    return ["single-period-bundle-artifact-unavailable", "filed-gstr1-detail-period-verified"];
+  }
+  if (
+    scope.returnType === "GSTR-2B" &&
+    missingReason === "artifact-filed-gstr2b-not-generated"
+  ) {
+    return [
+      "single-period-bundle-artifact-unavailable",
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+    ];
+  }
+  return ["single-period-bundle-artifact-unavailable"];
 }
 
 async function persistBothArtifacts() {

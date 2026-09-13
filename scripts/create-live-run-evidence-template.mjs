@@ -82,6 +82,7 @@ try {
   for (const field of [
     "downloaded",
     "not-filed",
+    "not-generated",
     "manually-observed",
     "blocked",
     "failed",
@@ -131,7 +132,7 @@ try {
   const zipSha256 = options["zip-sha256"] ?? readChromeZipSha256(packageJson.version);
 
   const evidence = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     evidenceId:
       options["evidence-id"] ??
       `pack-live-run-${new Date(startedAt).toISOString().slice(0, 10)}-${String(
@@ -259,6 +260,7 @@ function defaultCounts(outcome, eligibleTargets) {
     return {
       downloaded: eligibleTargets,
       notFiled: 0,
+      notGenerated: 0,
       manuallyObserved: 0,
       blocked: 0,
       failed: 0,
@@ -268,6 +270,7 @@ function defaultCounts(outcome, eligibleTargets) {
   return {
     downloaded: 0,
     notFiled: 0,
+    notGenerated: 0,
     manuallyObserved: 0,
     blocked: outcome === "blocked" ? eligibleTargets : 0,
     failed: outcome === "failed" ? eligibleTargets : 0,
@@ -368,6 +371,7 @@ function createDownloadEvidenceRows({
 
 function toCamelCountKey(key) {
   if (key === "not-filed") return "notFiled";
+  if (key === "not-generated") return "notGenerated";
   if (key === "manually-observed") return "manuallyObserved";
   return key;
 }

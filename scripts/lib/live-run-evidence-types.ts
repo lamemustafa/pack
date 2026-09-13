@@ -35,7 +35,7 @@ export type LiveRunEvidenceLimitation =
   | "browser-state-not-captured";
 
 export interface LiveRunEvidence {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   evidenceId: string;
   sourceCommit: string;
   gitTag: string;
@@ -93,6 +93,8 @@ export interface LiveRunEvidenceCounts {
   blocked: number;
   failed: number;
   duplicates: number;
+  /** Required by schema V2; absent in preserved V1 evidence. */
+  notGenerated?: number;
 }
 
 export interface LiveRunEvidenceChecks {
