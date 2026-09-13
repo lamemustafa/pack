@@ -403,7 +403,7 @@ export function markSinglePeriodBundleArtifactUnavailable(
     completedAt: now.toISOString(),
     ...(diagnostic ? { downloadDiagnostic: diagnostic } : {}),
     missingReason,
-    safeSignals: ["single-period-bundle-artifact-unavailable"],
+    safeSignals: unavailableSignals(flowStep, ledger.scope, artifactType),
     startedAt: artifact.startedAt!,
     status: "unavailable",
     updatedAt: now.toISOString(),
@@ -436,7 +436,7 @@ export function markSinglePeriodBundlePeriodUnavailable(
       artifactType: artifact.artifactType,
       completedAt: timestamp,
       missingReason: missingReasons[index]!,
-      safeSignals: ["single-period-bundle-artifact-unavailable"],
+      safeSignals: unavailableSignals(flowStep, ledger.scope, artifact.artifactType),
       startedAt: artifact.startedAt ?? timestamp,
       status: "unavailable" as const,
       updatedAt: timestamp,
@@ -655,7 +655,6 @@ function parseArtifact(
     return null;
   }
   const expectedSignals = statusSignals(artifact.status, expectedArtifactType);
-  if (!sameStrings(artifact.safeSignals, expectedSignals)) return null;
   if (artifact.startedAt !== undefined && !isCanonicalTimestamp(artifact.startedAt)) return null;
   if (artifact.completedAt !== undefined && !isCanonicalTimestamp(artifact.completedAt))
     return null;
@@ -679,6 +678,11 @@ function parseArtifact(
   const missingReason = isMissingReason(artifact.missingReason)
     ? normaliseArtifactMissingReason(artifact.missingReason, scope.returnType, expectedArtifactType)
     : null;
+  const expectedStoredSignals = [
+    ...expectedSignals,
+    ...unavailableProofSignals(scope, expectedArtifactType, missingReason),
+  ];
+  if (!sameStrings(artifact.safeSignals, expectedStoredSignals)) return null;
 
   if (artifact.status === "pending") {
     if (
@@ -708,7 +712,7 @@ function parseArtifact(
     ...(artifact.completedAt ? { completedAt: artifact.completedAt } : {}),
     ...(diagnostic ? { downloadDiagnostic: diagnostic } : {}),
     ...(missingReason ? { missingReason } : {}),
-    safeSignals: expectedSignals,
+    safeSignals: expectedStoredSignals,
     ...(artifact.startedAt ? { startedAt: artifact.startedAt } : {}),
     status: artifact.status,
     updatedAt: artifact.updatedAt,
@@ -888,6 +892,36 @@ function statusSignals(
   return [`single-period-bundle-artifact-${status}`];
 }
 
+function unavailableProofSignals(
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+  missingReason: string | null,
+): string[] {
+  if (
+    scope.returnType === "GSTR-1" &&
+    artifactType === "EXCEL" &&
+    missingReason === declinedArtifactReason("filed-gstr1-excel-no-details-available")
+  )
+    return ["filed-gstr1-detail-period-verified"];
+  if (
+    scope.returnType === "GSTR-2B" &&
+    missingReason === declinedArtifactReason("filed-gstr2b-not-generated")
+  )
+    return ["gstr2b-summary-route-verified", "gstr2b-visible-period-verified"];
+  return [];
+}
+
+function unavailableSignals(
+  flowStep: PortalFlowStepResult,
+  scope: FiledReturnsDownloadScope,
+  artifactType: FiledReturnsConcreteArtifactType,
+): string[] {
+  const reason = missingArtifactReason(flowStep, scope.returnType, artifactType);
+  return [
+    ...statusSignals("unavailable", artifactType),
+    ...unavailableProofSignals(scope, artifactType, reason),
+  ];
+}
 function isSupportedBundleScope(input: unknown): input is FiledReturnsDownloadScope {
   if (!input || typeof input !== "object") return false;
   const scope = input as Partial<FiledReturnsDownloadScope>;
