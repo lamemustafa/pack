@@ -489,7 +489,8 @@ describe("live run evidence", () => {
     });
 
     expect(v1WithNewCount.ok).toBe(false);
-    if (!v1WithNewCount.ok) expect(v1WithNewCount.errors).toContain("counts.notGenerated is not allowed");
+    if (!v1WithNewCount.ok)
+      expect(v1WithNewCount.errors).toContain("counts.notGenerated is not allowed");
     expect(v2).toMatchObject({ ok: true });
   });
 
@@ -511,11 +512,14 @@ describe("live run evidence", () => {
     });
 
     expect(missing.ok).toBe(false);
-    if (!missing.ok) expect(missing.errors).toContain("counts.notGenerated must be a non-negative integer");
+    if (!missing.ok)
+      expect(missing.errors).toContain("counts.notGenerated must be a non-negative integer");
     expect(otherReturn.ok).toBe(false);
-    if (!otherReturn.ok) expect(otherReturn.errors).toContain("counts.notGenerated can be nonzero only for GSTR-2B");
+    if (!otherReturn.ok)
+      expect(otherReturn.errors).toContain("counts.notGenerated can be nonzero only for GSTR-2B");
     expect(incomplete.ok).toBe(false);
-    if (!incomplete.ok) expect(incomplete.errors).toContain("pass evidence must reconcile every eligible target");
+    if (!incomplete.ok)
+      expect(incomplete.errors).toContain("pass evidence must reconcile every eligible target");
   });
 
   it("rejects duplicate downloaded target and action identities", () => {

@@ -842,10 +842,7 @@ function unavailableSafeSignals(
   ) {
     return ["single-period-bundle-artifact-unavailable", "filed-gstr1-detail-period-verified"];
   }
-  if (
-    scope.returnType === "GSTR-2B" &&
-    missingReason === "artifact-filed-gstr2b-not-generated"
-  ) {
+  if (scope.returnType === "GSTR-2B" && missingReason === "artifact-filed-gstr2b-not-generated") {
     return [
       "single-period-bundle-artifact-unavailable",
       "gstr2b-summary-route-verified",
