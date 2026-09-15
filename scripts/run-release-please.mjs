@@ -84,6 +84,7 @@ export async function runReleasePlease(env = process.env) {
       headsBeforeRegeneration,
       confirmedRewrites,
       async () => (await pullRequestManifest.createPullRequests()).filter(Boolean),
+      (branch) => findOpenPullRequestNumber({ env, owner, repo, branch, targetBranch }),
     );
   } catch (error) {
     regenerationError = error;
@@ -138,17 +139,40 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
       branch,
       targetBranch,
     });
-    if (pullRequestNumber === null)
+    // A retained generated branch whose release pull request has already merged is the normal
+    // state of any repository that does not delete merged head branches. Refusing here made the
+    // wrapper reject Release Please's reuse of that branch as unrecorded, so no further release
+    // pull request could ever be created until someone deleted the branch by hand -- and
+    // `.github/workflows/release.yml` runs this on every push to master.
+    //
+    // Record against the pull request whose head that branch was instead. The marker still names
+    // the head about to be discarded, which is all #350 needs, while claiming nothing about
+    // continuity for a review that is already closed.
+    const recordHomeIsOpen = pullRequestNumber !== null;
+    const recordHome = recordHomeIsOpen
+      ? pullRequestNumber
+      : await findLatestPullRequestNumber({ env, owner, repo, branch, targetBranch });
+    if (recordHome === null)
       throw new Error(
-        `Retained release branch ${branch} has no open release pull request for a durable rewrite record; regeneration remains held.`,
+        `Retained release branch ${branch} has no release pull request, open or closed, to hold a durable rewrite record; regeneration remains held.`,
       );
-    const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
+    const records = await readBranchRewriteRecords({
+      env,
+      owner,
+      repo,
+      pullRequestNumber: recordHome,
+    });
     const open = records.find(
       (record) => record.marker.branch === branch && record.marker.after === null,
     );
     if (open) {
       if (head === open.marker.before) {
-        opened.set(branch, { head, recordId: open.id, pullRequestNumber });
+        opened.set(branch, {
+          head,
+          recordId: open.id,
+          pullRequestNumber: recordHome,
+          recordHomeIsOpen,
+        });
         continue;
       }
       throw new Error(
@@ -157,7 +181,7 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
     }
     const created = await githubRequest(
       env,
-      `/repos/${owner}/${repo}/issues/${pullRequestNumber}/comments`,
+      `/repos/${owner}/${repo}/issues/${recordHome}/comments`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -170,8 +194,17 @@ export async function openBranchRewriteRecords({ env, owner, repo, targetBranch 
         "GitHub did not return an identifier for the opened release branch rewrite record.",
       );
     }
-    opened.set(branch, { head, recordId: created.id, pullRequestNumber });
-    console.log(`Opened release branch rewrite record on #${pullRequestNumber}: before=${head}`);
+    opened.set(branch, {
+      head,
+      recordId: created.id,
+      pullRequestNumber: recordHome,
+      recordHomeIsOpen,
+    });
+    console.log(
+      `Opened release branch rewrite record on #${recordHome}${
+        recordHomeIsOpen ? "" : " (closed; branch retained after merge)"
+      }: before=${head}`,
+    );
   }
   return opened;
 }
@@ -246,7 +279,17 @@ export async function refreshBranchRewriteRecords({
 // so replace recorded rewrites and the first update after a confirmed generated-branch creation
 // with a compare-and-swap. A mismatch rejects the release run while an open marker remains
 // durable for recovery.
-export async function withReleaseBranchRewriteCas(github, expected, confirmedRewrites, operation) {
+export async function withReleaseBranchRewriteCas(
+  github,
+  expected,
+  confirmedRewrites,
+  operation,
+  // Checked for closed-home records immediately before the compare-and-swap. `refreshBranchRewriteRecords`
+  // already asserts no pull request had appeared, but that runs before Release Please builds the
+  // commit; the mutation is the last instant at which the answer still matters. Omitted, the
+  // closed-home path is refused rather than silently unchecked.
+  assertNoPullRequestOpened = null,
+) {
   const updates = github.octokit?.git?.updateRef;
   const creates = github.octokit?.git?.createRef;
   if (
@@ -280,6 +323,22 @@ export async function withReleaseBranchRewriteCas(github, expected, confirmedRew
     const createdHead = createdBranches.get(branch);
     if (!record && !createdHead) {
       throw new Error(`Release Please tried to rewrite unrecorded generated branch ${branch}.`);
+    }
+    if (record && record.recordHomeIsOpen === false) {
+      if (typeof assertNoPullRequestOpened !== "function") {
+        throw new Error(
+          `Cannot verify that no release pull request opened for ${branch} before rewriting it; regeneration is held.`,
+        );
+      }
+      // Fail closed on both answers that are not "still none": a pull request that appeared, and a
+      // lookup that could not say. Either one means this force-push could discard a head named
+      // only on a review it does not belong to.
+      const opened = await assertNoPullRequestOpened(branch);
+      if (opened !== null) {
+        throw new Error(
+          `Release pull request #${opened} opened for ${branch} while its rewrite was being prepared against closed #${record.pullRequestNumber}; regeneration is held.`,
+        );
+      }
     }
     const afterOid = String(request?.sha ?? "").toLowerCase();
     if (!/^[0-9a-f]{40}$/u.test(afterOid)) {
@@ -345,12 +404,29 @@ async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, exp
       branch,
       targetBranch,
     });
-    if (pullRequestNumber === null || pullRequestNumber !== expectedRecord.pullRequestNumber) {
+    if (expectedRecord.recordHomeIsOpen === false) {
+      // The record lives on a closed pull request because none was open when it was written. The
+      // hazard in that state is the opposite one: a pull request appearing before the force-push
+      // would be rewritten while its head is named only on the earlier, closed review.
+      if (pullRequestNumber !== null) {
+        throw new Error(
+          `A release pull request opened for ${branch} after its rewrite record was written to closed #${expectedRecord.pullRequestNumber}; regeneration is held so the new review's head is not discarded unnamed.`,
+        );
+      }
+    } else if (
+      pullRequestNumber === null ||
+      pullRequestNumber !== expectedRecord.pullRequestNumber
+    ) {
       throw new Error(
         `Release pull request for ${branch} changed after its rewrite record was opened.`,
       );
     }
-    const records = await readBranchRewriteRecords({ env, owner, repo, pullRequestNumber });
+    const records = await readBranchRewriteRecords({
+      env,
+      owner,
+      repo,
+      pullRequestNumber: expectedRecord.pullRequestNumber,
+    });
     const open = records.find(
       (record) =>
         record.id === expectedRecord.recordId &&
@@ -362,7 +438,7 @@ async function eachOpenBranchRewriteRecord({ env, owner, repo, targetBranch, exp
         `Release branch ${branch} lost the rewrite record opened for this regeneration.`,
       );
     }
-    await visit({ pullRequestNumber, record: open, head });
+    await visit({ pullRequestNumber: expectedRecord.pullRequestNumber, record: open, head });
   }
 }
 
@@ -424,6 +500,25 @@ async function findOpenPullRequestNumber({ env, owner, repo, branch, targetBranc
   // discards a head nothing named, the exact loss this mechanism exists to prevent.
   if (pulls.length > 0 && !pulls.some((pull) => Number.isInteger(pull?.number))) {
     throw new Error("GitHub returned a malformed pull request list for a release branch.");
+  }
+  return pulls.find((pull) => Number.isInteger(pull?.number))?.number ?? null;
+}
+
+// The most recent pull request for this generated branch in any state, used only when no open one
+// exists. A retained generated branch whose release pull request has already merged still has a
+// durable home for its rewrite record: the pull request whose head that branch was. Writing the
+// marker there names the discarded head without claiming continuity for a closed review.
+async function findLatestPullRequestNumber({ env, owner, repo, branch, targetBranch }) {
+  const pulls = await githubList(
+    env,
+    `/repos/${owner}/${repo}/pulls?state=all&head=${owner}:${branch}&base=${targetBranch}&sort=created&direction=desc`,
+    "pull request history for a release branch",
+  );
+  // Same distinction as the open lookup: an empty list means none ever existed, an unreadable
+  // entry means the answer is unknown. Collapsing them would write no marker while the
+  // regeneration force-pushes anyway.
+  if (pulls.length > 0 && !pulls.some((pull) => Number.isInteger(pull?.number))) {
+    throw new Error("GitHub returned a malformed pull request history for a release branch.");
   }
   return pulls.find((pull) => Number.isInteger(pull?.number))?.number ?? null;
 }

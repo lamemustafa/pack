@@ -89,6 +89,120 @@ describe("Release Please workflow wrapper", () => {
     expect(github.octokit.git.createRef).toBe(originalCreate);
   });
 
+  it("refuses a closed-home rewrite when a pull request opened in the window", async () => {
+    // The record was written to a closed pull request because none was open. If one appears before
+    // the mutation, the exact-head CAS would still succeed and force-push that new review -- whose
+    // discarded head is named nowhere, which is precisely the state #350 describes as unreachable.
+    const branch = "release-please--branches--master--components--pack";
+    const originalCreate = vi.fn();
+    const originalUpdate = vi.fn();
+    const graphql = vi.fn().mockResolvedValue({ repository: { id: "repo-id" } });
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql,
+      octokit: { git: { createRef: originalCreate, updateRef: originalUpdate } },
+    };
+    const records = new Map([
+      [
+        branch,
+        { head: "b".repeat(40), recordId: 1, pullRequestNumber: 337, recordHomeIsOpen: false },
+      ],
+    ]);
+
+    await expect(
+      withReleaseBranchRewriteCas(
+        github,
+        records,
+        new Map(),
+        async () =>
+          github.octokit.git.updateRef({
+            ref: `heads/${branch}`,
+            sha: "c".repeat(40),
+            force: true,
+          }),
+        async () => 412,
+      ),
+    ).rejects.toThrow(/#412 opened for .* while its rewrite was being prepared/iu);
+
+    // The observable outcome that matters: no rewrite was attempted by either path.
+    expect(originalUpdate).not.toHaveBeenCalled();
+    expect(graphql).not.toHaveBeenCalledWith(
+      expect.stringContaining("updateRefs"),
+      expect.anything(),
+    );
+  });
+
+  it("proceeds with a closed-home rewrite while no pull request has opened", async () => {
+    const branch = "release-please--branches--master--components--pack";
+    const before = "b".repeat(40);
+    const after = "c".repeat(40);
+    const originalUpdate = vi.fn();
+    const graphql = vi
+      .fn()
+      .mockResolvedValueOnce({ repository: { id: "repo-id" } })
+      .mockResolvedValueOnce({ updateRefs: { clientMutationId: null } });
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql,
+      octokit: { git: { createRef: vi.fn(), updateRef: originalUpdate } },
+    };
+    const confirmed = new Map();
+
+    await withReleaseBranchRewriteCas(
+      github,
+      new Map([
+        [branch, { head: before, recordId: 1, pullRequestNumber: 337, recordHomeIsOpen: false }],
+      ]),
+      confirmed,
+      async () => github.octokit.git.updateRef({ ref: `heads/${branch}`, sha: after, force: true }),
+      async () => null,
+    );
+
+    expect(graphql).toHaveBeenLastCalledWith(
+      expect.stringContaining("updateRefs"),
+      expect.objectContaining({
+        refUpdates: [expect.objectContaining({ beforeOid: before, afterOid: after })],
+      }),
+    );
+    // A receipt is still produced, so the discarded head is named even though its home is closed.
+    expect(confirmed.get(branch)).toMatchObject({
+      after,
+      record: { id: 1, marker: { branch, before } },
+    });
+  });
+
+  it("refuses a closed-home rewrite when it cannot check for a new pull request", async () => {
+    // "Could not determine" is not "none". Without a checker the closed-home path is unverifiable,
+    // and an unverifiable rewrite must not proceed.
+    const branch = "release-please--branches--master--components--pack";
+    const originalUpdate = vi.fn();
+    const github = {
+      repository: { owner: "lamemustafa", repo: "pack" },
+      graphql: vi.fn().mockResolvedValue({ repository: { id: "repo-id" } }),
+      octokit: { git: { createRef: vi.fn(), updateRef: originalUpdate } },
+    };
+
+    await expect(
+      withReleaseBranchRewriteCas(
+        github,
+        new Map([
+          [
+            branch,
+            { head: "b".repeat(40), recordId: 1, pullRequestNumber: 337, recordHomeIsOpen: false },
+          ],
+        ]),
+        new Map(),
+        async () =>
+          github.octokit.git.updateRef({
+            ref: `heads/${branch}`,
+            sha: "c".repeat(40),
+            force: true,
+          }),
+      ),
+    ).rejects.toThrow(/cannot verify that no release pull request opened/iu);
+    expect(originalUpdate).not.toHaveBeenCalled();
+  });
+
   it("refuses an unrecorded generated-branch force update", async () => {
     const branch = "release-please--branches--master--components--pack";
     const originalCreate = vi.fn();
@@ -627,7 +741,14 @@ describe("release branch rewrite records", () => {
           return {
             ok: true,
             status: 200,
-            json: async () => handlers.pulls ?? [{ number: 337 }],
+            // `state=all` is the history lookup used only when nothing is open, so it must be
+            // answerable separately: a retained branch whose release pull request merged has an
+            // empty open list and a non-empty history, and collapsing the two hides exactly the
+            // case this distinction exists for.
+            json: async () =>
+              String(url).includes("state=all")
+                ? (handlers.allPulls ?? handlers.pulls ?? [{ number: 337 }])
+                : (handlers.pulls ?? [{ number: 337 }]),
           } as unknown as Response;
         }
         if (path.includes("/timeline")) {
@@ -695,15 +816,45 @@ describe("release branch rewrite records", () => {
     expect(posted?.body).not.toContain("after=");
   });
 
-  it("holds a retained generated branch without a durable rewrite marker", async () => {
+  it("holds a retained generated branch with no pull request at all to record against", async () => {
     const head = "b".repeat(40);
-    const calls = stubGitHub({ heads: head, pulls: [] });
+    // Neither open nor closed: nothing anywhere can hold the marker, so there is no safe rewrite.
+    const calls = stubGitHub({ heads: head, pulls: [], allPulls: [] });
     const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
 
     await expect(
       openBranchRewriteRecords({ env, owner: "lamemustafa", repo: "pack", targetBranch: "master" }),
-    ).rejects.toThrow(/no open release pull request.*durable rewrite record/iu);
+    ).rejects.toThrow(/no release pull request, open or closed/iu);
     expect(calls.find((call) => call.method === "POST")).toBeUndefined();
+  });
+
+  it("records against the merged pull request when the branch outlived it", async () => {
+    // The ordinary state of a repository that does not delete merged head branches. Refusing here
+    // meant Release Please's reuse of the retained branch was rejected as unrecorded, so no
+    // further release pull request could be created until the branch was deleted by hand -- on a
+    // workflow that runs on every push to master.
+    const head = "b".repeat(40);
+    const calls = stubGitHub({ heads: head, pulls: [], allPulls: [{ number: 337 }] });
+    const { openBranchRewriteRecords } = await import("../../scripts/run-release-please.mjs");
+
+    const heads = await openBranchRewriteRecords({
+      env,
+      owner: "lamemustafa",
+      repo: "pack",
+      targetBranch: "master",
+    });
+
+    expect(heads.get(branch)).toMatchObject({
+      head,
+      pullRequestNumber: 337,
+      recordId: 999,
+      recordHomeIsOpen: false,
+    });
+    // The marker still names the head about to be discarded. That is what #350 needs; it claims
+    // nothing about continuity for a review that is already closed.
+    const posted = calls.find((call) => call.method === "POST");
+    expect(posted?.path).toContain("/issues/337/comments");
+    expect(posted?.body).toContain(`review-gate-rewrite branch=${branch} before=${head}`);
   });
 
   it("holds an interrupted record when its branch changed", async () => {
