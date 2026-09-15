@@ -3,10 +3,22 @@
 // rejects it. `scripts/run-release-please.d.mts` cost a round exactly that way. Keep this minimal:
 // the smaller the surface restated here, the less there is to drift.
 
-/** `[major, minor, patch]`, parsed numerically from the leading version in a version or range. */
+/** `[major, minor, patch]`, parsed numerically from the leading version in an exact version. */
 export type SemanticVersion = [number, number, number];
 
+/** Throws on anything without a leading `x.y.z`; ranges go through `declaredFloor` instead. */
 export function parseVersion(value: unknown): SemanticVersion;
+
+/**
+ * The floor a bare `>=x.y.z` declares, or a reason the range cannot be fully honoured.
+ *
+ * Only a bare floor is evaluated. An upper bound, an `||`, a caret, a tilde or a wildcard returns
+ * `unsupported` rather than a partially-enforced floor, so a runtime a range explicitly excludes
+ * is never silently accepted.
+ */
+export function declaredFloor(
+  engines: unknown,
+): { floor: SemanticVersion; unsupported?: undefined } | { unsupported: string; floor?: undefined };
 
 /** `true` when `candidate` is the same as or newer than `minimum`. */
 export function atLeast(candidate: SemanticVersion, minimum: SemanticVersion): boolean;

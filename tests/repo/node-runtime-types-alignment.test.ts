@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertNodeRuntime,
   atLeast,
+  declaredFloor,
   nodeRuntimeProblems,
   parseVersion as parseRuntimeVersion,
   resolvedTypesNodeVersion,
@@ -136,5 +137,45 @@ describe("node runtime assertion", () => {
     // Reads the actual files rather than fixtures, so a change to either shape is caught here
     // instead of at the moment a workflow runs.
     await expect(assertNodeRuntime({ runtime: "24.20.0" })).resolves.toEqual([]);
+  });
+
+  // A floor is the only range shape this check evaluates. Reading the first version out of a
+  // richer range and calling it the floor would silently ignore the rest -- and both cases below
+  // were verified to be accepted before `declaredFloor` existed, which is a guard reporting
+  // "acceptable" for a runtime the declared range explicitly excludes.
+  it.each([
+    [">=24.20.0 <25.0.0", "26.5.0", "26.1.0"],
+    ["^24.20.0 || >=26.0.0", "25.0.0", "25.1.0"],
+    ["^24.20.0", "25.9.0", "25.1.0"],
+    ["~24.20.0", "24.30.0", "24.13.4"],
+  ])("refuses the range %s rather than enforcing only its floor", (engines, runtime, typesNode) => {
+    const problems = nodeRuntimeProblems({ runtime, engines, typesNode });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("cannot fully honour");
+  });
+
+  it("names a range it cannot parse at all instead of throwing", () => {
+    // `24.x` has no `x.y.z` to extract. Before this it threw out of a top-level await, replacing
+    // the script's own message with a raw stack trace.
+    expect(() => nodeRuntimeProblems({ runtime: "24.20.0", engines: "24.x", typesNode: "24.13.4" }))
+      .not.toThrow();
+    expect(
+      nodeRuntimeProblems({ runtime: "24.20.0", engines: "24.x", typesNode: "24.13.4" })[0],
+    ).toContain("cannot fully honour");
+  });
+
+  it("accepts a bare floor, with or without whitespace and a v prefix", () => {
+    expect(declaredFloor(">=24.20.0").floor).toEqual([24, 20, 0]);
+    expect(declaredFloor(">= v24.20.0").floor).toEqual([24, 20, 0]);
+    expect(declaredFloor("  >=24.20.0  ").floor).toEqual([24, 20, 0]);
+  });
+
+  it("keeps this repository's own engines.node in the supported shape", async () => {
+    // If the floor is ever widened into a real range, this fails here rather than in CI, and the
+    // message says what to do about it.
+    const { engines } = JSON.parse(await readFile("package.json", "utf8")) as {
+      engines: { node: string };
+    };
+    expect(declaredFloor(engines.node).unsupported).toBeUndefined();
   });
 });
