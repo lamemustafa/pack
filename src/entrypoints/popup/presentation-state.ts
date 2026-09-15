@@ -1,5 +1,9 @@
 import type { PortalContext } from "../../core/contracts";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import {
+  declinedArtifactSafeMessage,
+  getBoundDeclinedArtifactSignal,
+} from "../../connectors/gst/filed-returns-declined-artifact";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import {
   canRetryFullFiscalYearZipWithoutPortal,
@@ -88,6 +92,21 @@ export function getPopupPresentationState(
   );
   if (context && !context.supported && !hasTerminalSummary) {
     return getUnsupportedContextState(context);
+  }
+
+  const declinedArtifactSignal =
+    summary?.status === "complete"
+      ? getBoundDeclinedArtifactSignal(summary.scope, summary.flowStep.safeSignals)
+      : null;
+  if (declinedArtifactSignal) {
+    return {
+      badge: "Unavailable",
+      body: declinedArtifactSafeMessage(declinedArtifactSignal),
+      icon: "–",
+      kind: "unavailable",
+      title: "No artifact available",
+      tone: "neutral",
+    };
   }
 
   if (summary?.flowStep.safeSignals.includes("filed-return-positively-not-filed")) {

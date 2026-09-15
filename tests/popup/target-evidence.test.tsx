@@ -79,6 +79,19 @@ describe("per-target evidence", () => {
     expect(markup).not.toContain("Saved");
   });
 
+  it("names a not-generated statement without counting it as a saved file", () => {
+    const summary = summaryWith([{ period: "April", outcome: "not-generated" }]);
+    summary.scope = { ...summary.scope, artifactType: "EXCEL", returnType: "GSTR-2B" };
+
+    const markup = renderToStaticMarkup(<TargetEvidence summary={summary} />);
+
+    expect(markup).toContain("April");
+    expect(markup).toContain("Not generated");
+    expect(markup).toContain("0 of 1 saved");
+    expect(markup).not.toContain("Saved");
+    expect(markup).not.toContain("Needs review");
+  });
+
   it("renders nothing when the run carries no per-target evidence", () => {
     const summary = summaryWith([{ period: "April", outcome: "saved" }]);
     delete summary.targetEvidence;

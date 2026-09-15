@@ -1,10 +1,11 @@
+import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsAllSupportedFullFiscalYearRequest,
   FiledReturnsDownloadScope,
-  FiledReturnsFullFiscalYearTargetStatus,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
   expandAllSupportedFullFiscalYearTargetPlan,
@@ -32,7 +33,10 @@ import {
   markAllSupportedFullFiscalYearTargetTerminal,
   nextRunnableAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
-import { allSupportedTerminalPlanRoots } from "./filed-returns-all-supported-full-fiscal-year-summary";
+import {
+  unresolvedAllSupportedFullFiscalYearStep as unresolvedRunStep,
+  allSupportedTerminalPlanRoots,
+} from "./filed-returns-all-supported-full-fiscal-year-summary";
 import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
@@ -45,12 +49,16 @@ import type {
   FiledReturnsAllSupportedFullFiscalYearPeriodPlan,
   FiledReturnsAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
+import { durableAllSupportedFullFiscalYearArtifactSignals } from "./filed-returns-all-supported-full-fiscal-year-validation";
 import {
   discardAllSupportedFullFiscalYearFiledReturnsZip,
   exportAllSupportedFullFiscalYearZip,
   reconcileAllSupportedFullFiscalYearZipDownload,
 } from "./filed-returns-all-supported-full-fiscal-year-zip";
-import { targetStatusFromFlowStep } from "./filed-returns-full-fiscal-year-summary";
+import {
+  targetStatusFromFlowStep,
+  fullFiscalYearTargetFlowStep,
+} from "./filed-returns-full-fiscal-year-summary";
 import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 
 type AllSupportedRunnerDeps = FiledReturnsFlowRunnerDeps & {
@@ -61,10 +69,6 @@ type AllSupportedRunnerDeps = FiledReturnsFlowRunnerDeps & {
 
 type SystemErrorPredecessor = FiledReturnsFlowStepCategory | "initial";
 
-const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
 const MAX_DURABLE_FLOW_SIGNALS = 32;
 
 /**
@@ -377,8 +381,9 @@ async function continueSavedAllSupportedFullFiscalYearRun(
   }
   if (
     ledger.status === "partial" &&
-    ledger.targets.every((target) =>
-      ["pending", ...POSITIVE_TARGET_STATUSES].includes(target.status),
+    ledger.targets.every(
+      (target) =>
+        target.status === "pending" || isResolvedFullFiscalYearTargetStatus(target.status),
     )
   ) {
     return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
@@ -552,12 +557,13 @@ async function runAllSupportedFullFiscalYearTargets(
         systemErrorPredecessor,
       ),
     );
-    const targetStatus = targetStatusFromFlowStep(flowStep);
+    const terminalFlowStep = fullFiscalYearTargetFlowStep(flowStep, scope.returnType);
+    const targetStatus = targetStatusFromFlowStep(terminalFlowStep, scope.returnType);
     ledger = markAllSupportedFullFiscalYearTargetTerminal(
       ledger,
       nextTarget.targetId,
       targetStatus,
-      flowStep,
+      terminalFlowStep,
       deps.now?.() ?? new Date(),
     );
     if (canCompleteAllSupportedFullFiscalYearLedger(ledger)) {
@@ -568,8 +574,8 @@ async function runAllSupportedFullFiscalYearTargets(
     const persistedTarget = ledger.targets.find(
       (target) => target.targetId === nextTarget.targetId,
     );
-    if (persistedTarget && POSITIVE_TARGET_STATUSES.has(persistedTarget.status)) continue;
-    return allSupportedResponse(deps, ledger, flowStep);
+    if (persistedTarget && isResolvedFullFiscalYearTargetStatus(persistedTarget.status)) continue;
+    return allSupportedResponse(deps, ledger, terminalFlowStep);
   }
 }
 
@@ -717,7 +723,7 @@ function toAllSupportedSummary(
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
     updatedAt: ledger.updatedAt,
     completedTargetIds: ledger.targets
-      .filter((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+      .filter((target) => isResolvedFullFiscalYearTargetStatus(target.status))
       .map((target) => target.targetId),
     targetEvidence: ledger.targets.map((target) => ({
       targetId: target.targetId,
@@ -748,18 +754,17 @@ function targetOutcome(
   target: FiledReturnsAllSupportedFullFiscalYearTarget,
   zipDelivered: boolean,
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary["targetEvidence"][number]["outcome"] {
-  if (target.status === "not-filed") return "not-filed";
-  if (target.status === "downloaded") {
-    if (!zipDelivered) return "captured";
-    return target.safeSignals.some((signal) =>
-      signal.startsWith("filed-return-artifact-unavailable:"),
-    )
-      ? "partly-saved"
-      : "saved";
-  }
-  if (target.status === "pending") return "pending";
-  if (target.status === "running") return "running";
-  return "needs-review";
+  // The same exhaustive mapping the single-return fiscal-year path uses. Two hand-written copies
+  // stood here, each ending in a `needs-review` default that silently absorbed any status they had
+  // not been told about -- so a period the portal declined to generate was reported to the user as
+  // needing review, in the one run type where it could not be. The shared record fails to compile
+  // instead, which is the only reason the single-return path was already right.
+  return filedReturnsTargetOutcome(
+    target.status,
+    zipDelivered,
+    false,
+    target.safeSignals.some((signal) => signal.startsWith("filed-return-artifact-unavailable:")),
+  );
 }
 
 function scopeForTarget(
@@ -832,11 +837,7 @@ function mergeRetriedArtifactSignals(
   previousSignals: readonly string[],
   flowStep: PortalFlowStepResult,
 ): PortalFlowStepResult {
-  const retained = previousSignals.filter(
-    (signal) =>
-      /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|JSON|EXCEL)$/.test(signal) ||
-      /^all-supported-full-fiscal-year-opfs-staged:(?:PDF|JSON|EXCEL)$/.test(signal),
-  );
+  const retained = durableAllSupportedFullFiscalYearArtifactSignals(previousSignals);
   return retained.length === 0
     ? flowStep
     : { ...flowStep, safeSignals: Array.from(new Set([...retained, ...flowStep.safeSignals])) };
@@ -974,24 +975,6 @@ function interruptedRunStep(
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: "Review the saved targets before resuming this fiscal-year run.",
-      canResume: true,
-    },
-  };
-}
-
-function unresolvedRunStep(
-  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
-): PortalFlowStepResult {
-  return {
-    connectorId: "gst",
-    scopeId: filedReturnScopeId(ledger.targets[0]!.returnType),
-    state: "blocked",
-    safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
-    safeMessage:
-      "Pack retained the saved fiscal-year plan and will not repeat unresolved portal targets.",
-    userAction: {
-      type: "RETRY_PORTAL_GENERATION",
-      message: "Resolve the saved fiscal-year plan before starting another one.",
       canResume: true,
     },
   };

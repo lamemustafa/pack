@@ -6,6 +6,7 @@ import type {
   FiledReturnsLedgerPlanTarget,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import {
   normaliseFiledReturnsArtifactType,
   type FiledReturnsArtifactType,
@@ -34,10 +35,6 @@ export {
 } from "./filed-returns-full-fiscal-year-validation";
 
 const ACTIVE_LEDGER_STALE_MS = 30_000;
-const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
 
 export function createFullFiscalYearLedger(
   scope: FiledReturnsDownloadScope,
@@ -230,7 +227,7 @@ export function canCompleteFullFiscalYearLedger(ledger: FiledReturnsFullFiscalYe
   return (
     hasCanonicalFullFiscalYearTargetPlan(ledger) &&
     ledger.targets.length > 0 &&
-    ledger.targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+    ledger.targets.every((target) => isResolvedFullFiscalYearTargetStatus(target.status))
   );
 }
 
@@ -240,7 +237,7 @@ export function hasInconsistentFullFiscalYearCompletion(
 ): boolean {
   return (
     ledger.status === "complete" &&
-    ledger.targets.some((target) => !POSITIVE_TARGET_STATUSES.has(target.status))
+    ledger.targets.some((target) => !isResolvedFullFiscalYearTargetStatus(target.status))
   );
 }
 
@@ -248,7 +245,7 @@ export function hasActionRequiredFullFiscalYearTarget(
   ledger: FiledReturnsFullFiscalYearLedger,
 ): boolean {
   return ledger.targets.some(
-    (target) => target.status !== "pending" && !POSITIVE_TARGET_STATUSES.has(target.status),
+    (target) => target.status !== "pending" && !isResolvedFullFiscalYearTargetStatus(target.status),
   );
 }
 
@@ -347,7 +344,7 @@ export function markFullFiscalYearTargetTerminal(
           ["filed-return-durable-status-rejected"],
         )),
       ...(diagnosticState ?? {}),
-      ...(POSITIVE_TARGET_STATUSES.has(effectiveStatus) ? { completedAt: timestamp } : {}),
+      ...(isResolvedFullFiscalYearTargetStatus(effectiveStatus) ? { completedAt: timestamp } : {}),
       updatedAt: timestamp,
     };
   });
@@ -434,10 +431,11 @@ function ledgerStatus(
   targets: readonly FiledReturnsFullFiscalYearTarget[],
   lastStatus: FiledReturnsFullFiscalYearTargetStatus,
 ): FiledReturnsFullFiscalYearLedger["status"] {
-  if (targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))) return "complete";
+  if (targets.every((target) => isResolvedFullFiscalYearTargetStatus(target.status)))
+    return "complete";
   if (lastStatus === "cancelled") return "cancelled";
   if (lastStatus === "manually-observed") return "partial";
-  if (POSITIVE_TARGET_STATUSES.has(lastStatus)) return "partial";
+  if (isResolvedFullFiscalYearTargetStatus(lastStatus)) return "partial";
   return "blocked";
 }
 

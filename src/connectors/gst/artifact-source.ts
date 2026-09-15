@@ -1,15 +1,14 @@
-import { validateArtifactBytes } from "./artifact-validation";
+import { describeJsonArtifactRejection, validateArtifactBytes } from "./artifact-validation";
 import {
   GSTR1_DETAIL_PATH,
   GSTR1_PAGE_GENERATED_ARTIFACTS,
-  GSTR1_SUMMARY_PATH,
   GSTR1_SUMMARY_PREFLIGHT_PATH,
   GSTR2B_JSON_PATH,
   GSTR2B_ORIGIN,
   GSTR2B_PAGE_GENERATED_ARTIFACTS,
   GSTR2B_SUMMARY_PATH,
+  findPageArtifactControls,
 } from "./portal-artifact-endpoints";
-import { getClickableElements, normaliseText } from "./filed-returns-dom";
 import { extractScopedFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import { filedReturnDetailIdentityMatchesScope } from "./filed-returns-detail-navigation";
 import { resolveVisibleFiledReturnDownloadCandidates } from "./filed-returns-download-candidates";
@@ -224,14 +223,37 @@ async function acquireGstr1Artifact(
   const preflightBytes = new Uint8Array(await response.arrayBuffer());
   if (isHtmlResponse(preflightBytes)) return failed(request, "preflight-failed");
   const preflight = validateArtifactBytes(preflightBytes, "JSON", request.returnPeriod, "GSTR-1");
-  if (!preflight.ok) return failed(request, preflight.reason);
-  const expectedPath = request.artifactType === "PDF" ? GSTR1_SUMMARY_PATH : GSTR1_DETAIL_PATH;
-  if (view.location.pathname !== expectedPath)
-    return failed(request, "wrong-page", ["target-period-verified"]);
+  if (!preflight.ok) {
+    return failed(request, preflight.reason, [
+      "gstr1-summary-preflight-rejected",
+      ...describeJsonArtifactRejection(preflightBytes, request.returnPeriod, "GSTR-1"),
+    ]);
+  }
   const descriptor = GSTR1_PAGE_GENERATED_ARTIFACTS[request.artifactType];
-  const controls = resolvePageArtifactControls(documentRef, descriptor.controlText);
-  if (controls.length !== 1 || !controls[0])
-    return failed(request, "control-not-found", ["target-period-verified"]);
+  // The page decides which control to look for, because the same artifact is labelled differently
+  // on each surface that offers it. A page that is not one of those surfaces is refused.
+  const pathname = view.location.pathname.replace(/\/$/u, "") || "/";
+  const surface = descriptor.surfaces.find((candidate) => candidate.path === pathname);
+  if (!surface) {
+    // Named symbolically rather than by path, so the reason is diagnosable without a portal URL
+    // reaching a signal, a log, or an issue.
+    return failed(request, "wrong-page", [
+      "target-period-verified",
+      request.artifactType === "PDF"
+        ? "gstr1-pdf-expects-summary-page"
+        : "gstr1-excel-expects-detail-page",
+      pathname === GSTR1_DETAIL_PATH ? "gstr1-on-detail-page" : "gstr1-on-other-page",
+    ]);
+  }
+  const controls = findPageArtifactControls(documentRef, surface.controlText);
+  if (controls.length !== 1 || !controls[0]) {
+    // How many matched matters: none means the label is wrong for this page shape, several means
+    // the label is ambiguous and binding to one of them would be a guess.
+    return failed(request, "control-not-found", [
+      "target-period-verified",
+      controls.length === 0 ? "gstr1-control-label-unmatched" : "gstr1-control-label-ambiguous",
+    ]);
+  }
   const pageTargetMismatchSignals = gstr1PageTargetMismatchSignals(controls[0], request);
   if (pageTargetMismatchSignals.length > 0) {
     return failed(request, "page-period-mismatch", [
@@ -309,7 +331,7 @@ async function acquireGstr2bArtifact(
   if (view.location.pathname !== GSTR2B_SUMMARY_PATH)
     return failed(request, "wrong-page", ["target-period-verified"]);
   const descriptor = GSTR2B_PAGE_GENERATED_ARTIFACTS[request.artifactType];
-  const controls = resolvePageArtifactControls(documentRef, descriptor.controlText);
+  const controls = findPageArtifactControls(documentRef, descriptor.controlText);
   if (controls.length !== 1 || !controls[0])
     return failed(request, "control-not-found", ["target-period-verified"]);
   // The preflight above validated the fetched JSON, not the page. The summary
@@ -337,15 +359,6 @@ async function acquireGstr2bArtifact(
       `page-generated-${request.artifactType.toLowerCase()}-ready`,
     ],
   };
-}
-
-function resolvePageArtifactControls(documentRef: Document, canonicalLabel: string): HTMLElement[] {
-  const normalisedLabel = normaliseText(canonicalLabel);
-  return getClickableElements(documentRef).filter(
-    (element) =>
-      getClickableElements(element).length === 0 &&
-      normaliseText(element.textContent || "").includes(normalisedLabel),
-  );
 }
 
 function failed(

@@ -13,6 +13,12 @@ import { filedReturnScopeId } from "./filed-returns-return-descriptors";
 const GSTR2B_SUMMARY_ROUTE = /\/gstr2b\/auth\/gstr2b\/summary\/?$/i;
 const GSTR2B_AUTH_ROUTE = /\/gstr2b\/auth(?:\/|$)/i;
 
+// The summary route alone. `isGstr2bSummaryPage` additionally requires the download controls, so
+// it cannot identify the variant of this page where the portal renders a refusal in their place.
+export function isGstr2bSummaryRoute(documentRef: Document): boolean {
+  return GSTR2B_SUMMARY_ROUTE.test(documentRef.defaultView?.location.pathname ?? "");
+}
+
 export function isGstr2bSummaryPage(documentRef: Document, normalisedText: string): boolean {
   const pathname = documentRef.defaultView?.location.pathname ?? "";
   return (
@@ -53,10 +59,19 @@ export function verifyVisibleGstr2bSummaryScope(
   return verifyVisibleGstr2bPeriod(documentRef, normalised, scope);
 }
 
+/**
+ * `null` when this page is the requested period, otherwise the mismatch that rejects it.
+ *
+ * `requireVisibleEvidence` decides whether the page's own inline configuration may stand in for
+ * the identity a reader can see. A download click may rely on it, because the file that follows
+ * is correlated to this target before the target counts as complete. A refusal may not: it
+ * resolves the target outright, so the visible header is the only evidence there will ever be.
+ */
 export function verifyVisibleGstr2bPeriod(
   documentRef: Document,
   normalisedText: string,
   scope: FiledReturnsDownloadScope,
+  requireVisibleEvidence = false,
 ): PortalDownloadTriggerResult | null {
   const serverScope = extractGstr2bServerScope(documentRef);
   const visiblePeriod = extractGstr2bLabelValue(normalisedText, "return period");
@@ -80,16 +95,13 @@ export function verifyVisibleGstr2bPeriod(
     return gstr2bPeriodMismatch(serverScope ? ["gstr2b-server-visible-period-conflict"] : []);
   }
 
-  if (hasCompleteLabelledEvidence) return null;
+  // Whole-page month/year matches are not target evidence: generated-on text and table content
+  // can mention another period. Only labels or the portal statement heading qualify as visible.
+  if (hasCompleteLabelledEvidence || statementScope) return null;
 
-  if (serverScope) return null;
+  if (serverScope && !requireVisibleEvidence) return null;
 
-  if (!statementScope) {
-    // Whole-page month/year matches are not target evidence: generated-on text and table
-    // content can mention another period. Only labels or the portal statement heading qualify.
-    return gstr2bPeriodMismatch(["gstr2b-labelled-period-evidence-missing"]);
-  }
-  return null;
+  return gstr2bPeriodMismatch(["gstr2b-labelled-period-evidence-missing"]);
 
   function gstr2bPeriodMismatch(extraSignals: string[]): PortalDownloadTriggerResult {
     return {

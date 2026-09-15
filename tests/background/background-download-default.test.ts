@@ -827,15 +827,21 @@ describe("background filed returns download defaults", () => {
 
     const response = await sendBackgroundMessage({ type: "PACK_GET_LAST_MANIFEST" });
 
-    expect(response).toEqual({
+    expect(response).toMatchObject({
       ok: false,
       error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
-      safeMessage: "Pack stopped while handling the local manifest request. Try the action again.",
       safeSite: "background-message-handler:last-manifest",
     });
     if (response.ok) throw new Error("expected a safe background failure");
+    // The reply names where it failed and appends a fingerprint of the throw. The fingerprint is
+    // the error class and the innermost symbol from Pack's own bundle -- never the error message,
+    // which is what could carry a portal URL or a local path.
+    expect(response.safeMessage).toContain(
+      "Pack stopped while handling the local manifest request. Try the action again.",
+    );
     expect(response.safeMessage).not.toContain("portal URL");
     expect(response.safeMessage).not.toContain("local path");
+    expect(response.safeMessage).not.toContain("must not escape");
   });
 
   it("persists and returns a terminal GSTR-2B mismatch summary to the popup", async () => {

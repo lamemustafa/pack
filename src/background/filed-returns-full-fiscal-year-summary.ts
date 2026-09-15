@@ -1,3 +1,8 @@
+import {
+  hasRetainedFullFiscalYearArtifactEvidence,
+  hasBoundArtifactRefusalSignal,
+  hasFullFiscalYearRefusalArtifactConflict,
+} from "../connectors/gst/filed-returns-durable-signals";
 import type {
   FiledReturnsTargetEvidence,
   FiledReturnsTargetOutcome,
@@ -8,15 +13,21 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import {
+  isResolvedFullFiscalYearTargetStatus,
+  needsExplicitFullFiscalYearRetry,
   isCleanedZipPhase,
   zipPhaseProvesDelivery,
 } from "../connectors/gst/filed-returns-contracts";
+import type { FiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
 import {
   filedReturnsArtifactLabel,
   normaliseFiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
-import { parseDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
+import {
+  parseDurableTargetStatus,
+  DURABLE_BOUND_REFUSAL_WITH_RETAINED_ARTIFACT_MESSAGE,
+} from "../connectors/gst/filed-returns-durable-status";
 import { isUnconfirmedBrowserDownloadSignal } from "./download-evidence-signals";
 import {
   canCompleteFullFiscalYearLedger,
@@ -24,6 +35,7 @@ import {
   hasInconsistentFullFiscalYearCompletion,
   isFullFiscalYearLedgerStale,
 } from "./filed-returns-full-fiscal-year-ledger";
+import { statesFullFiscalYearTargetAbsence } from "../connectors/gst/filed-returns-contracts";
 
 export function fullFiscalYearZipPhaseStep(
   ledger: FiledReturnsFullFiscalYearLedger,
@@ -121,11 +133,6 @@ const RUN_INDETERMINATE_SIGNALS: readonly string[] = [
   "filed-returns-active-run-malformed",
 ];
 
-const COMPLETED_SUMMARY_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
-
 /**
  * The nine internal statuses collapsed to what a reader is deciding about.
  *
@@ -141,6 +148,7 @@ const TARGET_OUTCOMES: Readonly<
   // OPFS, not delivered to the browser.
   downloaded: "saved",
   "not-filed": "not-filed",
+  "not-generated": "not-generated",
   // A person reporting what they saw is not correlated download evidence, so
   // this sits with the failures rather than with `saved`.
   "manually-observed": "needs-review",
@@ -154,6 +162,7 @@ const TARGET_OUTCOMES: Readonly<
 
 export function targetStatusFromFlowStep(
   step: PortalFlowStepResult,
+  returnType?: FiledReturnsReturnType,
 ): FiledReturnsFullFiscalYearTargetStatus {
   if (step.state === "downloaded") return "downloaded";
   if (step.state === "download-unconfirmed") return "download-unconfirmed";
@@ -162,6 +171,19 @@ export function targetStatusFromFlowStep(
   }
   if (step.safeSignals.includes("filed-return-positively-not-filed")) {
     return "not-filed";
+  }
+  // The portal stated it produced nothing for this period. A positive answer, like
+  // `filed-return-positively-not-filed` above -- not an inability to determine.
+  //
+  // Read the return type's refusal from the canonical signal list rather than naming GSTR-2B's
+  // pair here. Spelling it out excluded `filed-gstr1-excel-no-details-available`, so a full-year
+  // GSTR-1 Excel-only selection fell through to `blocked` and halted the year at the first month
+  // the portal declined -- while a direct single-period run of the same refusal completed.
+  if (hasBoundArtifactRefusalSignal(returnType, step.safeSignals)) {
+    if (hasFullFiscalYearRefusalArtifactConflict(returnType, step.safeSignals)) {
+      return "blocked";
+    }
+    return "not-generated";
   }
   if (step.safeSignals.some(isUnconfirmedBrowserDownloadSignal)) {
     return "download-unconfirmed";
@@ -176,6 +198,23 @@ export function targetStatusFromFlowStep(
     return "blocked";
   }
   return "failed";
+}
+
+export function fullFiscalYearTargetFlowStep(
+  step: PortalFlowStepResult,
+  returnType?: FiledReturnsReturnType,
+): PortalFlowStepResult {
+  if (
+    targetStatusFromFlowStep(step, returnType) === "blocked" &&
+    hasFullFiscalYearRefusalArtifactConflict(returnType, step.safeSignals)
+  ) {
+    return {
+      ...step,
+      state: "blocked",
+      safeMessage: DURABLE_BOUND_REFUSAL_WITH_RETAINED_ARTIFACT_MESSAGE,
+    };
+  }
+  return step;
 }
 
 export function summariseFullFiscalYearLedger(
@@ -238,13 +277,14 @@ export function needsResumeConfirmation(ledger: FiledReturnsFullFiscalYearLedger
  * ZIP afterwards. So `downloaded` means "Pack holds these bytes" until the ZIP
  * delivery signal appears, and only then does it mean the browser has them.
  */
-function targetOutcome(
+export function filedReturnsTargetOutcome(
   status: FiledReturnsFullFiscalYearTargetStatus,
   zipDelivered: boolean,
   runInterrupted: boolean,
   missedAnArtifact: boolean,
 ): FiledReturnsTargetOutcome {
   const outcome = TARGET_OUTCOMES[status];
+  if (outcome === "not-generated" && missedAnArtifact) return "needs-review";
   // `summariseFullFiscalYearLedger` reports an interrupted run as blocked while
   // leaving the current target's durable status at `running`. Nothing is
   // running after an MV3 worker interruption, and reading it as "In progress"
@@ -327,8 +367,11 @@ export function fullFiscalYearTargetEvidence(
   // run produced. Everything that depended on a file Pack no longer has goes.
   if (runDiscarded || (clearedWithoutDelivery && hadStagedFiles)) {
     return ledger.targets
-      .filter((target) => target.status === "not-filed")
-      .map((target) => ({ period: target.period, outcome: "not-filed" as const }));
+      .filter((target) => statesFullFiscalYearTargetAbsence(target.status))
+      .map((target) => ({
+        period: target.period,
+        outcome: filedReturnsTargetOutcome(target.status, false, false, false),
+      }));
   }
   // From the step as well as the ledger. An MV3 interruption produces a blocked
   // summary while the persisted ledger normally still reads `running`, so
@@ -343,7 +386,7 @@ export function fullFiscalYearTargetEvidence(
     RUN_INDETERMINATE_SIGNALS.some((signal) => flowStep.safeSignals.includes(signal));
   return ledger.targets.map((target) => ({
     period: target.period,
-    outcome: targetOutcome(
+    outcome: filedReturnsTargetOutcome(
       target.status,
       zipDelivered,
       runInterrupted,
@@ -377,9 +420,9 @@ function targetMissedAnArtifact(target: FiledReturnsFullFiscalYearTarget): boole
   // absence fails ledger validation, so this cannot be reached with a real
   // record. A malformed one throwing here is diagnosable; a malformed one
   // silently reading as saved is not.
-  return target.safeSignals.some((signal) =>
-    signal.startsWith("filed-return-artifact-unavailable:"),
-  );
+  return target.status === "not-generated"
+    ? hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals)
+    : target.safeSignals.some((signal) => signal.startsWith("filed-return-artifact-unavailable:"));
 }
 
 export function toFullFiscalYearSummary(
@@ -388,7 +431,7 @@ export function toFullFiscalYearSummary(
 ): FiledReturnsFlowSummary {
   ledger = recoveryLedgerView(ledger);
   const completedPeriods = ledger.targets
-    .filter((target) => COMPLETED_SUMMARY_TARGET_STATUSES.has(target.status))
+    .filter((target) => isResolvedFullFiscalYearTargetStatus(target.status))
     .map((target) => target.period);
   const recoveryTarget = fullFiscalYearRecoveryTarget(
     ledger,
@@ -456,7 +499,7 @@ export function completeFullFiscalYearStep(
       ...(unplanned.length > 0 ? ["full-fiscal-year-plan-narrower-than-eligible"] : []),
       ...(ledger.zipPhase === "cleaned-without-export" &&
       ledger.targets.length > 0 &&
-      ledger.targets.every((target) => target.status === "not-filed")
+      ledger.targets.every((target) => statesFullFiscalYearTargetAbsence(target.status))
         ? ["full-fiscal-year-no-zip-artifacts"]
         : []),
     ],
@@ -494,24 +537,14 @@ function fullFiscalYearRecoveryTarget(
     : ledger.targets.find(isRecoverableFullFiscalYearTarget);
 }
 
+// The exact complement of resolved, so it is derived rather than restated. Written out, this was a
+// seven-line list that had to be edited every time the union grew.
 function isRecoverableFullFiscalYearTarget(target: FiledReturnsFullFiscalYearTarget): boolean {
-  return (
-    target.status === "pending" ||
-    target.status === "download-unconfirmed" ||
-    target.status === "running" ||
-    target.status === "blocked" ||
-    target.status === "failed" ||
-    target.status === "cancelled" ||
-    target.status === "manually-observed"
-  );
+  return !isResolvedFullFiscalYearTargetStatus(target.status);
 }
 
 function hasRecoverableActionRequiredTarget(ledger: FiledReturnsFullFiscalYearLedger): boolean {
-  return ledger.targets.some((target) =>
-    ["blocked", "failed", "cancelled", "download-unconfirmed", "manually-observed"].includes(
-      target.status,
-    ),
-  );
+  return ledger.targets.some((target) => needsExplicitFullFiscalYearRetry(target.status));
 }
 
 export function activeFullFiscalYearStep(

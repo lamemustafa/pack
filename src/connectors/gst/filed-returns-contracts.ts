@@ -227,16 +227,160 @@ export interface FiledReturnsDownloadDiagnostic {
   errorCategory?: string;
 }
 
+// One list, and the type derived from it. A `Set<FiledReturnsFullFiscalYearTargetStatus>` literal
+// does not have to be exhaustive, so a status added to a union alone can pass type-checking while
+// a runtime allowlist elsewhere silently rejects it -- which is how a persisted run summary became
+// unparseable and took its whole run with it.
+export const FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES = [
+  "pending",
+  "running",
+  "downloaded",
+  "manually-observed",
+  "not-filed",
+  // The portal states there is no artifact for this period, as distinct from a taxpayer not
+  // having submitted one. The auto-drafted GSTR-2B statement is drafted by the portal, never
+  // submitted by the taxpayer, so recording it as unfiled would print a claim about them that
+  // the portal never made.
+  "not-generated",
+  "download-unconfirmed",
+  "blocked",
+  "failed",
+  "cancelled",
+] as const;
+
 export type FiledReturnsFullFiscalYearTargetStatus =
-  | "pending"
-  | "running"
-  | "downloaded"
-  | "manually-observed"
-  | "not-filed"
-  | "download-unconfirmed"
-  | "blocked"
-  | "failed"
-  | "cancelled";
+  (typeof FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES)[number];
+
+/** Membership in the list above, so a validator cannot be told a status the list already allows. */
+export function isFiledReturnsFullFiscalYearTargetStatus(
+  value: unknown,
+): value is FiledReturnsFullFiscalYearTargetStatus {
+  return (FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES as readonly unknown[]).includes(value);
+}
+
+/**
+ * What a status *means*, in one place, answered for every member.
+ *
+ * The questions below were previously asked as literal comparisons scattered across twenty-two
+ * modules. Nothing connected them, so each was an independent place to forget: `not-generated` was
+ * added to the union and five separate sites went on spelling the question `=== "not-filed"`,
+ * silently answering "no" for every period the portal declined to draft.
+ *
+ * A `Record` over the union is what makes that impossible. Adding a member does not compile until
+ * every question below has been answered for it -- which is the difference between this and the
+ * `Set` that used to live here, under a comment warning against exactly the `Set`.
+ */
+interface FiledReturnsTargetStatusBehaviour {
+  /** The run is still working on this by itself. Nobody needs to decide anything. */
+  active: boolean;
+  /** The portal has answered. Retrying cannot change the outcome, so a run counts it as done. */
+  resolved: boolean;
+  /**
+   * The portal stated that no artifact exists for this period.
+   *
+   * Deliberately one question with two members behind it. `not-filed` is a claim about the
+   * taxpayer and `not-generated` is a claim about the portal, so they must stay distinct wherever
+   * a person reads them -- but "is there a file to expect?" has the same answer for both, and
+   * every site that asked it by naming only `not-filed` was wrong.
+   */
+  statedAbsence: boolean;
+  /** A local file was staged for this target. Narrower than `resolved`: an absence stages nothing. */
+  producedFile: boolean;
+  /**
+   * Holds an answer a run must not discard or overwrite.
+   *
+   * Wider than `resolved`: a manually observed target was answered by a person rather than the
+   * portal, which does not resolve it but is still work that took a human and cannot be replaced.
+   */
+  holdsAnswer: boolean;
+  /**
+   * The signal a stored record claiming this status must carry, or `null` where none applies.
+   *
+   * A status is a claim, and a claim without its evidence is how a ledger comes back asserting
+   * something no run established. `downloaded` is `null` here because its evidence is a richer
+   * predicate than a signal name -- see `hasPositiveFiledReturnsDownloadEvidence`.
+   */
+  requiredEvidenceSignal: string | null;
+}
+
+const TARGET_STATUS_BEHAVIOUR: Readonly<
+  Record<FiledReturnsFullFiscalYearTargetStatus, FiledReturnsTargetStatusBehaviour>
+> = {
+  pending: base({ active: true }),
+  running: base({ active: true }),
+  downloaded: base({ resolved: true, producedFile: true, holdsAnswer: true }),
+  "manually-observed": base({ holdsAnswer: true }),
+  "not-filed": base({
+    resolved: true,
+    statedAbsence: true,
+    holdsAnswer: true,
+    requiredEvidenceSignal: "filed-return-positively-not-filed",
+  }),
+  "not-generated": base({
+    resolved: true,
+    statedAbsence: true,
+    holdsAnswer: true,
+    requiredEvidenceSignal: "filed-gstr2b-not-generated",
+  }),
+  "download-unconfirmed": base({}),
+  blocked: base({}),
+  failed: base({}),
+  cancelled: base({}),
+};
+
+/** Every question answers "no" unless a status says otherwise, so a new member starts inert. */
+function base(
+  overrides: Partial<FiledReturnsTargetStatusBehaviour>,
+): FiledReturnsTargetStatusBehaviour {
+  return {
+    active: false,
+    resolved: false,
+    statedAbsence: false,
+    producedFile: false,
+    holdsAnswer: false,
+    requiredEvidenceSignal: null,
+    ...overrides,
+  };
+}
+
+export function filedReturnsTargetStatusBehaviour(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+): FiledReturnsTargetStatusBehaviour {
+  return TARGET_STATUS_BEHAVIOUR[status];
+}
+
+export function isResolvedFullFiscalYearTargetStatus(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+): boolean {
+  return TARGET_STATUS_BEHAVIOUR[status].resolved;
+}
+
+/** The portal said there is no artifact here -- whoever it made the claim about. */
+export function statesFullFiscalYearTargetAbsence(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+): boolean {
+  return TARGET_STATUS_BEHAVIOUR[status].statedAbsence;
+}
+
+/** An answer a run must not discard or overwrite, whether the portal or a person gave it. */
+export function holdsFullFiscalYearTargetAnswer(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+): boolean {
+  return TARGET_STATUS_BEHAVIOUR[status].holdsAnswer;
+}
+
+/**
+ * Unresolved, and not a state the run reaches by itself. What is left needs the user to choose.
+ *
+ * Derived rather than listed: a status that is neither resolved nor active belongs here by
+ * definition, so a new one cannot land in neither bucket.
+ */
+export function needsExplicitFullFiscalYearRetry(
+  status: FiledReturnsFullFiscalYearTargetStatus,
+): boolean {
+  const behaviour = TARGET_STATUS_BEHAVIOUR[status];
+  return !behaviour.resolved && !behaviour.active;
+}
 
 export interface FiledReturnsFullFiscalYearTarget {
   targetId: string;
@@ -374,6 +518,9 @@ export type FiledReturnsTargetOutcome =
   // offered is not a fault a re-run corrects, and routing it to review would
   // send someone looking for a problem that is not theirs.
   | "partly-saved"
+  // The portal never drafted anything for this period. Separate from `not-filed`, which says
+  // something about the taxpayer, and from `needs-review`, which says a re-run might help.
+  | "not-generated"
   | "captured"
   | "not-filed"
   | "needs-review"

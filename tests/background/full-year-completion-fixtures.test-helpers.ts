@@ -35,10 +35,12 @@ export function makeCompletedRecoveryLedger(
     stagedPositive?: boolean;
     positiveFirst?: boolean;
     currentPositive?: boolean;
+    returnType?: "GSTR-1" | "GSTR-2B" | "GSTR-3B";
+    stagedRecovery?: boolean;
   } = {},
 ): FiledReturnsFullFiscalYearLedger {
   const ledger = createFullFiscalYearLedger(
-    RECOVERY_SCOPE,
+    { ...RECOVERY_SCOPE, returnType: options.returnType ?? RECOVERY_SCOPE.returnType },
     new Date("2026-08-24T00:00:00.000Z"),
     FILED_RETURNS_MONTHS,
   );
@@ -52,7 +54,7 @@ export function makeCompletedRecoveryLedger(
           ? "downloaded"
           : "not-filed";
     const signals =
-      targetStatus === "downloaded"
+      targetStatus === "downloaded" || (index === recoveryIndex && options.stagedRecovery)
         ? ["filed-return-artifact-downloaded:PDF", "full-fiscal-year-opfs-staged:PDF"]
         : targetStatus === "not-filed"
           ? ["filed-return-positively-not-filed"]
@@ -72,7 +74,10 @@ export function makeCompletedRecoveryLedger(
               financialYear: target.financialYear,
               period: target.period,
               artifactType: "PDF" as const,
-              endpointClass: "gstr3b-portal-blob-captured-download" as const,
+              endpointClass:
+                target.returnType === "GSTR-2B"
+                  ? ("gstr2b-portal-blob-captured-download" as const)
+                  : ("gstr3b-portal-blob-captured-download" as const),
               downloadPathClass: "captured-portal-request-data" as const,
               status: "downloaded" as const,
               mimeClass: "pdf" as const,

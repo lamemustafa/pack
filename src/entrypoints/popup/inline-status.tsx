@@ -1,5 +1,9 @@
 import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
+import {
+  declinedArtifactSafeMessage,
+  getBoundDeclinedArtifactSignal,
+} from "../../connectors/gst/filed-returns-declined-artifact";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import { filedReturnsPlanCoverageMessage } from "../../connectors/gst/filed-returns-durable-status";
 import type { PopupPresentationState } from "./presentation-state";
@@ -252,10 +256,16 @@ function getInlineStatusCopy(
     };
   }
   if (presentation.kind === "unavailable") {
+    const declinedArtifactSignal =
+      summary?.status === "complete"
+        ? getBoundDeclinedArtifactSignal(summary.scope, summary.flowStep.safeSignals)
+        : null;
     return {
-      body: "The GST Portal did not report a filed return for this selection.",
+      body: declinedArtifactSignal
+        ? declinedArtifactSafeMessage(declinedArtifactSignal)
+        : "The GST Portal did not report a filed return for this selection.",
       icon: "–",
-      title: "No filed return found",
+      title: declinedArtifactSignal ? "No artifact available" : "No filed return found",
       tone: "neutral",
     };
   }

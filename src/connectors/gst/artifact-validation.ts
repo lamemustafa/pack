@@ -1,4 +1,5 @@
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import type { JsonArtifactRejectionSignal } from "./filed-returns-acquisition-diagnostics";
 
 export type ArtifactValidationResult =
   | {
@@ -11,7 +12,7 @@ export type ArtifactValidationResult =
   | { ok: false; reason: "empty" | "too-large" | "unexpected-content" | "target-period-mismatch" };
 
 const MIN_PDF_BYTES = 1024;
-const MIN_JSON_BYTES = 100;
+const MIN_NON_GSTR1_JSON_BYTES = 100;
 export const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];
 const XLSX_MAGIC = [0x50, 0x4b];
@@ -65,7 +66,14 @@ export function validateArtifactBytes(
       mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     };
   }
-  if (bytes.byteLength < MIN_JSON_BYTES) return { ok: false, reason: "unexpected-content" };
+  // GSTR-1 accepts a compact summary envelope, and a byte count alone cannot distinguish that
+  // contract from a truncated response.
+  // Every case the floor was standing in for is caught below and caught better: an empty body is
+  // rejected above, a non-JSON body fails to parse, and a body too small to hold the envelope
+  // fails the envelope and period checks that follow.
+  if (returnType !== "GSTR-1" && bytes.byteLength < MIN_NON_GSTR1_JSON_BYTES) {
+    return { ok: false, reason: "unexpected-content" };
+  }
   try {
     const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
     const contract = filedReturnsJsonDocumentContract(returnType);
@@ -81,6 +89,52 @@ export function validateArtifactBytes(
   } catch {
     return { ok: false, reason: "unexpected-content" };
   }
+}
+
+// Why a JSON artifact was refused, as signal fragments safe to show and to persist.
+//
+// `validateArtifactBytes` returns a category, and two different failures share the
+// `unexpected-content` category: a body that is not the expected envelope, and one whose period
+// field is absent. Diagnosing a live refusal from outside the browser needs the difference, and a
+// guard that cannot say which condition fired costs a round trip every time it fires.
+//
+// Everything here is a shape fact -- byte count band, field presence, parse success. No field
+// value is included, so nothing taxpayer-identifying can reach a signal.
+export function describeJsonArtifactRejection(
+  bytes: Uint8Array,
+  expectedReturnPeriod: string,
+  returnType: FiledReturnsReturnType,
+): JsonArtifactRejectionSignal[] {
+  if (bytes.byteLength === 0) return ["json-body-empty"];
+  // The size cap is a processing bound, not only a verdict. Decoding and parsing a body this
+  // function has already been told is too large spends exactly the work the cap exists to refuse,
+  // on the one path where the input is known to be unreasonable. The band is the whole diagnostic
+  // here: nothing inside an oversized body would change what a reader does about it.
+  if (bytes.byteLength > MAX_ARTIFACT_BYTES) return ["json-body-oversized"];
+  // Report the size band and keep going. Stopping here says only that the body is small, which
+  // cannot distinguish a legitimately compact envelope from a truncated or unrelated response --
+  // and that distinction is the whole question when a return has nothing in it.
+  const signals: JsonArtifactRejectionSignal[] = [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  } catch {
+    return [...signals, "json-parse-failed"];
+  }
+  const contract = filedReturnsJsonDocumentContract(returnType);
+  if (contract.requiredStatus !== undefined) {
+    const statusMatches = isJsonObject(parsed) && parsed.status === contract.requiredStatus;
+    if (!statusMatches) return [...signals, "json-status-unexpected"];
+  }
+  const document = jsonObjectAtPath(parsed, contract.envelopePath);
+  if (!document) return [...signals, "json-envelope-missing"];
+  const actualPeriod = document[contract.returnPeriodKey];
+  if (typeof actualPeriod !== "string") return [...signals, "json-period-field-missing"];
+  // A small body that still satisfies the contract is the case the size floor gets wrong, and
+  // this signal is what says so.
+  return actualPeriod === expectedReturnPeriod
+    ? [...signals, "json-contract-satisfied"]
+    : [...signals, "json-period-mismatch"];
 }
 
 function jsonObjectAtPath(input: unknown, path: readonly string[]): Record<string, unknown> | null {
