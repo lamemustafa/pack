@@ -16,6 +16,7 @@ import {
   allSupportedExplicitRetryTarget,
   allSupportedResumeMode,
   isAllSupportedFullFiscalYearLedgerStale,
+  isAllSupportedRunInterrupted,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import { isFiledReturnsRunLeaseLive } from "./filed-returns-active-run";
 import {
@@ -106,7 +107,7 @@ export function toAllSupportedFullFiscalYearSummary(
   leaseIsLive = false,
   allTerminalPlanRoots = allSupportedTerminalPlanRoots([ledger]),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
-  const flowStep = summaryStep(ledger, now, leaseIsLive);
+  const flowStep = summaryStep(ledger, isAllSupportedRunInterrupted(ledger, now, leaseIsLive));
   const zipDelivered =
     ledger.zipPhase === "cleaned-after-download" ||
     ledger.zipPhase === "downloaded-cleanup-pending";
@@ -115,18 +116,19 @@ export function toAllSupportedFullFiscalYearSummary(
       ledger.targets[0]!,
   );
   const resumeMode = allSupportedResumeMode(ledger);
-  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger);
+  // One derivation, consulted by every reader below. Previously the same condition was spelled out
+  // inline for the `status` projection and for `summaryStep`, and the recovery guard did not
+  // consult it at all -- so the summary reported the run as blocked while
+  // `allSupportedExplicitRetryTarget` still treated its target as active and offered nothing.
+  // That disagreement is #366: three exits, all gated on `running`, none reachable.
+  const interrupted = isAllSupportedRunInterrupted(ledger, now, leaseIsLive);
+  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger, interrupted);
   return {
     resumeAvailable: resumeMode !== null,
     ...(resumeMode ? { resumeMode } : {}),
     ...(allTerminalPlanRoots.length > 0 ? { terminalPlanRoots: allTerminalPlanRoots } : {}),
     summaryIdentity: { ...ledger.planRoot },
-    status:
-      isAllSupportedFullFiscalYearLedgerStale(ledger, now) &&
-      ledger.status === "running" &&
-      !leaseIsLive
-        ? "blocked"
-        : ledger.status,
+    status: interrupted ? "blocked" : ledger.status,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
     updatedAt: ledger.updatedAt,
     completedTargetIds: ledger.targets
@@ -190,8 +192,7 @@ function currentLedger(
 
 function summaryStep(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
-  now: Date,
-  leaseIsLive: boolean,
+  interrupted: boolean,
 ): PortalFlowStepResult {
   const noArtifacts = ledger.zipPhase === "cleaned-without-export";
   const current =
@@ -201,11 +202,7 @@ function summaryStep(
   const scopeId = filedReturnScopeId(current.returnType);
   // The status projection below already refuses to call a leased run interrupted; the message has
   // to agree, or the panel shows "running" while telling the reader Pack stopped.
-  if (
-    ledger.status === "running" &&
-    isAllSupportedFullFiscalYearLedgerStale(ledger, now) &&
-    !leaseIsLive
-  ) {
+  if (interrupted) {
     return {
       connectorId,
       scopeId,

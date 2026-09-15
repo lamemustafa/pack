@@ -751,4 +751,80 @@ describe("a period the portal declined to generate, in an all-returns year", () 
 
     expect(isAllSupportedFullFiscalYearLedger(invalid)).toBe(false);
   });
+
+  // #366: a service-worker death mid-target left the plan with no exit at all. Reproduced from a
+  // ledger captured from `chrome.storage.local` during a live authenticated run on 2026-09-15 --
+  // status `running`, one target `running` with `attempts: 1` and no result, thirteen `pending`,
+  // no `zipPhase`. The shape below is that capture, not an invented one.
+  describe("a run interrupted with a target still marked running", () => {
+    function interruptedLedger() {
+      const ledger = createLedger();
+      return {
+        ...ledger,
+        status: "running" as const,
+        // Older than the 30s staleness window, so the projection can see it is not merely slow.
+        updatedAt: new Date(Date.now() - 120_000).toISOString(),
+        currentTargetId: ledger.targets[0]!.targetId,
+        targets: ledger.targets.map((target, index) =>
+          index === 0 ? { ...target, status: "running" as const, attempts: 1 } : target,
+        ),
+      };
+    }
+
+    it("offers no recovery while a live lease says a worker is still behind it", () => {
+      // The guard this fix must not weaken. A leased run is a live race; resuming or retrying
+      // alongside it is exactly what the original refusal was written to prevent.
+      const summary = toAllSupportedFullFiscalYearSummary(interruptedLedger(), new Date(), true);
+      expect(summary.allSupportedFullFiscalYearRecovery).toBeUndefined();
+      expect(summary.status).toBe("running");
+    });
+
+    it("offers no recovery while the ledger is still fresh, even with no lease", () => {
+      // Within the staleness window the worker may simply not have written yet. Age alone is not
+      // evidence of death, which is why the lease exists.
+      const fresh = { ...interruptedLedger(), updatedAt: new Date().toISOString() };
+      expect(
+        toAllSupportedFullFiscalYearSummary(fresh, new Date(), false)
+          .allSupportedFullFiscalYearRecovery,
+      ).toBeUndefined();
+    });
+
+    it("offers an explicit retry for the abandoned target once stale and unleased", () => {
+      const ledger = interruptedLedger();
+      const summary = toAllSupportedFullFiscalYearSummary(ledger, new Date(), false);
+
+      // The observable outcome: the panel has something to render. Before this fix all three
+      // exits refused and the saved plan blocked every other scope, so the panel was unusable.
+      expect(summary.allSupportedFullFiscalYearRecovery).toMatchObject({
+        targetId: ledger.targets[0]!.targetId,
+        targetStatus: "running",
+        expectedRevision: ledger.revision,
+      });
+      expect(summary.status).toBe("blocked");
+    });
+
+    it("keeps the retry explicit rather than resuming the plan", () => {
+      // The target records an attempt and no result, so its portal action may already have fired.
+      // AGENTS.md routes that ambiguity to review, never to a blind retry -- so the exit is a
+      // per-target decision the reader makes, and plan-level resume stays refused.
+      const summary = toAllSupportedFullFiscalYearSummary(interruptedLedger(), new Date(), false);
+      expect(summary.resumeAvailable).toBe(false);
+    });
+
+    it("still withholds a retry when the abandoned target carries a non-resumable signal", () => {
+      const ledger = interruptedLedger();
+      const nonResumable = {
+        ...ledger,
+        targets: ledger.targets.map((target, index) =>
+          index === 0
+            ? { ...target, safeSignals: ["filed-return-durable-status-rejected"] }
+            : target,
+        ),
+      };
+      expect(
+        toAllSupportedFullFiscalYearSummary(nonResumable, new Date(), false)
+          .allSupportedFullFiscalYearRecovery,
+      ).toBeUndefined();
+    });
+  });
 });
