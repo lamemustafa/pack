@@ -47,10 +47,11 @@
     "review:format-disposition": "node scripts/format-review-gate-disposition.mjs",
     "validate:evidence": "node scripts/validate-live-run-evidence.mjs",
     "evidence:template": "node --experimental-strip-types scripts/create-live-run-evidence-template.mjs",
-    "verify:local": "pnpm install --frozen-lockfile && node scripts/run-dependency-audit.mjs && wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && git diff --check",
+    "verify:local": "node scripts/assert-node-runtime.mjs && pnpm install --frozen-lockfile && node scripts/run-dependency-audit.mjs && wxt prepare && prettier --check . && eslint . --max-warnings 0 && tsc --noEmit && vitest run && wxt build && node scripts/verify-extension-package.mjs .output/chrome-mv3 && git diff --check",
     "verify": "pnpm verify:local",
     "verify:release": "pnpm verify:local && pnpm verify:clean && wxt zip && node scripts/verify-extension-zip.mjs",
-    "verify:pr": "pnpm workflow:preflight && pnpm review:gate -- --strict-head-review --wait-head-review-ms 180000"
+    "verify:pr": "pnpm workflow:preflight && pnpm review:gate -- --strict-head-review --wait-head-review-ms 180000",
+    "check:node": "node scripts/assert-node-runtime.mjs"
   },
   "dependencies": {
     "@wxt-dev/module-react": "^1.1.3",

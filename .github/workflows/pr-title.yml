@@ -27,6 +27,9 @@ jobs:
         with:
           node-version: 24.20.0
 
+      - name: Assert Node runtime matches the declared engines
+        run: node scripts/assert-node-runtime.mjs
+
       - name: Check PR title
         run: node scripts/check-conventional-pr-title.mjs
         env:

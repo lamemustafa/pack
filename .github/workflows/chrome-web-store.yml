@@ -35,6 +35,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.20.0
+
+      - name: Assert Node runtime matches the declared engines
+        run: node scripts/assert-node-runtime.mjs
+
       - name: Require explicit enablement for a real upload
         env:
           CWS_DRY_RUN: ${{ inputs.dry_run }}
@@ -57,6 +65,9 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24.20.0
+
+      - name: Assert Node runtime matches the declared engines
+        run: node scripts/assert-node-runtime.mjs
 
       - name: Download verified release package
         run: >-
