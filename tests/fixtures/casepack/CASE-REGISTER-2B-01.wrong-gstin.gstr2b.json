@@ -1,0 +1,575 @@
+{
+  "chksum": "case-register-2b-01-synthetic",
+  "data": {
+    "gendt": "14-08-2025",
+    "gstin": "27AABCB9999K1Z1",
+    "rtnprd": "072025",
+    "version": "1.0",
+    "docdata": {
+      "b2b": [
+        {
+          "ctin": "27AAACS1111A1ZA",
+          "trdnm": "Sundar Steel Traders",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "inv": [
+            {
+              "inum": "SST/25-26/0412",
+              "dt": "03-07-2025",
+              "val": 118000,
+              "txval": 100000,
+              "igst": 0,
+              "cgst": 9000,
+              "sgst": 9000,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "SST/25-26/0431",
+              "dt": "18-07-2025",
+              "val": 88500,
+              "txval": 75000,
+              "igst": 0,
+              "cgst": 6750,
+              "sgst": 6750,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "SST/25-26/0445",
+              "dt": "12-07-2025",
+              "val": 59000,
+              "txval": 50000,
+              "igst": 0,
+              "cgst": 4500,
+              "sgst": 4500,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "SST/25-26/0450",
+              "dt": "05-07-2025",
+              "val": 103840,
+              "txval": 88000,
+              "igst": 0,
+              "cgst": 7920,
+              "sgst": 7920,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "INV-100",
+              "dt": "22-07-2025",
+              "val": 17700,
+              "txval": 15000,
+              "igst": 0,
+              "cgst": 1350,
+              "sgst": 1350,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "SST/25-26/0398",
+              "dt": "27-06-2025",
+              "val": 64900,
+              "txval": 55000,
+              "igst": 0,
+              "cgst": 4950,
+              "sgst": 4950,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            }
+          ]
+        },
+        {
+          "ctin": "24AABCK2222B1ZF",
+          "trdnm": "Kutch Poly Industries",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "inv": [
+            {
+              "inum": "KPI-1188",
+              "dt": "07-07-2025",
+              "val": 295000,
+              "txval": 250000,
+              "igst": 45000,
+              "cgst": 0,
+              "sgst": 0,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "KPI-1204",
+              "dt": "09-07-2025",
+              "val": 212400,
+              "txval": 180000,
+              "igst": 32400,
+              "cgst": 0,
+              "sgst": 0,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "kpi-1210",
+              "dt": "19-07-2025",
+              "val": 47200,
+              "txval": 40000,
+              "igst": 7200,
+              "cgst": 0,
+              "sgst": 0,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "KPI-1225",
+              "dt": "30-07-2025",
+              "val": 106200,
+              "txval": 90000,
+              "igst": 16200,
+              "cgst": 0,
+              "sgst": 0,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            }
+          ]
+        },
+        {
+          "ctin": "27AADCM3333C1ZX",
+          "trdnm": "Meridian Office Supplies",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "inv": [
+            {
+              "inum": "MOS/2025/0771",
+              "dt": "11-07-2025",
+              "val": 49560,
+              "txval": 42000,
+              "igst": 0,
+              "cgst": 3780,
+              "sgst": 3780,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "MOS/2025/0815",
+              "dt": "28-07-2025",
+              "val": 14567.890000000001,
+              "txval": 12345.67,
+              "igst": 0,
+              "cgst": 1111.11,
+              "sgst": 1111.11,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            }
+          ]
+        },
+        {
+          "ctin": "29AAECN4444D1ZJ",
+          "trdnm": "Nandi Logistics",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "inv": [
+            {
+              "inum": "NL-INV-9021",
+              "dt": "15-07-2025",
+              "val": 70800,
+              "txval": 60000,
+              "igst": 10800,
+              "cgst": 0,
+              "sgst": 0,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            }
+          ]
+        },
+        {
+          "ctin": "27AAFCR5555E1ZA",
+          "trdnm": "Rathi Packaging",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "inv": [
+            {
+              "inum": "RPK/JUL/0041",
+              "dt": "16-07-2025",
+              "val": 33000,
+              "txval": 30000,
+              "igst": 0,
+              "cgst": 1500,
+              "sgst": 1500,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "INV-100",
+              "dt": "22-07-2025",
+              "val": 25960,
+              "txval": 22000,
+              "igst": 0,
+              "cgst": 1980,
+              "sgst": 1980,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            },
+            {
+              "inum": "RPK/JUL/0050",
+              "dt": "23-07-2025",
+              "val": 11800,
+              "txval": 10000,
+              "igst": 0,
+              "cgst": 900,
+              "sgst": 900,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED"
+            }
+          ]
+        }
+      ],
+      "b2ba": [
+        {
+          "ctin": "27AADCM3333C1ZX",
+          "trdnm": "Meridian Office Supplies",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "inv": [
+            {
+              "inum": "MOS/2025/0771",
+              "dt": "11-07-2025",
+              "val": 53100,
+              "txval": 45000,
+              "igst": 0,
+              "cgst": 4050,
+              "sgst": 4050,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED",
+              "oinum": "MOS/2025/0771",
+              "oidt": "11-07-2025"
+            }
+          ]
+        }
+      ],
+      "cdnr": [
+        {
+          "ctin": "27AAACS1111A1ZA",
+          "trdnm": "Sundar Steel Traders",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "nt": [
+            {
+              "ntnum": "CN-SST-007",
+              "dt": "26-07-2025",
+              "val": -23600,
+              "txval": -20000,
+              "igst": 0,
+              "cgst": -1800,
+              "sgst": -1800,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED",
+              "suptyp": "R"
+            }
+          ]
+        },
+        {
+          "ctin": "24AABCK2222B1ZF",
+          "trdnm": "Kutch Poly Industries",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "nt": [
+            {
+              "ntnum": "CN-KPI-002",
+              "dt": "29-07-2025",
+              "val": -11800,
+              "txval": -10000,
+              "igst": -1800,
+              "cgst": 0,
+              "sgst": 0,
+              "cess": 0,
+              "pos": "27AABCB1234K1ZX",
+              "rev": "N",
+              "typ": "R",
+              "itcavl": "Y",
+              "rsn": "",
+              "srctyp": "GSTR2B",
+              "irn": "",
+              "irngendate": "",
+              "imsStatus": "ACCEPTED",
+              "suptyp": "R"
+            }
+          ]
+        }
+      ],
+      "impg": [
+        {
+          "boedt": "14-07-2025",
+          "boenum": "7712345",
+          "igst": 54000,
+          "portcode": "INMUN1",
+          "refdt": "14-07-2025",
+          "txval": 300000
+        }
+      ],
+      "isd": [
+        {
+          "igst": 7200,
+          "txval": 40000
+        },
+        {}
+      ]
+    },
+    "cpsumm": {
+      "b2b": [
+        {
+          "ctin": "27AAACS1111A1ZA",
+          "trdnm": "Sundar Steel Traders",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "ttldocs": 6,
+          "txval": 383000,
+          "igst": 0,
+          "cgst": 34470,
+          "sgst": 34470,
+          "cess": 0
+        },
+        {
+          "ctin": "24AABCK2222B1ZF",
+          "trdnm": "Kutch Poly Industries",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "ttldocs": 4,
+          "txval": 560000,
+          "igst": 100800,
+          "cgst": 0,
+          "sgst": 0,
+          "cess": 0
+        },
+        {
+          "ctin": "27AADCM3333C1ZX",
+          "trdnm": "Meridian Office Supplies",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "ttldocs": 2,
+          "txval": 54345.67,
+          "igst": 0,
+          "cgst": 4891.11,
+          "sgst": 4891.11,
+          "cess": 0
+        },
+        {
+          "ctin": "29AAECN4444D1ZJ",
+          "trdnm": "Nandi Logistics",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "ttldocs": 1,
+          "txval": 60000,
+          "igst": 10800,
+          "cgst": 0,
+          "sgst": 0,
+          "cess": 0
+        },
+        {
+          "ctin": "27AAFCR5555E1ZA",
+          "trdnm": "Rathi Packaging",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "ttldocs": 3,
+          "txval": 62000,
+          "igst": 0,
+          "cgst": 4380,
+          "sgst": 4380,
+          "cess": 0
+        }
+      ],
+      "b2ba": [
+        {
+          "ctin": "27AADCM3333C1ZX",
+          "trdnm": "Meridian Office Supplies",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "ttldocs": 1,
+          "txval": 45000,
+          "igst": 0,
+          "cgst": 4050,
+          "sgst": 4050,
+          "cess": 0
+        }
+      ],
+      "cdnr": [
+        {
+          "ctin": "27AAACS1111A1ZA",
+          "trdnm": "Sundar Steel Traders",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "ttldocs": 1,
+          "txval": -20000,
+          "igst": 0,
+          "cgst": -1800,
+          "sgst": -1800,
+          "cess": 0
+        },
+        {
+          "ctin": "24AABCK2222B1ZF",
+          "trdnm": "Kutch Poly Industries",
+          "supfildt": "11-08-2025",
+          "supprd": "072025",
+          "ttldocs": 1,
+          "txval": -10000,
+          "igst": -1800,
+          "cgst": 0,
+          "sgst": 0,
+          "cess": 0
+        }
+      ]
+    },
+    "itcsumm": {
+      "itcavl": {
+        "isd": {
+          "igst": 7200,
+          "txval": 40000
+        }
+      }
+    }
+  }
+}

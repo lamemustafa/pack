@@ -1,0 +1,728 @@
+{
+  "buyer": "27AABCB1234K1Z5",
+  "period": "072025",
+  "tolerance": "1.00",
+  "cases": [
+    {
+      "id": "D-001",
+      "family": "agreement",
+      "section": "B2B",
+      "sup": [
+        "27AAACS1111A1Z7",
+        "Sundar Steel Traders"
+      ],
+      "docno": "SST/25-26/0412",
+      "docdate": "2025-07-03",
+      "gst": {
+        "txval": "100000",
+        "cgst": "9000",
+        "sgst": "9000",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0071",
+        "vchdate": "2025-07-03",
+        "ref": "SST/25-26/0412",
+        "values": {
+          "txval": "100000",
+          "cgst": "9000",
+          "sgst": "9000",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT",
+      "note": "Baseline intra-state 18%."
+    },
+    {
+      "id": "D-002",
+      "family": "agreement",
+      "section": "B2B",
+      "sup": [
+        "24AABCK2222B1Z3",
+        "Kutch Poly Industries"
+      ],
+      "docno": "KPI-1188",
+      "docdate": "2025-07-07",
+      "gst": {
+        "txval": "250000",
+        "cgst": "0",
+        "sgst": "0",
+        "igst": "45000",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0072",
+        "vchdate": "2025-07-07",
+        "ref": "KPI-1188",
+        "values": {
+          "txval": "250000",
+          "cgst": "0",
+          "sgst": "0",
+          "igst": "45000",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT",
+      "note": "Baseline inter-state 18%."
+    },
+    {
+      "id": "D-003",
+      "family": "agreement",
+      "section": "B2B",
+      "sup": [
+        "27AADCM3333C1Z9",
+        "Meridian Office Supplies"
+      ],
+      "docno": "MOS/2025/0771",
+      "docdate": "2025-07-11",
+      "gst": {
+        "txval": "42000",
+        "cgst": "3780",
+        "sgst": "3780",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0073",
+        "vchdate": "2025-07-11",
+        "ref": "MOS/2025/0771",
+        "values": {
+          "txval": "42000",
+          "cgst": "3780",
+          "sgst": "3780",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT_SUPERSEDED_BY_AMENDMENT",
+      "note": "Amended by D-020. Must not be counted twice with its amendment."
+    },
+    {
+      "id": "D-004",
+      "family": "agreement",
+      "section": "B2B",
+      "sup": [
+        "29AAECN4444D1Z1",
+        "Nandi Logistics"
+      ],
+      "docno": "NL-INV-9021",
+      "docdate": "2025-07-15",
+      "gst": {
+        "txval": "60000",
+        "cgst": "0",
+        "sgst": "0",
+        "igst": "10800",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0074",
+        "vchdate": "2025-07-15",
+        "ref": "NL-INV-9021",
+        "values": {
+          "txval": "60000",
+          "cgst": "0",
+          "sgst": "0",
+          "igst": "10800",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT",
+      "note": "Service supply, inter-state."
+    },
+    {
+      "id": "D-005",
+      "family": "one_sided",
+      "section": "B2B",
+      "sup": [
+        "27AAACS1111A1Z7",
+        "Sundar Steel Traders"
+      ],
+      "docno": "SST/25-26/0431",
+      "docdate": "2025-07-18",
+      "gst": {
+        "txval": "75000",
+        "cgst": "6750",
+        "sgst": "6750",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": false
+      },
+      "expect": "GST_ONLY",
+      "note": "In 2B, absent from books. Unrecorded purchase candidate."
+    },
+    {
+      "id": "D-006",
+      "family": "one_sided",
+      "section": null,
+      "sup": [
+        "27AAFCR5555E1Z6",
+        "Rathi Packaging"
+      ],
+      "docno": "RPK/JUL/0033",
+      "docdate": "2025-07-21",
+      "gst": null,
+      "books": {
+        "present": true,
+        "vchno": "PUR/0075",
+        "vchdate": "2025-07-21",
+        "ref": "RPK/JUL/0033",
+        "values": {
+          "txval": "18000",
+          "cgst": "1620",
+          "sgst": "1620",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "BOOKS_ONLY",
+      "note": "Supplier has not filed. Removed in the rerun case C-025."
+    },
+    {
+      "id": "D-007",
+      "family": "one_sided",
+      "section": null,
+      "sup": [
+        "27AADCM3333C1Z9",
+        "Meridian Office Supplies"
+      ],
+      "docno": "MOS/2025/0802",
+      "docdate": "2025-07-24",
+      "gst": null,
+      "books": {
+        "present": true,
+        "vchno": "PUR/0076",
+        "vchdate": "2025-07-24",
+        "ref": "MOS/2025/0802",
+        "values": {
+          "txval": "9500",
+          "cgst": "855",
+          "sgst": "855",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "BOOKS_ONLY",
+      "note": "Second books-only item so a single fix cannot clear the family."
+    },
+    {
+      "id": "D-008",
+      "family": "values",
+      "section": "B2B",
+      "sup": [
+        "24AABCK2222B1Z3",
+        "Kutch Poly Industries"
+      ],
+      "docno": "KPI-1204",
+      "docdate": "2025-07-09",
+      "gst": {
+        "txval": "180000",
+        "cgst": "0",
+        "sgst": "0",
+        "igst": "32400",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0077",
+        "vchdate": "2025-07-09",
+        "ref": "KPI-1204",
+        "values": {
+          "txval": "181000",
+          "cgst": "0",
+          "sgst": "0",
+          "igst": "32400",
+          "cess": "0"
+        }
+      },
+      "expect": "TAXABLE_VALUE_DIFF",
+      "diffs": {
+        "txval": "-1000.00"
+      },
+      "note": "Taxable differs by 1000; tax components agree. Books voucher stays balanced."
+    },
+    {
+      "id": "D-009",
+      "family": "values",
+      "section": "B2B",
+      "sup": [
+        "27AAACS1111A1Z7",
+        "Sundar Steel Traders"
+      ],
+      "docno": "SST/25-26/0445",
+      "docdate": "2025-07-12",
+      "gst": {
+        "txval": "50000",
+        "cgst": "4500",
+        "sgst": "4500",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0078",
+        "vchdate": "2025-07-12",
+        "ref": "SST/25-26/0445",
+        "values": {
+          "txval": "50000",
+          "cgst": "4500",
+          "sgst": "4600",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "TAX_COMPONENT_DIFF",
+      "diffs": {
+        "sgst": "-100.00"
+      },
+      "note": "ONLY SGST differs. A taxable-value-only comparison would call this a match."
+    },
+    {
+      "id": "D-010",
+      "family": "values",
+      "section": "B2B",
+      "sup": [
+        "27AAFCR5555E1Z6",
+        "Rathi Packaging"
+      ],
+      "docno": "RPK/JUL/0041",
+      "docdate": "2025-07-16",
+      "gst": {
+        "txval": "30000",
+        "cgst": "1500",
+        "sgst": "1500",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0079",
+        "vchdate": "2025-07-16",
+        "ref": "RPK/JUL/0041",
+        "values": {
+          "txval": "30000",
+          "cgst": "0",
+          "sgst": "0",
+          "igst": "3000",
+          "cess": "0"
+        }
+      },
+      "expect": "TAX_HEAD_DIFF",
+      "diffs": {
+        "cgst": "1500.00",
+        "sgst": "1500.00",
+        "igst": "-3000.00"
+      },
+      "note": "Same total tax (3000), wrong heads: intra-state booked as IGST. Totals agree."
+    },
+    {
+      "id": "D-011",
+      "family": "values",
+      "section": "B2B",
+      "sup": [
+        "27AADCM3333C1Z9",
+        "Meridian Office Supplies"
+      ],
+      "docno": "MOS/2025/0815",
+      "docdate": "2025-07-28",
+      "gst": {
+        "txval": "12345.67",
+        "cgst": "1111.11",
+        "sgst": "1111.11",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0080",
+        "vchdate": "2025-07-28",
+        "ref": "MOS/2025/0815",
+        "values": {
+          "txval": "12345.67",
+          "cgst": "1111.00",
+          "sgst": "1111.00",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "WITHIN_TOLERANCE_REPORTED",
+      "diffs": {
+        "cgst": "0.11",
+        "sgst": "0.11"
+      },
+      "note": "Inside the 1.00 tolerance. Must still be DISPLAYED, not silently matched."
+    },
+    {
+      "id": "D-012",
+      "family": "references",
+      "section": "B2B",
+      "sup": [
+        "27AAACS1111A1Z7",
+        "Sundar Steel Traders"
+      ],
+      "docno": "SST/25-26/0450",
+      "docdate": "2025-07-05",
+      "gst": {
+        "txval": "88000",
+        "cgst": "7920",
+        "sgst": "7920",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0087",
+        "vchdate": "2025-07-05",
+        "ref": "SST/25-26/0450",
+        "values": {
+          "txval": "88000",
+          "cgst": "7920",
+          "sgst": "7920",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT",
+      "note": "Supplier reference != Tally voucher number. Matching on voucher number FAILS this case. Both identifiers must appear in the output."
+    },
+    {
+      "id": "D-013",
+      "family": "references",
+      "section": "B2B",
+      "sup": [
+        "24AABCK2222B1Z3",
+        "Kutch Poly Industries"
+      ],
+      "docno": "kpi-1210",
+      "docdate": "2025-07-19",
+      "gst": {
+        "txval": "40000",
+        "cgst": "0",
+        "sgst": "0",
+        "igst": "7200",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0081",
+        "vchdate": "2025-07-19",
+        "ref": "KPI 1210",
+        "values": {
+          "txval": "40000",
+          "cgst": "0",
+          "sgst": "0",
+          "igst": "7200",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT_AFTER_NORMALISATION",
+      "note": "Case and space differ only. Raw strings must be preserved in the output."
+    },
+    {
+      "id": "D-014",
+      "family": "references",
+      "section": "B2B",
+      "sup": [
+        "27AAACS1111A1Z7",
+        "Sundar Steel Traders"
+      ],
+      "docno": "INV-100",
+      "docdate": "2025-07-22",
+      "gst": {
+        "txval": "15000",
+        "cgst": "1350",
+        "sgst": "1350",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0082",
+        "vchdate": "2025-07-22",
+        "ref": "INV-100",
+        "values": {
+          "txval": "15000",
+          "cgst": "1350",
+          "sgst": "1350",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT",
+      "note": "Same document number as D-015 from a DIFFERENT supplier. Key must be GSTIN+docno."
+    },
+    {
+      "id": "D-015",
+      "family": "references",
+      "section": "B2B",
+      "sup": [
+        "27AAFCR5555E1Z6",
+        "Rathi Packaging"
+      ],
+      "docno": "INV-100",
+      "docdate": "2025-07-22",
+      "gst": {
+        "txval": "22000",
+        "cgst": "1980",
+        "sgst": "1980",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0083",
+        "vchdate": "2025-07-22",
+        "ref": "INV-100",
+        "values": {
+          "txval": "22000",
+          "cgst": "1980",
+          "sgst": "1980",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT",
+      "note": "Pairs with D-014. Matching on document number alone produces two false mismatches."
+    },
+    {
+      "id": "D-016",
+      "family": "references",
+      "section": "B2B",
+      "sup": [
+        "27AAFCR5555E1Z6",
+        "Rathi Packaging"
+      ],
+      "docno": "RPK/JUL/0050",
+      "docdate": "2025-07-23",
+      "gst": {
+        "txval": "10000",
+        "cgst": "900",
+        "sgst": "900",
+        "igst": "0",
+        "cess": "0"
+      },
+      "books": {
+        "present": "DUPLICATE",
+        "vchno": [
+          "PUR/0084",
+          "PUR/0085"
+        ],
+        "vchdate": "2025-07-23",
+        "ref": "RPK/JUL/0050",
+        "values": {
+          "txval": "10000",
+          "cgst": "900",
+          "sgst": "900",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "DUPLICATE_IN_BOOKS",
+      "note": "One 2B row, TWO book vouchers with the same supplier reference. Both candidates must be retained and shown; neither may be silently discarded."
+    },
+    {
+      "id": "D-017",
+      "family": "timing",
+      "section": "B2B",
+      "sup": [
+        "24AABCK2222B1Z3",
+        "Kutch Poly Industries"
+      ],
+      "docno": "KPI-1225",
+      "docdate": "2025-07-30",
+      "gst": {
+        "txval": "90000",
+        "cgst": "0",
+        "sgst": "0",
+        "igst": "16200",
+        "cess": "0"
+      },
+      "books": {
+        "present": true,
+        "vchno": "PUR/0091",
+        "vchdate": "2025-08-04",
+        "ref": "KPI-1225",
+        "values": {
+          "txval": "90000",
+          "cgst": "0",
+          "sgst": "0",
+          "igst": "16200",
+          "cess": "0"
+        }
+      },
+      "expect": "TIMING_CANDIDATE",
+      "note": "Booked in the NEXT month. Must NOT be reported as missing from books. The report must state the book date range actually searched."
+    },
+    {
+      "id": "D-018",
+      "family": "timing",
+      "section": "B2B",
+      "sup": [
+        "27AAACS1111A1Z7",
+        "Sundar Steel Traders"
+      ],
+      "docno": "SST/25-26/0398",
+      "docdate": "2025-06-27",
+      "gst": {
+        "txval": "55000",
+        "cgst": "4950",
+        "sgst": "4950",
+        "igst": "0",
+        "cess": "0"
+      },
+      "supprd": "062025",
+      "books": {
+        "present": true,
+        "vchno": "PUR/0061",
+        "vchdate": "2025-06-27",
+        "ref": "SST/25-26/0398",
+        "values": {
+          "txval": "55000",
+          "cgst": "4950",
+          "sgst": "4950",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT_PRIOR_PERIOD_DOCUMENT",
+      "note": "June invoice appearing in the JULY 2B (supplier filed late). Statement period != document period. Both must be reported; the July book window alone would miss it."
+    },
+    {
+      "id": "D-019",
+      "family": "corrections",
+      "section": "CDNR",
+      "sup": [
+        "27AAACS1111A1Z7",
+        "Sundar Steel Traders"
+      ],
+      "docno": "CN-SST-007",
+      "docdate": "2025-07-26",
+      "gst": {
+        "txval": "-20000",
+        "cgst": "-1800",
+        "sgst": "-1800",
+        "igst": "0",
+        "cess": "0"
+      },
+      "against": "SST/25-26/0412",
+      "books": {
+        "present": true,
+        "vchno": "DN/0012",
+        "vchdate": "2025-07-26",
+        "ref": "CN-SST-007",
+        "values": {
+          "txval": "-20000",
+          "cgst": "-1800",
+          "sgst": "-1800",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "EXACT_AGREEMENT",
+      "note": "Credit note against D-001. Sign convention must survive the round trip."
+    },
+    {
+      "id": "D-020",
+      "family": "corrections",
+      "section": "B2BA",
+      "sup": [
+        "27AADCM3333C1Z9",
+        "Meridian Office Supplies"
+      ],
+      "docno": "MOS/2025/0771",
+      "docdate": "2025-07-11",
+      "gst": {
+        "txval": "45000",
+        "cgst": "4050",
+        "sgst": "4050",
+        "igst": "0",
+        "cess": "0"
+      },
+      "oinum": "MOS/2025/0771",
+      "oidt": "2025-07-11",
+      "books": {
+        "present": true,
+        "vchno": "PUR/0073",
+        "vchdate": "2025-07-11",
+        "ref": "MOS/2025/0771",
+        "values": {
+          "txval": "42000",
+          "cgst": "3780",
+          "sgst": "3780",
+          "igst": "0",
+          "cess": "0"
+        }
+      },
+      "expect": "AMENDED_VALUE_DIFF",
+      "diffs": {
+        "txval": "-3000.00",
+        "cgst": "-270.00",
+        "sgst": "-270.00"
+      },
+      "note": "Amendment of D-003. The amended figures supersede the original; the original must NOT also be counted as a separate unmatched document."
+    },
+    {
+      "id": "D-021",
+      "family": "corrections",
+      "section": "CDNR",
+      "sup": [
+        "24AABCK2222B1Z3",
+        "Kutch Poly Industries"
+      ],
+      "docno": "CN-KPI-002",
+      "docdate": "2025-07-29",
+      "gst": {
+        "txval": "-10000",
+        "cgst": "0",
+        "sgst": "0",
+        "igst": "-1800",
+        "cess": "0"
+      },
+      "against": "KPI-1188",
+      "books": {
+        "present": false
+      },
+      "expect": "GST_ONLY",
+      "note": "Credit note not recorded in books. Overstates ITC if missed."
+    }
+  ],
+  "controls": [
+    {
+      "id": "C-022",
+      "kind": "section",
+      "expect": "IMPG_HANDLED_OR_DECLARED_UNSUPPORTED",
+      "note": "2B carries one IMPG bill of entry (BOE 7712345, 2025-07-14, port INMUN1, taxable 300000, IGST 54000). No counterparty GSTIN exists, so the B2B key cannot apply. Either match on BOE number or report the section as unsupported WITH its row count and totals. Silently dropping it is a failure."
+    },
+    {
+      "id": "C-023",
+      "kind": "section",
+      "expect": "DECLARED_UNSUPPORTED_WITH_TOTALS",
+      "note": "2B carries an ISD section (2 rows, taxable 40000, IGST 7200). Pack does not shape ISD. The run must report section=ISD, status=unsupported, rows=2 and its totals. Reporting zero, or omitting the section, is a failure."
+    },
+    {
+      "id": "C-024",
+      "kind": "identity",
+      "expect": "REJECT_WRONG_GSTIN",
+      "note": "A 2B file whose own gstin is 27AABCB9999K1Z1 is offered against the book bound to 27AABCB1234K1Z5. Expect refusal with an explicit wrong-registration reason and NO comparison output. A warning plus results is a failure."
+    },
+    {
+      "id": "C-025",
+      "kind": "rerun",
+      "expect": "NEW_VERSION_PRIOR_EVIDENCE_RETAINED",
+      "note": "After run 1: book D-006 is removed and D-005 is entered. Rerun must produce a NEW version in which D-005 becomes EXACT_AGREEMENT and D-006 leaves BOOKS_ONLY, while run 1's evidence stays retrievable and unaltered."
+    },
+    {
+      "id": "C-026",
+      "kind": "coverage",
+      "expect": "FAILED_READ_DISTINCT_FROM_EMPTY",
+      "note": "A period whose 2B read fails must be reported as FAILED, distinct from a verified-empty period and distinct from zero. A failed read must never render as a clean result."
+    }
+  ]
+}
