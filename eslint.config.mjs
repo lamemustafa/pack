@@ -35,6 +35,24 @@ export default tseslint.config(
     },
   },
   {
+    // The only type-aware rule in this config, and it earns the parser cost.
+    // `try { return delegate() } finally { release() }` runs the cleanup before the delegate's body
+    // continues past its first await, so the lease, timer, or handle released in that `finally` is
+    // already gone before the work it guards starts. Eight wrappers in the flow runner had that
+    // exact shape at once, and the code reads identically to the correct version -- nothing but
+    // this rule makes the missing `await` visible in review.
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      "@typescript-eslint/return-await": ["error", "in-try-catch"],
+    },
+  },
+  {
     files: ["scripts/**/*.mjs"],
     languageOptions: {
       globals: {

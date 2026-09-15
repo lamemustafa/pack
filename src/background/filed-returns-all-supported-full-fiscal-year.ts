@@ -1,3 +1,4 @@
+import { filedReturnsRunLeaseLiveness } from "./filed-returns-active-run";
 import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
@@ -28,7 +29,7 @@ import {
   canCompleteAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearTargetPlan,
-  isAllSupportedFullFiscalYearLedgerStale,
+  isAllSupportedRunInterrupted,
   markAllSupportedFullFiscalYearTargetRunning,
   markAllSupportedFullFiscalYearTargetTerminal,
   nextRunnableAllSupportedFullFiscalYearTarget,
@@ -65,6 +66,11 @@ type AllSupportedRunnerDeps = FiledReturnsFlowRunnerDeps & {
   storageKeys: FiledReturnsFlowRunnerDeps["storageKeys"] & {
     allSupportedFullFiscalYearLedgerIndex: string;
   };
+  /**
+   * Set by a caller that already holds the run lease for this plan, so the lease read below does
+   * not answer with the caller's own record. See `planIsInterrupted`.
+   */
+  runLeaseHeldByThisOperation?: boolean;
 };
 
 type SystemErrorPredecessor = FiledReturnsFlowStepCategory | "initial";
@@ -264,6 +270,47 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
 }
 
 /**
+ * Whether this plan is running with nobody behind it.
+ *
+ * One definition for every caller in this file. It was written inline three times during the #366
+ * rectification, which is the duplicated-derivation shape that caused #366 in the first place --
+ * the next edit would have been one missed copy away from recreating it.
+ *
+ * `deps.runLeaseHeldByThisOperation` is the other half. Every user-facing entry point in
+ * `filed-returns-flow-runner.ts` acquires the shared run lease before delegating here, and
+ * `acquireFiledReturnsRun` only hands back a run when no valid lease already exists -- a
+ * successful acquisition is itself the proof that nobody else is behind this plan. Reading the
+ * lease again from such a caller answers with the record that same call just wrote, which is
+ * circular: it would report every abandoned target as still attended and refuse every retry the
+ * panel offers. Those callers pass the flag and the read is skipped.
+ *
+ * `unknownLeaseMeans` is the whole reason this takes an argument. A storage read that failed is
+ * not evidence that no worker is behind the target:
+ *
+ * - a **projection** passes `"absent"`: a display that cannot read the lease should let the
+ *   age-based view stand rather than suppress a genuine interruption, and it changes nothing.
+ * - a **mutation** passes `"live"`: resetting a target and re-arming a portal action on the
+ *   strength of an unreadable lease is "could not determine" treated as "matches". Refusing costs
+ *   the reader a retry; getting it wrong costs a duplicate portal action.
+ */
+async function planIsInterrupted(
+  deps: AllSupportedRunnerDeps,
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+  unknownLeaseMeans: "live" | "absent",
+): Promise<boolean> {
+  const now = deps.now?.() ?? new Date();
+  if (deps.runLeaseHeldByThisOperation) {
+    return isAllSupportedRunInterrupted(ledger, now, false);
+  }
+  const liveness = await filedReturnsRunLeaseLiveness(
+    { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
+    now,
+  );
+  const resolved = liveness === "unknown" ? unknownLeaseMeans : liveness;
+  return isAllSupportedRunInterrupted(ledger, now, resolved === "live");
+}
+
+/**
  * Replays exactly one reader-reviewed, terminal child target. This is not a
  * reconciliation of its earlier browser download: a retry happens only after
  * an explicit message bound to the current immutable ledger revision.
@@ -300,7 +347,17 @@ export async function retryAllSupportedFullFiscalYearTarget(
       deps,
     );
   }
-  const target = allSupportedExplicitRetryTarget(ledger);
+  // Recomputed here rather than trusted from the summary that rendered the control. The panel's
+  // offer is a snapshot; this is the moment the ledger is actually mutated, and between the two a
+  // worker could have come back. Reading the lease again is what makes "nobody is behind this
+  // target" true at the instant it matters instead of when the panel last polled.
+  //
+  // Without this the whole fix is inert: the summary populates the recovery control, the reader
+  // clicks it, and this lookup -- defaulting `interrupted` to false -- refuses the very target the
+  // panel just offered, forever. The control renders and can never succeed.
+  // A mutation: an unreadable lease refuses rather than proceeds.
+  const interrupted = await planIsInterrupted(deps, ledger, "live");
+  const target = allSupportedExplicitRetryTarget(ledger, interrupted);
   if (
     !target ||
     target.financialYear !== payload.financialYear ||
@@ -369,14 +426,18 @@ async function continueSavedAllSupportedFullFiscalYearRun(
   // can establish what happened to the first browser request.
   if (ledger.zipPhase) return allSupportedResponse(deps, ledger, finalZipReviewStep(ledger));
   if (ledger.status === "running") {
-    const stale = isAllSupportedFullFiscalYearLedgerStale(ledger, deps.now?.() ?? new Date());
+    // Age alone was the test here, which called a slow-but-live run interrupted and a dead one
+    // active depending only on the clock. The lease is the evidence -- it renews every ten seconds
+    // while a worker is behind the run -- and this is now the same derivation every other reader
+    // uses.
+    const interrupted = await planIsInterrupted(deps, ledger, "absent");
     if (!ledger.targets.some((target) => target.status === "running")) {
       return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
     }
     return allSupportedResponse(
       deps,
       ledger,
-      stale ? interruptedRunStep(ledger) : activeRunStep(ledger),
+      interrupted ? interruptedRunStep(ledger) : activeRunStep(ledger),
     );
   }
   if (
@@ -687,6 +748,12 @@ async function allSupportedResponse(
   flowStep: PortalFlowStepResult,
 ): Promise<PackMessageResponse> {
   const storageState = await readAllSupportedPlanLedgersStorageState(deps);
+  // Every runner action returns through here, and the popup writes this summary into the same
+  // state slot the polled summary uses. Deriving `interrupted` only in
+  // `toAllSupportedFullFiscalYearSummary` meant an action response could overwrite a correct
+  // "blocked, with a retry offered" view with a bare `running` one, taking the recovery control
+  // away again. Two derivations of one fact, and the losing one was the one that ran last.
+  const interrupted = await planIsInterrupted(deps, ledger, "absent");
   return {
     ok: true,
     flowStep,
@@ -696,6 +763,7 @@ async function allSupportedResponse(
       storageState.state === "valid"
         ? allSupportedTerminalPlanRoots(storageState.ledgers)
         : allSupportedTerminalPlanRoots([ledger]),
+      interrupted,
     ),
   };
 }
@@ -704,6 +772,7 @@ function toAllSupportedSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
   allTerminalPlanRoots = allSupportedTerminalPlanRoots([ledger]),
+  interrupted = false,
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   const resumeMode = allSupportedResumeMode(ledger);
   const zipDelivered =
@@ -713,13 +782,13 @@ function toAllSupportedSummary(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
   );
-  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger);
+  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger, interrupted);
   return {
     resumeAvailable: resumeMode !== null,
     ...(resumeMode ? { resumeMode } : {}),
     ...(allTerminalPlanRoots.length > 0 ? { terminalPlanRoots: allTerminalPlanRoots } : {}),
     summaryIdentity: { ...ledger.planRoot },
-    status: ledger.status,
+    status: interrupted ? "blocked" : ledger.status,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
     updatedAt: ledger.updatedAt,
     completedTargetIds: ledger.targets

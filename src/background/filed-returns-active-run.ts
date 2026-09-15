@@ -387,19 +387,39 @@ function malformedActiveRunStep(
  * Absent or malformed state answers false, which is the fail-closed direction: it lets the
  * age-based projection stand rather than suppressing a genuine interruption.
  */
+/**
+ * The lease's liveness, keeping "nothing says a worker is alive" separate from "the question
+ * could not be asked".
+ *
+ * `isFiledReturnsRunLeaseLive` collapses both into `false`, which is right for a projection: a
+ * display that cannot read the lease should let the age-based view stand rather than suppress a
+ * genuine interruption. It is the wrong default for a *mutation*. A caller about to reset a target
+ * and re-arm a portal action on the strength of "no worker is behind this" must not act on a
+ * storage read that simply failed -- that is "could not determine" being treated as "matches",
+ * which AGENTS.md forbids. Such a caller reads `unknown` and refuses.
+ */
+export async function filedReturnsRunLeaseLiveness(
+  deps: FiledReturnsActiveRunDeps,
+  now: Date,
+): Promise<"live" | "absent" | "unknown"> {
+  const key = deps.storageKeys.activeRun;
+  if (!key) return "absent";
+  try {
+    const values = await browser.storage.local.get(key);
+    const stored = activeRunStorageState(values[key], now);
+    return stored.state === "valid" && !isInterruptedFiledReturnsRun(stored.run, now)
+      ? "live"
+      : "absent";
+  } catch {
+    return "unknown";
+  }
+}
+
 export async function isFiledReturnsRunLeaseLive(
   deps: FiledReturnsActiveRunDeps,
   now: Date,
 ): Promise<boolean> {
-  const key = deps.storageKeys.activeRun;
-  if (!key) return false;
-  try {
-    const values = await browser.storage.local.get(key);
-    const stored = activeRunStorageState(values[key], now);
-    return stored.state === "valid" && !isInterruptedFiledReturnsRun(stored.run, now);
-  } catch {
-    return false;
-  }
+  return (await filedReturnsRunLeaseLiveness(deps, now)) === "live";
 }
 
 export function isInterruptedFiledReturnsRun(run: ActiveFiledReturnsRun, now: Date): boolean {

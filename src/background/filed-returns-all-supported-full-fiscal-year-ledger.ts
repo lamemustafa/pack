@@ -51,9 +51,23 @@ const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
  */
 export function allSupportedExplicitRetryTarget(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+  /**
+   * When the run is interrupted, the target left in `running` becomes explicitly retryable.
+   *
+   * Deliberately this and not a resume. The target's outcome is unknown -- it records an attempt
+   * and no result -- and its portal action may already have fired, so resuming the plan would
+   * blind-retry it, which AGENTS.md forbids for exactly this ambiguity. An explicit per-target
+   * retry is a decision the reader makes about one named target, guarded by `expectedRevision`.
+   */
+  interrupted = false,
 ): FiledReturnsAllSupportedFullFiscalYearTarget | null {
   if (ledger.zipPhase) return null;
-  const targetIndex = ledger.targets.findIndex(isExplicitlyRetryableTarget);
+  const targetIndex = ledger.targets.findIndex((candidate) =>
+    isExplicitlyRetryableTarget(candidate, interrupted),
+  );
+  // `findIndex` returns -1 when nothing matches, and `targets[-1]` is `undefined`. The assertion
+  // that used to stand here was unsound; the early return makes it unnecessary.
+  if (targetIndex === -1) return null;
   const target = ledger.targets[targetIndex]!;
   return ledger.targets
     .slice(0, targetIndex)
@@ -65,9 +79,15 @@ export function allSupportedExplicitRetryTarget(
 
 function isExplicitlyRetryableTarget(
   target: FiledReturnsAllSupportedFullFiscalYearTarget,
+  interrupted = false,
 ): boolean {
+  // `running` is `active`, so `needsExplicitFullFiscalYearRetry` rejects it -- correctly, while a
+  // worker is behind it. When the run is interrupted nothing is behind it, and treating it as
+  // active is what left the plan with no exit at all.
+  const retryable =
+    needsExplicitFullFiscalYearRetry(target.status) || (interrupted && target.status === "running");
   return (
-    needsExplicitFullFiscalYearRetry(target.status) &&
+    retryable &&
     !target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal))
   );
 }
@@ -445,8 +465,37 @@ export function resumeAllSupportedFullFiscalYearLedger(
   return resumed;
 }
 
+/**
+ * A run that is marked running but has nobody behind it.
+ *
+ * `running` means "a worker is working this target". After a service-worker death it means
+ * "a worker *was* working this target", and nothing distinguishes the two from the ledger alone --
+ * which is why the summary already projects this state as `blocked`. The lease is the evidence:
+ * it renews every ten seconds while a worker is alive, so a stale ledger with no live lease is an
+ * abandoned run rather than a slow one. Age alone is not enough, because an atomic child can
+ * legitimately outlive the root's staleness window.
+ *
+ * Extracted so the projection has one definition. It was previously spelled out inline in two
+ * places in the summary and consulted by neither of the guards that decide whether the run can be
+ * recovered -- so the summary called the run interrupted while the recovery guards still called it
+ * active. See #366.
+ */
+export function isAllSupportedRunInterrupted(
+  ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "status" | "updatedAt">,
+  now: Date,
+  leaseIsLive: boolean,
+): boolean {
+  return (
+    ledger.status === "running" &&
+    isAllSupportedFullFiscalYearLedgerStale(ledger, now) &&
+    !leaseIsLive
+  );
+}
+
 export function isAllSupportedFullFiscalYearLedgerStale(
-  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+  // Narrowed to what it reads. It only inspects `updatedAt`, and demanding a whole ledger made it
+  // unusable from anything holding less than one.
+  ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "updatedAt">,
   now: Date,
 ): boolean {
   const updatedAt = Date.parse(ledger.updatedAt);
