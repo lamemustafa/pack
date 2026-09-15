@@ -18,6 +18,7 @@ import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
 import * as AllSupportedPlanModule from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import type * as ArtifactAcquisitionState from "../../src/background/artifact-acquisition-state";
 import {
   createAllSupportedFullFiscalYearLedger,
   markAllSupportedFullFiscalYearTargetRunning,
@@ -36,10 +37,28 @@ const stored = vi.hoisted(() => ({
   failReplacementSet: false,
   values: {} as Record<string, unknown>,
 }));
+const singlePeriod = vi.hoisted(() => ({
+  run: vi.fn(),
+}));
 const zip = vi.hoisted(() => ({
   discard: vi.fn(async () => ["all-supported-full-fiscal-year-opfs-cleared"]),
   export: vi.fn(),
   reconcile: vi.fn(),
+}));
+
+// The child single-period flow is the one collaborator the real wrapper hard-wires rather than
+// taking through `deps`. Stubbing it keeps these two tests about the wrapper's own lease and
+// recovery handling; the child flow has its own suite.
+vi.mock("../../src/background/filed-returns-single-period-flow", () => ({
+  startSinglePeriodFiledReturnsDownloadFlow: singlePeriod.run,
+}));
+
+// Only the retained-artifact preflight is stubbed, and only because it reads OPFS directly rather
+// than through `deps`. Everything else in the module stays real so the wrapper tests below exercise
+// the production path.
+vi.mock("../../src/background/artifact-acquisition-state", async (importOriginal) => ({
+  ...(await importOriginal<typeof ArtifactAcquisitionState>()),
+  readArtifactAcquisitionCheckpoints: vi.fn(async () => []),
 }));
 
 vi.mock("wxt/browser", () => ({
@@ -106,6 +125,7 @@ beforeEach(() => {
   stored.values = {};
   deps.now = () => NOW;
   vi.clearAllMocks();
+  singlePeriod.run.mockImplementation(async () => notFiledStep());
   zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
   zip.reconcile.mockResolvedValue(unconfirmedZipStep());
   zip.export.mockImplementation(async (_ledger, _step, checkpoints) => {
@@ -660,6 +680,76 @@ describe("all-supported full-fiscal-year worker", () => {
         flowStep: { safeSignals: ["all-supported-full-fiscal-year-target-retry-unavailable"] },
       });
       expect(retryRunner).not.toHaveBeenCalled();
+    } finally {
+      delete deps.storageKeys.activeRun;
+    }
+  });
+
+  it("still holds the run lease while the delegated child flow is running", async () => {
+    // `try { return delegate() } finally { release() }` releases in the `finally` as soon as the
+    // return expression is evaluated -- that is, before the delegate's body past its first await
+    // has run at all. Every lease-holding wrapper in the flow runner had that shape, so the guard
+    // that is supposed to stop two overlapping portal actions was already gone by the time any
+    // portal work started. Observable from inside the child: the lease record must still be there.
+    const interrupted = interruptedRunLedger(new Date("2026-07-14T23:58:00.000Z"));
+    await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
+    deps.storageKeys.activeRun = "active-run";
+    const leaseDuringChild: unknown[] = [];
+    singlePeriod.run.mockImplementation(async () => {
+      leaseDuringChild.push(stored.values["active-run"]);
+      return notFiledStep();
+    });
+
+    try {
+      await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+        {
+          financialYear: request.financialYear,
+          ledgerId: interrupted.ledgerId,
+          targetId: interrupted.targets[0]!.targetId,
+          expectedRevision: interrupted.revision,
+        },
+        deps,
+      );
+
+      expect(leaseDuringChild.length).toBeGreaterThan(0);
+      for (const lease of leaseDuringChild) expect(lease).toBeDefined();
+      // And it is released once, on the way out.
+      expect(stored.values["active-run"]).toBeUndefined();
+    } finally {
+      delete deps.storageKeys.activeRun;
+    }
+  });
+
+  it("retries an abandoned target through the real handler, which holds the lease itself", async () => {
+    // The wrapper `background.ts` actually registers acquires the shared run lease before
+    // delegating, so the inner derivation read a live lease this very call had just written and
+    // refused every retry. The two tests above both call the inner function directly and cannot
+    // see it. A successful acquisition is itself the proof no other worker holds the plan.
+    const interrupted = interruptedRunLedger(new Date("2026-07-14T23:58:00.000Z"));
+    await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
+    const abandoned = interrupted.targets[0]!;
+    expect(abandoned.status).toBe("running");
+    deps.storageKeys.activeRun = "active-run";
+
+    try {
+      const response = await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+        {
+          financialYear: request.financialYear,
+          ledgerId: interrupted.ledgerId,
+          targetId: abandoned.targetId,
+          expectedRevision: interrupted.revision,
+        },
+        deps,
+      );
+
+      expect(response).not.toMatchObject({
+        flowStep: { safeSignals: ["all-supported-full-fiscal-year-target-retry-unavailable"] },
+      });
+      expect(singlePeriod.run).toHaveBeenCalled();
+      expect(savedLedger().targets[0]!.status).not.toBe("running");
+      expect(savedLedger().revision).toBeGreaterThan(interrupted.revision);
+      // The lease this call took is its own, and it must not survive the call.
+      expect(stored.values["active-run"]).toBeUndefined();
     } finally {
       delete deps.storageKeys.activeRun;
     }
