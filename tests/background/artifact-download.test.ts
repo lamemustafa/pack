@@ -39,7 +39,11 @@ describe("downloadAcquiredArtifact", () => {
       const create = vi.fn(async () => "blob:extension");
       const bind = vi.fn();
       const release = vi.fn();
-      const reserveRequestedFilename = vi.fn(() => ({ bind, release }));
+      const reserveRequestedFilename = vi.fn(() => ({
+        bind,
+        release,
+        whenAnswered: async () => true,
+      }));
       const result = await downloadAcquiredArtifact(
         { ...input(), mimeType, filename },
         deps({

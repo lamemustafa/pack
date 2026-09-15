@@ -48,6 +48,16 @@ export async function runDownloadPromptProbe(
       url: filenameClaim.url,
     });
     filenameClaim.reservation.bind(downloadId);
+    // Same early-release hazard as #314: the data-URL branch returned immediately and released in
+    // `finally` while `onDeterminingFilename` was still outstanding.
+    //
+    // Deliberately unconditional, covering the offscreen-blob branch too. That branch already
+    // outlives the event by observing the download to a terminal state below, but only as a side
+    // effect of waiting for something else -- reorder or shorten that observation and the
+    // guarantee silently disappears. Waiting here makes it a property of this call site rather
+    // than an accident of the next one, and costs at most `FILENAME_DETERMINATION_WAIT_MS` on a
+    // path that already tolerates a 5s observation.
+    await filenameClaim.reservation.whenAnswered();
     if (sourceClass === "offscreen-blob-url") {
       await observeBrowserDownloadById(
         browser.downloads,

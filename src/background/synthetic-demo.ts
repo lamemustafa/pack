@@ -50,6 +50,13 @@ export async function startSyntheticDemo(deps: SyntheticDemoDeps): Promise<PackM
         });
         reservation.bind(downloadId);
         downloaded += 1;
+        // `downloads.download()` resolves when the download is accepted, not when Chrome has
+        // asked what to call it. Releasing here -- which is what the `finally` used to do on its
+        // own -- dropped the reservation before `onDeterminingFilename` fired, so the listener
+        // had nothing to re-assert and the browser used its own generated name. That is the
+        // symptom reported in #314: ten correct, non-empty files saved outside `Pack-Demo/` under
+        // names the demo index does not match.
+        await reservation.whenAnswered();
       } finally {
         reservation.release();
       }
