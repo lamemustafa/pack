@@ -157,8 +157,9 @@ describe("node runtime assertion", () => {
   it("names a range it cannot parse at all instead of throwing", () => {
     // `24.x` has no `x.y.z` to extract. Before this it threw out of a top-level await, replacing
     // the script's own message with a raw stack trace.
-    expect(() => nodeRuntimeProblems({ runtime: "24.20.0", engines: "24.x", typesNode: "24.13.4" }))
-      .not.toThrow();
+    expect(() =>
+      nodeRuntimeProblems({ runtime: "24.20.0", engines: "24.x", typesNode: "24.13.4" }),
+    ).not.toThrow();
     expect(
       nodeRuntimeProblems({ runtime: "24.20.0", engines: "24.x", typesNode: "24.13.4" })[0],
     ).toContain("cannot fully honour");
