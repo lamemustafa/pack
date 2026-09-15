@@ -1,3 +1,4 @@
+import { isFiledReturnsRunLeaseLive } from "./filed-returns-active-run";
 import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
@@ -29,6 +30,7 @@ import {
   createAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearTargetPlan,
   isAllSupportedFullFiscalYearLedgerStale,
+  isAllSupportedRunInterrupted,
   markAllSupportedFullFiscalYearTargetRunning,
   markAllSupportedFullFiscalYearTargetTerminal,
   nextRunnableAllSupportedFullFiscalYearTarget,
@@ -300,7 +302,24 @@ export async function retryAllSupportedFullFiscalYearTarget(
       deps,
     );
   }
-  const target = allSupportedExplicitRetryTarget(ledger);
+  // Recomputed here rather than trusted from the summary that rendered the control. The panel's
+  // offer is a snapshot; this is the moment the ledger is actually mutated, and between the two a
+  // worker could have come back. Reading the lease again is what makes "nobody is behind this
+  // target" true at the instant it matters instead of when the panel last polled.
+  //
+  // Without this the whole fix is inert: the summary populates the recovery control, the reader
+  // clicks it, and this lookup -- defaulting `interrupted` to false -- refuses the very target the
+  // panel just offered, forever. The control renders and can never succeed.
+  const retryNow = deps.now?.() ?? new Date();
+  const interrupted = isAllSupportedRunInterrupted(
+    ledger,
+    retryNow,
+    await isFiledReturnsRunLeaseLive(
+      { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
+      retryNow,
+    ),
+  );
+  const target = allSupportedExplicitRetryTarget(ledger, interrupted);
   if (
     !target ||
     target.financialYear !== payload.financialYear ||
