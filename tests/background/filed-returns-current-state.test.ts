@@ -216,6 +216,9 @@ describe("durable filed-return current state", () => {
 
   it("never reports a full-year run stopped while a live lease is behind it", async () => {
     storage.local.ledger = staleRunningFullYearLedger(RUN_STARTED_AT);
+    // The lease a full-year run actually takes is scoped to the whole year, not to the month it
+    // happens to be working on. Giving it `period: "April"` would make `sameFiledReturnsScope`
+    // false and quietly test only the unmatched fallback.
     storage.local["active-run"] = {
       schemaVersion: "1.0",
       runId: "filed-returns-run-m0abc123",
@@ -223,7 +226,7 @@ describe("durable filed-return current state", () => {
       scope: {
         artifactType: "PDF",
         financialYear: "2026-27",
-        period: "April",
+        period: FULL_FISCAL_YEAR_PERIOD,
         returnType: "GSTR-1",
       },
       status: "running",
