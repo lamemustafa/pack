@@ -69,6 +69,73 @@ describe("filed-return session write boundary", () => {
     vi.clearAllMocks();
   });
 
+  it.each([
+    [
+      "GSTR-1 Excel without detail proof",
+      "GSTR-1",
+      "EXCEL",
+      ["filed-gstr1-excel-no-details-available"],
+    ],
+    ["GSTR-2B without proof", "GSTR-2B", "PDF", ["filed-gstr2b-not-generated"]],
+    [
+      "GSTR-2B without route proof",
+      "GSTR-2B",
+      "PDF",
+      ["filed-gstr2b-not-generated", "gstr2b-visible-period-verified"],
+    ],
+    [
+      "GSTR-2B without period proof",
+      "GSTR-2B",
+      "PDF",
+      ["filed-gstr2b-not-generated", "gstr2b-summary-route-verified"],
+    ],
+    [
+      "GSTR-1 with the wrong binding proof",
+      "GSTR-1",
+      "EXCEL",
+      [
+        "filed-gstr1-excel-no-details-available",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ],
+    ],
+    [
+      "GSTR-1 with conflicting refusal signals",
+      "GSTR-1",
+      "EXCEL",
+      [
+        "filed-gstr1-excel-no-details-available",
+        "filed-gstr2b-not-generated",
+        "filed-gstr1-detail-period-verified",
+      ],
+    ],
+  ] as const)(
+    "rejects recovered completion for %s",
+    async (_label, returnType, artifactType, signals) => {
+      const scope = singlePeriodScope(returnType, artifactType);
+      const summary = gstr1ExcelNoDetailsCompleteSummary(scope);
+      summary.flowStep.safeSignals = [...signals];
+      storage.session[COMPLETION_KEY] = summary;
+
+      await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toBeNull();
+      expect(storage.session[COMPLETION_KEY]).toBeUndefined();
+    },
+  );
+
+  it("accepts recovered GSTR-2B absence only with both binding proofs", async () => {
+    const scope = singlePeriodScope("GSTR-2B", "PDF");
+    const summary = gstr1ExcelNoDetailsCompleteSummary(scope);
+    summary.flowStep.safeSignals = [
+      "filed-gstr2b-not-generated",
+      "gstr2b-summary-route-verified",
+      "gstr2b-visible-period-verified",
+    ];
+    storage.session[COMPLETION_KEY] = summary;
+    await expect(readCanonicalFiledReturnsFlowSummary(COMPLETION_KEY)).resolves.toMatchObject({
+      status: "complete",
+    });
+  });
+
   it("reconstructs summary prose before direct persistence", async () => {
     const summary = await persistCanonicalFiledReturnsFlowSummary(
       COMPLETION_KEY,
@@ -1487,7 +1554,7 @@ function gstr1ExcelNoDetailsCompleteSummary(
       connectorId: "gst",
       scopeId: filedReturnsScopeId(scope.returnType),
       state: "blocked",
-      safeSignals: ["filed-gstr1-excel-no-details-available"],
+      safeSignals: ["filed-gstr1-excel-no-details-available", "filed-gstr1-detail-period-verified"],
       safeMessage: "Synthetic scoped decline.",
     },
   };
