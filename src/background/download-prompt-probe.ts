@@ -48,6 +48,11 @@ export async function runDownloadPromptProbe(
       url: filenameClaim.url,
     });
     filenameClaim.reservation.bind(downloadId);
+    // Same early-release hazard as #314. The offscreen-blob branch below already holds the
+    // reservation past `onDeterminingFilename` by observing the download to a terminal state; the
+    // data-URL branch returned immediately and released in `finally` while the event was still
+    // outstanding.
+    await filenameClaim.reservation.whenAnswered();
     if (sourceClass === "offscreen-blob-url") {
       await observeBrowserDownloadById(
         browser.downloads,
