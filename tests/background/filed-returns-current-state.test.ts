@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
 import { parseDurableFiledReturnsFlowSummary } from "../../src/background/filed-returns-durable-summary";
 import { parseDurableFiledReturnsSignals } from "../../src/connectors/gst/filed-returns-durable-signals";
+import {
+  createFullFiscalYearLedger,
+  markFullFiscalYearTargetRunning,
+} from "../../src/background/filed-returns-full-fiscal-year-ledger";
+import {
+  FULL_FISCAL_YEAR_PERIOD,
+  getFiledReturnsFullFiscalYearPeriods,
+} from "../../src/connectors/gst/filed-returns-scope";
 
 const storage = vi.hoisted(() => ({
   local: {} as Record<string, unknown>,
@@ -177,6 +185,65 @@ describe("durable filed-return current state", () => {
 
     expect(parseDurableFiledReturnsFlowSummary(storage.session.completion)).not.toBeNull();
     await expect(readCurrentFiledReturnsFlowSummary(deps)).resolves.toBeNull();
+  });
+
+  // `isFullFiscalYearLedgerStale` decides "this run stopped" from ledger age alone, with no
+  // reference to the run lease -- and 30s is shorter than a legitimate step, since the
+  // content-message timeout alone is 60s. That predicate gives the wrong answer for a slow but
+  // live run. It is safe here only because `readCurrentFiledReturnsFlowSummary` answers from the
+  // active-run record first and never reaches the age branch while a lease exists.
+  //
+  // That ordering is load-bearing and was not guarded by anything. Replacing the early return
+  // with `if (false && activeRunSummary)` makes the first test below report
+  // `full-fiscal-year-run-interrupted` for a run whose lease was renewed this second -- "Pack
+  // stopped before it could confirm the result for April", while it is working. So this pins the
+  // invariant rather than the implementation: whatever the panel reads, it must not call a
+  // leased run stopped.
+  function staleRunningFullYearLedger(startedAt: Date) {
+    const scope = {
+      artifactType: "PDF" as const,
+      financialYear: "2026-27",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-1" as const,
+    };
+    const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, startedAt);
+    const base = createFullFiscalYearLedger(scope, startedAt, periods);
+    return markFullFiscalYearTargetRunning(base, base.targets[0]!.targetId, startedAt);
+  }
+
+  const RUN_STARTED_AT = new Date("2026-07-24T23:58:00.000Z");
+  const NOW = new Date("2026-07-25T00:00:00.000Z");
+
+  it("never reports a full-year run stopped while a live lease is behind it", async () => {
+    storage.local.ledger = staleRunningFullYearLedger(RUN_STARTED_AT);
+    storage.local["active-run"] = {
+      schemaVersion: "1.0",
+      runId: "filed-returns-run-m0abc123",
+      revision: 1,
+      scope: {
+        artifactType: "PDF",
+        financialYear: "2026-27",
+        period: "April",
+        returnType: "GSTR-1",
+      },
+      status: "running",
+      leaseUpdatedAt: NOW.toISOString(),
+    };
+
+    const summary = await readCurrentFiledReturnsFlowSummary({ ...deps, now: () => NOW });
+
+    expect(summary?.flowStep.safeSignals).not.toContain("full-fiscal-year-run-interrupted");
+    expect(summary?.status).not.toBe("blocked");
+  });
+
+  it("reports a stale run interrupted once no lease is behind it", async () => {
+    // The complement, and the reason the age predicate is not simply wrong: with no lease record
+    // at all, age is the only evidence there is, and the interrupted view is the correct one.
+    storage.local.ledger = staleRunningFullYearLedger(RUN_STARTED_AT);
+
+    const summary = await readCurrentFiledReturnsFlowSummary({ ...deps, now: () => NOW });
+
+    expect(summary?.flowStep.safeSignals).toContain("full-fiscal-year-run-interrupted");
   });
 });
 
