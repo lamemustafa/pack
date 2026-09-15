@@ -279,15 +279,25 @@ export async function refreshBranchRewriteRecords({
 // so replace recorded rewrites and the first update after a confirmed generated-branch creation
 // with a compare-and-swap. A mismatch rejects the release run while an open marker remains
 // durable for recovery.
+/**
+ * @param {unknown} github
+ * @param {Map<string, { head: string, recordId: number, pullRequestNumber: number, recordHomeIsOpen?: boolean }>} expected
+ * @param {Map<string, unknown>} confirmedRewrites
+ * @param {() => Promise<unknown>} operation
+ * @param {((branch: string) => Promise<number | null>) | null} [assertNoPullRequestOpened]
+ *   Checked for closed-home records immediately before the compare-and-swap.
+ *   `refreshBranchRewriteRecords` already asserts no pull request had appeared, but that runs
+ *   before Release Please builds the commit; the mutation is the last instant at which the answer
+ *   still matters. Omitted, the closed-home path is refused rather than silently unchecked.
+ *
+ *   Omitting it is safe by construction rather than by convention: a closed-home rewrite with no
+ *   checker is refused, not waved through.
+ */
 export async function withReleaseBranchRewriteCas(
   github,
   expected,
   confirmedRewrites,
   operation,
-  // Checked for closed-home records immediately before the compare-and-swap. `refreshBranchRewriteRecords`
-  // already asserts no pull request had appeared, but that runs before Release Please builds the
-  // commit; the mutation is the last instant at which the answer still matters. Omitted, the
-  // closed-home path is refused rather than silently unchecked.
   assertNoPullRequestOpened = null,
 ) {
   const updates = github.octokit?.git?.updateRef;

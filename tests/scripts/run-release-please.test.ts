@@ -716,6 +716,9 @@ describe("release branch rewrite records", () => {
     heads?: string | null;
     comments?: Array<{ id: number; body: string; user?: { login: string } }>;
     pulls?: Array<{ number: number }>;
+    // The `state=all` history, answerable separately from the open list: a retained branch whose
+    // release pull request merged has an empty open list and a non-empty history at once.
+    allPulls?: Array<{ number: number }>;
     malformedHeads?: boolean;
     malformedHeadEntry?: boolean;
     commentPages?: Array<Array<{ id: number; body: string; user?: { login: string } }>>;
