@@ -1,4 +1,5 @@
 import { REFUSAL_BINDING_SIGNALS } from "./filed-returns-declined-artifact";
+import type { DeclinedArtifactSignal } from "./filed-returns-acquisition-diagnostics";
 import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "./offscreen-blob-url";
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
@@ -77,16 +78,41 @@ export function hasRetainedFullFiscalYearArtifactEvidence(signals: readonly stri
   );
 }
 
+// The declined-artifact signal each return type can produce. `DECLINED_ARTIFACT_SIGNALS` is the
+// canonical list; this only says which of them belongs to which return type, so a new declined
+// signal cannot be recognized here without being added to that list first.
+const DECLINED_ARTIFACT_SIGNAL_BY_RETURN_TYPE: Partial<
+  Record<FiledReturnsReturnType, DeclinedArtifactSignal>
+> = {
+  "GSTR-1": "filed-gstr1-excel-no-details-available",
+  "GSTR-2B": "filed-gstr2b-not-generated",
+};
+
+/**
+ * A portal refusal that is bound to this return type, in either the bare content-script form or
+ * the `artifact-` prefixed form the acquisition path re-emits.
+ *
+ * Both callers previously spelled the GSTR-2B pair out by hand, which silently excluded the
+ * GSTR-1 Excel refusal even though it is in `DECLINED_ARTIFACT_SIGNALS` beside it. A full-year
+ * GSTR-1 Excel selection therefore recorded a positive "the portal has nothing" answer as
+ * `blocked` and stopped the year at that month, while the same refusal on a direct single-period
+ * run was treated as complete.
+ */
+export function hasBoundArtifactRefusalSignal(
+  returnType: FiledReturnsReturnType | undefined,
+  signals: readonly string[],
+): boolean {
+  const declined = returnType ? DECLINED_ARTIFACT_SIGNAL_BY_RETURN_TYPE[returnType] : undefined;
+  if (!declined) return false;
+  return signals.some((signal) => signal === declined || signal === `artifact-${declined}`);
+}
+
 export function hasFullFiscalYearRefusalArtifactConflict(
   returnType: FiledReturnsReturnType | undefined,
   signals: readonly string[],
 ): boolean {
   return (
-    returnType === "GSTR-2B" &&
-    signals.some(
-      (signal) =>
-        signal === "filed-gstr2b-not-generated" || signal === "artifact-filed-gstr2b-not-generated",
-    ) &&
+    hasBoundArtifactRefusalSignal(returnType, signals) &&
     hasRetainedFullFiscalYearArtifactEvidence(signals)
   );
 }

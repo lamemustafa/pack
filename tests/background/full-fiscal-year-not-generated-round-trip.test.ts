@@ -33,6 +33,7 @@ import {
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import { exportFullFiscalYearZip } from "../../src/background/filed-returns-full-fiscal-year-zip";
 import { declinedArtifactSafeMessage } from "../../src/connectors/gst/filed-returns-declined-artifact";
+import { targetStatusFromFlowStep } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-validation";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 
@@ -168,5 +169,52 @@ describe("a cancelled run that recorded a declined period", () => {
     );
 
     expect(hasTerminalPositiveTarget(ledger)).toBe(true);
+  });
+});
+
+// The GSTR-1 counterpart of the GSTR-2B refusal above. The portal answers an Excel e-invoice
+// request with "no details available for download" instead of a file; that is a positive
+// statement that nothing exists for this period, exactly like "GSTR-2B could not be generated".
+// The status mapper used to name only the GSTR-2B signal, so this one fell through to `blocked`
+// and a full-year GSTR-1 Excel run stopped at the first month the portal declined -- even though
+// the identical refusal on a direct single-period run was recorded as complete.
+describe("a full-year GSTR-1 Excel period the portal has no details for", () => {
+  function gstr1ExcelNoDetailsStep(extraSignals: readonly string[] = []) {
+    return {
+      connectorId: "gst" as const,
+      scopeId: "gst-gstr1-private-v0",
+      state: "blocked" as const,
+      safeSignals: [
+        "filed-gstr1-excel-no-details-available",
+        "filed-gstr1-detail-period-verified",
+        ...extraSignals,
+      ],
+      safeMessage: declinedArtifactSafeMessage("filed-gstr1-excel-no-details-available"),
+    };
+  }
+
+  it("records a resolved absence so the year continues", () => {
+    expect(targetStatusFromFlowStep(gstr1ExcelNoDetailsStep(), "GSTR-1")).toBe("not-generated");
+  });
+
+  it("is recognized through the artifact- prefixed form the acquisition path re-emits", () => {
+    const step = {
+      ...gstr1ExcelNoDetailsStep(),
+      safeSignals: ["artifact-filed-gstr1-excel-no-details-available"],
+    };
+    expect(targetStatusFromFlowStep(step, "GSTR-1")).toBe("not-generated");
+  });
+
+  it("stays blocked when the refusal conflicts with retained artifact evidence", () => {
+    // A period cannot both have no artifact and have one staged. That contradiction must surface
+    // for review rather than resolve itself into a clean absence. Extending the refusal mapping to
+    // GSTR-1 extends this guard with it, which is the point of deriving both from one predicate.
+    const conflicted = gstr1ExcelNoDetailsStep(["full-fiscal-year-opfs-staged:EXCEL"]);
+    expect(targetStatusFromFlowStep(conflicted, "GSTR-1")).toBe("blocked");
+  });
+
+  it("does not attribute the GSTR-1 refusal to a GSTR-2B target", () => {
+    // The signal is bound to its return type. A GSTR-1 refusal must never resolve a 2B period.
+    expect(targetStatusFromFlowStep(gstr1ExcelNoDetailsStep(), "GSTR-2B")).toBe("blocked");
   });
 });

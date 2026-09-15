@@ -1,5 +1,6 @@
 import {
   hasRetainedFullFiscalYearArtifactEvidence,
+  hasBoundArtifactRefusalSignal,
   hasFullFiscalYearRefusalArtifactConflict,
 } from "../connectors/gst/filed-returns-durable-signals";
 import type {
@@ -173,13 +174,12 @@ export function targetStatusFromFlowStep(
   }
   // The portal stated it produced nothing for this period. A positive answer, like
   // `filed-return-positively-not-filed` above -- not an inability to determine.
-  if (
-    returnType === "GSTR-2B" &&
-    step.safeSignals.some(
-      (signal) =>
-        signal === "filed-gstr2b-not-generated" || signal === "artifact-filed-gstr2b-not-generated",
-    )
-  ) {
+  //
+  // Read the return type's refusal from the canonical signal list rather than naming GSTR-2B's
+  // pair here. Spelling it out excluded `filed-gstr1-excel-no-details-available`, so a full-year
+  // GSTR-1 Excel-only selection fell through to `blocked` and halted the year at the first month
+  // the portal declined -- while a direct single-period run of the same refusal completed.
+  if (hasBoundArtifactRefusalSignal(returnType, step.safeSignals)) {
     if (hasFullFiscalYearRefusalArtifactConflict(returnType, step.safeSignals)) {
       return "blocked";
     }
