@@ -571,6 +571,100 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(zip.export).not.toHaveBeenCalled();
   });
 
+  // #366 end-to-end. The first attempt at this fix populated the summary so the recovery control
+  // rendered, and stopped there -- the handler that actually mutates the ledger looked the target
+  // up again without `interrupted` and refused it every time. A summary-layer test passed while
+  // the button could never work. These exercise the handler.
+  function interruptedRunLedger(interruptedAt: Date) {
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported plan");
+    const first = createAllSupportedFullFiscalYearLedger(
+      request,
+      expansion.targets,
+      FILED_RETURNS_MONTHS.slice(0, 3),
+      interruptedAt,
+    );
+    // Built through the real transitions rather than by hand: a `running` target that still holds
+    // a previous outcome's signals is rejected by the ledger validator, which is how an earlier
+    // hand-rolled fixture silently failed to load at all.
+    return markAllSupportedFullFiscalYearTargetRunning(
+      first,
+      first.targets[0]!.targetId,
+      interruptedAt,
+    );
+  }
+
+  it("retries a target abandoned by a dead worker rather than only offering it", async () => {
+    const interrupted = interruptedRunLedger(new Date("2026-07-14T23:58:00.000Z"));
+    await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
+    const abandoned = interrupted.targets[0]!;
+    expect(abandoned.status).toBe("running");
+
+    const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const response = await retryAllSupportedFullFiscalYearTarget(
+      {
+        financialYear: request.financialYear,
+        ledgerId: interrupted.ledgerId,
+        targetId: abandoned.targetId,
+        expectedRevision: interrupted.revision,
+      },
+      deps,
+      retryRunner,
+    );
+
+    // The observable outcome, not the returned shape: the runner actually ran and the ledger
+    // advanced. Before the handler fix this returned `-target-retry-unavailable` and the runner
+    // was never called, for the very target the panel had just offered.
+    expect(response).not.toMatchObject({
+      flowStep: { safeSignals: ["all-supported-full-fiscal-year-target-retry-unavailable"] },
+    });
+    expect(retryRunner).toHaveBeenCalled();
+    expect(savedLedger().targets[0]!.status).not.toBe("running");
+    expect(savedLedger().revision).toBeGreaterThan(interrupted.revision);
+  });
+
+  it("refuses to retry an abandoned target while its run lease is still live", async () => {
+    // The guard the fix must not weaken. A live lease means a worker is still behind the target,
+    // and retrying would race it -- which is what the original `running` refusal protected.
+    const interrupted = interruptedRunLedger(new Date("2026-07-14T23:58:00.000Z"));
+    await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
+    deps.storageKeys.activeRun = "active-run";
+    stored.values["active-run"] = {
+      schemaVersion: "1.0",
+      runId: "filed-returns-run-m0abc123",
+      revision: 1,
+      scope: {
+        artifactType: "PDF",
+        financialYear: request.financialYear,
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      status: "running",
+      leaseUpdatedAt: NOW.toISOString(),
+    };
+
+    try {
+      const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+      const response = await retryAllSupportedFullFiscalYearTarget(
+        {
+          financialYear: request.financialYear,
+          ledgerId: interrupted.ledgerId,
+          targetId: interrupted.targets[0]!.targetId,
+          expectedRevision: interrupted.revision,
+        },
+        deps,
+        retryRunner,
+      );
+
+      expect(response).toMatchObject({
+        flowStep: { safeSignals: ["all-supported-full-fiscal-year-target-retry-unavailable"] },
+      });
+      expect(retryRunner).not.toHaveBeenCalled();
+    } finally {
+      delete deps.storageKeys.activeRun;
+    }
+  });
+
   it("keeps a stale running target in explicit review without replaying it", async () => {
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
     if (!expansion.ok) throw new Error("expected all-supported plan");
@@ -602,13 +696,18 @@ describe("all-supported full-fiscal-year worker", () => {
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
+    // `blocked`, not `running`. This assertion previously read `running` and so froze a
+    // disagreement: the flow step said the run was interrupted while the summary beside it still
+    // reported it as running, because the two were derived from different facts. The polled
+    // summary has always projected this state as `blocked`; the action response now agrees.
     expect(response).toMatchObject({
-      allSupportedFullFiscalYearFlowSummary: { status: "running" },
+      allSupportedFullFiscalYearFlowSummary: { status: "blocked" },
       flowStep: {
         state: "user-action-required",
         safeSignals: ["all-supported-full-fiscal-year-run-interrupted"],
       },
     });
+    // Unchanged and load-bearing: an interrupted run is never replayed on its own.
     expect(runner).not.toHaveBeenCalled();
     expect(attemptedScopes).toEqual([]);
     expect(savedLedger().targets[0]).toMatchObject({ status: "not-filed", attempts: 0 });

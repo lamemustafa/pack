@@ -29,7 +29,6 @@ import {
   canCompleteAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearTargetPlan,
-  isAllSupportedFullFiscalYearLedgerStale,
   isAllSupportedRunInterrupted,
   markAllSupportedFullFiscalYearTargetRunning,
   markAllSupportedFullFiscalYearTargetTerminal,
@@ -388,14 +387,28 @@ async function continueSavedAllSupportedFullFiscalYearRun(
   // can establish what happened to the first browser request.
   if (ledger.zipPhase) return allSupportedResponse(deps, ledger, finalZipReviewStep(ledger));
   if (ledger.status === "running") {
-    const stale = isAllSupportedFullFiscalYearLedgerStale(ledger, deps.now?.() ?? new Date());
+    // Age alone was the test here, which called a slow-but-live run interrupted and a dead one
+    // active depending only on the clock. The lease is the evidence -- it renews every ten seconds
+    // while a worker is behind the run -- and this is now the same derivation every other reader
+    // uses.
+    const continueNow = deps.now?.() ?? new Date();
+    const interrupted = isAllSupportedRunInterrupted(
+      ledger,
+      continueNow,
+      await isFiledReturnsRunLeaseLive(
+        {
+          storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {},
+        },
+        continueNow,
+      ),
+    );
     if (!ledger.targets.some((target) => target.status === "running")) {
       return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
     }
     return allSupportedResponse(
       deps,
       ledger,
-      stale ? interruptedRunStep(ledger) : activeRunStep(ledger),
+      interrupted ? interruptedRunStep(ledger) : activeRunStep(ledger),
     );
   }
   if (
@@ -706,6 +719,20 @@ async function allSupportedResponse(
   flowStep: PortalFlowStepResult,
 ): Promise<PackMessageResponse> {
   const storageState = await readAllSupportedPlanLedgersStorageState(deps);
+  // Every runner action returns through here, and the popup writes this summary into the same
+  // state slot the polled summary uses. Deriving `interrupted` only in
+  // `toAllSupportedFullFiscalYearSummary` meant an action response could overwrite a correct
+  // "blocked, with a retry offered" view with a bare `running` one, taking the recovery control
+  // away again. Two derivations of one fact, and the losing one was the one that ran last.
+  const now = deps.now?.() ?? new Date();
+  const interrupted = isAllSupportedRunInterrupted(
+    ledger,
+    now,
+    await isFiledReturnsRunLeaseLive(
+      { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
+      now,
+    ),
+  );
   return {
     ok: true,
     flowStep,
@@ -715,6 +742,7 @@ async function allSupportedResponse(
       storageState.state === "valid"
         ? allSupportedTerminalPlanRoots(storageState.ledgers)
         : allSupportedTerminalPlanRoots([ledger]),
+      interrupted,
     ),
   };
 }
@@ -723,6 +751,7 @@ function toAllSupportedSummary(
   ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
   flowStep: PortalFlowStepResult,
   allTerminalPlanRoots = allSupportedTerminalPlanRoots([ledger]),
+  interrupted = false,
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   const resumeMode = allSupportedResumeMode(ledger);
   const zipDelivered =
@@ -732,13 +761,13 @@ function toAllSupportedSummary(
     ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
       ledger.targets[0]!,
   );
-  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger);
+  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger, interrupted);
   return {
     resumeAvailable: resumeMode !== null,
     ...(resumeMode ? { resumeMode } : {}),
     ...(allTerminalPlanRoots.length > 0 ? { terminalPlanRoots: allTerminalPlanRoots } : {}),
     summaryIdentity: { ...ledger.planRoot },
-    status: ledger.status,
+    status: interrupted ? "blocked" : ledger.status,
     ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
     updatedAt: ledger.updatedAt,
     completedTargetIds: ledger.targets
