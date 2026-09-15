@@ -104,6 +104,16 @@ export function createPackDownloadFilenameReassertion(
     const answeredOnce = new Promise<true>((resolve) => {
       markAnswered = () => resolve(true);
     });
+    // Settled by `release()`, so a wait already in flight when the reservation is released ends
+    // then rather than serving out the rest of its ceiling. Once released the entry is gone from
+    // both correlation maps, so a later event can no longer find it and the answer can only be
+    // `false` -- the wait is already decided, and continuing to wait would just be slow about it.
+    // No caller reaches this ordering today, both awaiting `whenAnswered` before `release()`; this
+    // makes the safe ordering a property of the reservation instead of a caller convention.
+    let markReleased: () => void = () => {};
+    const releasedOnce = new Promise<false>((resolve) => {
+      markReleased = () => resolve(false);
+    });
     const requested: RequestedFilename = { filename, answered: markAnswered };
     let boundDownloadId: number | null = null;
     let released = false;
@@ -115,6 +125,7 @@ export function createPackDownloadFilenameReassertion(
         try {
           return await Promise.race([
             answeredOnce,
+            releasedOnce,
             new Promise<false>((resolve) => {
               timer = setTimeout(() => resolve(false), timeoutMs);
             }),
@@ -131,6 +142,7 @@ export function createPackDownloadFilenameReassertion(
       release() {
         if (released) return;
         released = true;
+        markReleased();
         if (requestedFilenamesByUrl.get(url) === requested) requestedFilenamesByUrl.delete(url);
         if (
           boundDownloadId !== null &&

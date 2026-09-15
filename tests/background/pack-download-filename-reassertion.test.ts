@@ -170,4 +170,24 @@ describe("Pack download filename reassertion", () => {
 
     await expect(reservation.whenAnswered(5_000)).resolves.toBe(false);
   });
+
+  it("ends a wait already in flight when the reservation is released", async () => {
+    // Releasing removes the entry from both correlation maps, so a later event can no longer find
+    // it and the answer can only be `false`. Serving out the rest of the ceiling would be slow
+    // about a question already decided. No caller reaches this ordering today; this keeps the safe
+    // ordering a property of the reservation rather than a convention callers must remember.
+    const reassertion = createPackDownloadFilenameReassertion({
+      onDeterminingFilename: { addListener() {} },
+    });
+    const reservation = reassertion.reserve("blob:pack-owned/racing", "Pack-Demo/racing.pdf");
+
+    const startedAt = Date.now();
+    const answered = reservation.whenAnswered(5_000);
+    reservation.release();
+
+    await expect(answered).resolves.toBe(false);
+    // Elapsed time, not just the value: a `false` after the full ceiling is the stall this
+    // prevents, and it is indistinguishable from a prompt one by value alone.
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+  });
 });
