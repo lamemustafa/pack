@@ -38,6 +38,9 @@ jobs:
         with:
           node-version: 24.20.0
 
+      - name: Assert Node runtime matches the declared engines
+        run: node scripts/assert-node-runtime.mjs
+
       - name: Reconcile open pull request checks
         env:
           GH_TOKEN: ${{ github.token }}

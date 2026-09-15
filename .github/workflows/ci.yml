@@ -31,6 +31,9 @@ jobs:
           node-version: 24.20.0
           cache: pnpm
 
+      - name: Assert Node runtime matches the declared engines
+        run: node scripts/assert-node-runtime.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

@@ -37,6 +37,9 @@ jobs:
         with:
           node-version: 24.20.0
 
+      - name: Assert Node runtime matches the declared engines
+        run: node scripts/assert-node-runtime.mjs
+
       - name: Check Chrome Web Store status
         shell: bash
         run: |
