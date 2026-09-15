@@ -1,4 +1,6 @@
 import type { UserActionRequired } from "../core/contracts";
+import { getBoundDeclinedArtifactSignal } from "../connectors/gst/filed-returns-declined-artifact";
+import { DECLINED_ARTIFACT_SIGNALS } from "../connectors/gst/filed-returns-acquisition-diagnostics";
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFlowSummary,
@@ -29,6 +31,7 @@ import {
   hasPositiveFiledReturnsDownloadEvidence,
   isValidFiledReturnsDownloadDiagnosticState,
 } from "./filed-returns-download-diagnostic-state";
+import { isFiledReturnsFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 
 const SUMMARY_KEYS = [
   "artifactAcquisitionCompletion",
@@ -80,17 +83,6 @@ const FLOW_STATES = new Set<PortalFlowStepResult["state"]>([
   "ready",
   "unsupported-page",
   "user-action-required",
-]);
-const TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "blocked",
-  "cancelled",
-  "download-unconfirmed",
-  "downloaded",
-  "failed",
-  "manually-observed",
-  "not-filed",
-  "pending",
-  "running",
 ]);
 
 export function parseDurableFiledReturnsFlowSummary(
@@ -230,6 +222,14 @@ function isConsistentCompleteSummary({
   ) {
     return false;
   }
+  if (DECLINED_ARTIFACT_SIGNALS.some((signal) => flowStep.safeSignals.includes(signal))) {
+    return (
+      getBoundDeclinedArtifactSignal(scope, flowStep.safeSignals) !== null &&
+      flowStep.state === "blocked" &&
+      flowStep.downloadDiagnostic === undefined &&
+      flowStep.downloadDiagnostics === undefined
+    );
+  }
   if (flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
     return (
       flowStep.state === "candidate-not-found" &&
@@ -357,7 +357,7 @@ function parseRecovery(
   }
   if (
     typeof recovery.targetStatus !== "string" ||
-    !TARGET_STATUSES.has(recovery.targetStatus as FiledReturnsFullFiscalYearTargetStatus)
+    !isFiledReturnsFullFiscalYearTargetStatus(recovery.targetStatus)
   ) {
     return null;
   }

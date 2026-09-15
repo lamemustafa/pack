@@ -50,6 +50,7 @@ import {
   type Gstr1PeriodMismatchRecovery,
   type ReturnTypeMismatchRecovery,
 } from "./filed-returns-gstr1-period-mismatch-recovery";
+import type { ReturnsDashboardAnchorFailureReason } from "../connectors/gst/filed-returns-durable-signals";
 
 // The deadline is the product bound. This only stops a broken zero-delay response loop.
 const ZERO_DELAY_RUNAWAY_STEP_LIMIT = 10_000;
@@ -307,7 +308,7 @@ async function blockedWrongOriginResponse(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
   shouldPersistSinglePeriodSummary: boolean,
-  reason: "ambiguous" | "not-found" | "timeout" | "unavailable",
+  reason: ReturnsDashboardAnchorFailureReason,
 ): Promise<PackMessageResponse> {
   return withPersistedSinglePeriodSummary(
     scope,

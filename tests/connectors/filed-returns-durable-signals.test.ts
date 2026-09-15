@@ -1,5 +1,5 @@
 import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "../../src/connectors/gst/offscreen-blob-url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   durableFiledReturnsSignalRejectionReason,
   isDurableFiledReturnsSignal,
@@ -535,6 +535,29 @@ describe("filed-return durable signal contract", () => {
     ]) {
       expect(isDurableFiledReturnsSignal(signal)).toBe(false);
       expect(parseDurableFiledReturnsSignals([signals[0], signal])).toBeNull();
+    }
+  });
+
+  it("never repeats a rejected token to a console sink", () => {
+    // This boundary exists because it cannot know what it has been handed -- a legacy or malformed
+    // entry read back from storage is exactly the input it refuses. Naming that entry in a log
+    // undoes the refusal it just made.
+    const sinks = [
+      vi.spyOn(console, "warn").mockImplementation(() => undefined),
+      vi.spyOn(console, "error").mockImplementation(() => undefined),
+      vi.spyOn(console, "log").mockImplementation(() => undefined),
+    ];
+    try {
+      const rejected = parseDurableFiledReturnsSignals([
+        "gstr2b-for-00AAAAA0000A1Z0-at-https://portal.example/x",
+      ]);
+
+      expect(rejected).toBeNull();
+      const written = sinks.flatMap((sink) => sink.mock.calls.flat()).join(" ");
+      expect(written).not.toContain("00AAAAA0000A1Z0");
+      expect(written).not.toContain("portal.example");
+    } finally {
+      for (const sink of sinks) sink.mockRestore();
     }
   });
 });

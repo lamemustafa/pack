@@ -8,7 +8,10 @@ import {
   hasInlinePrimaryAction,
   inlinePrimaryActionIsPortalGated,
 } from "../../src/entrypoints/popup/inline-status";
-import type { PopupPresentationState } from "../../src/entrypoints/popup/presentation-state";
+import {
+  getPopupPresentationState,
+  type PopupPresentationState,
+} from "../../src/entrypoints/popup/presentation-state";
 import { RecoveryActions } from "../../src/entrypoints/popup/recovery-actions";
 
 const blockedPresentation: PopupPresentationState = {
@@ -197,6 +200,61 @@ describe("single-period completion claim", () => {
 
     expect(markup).toContain("The selected file was saved by your browser.");
   });
+});
+
+describe("stated artifact absence presentation", () => {
+  it.each([
+    [
+      "GSTR-2B",
+      "PDF",
+      [
+        "filed-gstr2b-not-generated",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ],
+      "did not generate the auto-drafted GSTR-2B statement",
+    ],
+    [
+      "GSTR-1",
+      "EXCEL",
+      ["filed-gstr1-excel-no-details-available", "filed-gstr1-detail-period-verified"],
+      "no e-invoice details are available",
+    ],
+  ] as const)(
+    "renders the canonical %s absence copy",
+    (returnType, artifactType, safeSignals, expectedBody) => {
+      const summary = singlePeriodSummary([...safeSignals]);
+      summary.scope = {
+        ...summary.scope,
+        returnType,
+        artifactType,
+      };
+      const presentation = getPopupPresentationState(
+        { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        summary,
+        null,
+      );
+
+      const markup = renderToStaticMarkup(
+        <InlineStatus
+          busy={null}
+          portalReady
+          onOpenPortal={vi.fn()}
+          onRestartTarget={vi.fn()}
+          onRetryFullFiscalYearTarget={vi.fn()}
+          onRetryTarget={vi.fn()}
+          presentation={presentation}
+          summary={summary}
+        />,
+      );
+
+      expect(markup.match(/No artifact available/g)).toHaveLength(2);
+      expect(markup).toContain(expectedBody);
+      expect(markup).not.toContain("Browser Downloads");
+      expect(markup).not.toContain("Browser download not confirmed");
+      expect(markup).not.toContain("saved by your browser");
+    },
+  );
 });
 
 describe("inline filed-return recovery status", () => {

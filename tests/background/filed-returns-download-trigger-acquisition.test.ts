@@ -41,7 +41,8 @@ const captureMocks = vi.hoisted(() => ({
     safeMessage: undefined as string | undefined,
     safeSignals: [] as string[],
   })),
-  clearArtifactAcquisitionCheckpoint: vi.fn(async () => undefined),
+  clearArtifactAcquisitionCheckpoint: vi.fn(async () => ({ ok: true as const })),
+  clearArtifactAcquisitionCheckpointOrThrow: vi.fn(async () => undefined),
   persistArtifactAcquisitionDownloadId: vi.fn(async () => undefined),
   persistArtifactAcquisitionIntent: vi.fn(async () => undefined),
   persistArtifactAcquisitionUnconfirmedDownload: vi.fn(async () => undefined),
@@ -50,12 +51,25 @@ const captureMocks = vi.hoisted(() => ({
   })),
 }));
 const summaryStorage = vi.hoisted(() => ({
+  values: {} as Record<string, unknown>,
   remove: vi.fn(async () => undefined),
-  set: vi.fn(async () => undefined),
+  set: vi.fn(async (values: Record<string, unknown>) => {
+    Object.assign(summaryStorage.values, values);
+  }),
+}));
+const reviewStorage = vi.hoisted(() => ({
+  values: {} as Record<string, unknown>,
+  get: vi.fn(async (key: string) => ({ [key]: reviewStorage.values[key] })),
+  remove: vi.fn(async (key: string) => {
+    delete reviewStorage.values[key];
+  }),
+  set: vi.fn(async (values: Record<string, unknown>) =>
+    Object.assign(reviewStorage.values, values),
+  ),
 }));
 
 vi.mock("wxt/browser", () => ({
-  browser: { storage: { session: summaryStorage } },
+  browser: { storage: { local: reviewStorage, session: summaryStorage } },
 }));
 
 vi.mock("../../src/background/artifact-download", () => ({
@@ -63,6 +77,7 @@ vi.mock("../../src/background/artifact-download", () => ({
 }));
 vi.mock("../../src/background/artifact-acquisition-state", () => ({
   clearArtifactAcquisitionCheckpoint: captureMocks.clearArtifactAcquisitionCheckpoint,
+  clearArtifactAcquisitionCheckpointOrThrow: captureMocks.clearArtifactAcquisitionCheckpointOrThrow,
   persistArtifactAcquisitionDownloadId: captureMocks.persistArtifactAcquisitionDownloadId,
   persistArtifactAcquisitionIntent: captureMocks.persistArtifactAcquisitionIntent,
   persistArtifactAcquisitionUnconfirmedDownload:
@@ -94,6 +109,11 @@ import {
 } from "../../src/background/filed-returns-download-trigger";
 import { withPersistedSinglePeriodSummary } from "../../src/background/filed-returns-single-period-summary";
 import { FILED_RETURNS_RETURN_TYPES } from "../../src/connectors/gst/filed-returns-return-types";
+import { filedReturnScopeId } from "../../src/connectors/gst/filed-returns-return-descriptors";
+import {
+  PACK_LOCAL_STORAGE_KEYS,
+  PACK_SESSION_STORAGE_KEYS,
+} from "../../src/background/storage-keys";
 
 const ARTIFACT_ACQUISITION_RETURN_TYPES = FILED_RETURNS_RETURN_TYPES;
 
@@ -139,6 +159,53 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
     );
   });
 
+  it.each(["JSON", "PDF"] as const)(
+    "surfaces a named cleanup failure when %s checkpoint cleanup fails",
+    async (artifactType) => {
+      vi.clearAllMocks();
+      captureMocks.clearArtifactAcquisitionCheckpointOrThrow.mockRejectedValueOnce(
+        new Error("artifact acquisition checkpoint clear failed: storage-remove-failed"),
+      );
+      if (artifactType === "JSON") {
+        captureMocks.acquireFiledReturnJsonInMainWorld.mockResolvedValueOnce({
+          ok: false as const,
+          reason: "generation-timeout" as const,
+          safeSignals: [],
+        } as never);
+      } else {
+        captureMocks.acquireGstr3bPdfAfterPreflight.mockResolvedValueOnce({
+          ok: false as const,
+          reason: "control-not-found" as const,
+          safeSignals: [],
+        } as never);
+      }
+      const sendMessageToTabWithInjection = vi.fn(
+        async (_tabId: number, message: { payload: { requestId: string } }) => ({
+          ok: true as const,
+          artifact: {
+            ok: true as const,
+            state: "ready" as const,
+            requestId: message.payload.requestId,
+            safeSignals: [],
+          },
+        }),
+      );
+
+      await expect(
+        triggerAndObserveFiledReturnDownload({
+          activePeriod: "April",
+          artifactType,
+          deps: {
+            sendMessageToTabWithInjection: sendMessageToTabWithInjection as never,
+            storageKeys: {},
+          },
+          scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" },
+          tabId: 17,
+        }),
+      ).rejects.toThrow("artifact acquisition checkpoint clear failed: storage-remove-failed");
+    },
+  );
+
   it.each(["PDF", "JSON"] as const)(
     "blocks raw full-year GSTR-3B %s acquisition before it can create an artifact download",
     async (artifactType) => {
@@ -148,7 +215,10 @@ describe("GSTR-3B artifact acquisition dispatch", () => {
       const response = await triggerAndObserveFiledReturnDownload({
         activePeriod: null,
         artifactType,
-        deps: { sendMessageToTabWithInjection, storageKeys: {} },
+        deps: {
+          sendMessageToTabWithInjection: sendMessageToTabWithInjection as never,
+          storageKeys: {},
+        },
         scope: { financialYear: "2026-27", period: "ALL", returnType: "GSTR-3B" },
         tabId: 17,
       });
@@ -756,6 +826,44 @@ describe("GSTR-2B artifact acquisition dispatch", () => {
     },
   );
 
+  it("surfaces a bounded read failure from the page-generated cleanup caller", async () => {
+    vi.clearAllMocks();
+    captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "control-not-found" as const,
+      safeSignals: [],
+    } as never);
+    captureMocks.clearArtifactAcquisitionCheckpointOrThrow.mockRejectedValueOnce(
+      new Error("artifact acquisition checkpoint clear failed: storage-read-failed"),
+    );
+    const sendMessageToTabWithInjection = vi.fn(
+      async (_tabId: number, message: { payload: { requestId: string } }) =>
+        ({
+          ok: true,
+          artifact: {
+            ok: true,
+            state: "ready",
+            requestId: message.payload.requestId,
+            safeSignals: [],
+          },
+        }) as PackMessageResponse,
+    );
+
+    await expect(
+      triggerAndObserveFiledReturnDownload({
+        activePeriod: "April",
+        artifactType: "PDF",
+        deps: {
+          sendMessageToTabWithInjection: sendMessageToTabWithInjection as never,
+          storageKeys: {},
+        },
+        scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-2B" },
+        tabId: 17,
+      }),
+    ).rejects.toThrow("artifact acquisition checkpoint clear failed: storage-read-failed");
+    expect(captureMocks.clearArtifactAcquisitionCheckpointOrThrow).toHaveBeenCalled();
+  });
+
   it("writes GSTR-2B portal data with its data suffix", async () => {
     const response = await triggerAndObserveFiledReturnDownload({
       activePeriod: "June",
@@ -1030,3 +1138,585 @@ function acquiredJson(): PackMessageResponse {
     },
   };
 }
+
+describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
+  // A definitive acquisition failure may be refined by the typed, target-bound inspection result.
+  // An uncertain acquisition takes the recovery branch tested below and never reaches this path.
+  function messagingDeps(postClick: PackMessageResponse) {
+    return vi.fn(async (_tabId: number, message: { type: string }) =>
+      message.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3"
+        ? postClick
+        : ({
+            ok: true,
+            artifact: {
+              ok: true,
+              state: "ready",
+              requestId: "synthetic-request",
+              safeSignals: ["target-period-verified"],
+            },
+          } as PackMessageResponse),
+    );
+  }
+
+  const noDetailsStep = {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-1"),
+      state: "blocked",
+      safeSignals: ["filed-gstr1-excel-no-details-available", "filed-gstr1-detail-period-verified"],
+      safeMessage: "The GST Portal reported that no e-invoice details are available.",
+    },
+  } as PackMessageResponse;
+
+  const gstr2bNotGeneratedStep = {
+    ok: true,
+    flowStep: {
+      connectorId: "gst",
+      scopeId: filedReturnScopeId("GSTR-2B"),
+      state: "blocked",
+      safeSignals: [
+        "filed-gstr2b-not-generated",
+        "gstr2b-summary-route-verified",
+        "gstr2b-visible-period-verified",
+      ],
+      safeMessage: "The GST Portal reported that this GSTR-2B is not generated.",
+    },
+  } as PackMessageResponse;
+
+  function armDefinitiveNoActionFailure() {
+    captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "control-not-found",
+      safeSignals: [] as string[],
+    } as never);
+  }
+
+  // `control-not-found` is resolved BEFORE any control is clicked, so the helper above only ever
+  // covered the no-action path. The real no-details case is the opposite: Pack arms and clicks the
+  // target-bound Excel control, the portal answers with the no-details dialog instead of a file,
+  // and the blob capture therefore times out. `generation-timeout` is classified as a retained
+  // reason, which is exactly why the post-click inspection used to be skipped here.
+  function armClickedThenTimedOutFailure() {
+    captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "generation-timeout",
+      safeSignals: [] as string[],
+    } as never);
+  }
+
+  it("inspects a declined artifact after the clicked control times out", async () => {
+    armClickedThenTimedOutFailure();
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    // The observable outcome that matters: the inspection actually ran. Asserting only the
+    // returned step would pass even if the runtime never looked at the page.
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledWith(
+      17,
+      expect.objectContaining({ type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3" }),
+    );
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["filed-gstr1-excel-no-details-available"]),
+        state: "blocked",
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow step.");
+    // The generic acquisition failure must not survive alongside the specific answer.
+    expect(response.flowStep.safeSignals).not.toContain("artifact-generation-timeout");
+  });
+
+  it("keeps the timed-out acquisition failure when the visible refusal is not target-bound", async () => {
+    armClickedThenTimedOutFailure();
+    // An unbound refusal is what `detectPostClickBlockedState` returns as null: the dialog on
+    // screen belongs to some other target. Fail closed -- the original reason must stand rather
+    // than a stale dialog marking this period unavailable.
+    const sendMessageToTabWithInjection = messagingDeps({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId("GSTR-1"),
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-post-click-blocked-state-not-found"],
+        safeMessage: "Pack did not find a recognized post-click portal block.",
+      },
+    } as PackMessageResponse);
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["artifact-generation-timeout"]),
+        state: "blocked",
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow step.");
+    expect(response.flowStep.safeSignals).not.toContain("filed-gstr1-excel-no-details-available");
+  });
+
+  it("adopts a target-bound no-details answer after a definitive acquisition failure", async () => {
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledWith(
+      17,
+      expect.objectContaining({ type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3" }),
+    );
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["filed-gstr1-excel-no-details-available"]),
+        // Still blocked. This records an absence; it never turns a click into a download.
+        state: "blocked",
+      },
+    });
+  });
+
+  it("persists the declined terminal answer before clearing its acquisition checkpoint", async () => {
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+    const persistedBefore = summaryStorage.set.mock.calls.length;
+    const clearedBefore = captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length;
+
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: { completion: "completion" } },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(summaryStorage.set).toHaveBeenCalledWith({
+      completion: expect.objectContaining({
+        completedPeriods: ["April"],
+        status: "complete",
+      }),
+    });
+    expect(captureMocks.clearArtifactAcquisitionCheckpoint).toHaveBeenCalled();
+    expect(summaryStorage.set.mock.invocationCallOrder[persistedBefore]).toBeLessThan(
+      captureMocks.clearArtifactAcquisitionCheckpoint.mock.invocationCallOrder[clearedBefore]!,
+    );
+  });
+
+  it("clears the exact persisted target review after a durable definitive refusal", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-1" } as const;
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: {
+        sendMessageToTabWithInjection: messagingDeps(noDetailsStep),
+        storageKeys: {
+          completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+          targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+        },
+      },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "EXCEL" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      {
+        storageKeys: {
+          completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+          targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+        },
+      } as never,
+      true,
+    );
+
+    expect(reviewStorage.set).toHaveBeenCalledWith(
+      expect.objectContaining({ [PACK_LOCAL_STORAGE_KEYS.targetReview]: expect.any(Object) }),
+    );
+    expect(reviewStorage.remove).toHaveBeenCalledWith(PACK_LOCAL_STORAGE_KEYS.targetReview);
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toBeUndefined();
+    expect(persisted).toMatchObject({ flowSummary: { status: "complete" } });
+
+    armDefinitiveNoActionFailure();
+    await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: {
+        sendMessageToTabWithInjection: messagingDeps(noDetailsStep),
+        storageKeys: {
+          completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+          targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+        },
+      },
+      scope,
+      tabId: 17,
+    });
+    expect(reviewStorage.set).toHaveBeenCalledTimes(2);
+    expect(reviewStorage.remove).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a clear refusal blocked and resumable through outer summary persistence", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    reviewStorage.remove.mockRejectedValueOnce(
+      new Error("Synthetic target-review remove failure."),
+    );
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-1" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection: messagingDeps(noDetailsStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "EXCEL" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-gstr1-excel-no-details-available",
+          "filed-returns-target-review-clear-failed",
+          "filed-returns-target-review-clear-failed:storage-remove-failed",
+        ]),
+        state: "download-unconfirmed",
+        userAction: { canResume: false, type: "RETRY_PORTAL_GENERATION" },
+      },
+      flowSummary: { flowStep: { userAction: { canResume: false } }, status: "blocked" },
+    });
+    expect(
+      summaryStorage.values[PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary],
+    ).toMatchObject({
+      status: "blocked",
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "EXCEL" },
+    });
+  });
+
+  it("retains the owned review when its exact acquisition checkpoint cannot be cleared", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    captureMocks.clearArtifactAcquisitionCheckpoint.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "storage-remove-failed" as const,
+    } as never);
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-1" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection: messagingDeps(noDetailsStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "EXCEL" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-checkpoint-clear-failed:storage-remove-failed",
+        ]),
+        userAction: { canResume: false },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "EXCEL" },
+    });
+    expect(reviewStorage.remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps a target-review read throw blocked and resumable through outer summary persistence", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    reviewStorage.get
+      .mockImplementationOnce(async (key: string) => ({ [key]: reviewStorage.values[key] }))
+      .mockRejectedValueOnce(new Error("Synthetic target-review read failure."));
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-1" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection: messagingDeps(noDetailsStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "EXCEL" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-gstr1-excel-no-details-available",
+          "filed-returns-target-review-clear-failed:storage-read-failed",
+        ]),
+        userAction: { canResume: false },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "EXCEL" },
+    });
+  });
+
+  it("keeps a GSTR-2B clear refusal blocked and resumable through outer summary persistence", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    reviewStorage.remove.mockRejectedValueOnce(
+      new Error("Synthetic target-review remove failure."),
+    );
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-2B" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "PDF",
+      deps: { sendMessageToTabWithInjection: messagingDeps(gstr2bNotGeneratedStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "PDF" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-gstr2b-not-generated",
+          "filed-returns-target-review-clear-failed:storage-remove-failed",
+        ]),
+        userAction: { canResume: false },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "PDF" },
+    });
+  });
+
+  it("keeps a GSTR-2B target-review read throw blocked and resumable through outer summary persistence", async () => {
+    armDefinitiveNoActionFailure();
+    reviewStorage.values = {};
+    summaryStorage.values = {};
+    reviewStorage.get
+      .mockImplementationOnce(async (key: string) => ({ [key]: reviewStorage.values[key] }))
+      .mockRejectedValueOnce(new Error("Synthetic target-review read failure."));
+    const scope = { financialYear: "2025-26", period: "April", returnType: "GSTR-2B" } as const;
+    const storageKeys = {
+      completion: PACK_SESSION_STORAGE_KEYS.lastFiledReturnsFlowSummary,
+      targetReview: PACK_LOCAL_STORAGE_KEYS.targetReview,
+    };
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "PDF",
+      deps: { sendMessageToTabWithInjection: messagingDeps(gstr2bNotGeneratedStep), storageKeys },
+      scope,
+      tabId: 17,
+    });
+    const persisted = await withPersistedSinglePeriodSummary(
+      { ...scope, artifactType: "PDF" },
+      response as Extract<PackMessageResponse, { ok: true; flowStep: never }>,
+      { storageKeys } as never,
+      true,
+    );
+
+    expect(persisted).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "filed-gstr2b-not-generated",
+          "filed-returns-target-review-clear-failed:storage-read-failed",
+        ]),
+        userAction: { canResume: false },
+      },
+      flowSummary: { status: "blocked" },
+    });
+    expect(reviewStorage.values[PACK_LOCAL_STORAGE_KEYS.targetReview]).toMatchObject({
+      scope: { ...scope, artifactType: "PDF" },
+    });
+  });
+
+  it("does not write a single-period summary for a staged full-year refusal", async () => {
+    armDefinitiveNoActionFailure();
+    summaryStorage.set.mockRejectedValueOnce(new Error("Synthetic session write failure."));
+    const persistedBefore = summaryStorage.set.mock.calls.length;
+
+    await expect(
+      triggerAndObserveFiledReturnDownload({
+        activePeriod: "April",
+        artifactType: "EXCEL",
+        deps: {
+          sendMessageToTabWithInjection: messagingDeps(noDetailsStep),
+          stageCapturedDownloads: {
+            bundleKind: "full-fiscal-year",
+            ledgerId: "full-fiscal-year:test",
+          },
+          storageKeys: { completion: "completion" },
+        },
+        scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+        tabId: 17,
+      }),
+    ).resolves.toMatchObject({ flowStep: { state: "blocked" } });
+    expect(summaryStorage.set.mock.calls.length).toBe(persistedBefore);
+    summaryStorage.set.mockResolvedValue(undefined);
+  });
+
+  // REMOVED: "retains an uncertain acquisition instead of adopting a later decline".
+  //
+  // That test asserted the post-click inspection is NOT sent after a `generation-timeout`, which
+  // made the GSTR-1 Excel no-details path unreachable: the dialog is the cause of the timeout, so
+  // the only reason that path can be entered was also the one that suppressed it. Its replacement
+  // is "inspects a declined artifact after the clicked control times out" above, together with
+  // "keeps the timed-out acquisition failure when the visible refusal is not target-bound", which
+  // preserves the property the removed test was actually protecting -- an unrelated dialog must
+  // never mark this target unavailable -- by binding rather than by refusing to look.
+
+  it("retains the checkpoint when terminal-decline persistence throws", async () => {
+    summaryStorage.set.mockReset();
+    summaryStorage.set.mockResolvedValue(undefined);
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+    const clearedBefore = captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length;
+    summaryStorage.set.mockRejectedValueOnce(new Error("Synthetic storage failure."));
+
+    await expect(
+      triggerAndObserveFiledReturnDownload({
+        activePeriod: "April",
+        artifactType: "EXCEL",
+        deps: { sendMessageToTabWithInjection, storageKeys: { completion: "completion" } },
+        scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+        tabId: 17,
+      }),
+    ).rejects.toThrow("Synthetic storage failure.");
+
+    expect(captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length).toBe(clearedBefore);
+  });
+
+  it("keeps the original failure when the page cannot be asked at all", async () => {
+    // This runs after an acquisition has already failed and can only refine that failure. A tab
+    // that has closed, navigated, or refuses injection means the failure cannot be refined -- not
+    // that a new one happened. Throwing here would replace a specific, actionable reason with the
+    // generic background error and lose the terminal summary with it.
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = vi.fn(
+      async (_tabId: number, message: { type: string }) => {
+        if (message.type === "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3") {
+          throw new Error("Could not establish connection. Receiving end does not exist.");
+        }
+        return {
+          ok: true,
+          artifact: {
+            ok: true,
+            state: "ready",
+            requestId: "synthetic-request",
+            safeSignals: ["target-period-verified"],
+          },
+        } as PackMessageResponse;
+      },
+    );
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining([
+          "artifact-acquisition-failed",
+          "artifact-control-not-found",
+        ]),
+        state: "blocked",
+      },
+    });
+  });
+
+  it("keeps the original failure when the page reports no recognised block", async () => {
+    armDefinitiveNoActionFailure();
+    const sendMessageToTabWithInjection = messagingDeps({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "filed-returns:gstr-1",
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-post-click-blocked-state-not-found"],
+        safeMessage: "Pack did not find a recognized post-click portal block.",
+      },
+    } as PackMessageResponse);
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["artifact-acquisition-failed"]),
+        state: "blocked",
+      },
+    });
+  });
+});

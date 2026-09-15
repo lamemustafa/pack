@@ -264,6 +264,38 @@ describe("live evidence template generator", () => {
     expect(evidence.downloadEvidence).toEqual([]);
   });
 
+  it("emits V2 GSTR-2B not-generated counts without fabricated download rows", () => {
+    const evidence = runTemplate([
+      "--return-type",
+      "GSTR-2B",
+      "--artifact-type",
+      "PDF",
+      "--financial-year",
+      "2025-26",
+      "--period",
+      "FULL_FISCAL_YEAR",
+      "--outcome",
+      "pass",
+      "--downloaded",
+      "0",
+      "--not-generated",
+      "12",
+      "--clean-test-profile",
+      "--human-verified-account",
+      "--human-verified-periods",
+      "--all-files-non-empty",
+      "--service-worker-restart-resume-checked",
+      "--browser-restart-resume-checked",
+      "--clear-local-data-checked",
+      "--browser-summary-captured",
+      ...stableArgs,
+    ]);
+
+    expect(validateLiveRunEvidence(evidence)).toMatchObject({ ok: true });
+    expect(evidence).toMatchObject({ schemaVersion: 2, counts: { notGenerated: 12 } });
+    expect(evidence.downloadEvidence).toEqual([]);
+  });
+
   it("defaults GSTR-3B evidence to the capture-first runtime path", () => {
     const evidence = runTemplate([
       "--return-type",

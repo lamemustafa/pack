@@ -76,6 +76,7 @@ export {
   rememberGstTabIfSupported,
   sendMessageToTabWithInjection,
 } from "../background/gst-tab-context";
+import { backgroundFailureFingerprint } from "../background/background-failure-fingerprint";
 
 const OFFICIAL_URL = "https://pack.complyeaze.com";
 
@@ -159,14 +160,22 @@ export default defineBackground(() => {
 
     void handleMessage(message, sender)
       .then((response) => sendResponse(response))
-      .catch(() =>
+      .catch((error: unknown) => {
+        // The fingerprint, not the error. A handler that fails without saying why costs a build
+        // and a live run to locate, so the reason is named rather than discarded -- but an error
+        // raised by storage, scripting, or downloads can quote a URL, a path, or a response body,
+        // and "the console is not persisted" is not a reason to log those. The fingerprint carries
+        // what a reader needs and is established to be this bundle's own.
+        console.error(
+          `Pack background handler failed for ${backgroundMessageSource(message)}: ${backgroundFailureFingerprint(error)}`,
+        );
         sendResponse({
           ok: false,
           error: "BACKGROUND_MESSAGE_HANDLER_FAILED",
-          safeMessage: `Pack stopped while handling ${backgroundMessageSource(message)}. Try the action again.`,
+          safeMessage: `Pack stopped while handling ${backgroundMessageSource(message)}. Try the action again. (${backgroundFailureFingerprint(error)})`,
           safeSite: backgroundMessageHandlerSite(message),
-        } satisfies PackMessageResponse),
-      );
+        } satisfies PackMessageResponse);
+      });
     return true;
   });
 });

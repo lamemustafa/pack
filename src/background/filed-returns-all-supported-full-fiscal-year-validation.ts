@@ -1,7 +1,12 @@
+import { hasRetainedFullFiscalYearArtifactEvidence } from "../connectors/gst/filed-returns-durable-signals";
 import type {
   FiledReturnsAllSupportedFullFiscalYearIdentity,
   FiledReturnsDownloadDiagnostic,
   FiledReturnsFullFiscalYearTargetStatus,
+} from "../connectors/gst/filed-returns-contracts";
+import {
+  isResolvedFullFiscalYearTargetStatus,
+  isFiledReturnsFullFiscalYearTargetStatus,
 } from "../connectors/gst/filed-returns-contracts";
 import type {
   FiledReturnsArtifactType,
@@ -39,6 +44,7 @@ import {
   canonicalFullFiscalYearPlanPeriods,
   isCanonicalFullFiscalYearPeriodPlan,
 } from "./filed-returns-full-fiscal-year-validation";
+import { filedReturnsTargetStatusBehaviour } from "../connectors/gst/filed-returns-contracts";
 
 export const ALL_SUPPORTED_FULL_FISCAL_YEAR_PLAN_VERSION =
   "all-supported-filed-returns-targets-v1" as const;
@@ -119,21 +125,17 @@ export type AllSupportedFullFiscalYearZipPhase =
   | "cleaned";
 
 const MAX_SAFE_MESSAGE_LENGTH = 500;
-const TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "pending",
-  "running",
-  "downloaded",
-  "manually-observed",
-  "not-filed",
-  "download-unconfirmed",
-  "blocked",
-  "failed",
-  "cancelled",
-]);
-const POSITIVE_TARGET_STATUSES = new Set<FiledReturnsFullFiscalYearTargetStatus>([
-  "downloaded",
-  "not-filed",
-]);
+
+export function durableAllSupportedFullFiscalYearArtifactSignals(
+  signals: readonly string[],
+): string[] {
+  return signals.filter(
+    (signal) =>
+      /^filed-return-artifact-(?:downloaded|unavailable):(?:PDF|JSON|EXCEL)$/.test(signal) ||
+      /^all-supported-full-fiscal-year-opfs-staged:(?:PDF|JSON|EXCEL)$/.test(signal),
+  );
+}
+
 const ZIP_PHASES = new Set<AllSupportedFullFiscalYearZipPhase>([
   "export-pending",
   "export-retry-pending",
@@ -281,7 +283,7 @@ export function isAllSupportedFullFiscalYearLedger(
   return !(
     ledger.zipPhase &&
     ZIP_PHASES_REQUIRING_COMPLETED_TARGETS.has(ledger.zipPhase) &&
-    !ledger.targets.every((target) => POSITIVE_TARGET_STATUSES.has(target.status))
+    !ledger.targets.every((target) => isResolvedFullFiscalYearTargetStatus(target.status))
   );
 }
 
@@ -491,7 +493,9 @@ function isTarget(
     target.returnType !== planTarget.returnType ||
     target.artifactType !== planTarget.artifactType ||
     !sameArtifacts(target.concreteArtifactTypes, planTarget.concreteArtifactTypes) ||
-    !TARGET_STATUSES.has(target.status as FiledReturnsFullFiscalYearTargetStatus) ||
+    !isFiledReturnsFullFiscalYearTargetStatus(
+      target.status as FiledReturnsFullFiscalYearTargetStatus,
+    ) ||
     !isAttemptCount(target.attempts) ||
     !isBoundedString(target.safeMessage, 1, MAX_SAFE_MESSAGE_LENGTH) ||
     !isCanonicalTimestamp(target.updatedAt) ||
@@ -508,6 +512,12 @@ function isTarget(
     verifiedTarget.safeSignals,
   );
   if (!durableStatus) return false;
+  if (
+    verifiedTarget.status === "not-generated" &&
+    hasRetainedFullFiscalYearArtifactEvidence(verifiedTarget.safeSignals)
+  ) {
+    return false;
+  }
   if (
     verifiedTarget.safeMessage !== durableStatus.safeMessage &&
     !isHistoricalDurableTargetMessage(
@@ -531,10 +541,13 @@ function isTarget(
   ) {
     return false;
   }
-  return (
-    verifiedTarget.status !== "not-filed" ||
-    verifiedTarget.safeSignals.includes("filed-return-positively-not-filed")
-  );
+  // The evidence a claim needs is a property of the status, not a rule each validator remembers.
+  // Spelled out, only `not-filed` was checked here and in the single-return validator, so a stored
+  // record could assert `not-generated` with nothing behind it -- in both.
+  const requiredEvidenceSignal = filedReturnsTargetStatusBehaviour(
+    verifiedTarget.status,
+  ).requiredEvidenceSignal;
+  return !requiredEvidenceSignal || verifiedTarget.safeSignals.includes(requiredEvidenceSignal);
 }
 
 function hasCanonicalConcreteArtifacts(

@@ -213,6 +213,98 @@ describe("filed returns target review", () => {
     },
   );
 
+  it.each([
+    ["malformed", { schemaVersion: "1.0", unsafe: true }, "review-malformed"],
+    [
+      "different scope",
+      {
+        downloadAttempt: {
+          actionId: "00000000-0000-4000-8000-000000000111",
+          artifactType: "EXCEL",
+          kind: "single-artifact",
+          phase: "download-intent-persisted",
+          requestedAt: "2026-06-24T00:00:00.000Z",
+        },
+        revision: 1,
+        safeMessage: "Synthetic target review.",
+        safeSignals: ["browser-download-not-observed"],
+        schemaVersion: "1.0",
+        scope: {
+          artifactType: "EXCEL",
+          financialYear: "2025-26",
+          period: "April",
+          returnType: "GSTR-1",
+        },
+        status: "download-unconfirmed",
+        targetId: "GSTR-1:2025-26:April:EXCEL",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
+      "scope-mismatch",
+    ],
+  ] as const)(
+    "does not clear an expected owned intent when the current review is %s",
+    async (_name, stored, stage) => {
+      const scope = { financialYear: "2025-26", period: "March", returnType: "GSTR-1" } as const;
+      browserMocks.storage.local.get.mockResolvedValue({ "target-review": stored });
+
+      const result = await clearFiledReturnsTargetReviewWithReason(
+        scope,
+        { storageKeys: { targetReview: "target-review" } },
+        undefined,
+        {
+          actionId: "00000000-0000-4000-8000-000000000111",
+          artifactType: "EXCEL",
+          kind: "single-artifact",
+          phase: "download-intent-persisted",
+          requestedAt: "2026-06-24T00:00:00.000Z",
+        },
+      );
+
+      expect(result).toMatchObject({ error: { stage }, ok: false });
+      expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not clear an ABA-recreated same-revision review with a different owned intent", async () => {
+    const scope = { financialYear: "2025-26", period: "March", returnType: "GSTR-1" } as const;
+    const targetScope = { ...scope, artifactType: "EXCEL" } as const;
+    browserMocks.storage.local.get.mockResolvedValue({
+      "target-review": {
+        downloadAttempt: {
+          actionId: "00000000-0000-4000-8000-000000000222",
+          artifactType: "EXCEL",
+          kind: "single-artifact",
+          phase: "download-intent-persisted",
+          requestedAt: "2026-06-24T00:00:01.000Z",
+        },
+        revision: 1,
+        safeMessage: "Synthetic target review.",
+        safeSignals: ["browser-download-not-observed"],
+        schemaVersion: "1.0",
+        scope: { ...scope, artifactType: "EXCEL" },
+        status: "download-unconfirmed",
+        targetId: "GSTR-1:2025-26:March:EXCEL",
+        updatedAt: "2026-06-24T00:00:01.000Z",
+      },
+    });
+
+    const result = await clearFiledReturnsTargetReviewWithReason(
+      targetScope,
+      { storageKeys: { targetReview: "target-review" } },
+      1,
+      {
+        actionId: "00000000-0000-4000-8000-000000000111",
+        artifactType: "EXCEL",
+        kind: "single-artifact",
+        phase: "download-intent-persisted",
+        requestedAt: "2026-06-24T00:00:00.000Z",
+      },
+    );
+
+    expect(result).toMatchObject({ error: { stage: "revision-mismatch" }, ok: false });
+    expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
+  });
+
   it("records a manual observation without completing or clearing the unresolved target", async () => {
     browserMocks.storage.local.get.mockImplementation(async (key: unknown) =>
       key === "target-review"

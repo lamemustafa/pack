@@ -38,7 +38,10 @@ export async function acquirePageGeneratedArtifact(input: {
             controlSelector: `[data-pack-artifact-request="${input.requestId}"]`,
             ...(input.returnType === "GSTR-2B"
               ? {
-                  expectedControlText: artifact.controlText,
+                  // Read straight from the GSTR-2B descriptor: only that return type pins the
+                  // control text here, and GSTR-1 has more than one label for the same artifact.
+                  expectedControlText:
+                    GSTR2B_PAGE_GENERATED_ARTIFACTS[input.artifactType].controlText,
                   expectedPeriodTexts: acceptedFiledReturnsMonthTexts(input.period),
                 }
               : {}),

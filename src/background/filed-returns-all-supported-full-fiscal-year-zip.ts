@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import type { PortalFlowStepResult } from "../connectors/gst/filed-returns-contracts";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
+import { filedReturnsSummaryOutcomeCategory } from "../connectors/gst/filed-returns-summary-sheet";
 import type { FiledReturnsSummaryStatus } from "../connectors/gst/filed-returns-summary-status";
 import { canCompleteAllSupportedFullFiscalYearLedger } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import {
@@ -212,12 +213,11 @@ function allSupportedFullFiscalYearStagingRequirement(
           safeAllSupportedFullFiscalYearZipEntryPath(target, artifactType, ".xlsx"),
         ];
       }
-      const outcomeCategory =
-        target.status === "not-filed"
-          ? "not-filed"
-          : signals.has(`filed-return-artifact-unavailable:${artifactType}`)
-            ? "artifact-unavailable"
-            : "staged";
+      const outcomeCategory = filedReturnsSummaryOutcomeCategory(
+        target.status,
+        signals,
+        artifactType,
+      );
       summaryPlan.push({
         artifactType,
         entryNames: outcomeCategory === "staged" ? expectedEntry.entryNames : [],

@@ -85,7 +85,7 @@ const LIVE_RUN_EVIDENCE_KEYS = [
   "mediaArtifacts",
 ];
 const BROWSER_KEYS = ["name", "version"];
-const COUNT_KEYS = [
+const COUNT_KEYS_V1 = [
   "eligibleTargets",
   "downloaded",
   "notFiled",
@@ -94,6 +94,7 @@ const COUNT_KEYS = [
   "failed",
   "duplicates",
 ];
+const COUNT_KEYS_V2 = [...COUNT_KEYS_V1, "notGenerated"];
 const CHECK_KEYS = [
   "humanVerifiedAccount",
   "humanVerifiedPeriods",
@@ -192,7 +193,7 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   if (!isRecord(input)) return { ok: false, errors: ["evidence must be an object"] };
 
   requireOnlyKeys(input, LIVE_RUN_EVIDENCE_KEYS, "evidence", errors);
-  requireExact(input.schemaVersion, 1, "schemaVersion", errors);
+  requireSchemaVersion(input.schemaVersion, errors);
   requirePattern(input.sourceCommit, HEX_40, "sourceCommit", errors);
   requirePattern(input.gitTag, GIT_TAG, "gitTag", errors);
   requirePattern(input.zipSha256, HEX_64, "zipSha256", errors);
@@ -225,7 +226,7 @@ export function validateLiveRunEvidence(input: unknown): LiveRunEvidenceValidati
   if (input.outcome === "pass" && input.profile !== "clean-test-profile") {
     errors.push("pass evidence must use clean-test-profile");
   }
-  validateCounts(input.counts, input.outcome, errors);
+  validateCounts(input.counts, input.outcome, input.returnType, input.schemaVersion, errors);
   validateChecks(input.checks, input.scenario, input.outcome, errors);
   validateDownloadEvidence(input.downloadEvidence, input, errors);
   validateLimitations(input.limitations, input.outcome, errors);
@@ -569,18 +570,29 @@ function expectedConcreteArtifactTypes(evidence: Record<string, unknown>): strin
   );
 }
 
-function validateCounts(input: unknown, outcome: unknown, errors: string[]): void {
+function validateCounts(
+  input: unknown,
+  outcome: unknown,
+  returnType: unknown,
+  schemaVersion: unknown,
+  errors: string[],
+): void {
   if (!isRecord(input)) {
     errors.push("counts must be an object");
     return;
   }
-  requireOnlyKeys(input, COUNT_KEYS, "counts", errors);
-  for (const field of COUNT_KEYS) {
+  const countKeys = schemaVersion === 2 ? COUNT_KEYS_V2 : COUNT_KEYS_V1;
+  requireOnlyKeys(input, countKeys, "counts", errors);
+  for (const field of countKeys) {
     requireNonNegativeInteger(input[field], `counts.${field}`, errors);
   }
-  if (!hasOnlyNumberCounts(input)) return;
-  const reconciled = input.downloaded + input.notFiled + input.manuallyObserved;
+  if (!hasOnlyNumberCounts(input, schemaVersion)) return;
+  const notGenerated = schemaVersion === 2 ? input.notGenerated : 0;
+  const reconciled = input.downloaded + input.notFiled + notGenerated + input.manuallyObserved;
   const observed = reconciled + input.blocked + input.failed;
+  if (notGenerated > 0 && returnType !== "GSTR-2B") {
+    errors.push("counts.notGenerated can be nonzero only for GSTR-2B");
+  }
   if (outcome === "pass" && reconciled === 0) {
     errors.push("counts must include at least one reconciled target");
   } else if (observed === 0) {
@@ -736,13 +748,8 @@ function assertNoSensitiveMarkers(input: unknown, errors: string[]): void {
   }
 }
 
-function requireExact(
-  value: unknown,
-  expected: number | string | boolean,
-  field: string,
-  errors: string[],
-): void {
-  if (value !== expected) errors.push(`${field} must be ${String(expected)}`);
+function requireSchemaVersion(value: unknown, errors: string[]): void {
+  if (value !== 1 && value !== 2) errors.push("schemaVersion must be 1 or 2");
 }
 
 function requirePattern(
@@ -817,7 +824,8 @@ function stableJson(value: unknown): string {
 
 function hasOnlyNumberCounts(
   input: Record<string, unknown>,
-): input is Record<keyof LiveRunEvidenceCounts, number> {
+  schemaVersion: unknown,
+): input is Record<keyof LiveRunEvidenceCounts, number> & { notGenerated?: number } {
   return (
     typeof input.downloaded === "number" &&
     typeof input.eligibleTargets === "number" &&
@@ -825,7 +833,8 @@ function hasOnlyNumberCounts(
     typeof input.manuallyObserved === "number" &&
     typeof input.blocked === "number" &&
     typeof input.failed === "number" &&
-    typeof input.duplicates === "number"
+    typeof input.duplicates === "number" &&
+    (schemaVersion !== 2 || typeof input.notGenerated === "number")
   );
 }
 

@@ -15,6 +15,7 @@ import {
   clearFiledReturnsTargetReview,
   readFiledReturnsTargetReview,
 } from "./filed-returns-target-review";
+import { targetStatusFromFlowStep } from "./filed-returns-full-fiscal-year-summary";
 
 export async function withPersistedSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
@@ -74,10 +75,10 @@ async function responseAfterPersistedSummary(
   return { ...response, flowSummary };
 }
 
-async function persistSinglePeriodSummary(
+export async function persistSinglePeriodSummary(
   scope: FiledReturnsDownloadScope,
   flowStep: PortalFlowStepResult,
-  deps: FiledReturnsFlowRunnerDeps,
+  deps: { storageKeys: { completion: string }; now?: () => Date },
 ): Promise<FiledReturnsFlowSummary | null> {
   const summary = toSinglePeriodSummary(scope, flowStep, deps.now?.() ?? new Date());
   return persistCanonicalFiledReturnsFlowSummary(deps.storageKeys.completion, summary);
@@ -97,7 +98,10 @@ function toSinglePeriodSummary(
 ): FiledReturnsFlowSummary {
   const isReconciled =
     flowStep.state === "downloaded" ||
-    flowStep.safeSignals.includes("filed-return-positively-not-filed");
+    ["not-filed", "not-generated"].includes(targetStatusFromFlowStep(flowStep, scope.returnType)) ||
+    (scope.returnType === "GSTR-1" &&
+      scope.artifactType === "EXCEL" &&
+      flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available"));
   const isPartial = flowStep.state === "partial";
   return {
     scope,

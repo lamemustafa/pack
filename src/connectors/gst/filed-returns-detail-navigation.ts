@@ -8,6 +8,7 @@ import {
 import type { extractFiledReturnsDetailIdentity } from "./filed-returns-detail-identity";
 import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import { filedReturnDescriptor, filedReturnScopeId } from "./filed-returns-return-descriptors";
+import { offersFiledGstr1DetailPdf } from "./portal-artifact-endpoints";
 
 export function shouldReturnFromMismatchedDetail(
   detailIdentity: ReturnType<typeof extractFiledReturnsDetailIdentity>,
@@ -150,6 +151,14 @@ export function clickFiledGstr1SummaryForPdf(
   if (scope.returnType !== "GSTR-1") return null;
   if (!scopeIncludesPdfArtifact(scope)) return null;
   if (safeSignals.includes("download-pdf-gstr-1")) return null;
+  // The detail route can offer the filed-PDF control directly. Leaving a page that already offers
+  // the download makes the flow wait for a navigation step that is not needed.
+  //
+  // Ask the page's controls, not a signal derived from its text. That signal only says the label
+  // appears somewhere, which decoy or non-actionable copy also does -- and
+  // skipping a real View Summary control on that basis strands a target whose PDF was reachable
+  // all along. The question is whether this page offers something to click, so the page is asked.
+  if (offersFiledGstr1DetailPdf(documentRef)) return null;
   if (isGstr1SummaryRoute(documentRef)) return null;
 
   const summaryControl = findGstr1ViewSummaryControl(documentRef);
