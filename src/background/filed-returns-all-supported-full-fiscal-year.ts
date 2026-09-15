@@ -1,4 +1,4 @@
-import { isFiledReturnsRunLeaseLive } from "./filed-returns-active-run";
+import { filedReturnsRunLeaseLiveness } from "./filed-returns-active-run";
 import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
@@ -265,6 +265,36 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
 }
 
 /**
+ * Whether this plan is running with nobody behind it.
+ *
+ * One definition for every caller in this file. It was written inline three times during the #366
+ * rectification, which is the duplicated-derivation shape that caused #366 in the first place --
+ * the next edit would have been one missed copy away from recreating it.
+ *
+ * `unknownLeaseMeans` is the whole reason this takes an argument. A storage read that failed is
+ * not evidence that no worker is behind the target:
+ *
+ * - a **projection** passes `"absent"`: a display that cannot read the lease should let the
+ *   age-based view stand rather than suppress a genuine interruption, and it changes nothing.
+ * - a **mutation** passes `"live"`: resetting a target and re-arming a portal action on the
+ *   strength of an unreadable lease is "could not determine" treated as "matches". Refusing costs
+ *   the reader a retry; getting it wrong costs a duplicate portal action.
+ */
+async function planIsInterrupted(
+  deps: AllSupportedRunnerDeps,
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+  unknownLeaseMeans: "live" | "absent",
+): Promise<boolean> {
+  const now = deps.now?.() ?? new Date();
+  const liveness = await filedReturnsRunLeaseLiveness(
+    { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
+    now,
+  );
+  const resolved = liveness === "unknown" ? unknownLeaseMeans : liveness;
+  return isAllSupportedRunInterrupted(ledger, now, resolved === "live");
+}
+
+/**
  * Replays exactly one reader-reviewed, terminal child target. This is not a
  * reconciliation of its earlier browser download: a retry happens only after
  * an explicit message bound to the current immutable ledger revision.
@@ -309,15 +339,8 @@ export async function retryAllSupportedFullFiscalYearTarget(
   // Without this the whole fix is inert: the summary populates the recovery control, the reader
   // clicks it, and this lookup -- defaulting `interrupted` to false -- refuses the very target the
   // panel just offered, forever. The control renders and can never succeed.
-  const retryNow = deps.now?.() ?? new Date();
-  const interrupted = isAllSupportedRunInterrupted(
-    ledger,
-    retryNow,
-    await isFiledReturnsRunLeaseLive(
-      { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
-      retryNow,
-    ),
-  );
+  // A mutation: an unreadable lease refuses rather than proceeds.
+  const interrupted = await planIsInterrupted(deps, ledger, "live");
   const target = allSupportedExplicitRetryTarget(ledger, interrupted);
   if (
     !target ||
@@ -391,17 +414,7 @@ async function continueSavedAllSupportedFullFiscalYearRun(
     // active depending only on the clock. The lease is the evidence -- it renews every ten seconds
     // while a worker is behind the run -- and this is now the same derivation every other reader
     // uses.
-    const continueNow = deps.now?.() ?? new Date();
-    const interrupted = isAllSupportedRunInterrupted(
-      ledger,
-      continueNow,
-      await isFiledReturnsRunLeaseLive(
-        {
-          storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {},
-        },
-        continueNow,
-      ),
-    );
+    const interrupted = await planIsInterrupted(deps, ledger, "absent");
     if (!ledger.targets.some((target) => target.status === "running")) {
       return runAllSupportedFullFiscalYearTargets(deps, ledger, runSinglePeriod);
     }
@@ -724,15 +737,7 @@ async function allSupportedResponse(
   // `toAllSupportedFullFiscalYearSummary` meant an action response could overwrite a correct
   // "blocked, with a retry offered" view with a bare `running` one, taking the recovery control
   // away again. Two derivations of one fact, and the losing one was the one that ran last.
-  const now = deps.now?.() ?? new Date();
-  const interrupted = isAllSupportedRunInterrupted(
-    ledger,
-    now,
-    await isFiledReturnsRunLeaseLive(
-      { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
-      now,
-    ),
-  );
+  const interrupted = await planIsInterrupted(deps, ledger, "absent");
   return {
     ok: true,
     flowStep,

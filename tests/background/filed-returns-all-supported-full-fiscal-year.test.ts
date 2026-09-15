@@ -665,6 +665,45 @@ describe("all-supported full-fiscal-year worker", () => {
     }
   });
 
+  it("treats a stale run as active while its lease is live, and does not replay it", async () => {
+    // The branch in `continueSavedAllSupportedFullFiscalYearRun` that the lease-aware derivation
+    // changed, and which no test covered. A ledger past the 30s staleness window is NOT interrupted
+    // while a worker still holds the lease -- an atomic child can legitimately outlive that window,
+    // which is precisely why age alone was the wrong test.
+    const interrupted = interruptedRunLedger(new Date("2026-07-14T23:58:00.000Z"));
+    await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
+    deps.storageKeys.activeRun = "active-run";
+    stored.values["active-run"] = {
+      schemaVersion: "1.0",
+      runId: "filed-returns-run-m0abc123",
+      revision: 1,
+      scope: {
+        artifactType: "PDF",
+        financialYear: request.financialYear,
+        period: "April",
+        returnType: "GSTR-3B",
+      },
+      status: "running",
+      leaseUpdatedAt: NOW.toISOString(),
+    };
+
+    try {
+      const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+      const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+
+      // Reported as still running, not interrupted, and still never replayed.
+      expect(response).toMatchObject({
+        allSupportedFullFiscalYearFlowSummary: { status: "running" },
+      });
+      expect(response).not.toMatchObject({
+        flowStep: { safeSignals: ["all-supported-full-fiscal-year-run-interrupted"] },
+      });
+      expect(runner).not.toHaveBeenCalled();
+    } finally {
+      delete deps.storageKeys.activeRun;
+    }
+  });
+
   it("keeps a stale running target in explicit review without replaying it", async () => {
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
     if (!expansion.ok) throw new Error("expected all-supported plan");
