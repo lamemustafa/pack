@@ -243,13 +243,13 @@ export async function startFiledReturnsDownloadFlow(
       }
     }
     if (isFullFiscalYearScope(scope)) {
-      return startFullFiscalYearDownloadFlow(
+      return await startFullFiscalYearDownloadFlow(
         scope,
         deps,
         startSinglePeriodFiledReturnsDownloadFlow,
       );
     }
-    return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
+    return await startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
@@ -364,16 +364,16 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
     );
     if (retainedArtifactRecovery) return retainedArtifactRecovery;
     if (options.discardCompletedPlanRoot) {
-      return restartCompletedAllSupportedFullFiscalYearPlan(
+      return await restartCompletedAllSupportedFullFiscalYearPlan(
         request,
-        deps as never,
+        leasedAllSupportedDeps(deps) as never,
         startSinglePeriodFiledReturnsDownloadFlow,
       );
     }
     const planRoot = { kind: request.kind, financialYear: request.financialYear };
-    return startAllSupportedFullFiscalYearDownloadFlow(
+    return await startAllSupportedFullFiscalYearDownloadFlow(
       planRoot,
-      deps as never,
+      leasedAllSupportedDeps(deps) as never,
       startSinglePeriodFiledReturnsDownloadFlow,
     );
   } finally {
@@ -424,9 +424,9 @@ export async function retryAllSupportedFiledReturnsFullFiscalYearTarget(
       deps,
     );
     if (retainedArtifactRecovery) return retainedArtifactRecovery;
-    return retryAllSupportedFullFiscalYearTarget(
+    return await retryAllSupportedFullFiscalYearTarget(
       payload,
-      deps as never,
+      leasedAllSupportedDeps(deps) as never,
       startSinglePeriodFiledReturnsDownloadFlow,
     );
   } finally {
@@ -489,6 +489,21 @@ function retainedFullFiscalYearPlanLockResponse(
       },
     },
   };
+}
+
+/**
+ * Carries one fact into the all-supported worker: this call already holds the run lease.
+ *
+ * `acquireFiledReturnsRun` hands back a run only when no valid lease was already stored, so a
+ * successful acquisition proves no other worker is behind the plan. Without it the worker read the
+ * lease back out of storage, found the record this very call had just written, concluded a worker
+ * was still attending the abandoned target, and refused the retry the panel had just offered --
+ * the control rendered and could never succeed.
+ */
+function leasedAllSupportedDeps(
+  deps: FiledReturnsFlowRunnerDeps,
+): FiledReturnsFlowRunnerDeps & { runLeaseHeldByThisOperation: true } {
+  return { ...deps, runLeaseHeldByThisOperation: true };
 }
 
 /**
@@ -577,7 +592,7 @@ export async function retryFullFiscalYearTargetDownloadFlow(
   try {
     const recovery = await prepareFullFiscalYearTargetRetry(payload, deps);
     if (!recovery.ok) return recovery.response;
-    return startFullFiscalYearDownloadFlow(
+    return await startFullFiscalYearDownloadFlow(
       recovery.ledger.scope,
       deps,
       startSinglePeriodFiledReturnsDownloadFlow,
@@ -642,7 +657,7 @@ export async function retryFiledReturnsTargetDownloadFlow(
         return responseForFiledReturnsTargetReview(currentState.review);
       }
     }
-    return startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
+    return await startSinglePeriodFiledReturnsDownloadFlow(scope, deps);
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
@@ -783,7 +798,7 @@ export async function resolveUnconfirmedFiledReturnsDownloadFlow(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
-    return resolveUnconfirmedFiledReturnsDownload(scope, resolution, deps);
+    return await resolveUnconfirmedFiledReturnsDownload(scope, resolution, deps);
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
@@ -803,7 +818,7 @@ export async function resolveFullFiscalYearTargetFlow(
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
   try {
-    return resolveFullFiscalYearTarget(payload, resolution, deps);
+    return await resolveFullFiscalYearTarget(payload, resolution, deps);
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);
@@ -865,13 +880,13 @@ export async function startFreshFiledReturnsDownloadFlow(
     if (retainedArtifactRecovery) return retainedArtifactRecovery;
 
     if (isFullFiscalYearScope(payload.scope)) {
-      return startFullFiscalYearDownloadFlow(
+      return await startFullFiscalYearDownloadFlow(
         payload.scope,
         deps,
         startSinglePeriodFiledReturnsDownloadFlow,
       );
     }
-    return startSinglePeriodFiledReturnsDownloadFlow(payload.scope, deps);
+    return await startSinglePeriodFiledReturnsDownloadFlow(payload.scope, deps);
   } finally {
     stopLeaseRenewal();
     await releaseFiledReturnsRun(activeRun.run, deps);

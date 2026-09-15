@@ -66,6 +66,11 @@ type AllSupportedRunnerDeps = FiledReturnsFlowRunnerDeps & {
   storageKeys: FiledReturnsFlowRunnerDeps["storageKeys"] & {
     allSupportedFullFiscalYearLedgerIndex: string;
   };
+  /**
+   * Set by a caller that already holds the run lease for this plan, so the lease read below does
+   * not answer with the caller's own record. See `planIsInterrupted`.
+   */
+  runLeaseHeldByThisOperation?: boolean;
 };
 
 type SystemErrorPredecessor = FiledReturnsFlowStepCategory | "initial";
@@ -271,6 +276,14 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
  * rectification, which is the duplicated-derivation shape that caused #366 in the first place --
  * the next edit would have been one missed copy away from recreating it.
  *
+ * `deps.runLeaseHeldByThisOperation` is the other half. Every user-facing entry point in
+ * `filed-returns-flow-runner.ts` acquires the shared run lease before delegating here, and
+ * `acquireFiledReturnsRun` only hands back a run when no valid lease already exists -- a
+ * successful acquisition is itself the proof that nobody else is behind this plan. Reading the
+ * lease again from such a caller answers with the record that same call just wrote, which is
+ * circular: it would report every abandoned target as still attended and refuse every retry the
+ * panel offers. Those callers pass the flag and the read is skipped.
+ *
  * `unknownLeaseMeans` is the whole reason this takes an argument. A storage read that failed is
  * not evidence that no worker is behind the target:
  *
@@ -286,6 +299,9 @@ async function planIsInterrupted(
   unknownLeaseMeans: "live" | "absent",
 ): Promise<boolean> {
   const now = deps.now?.() ?? new Date();
+  if (deps.runLeaseHeldByThisOperation) {
+    return isAllSupportedRunInterrupted(ledger, now, false);
+  }
   const liveness = await filedReturnsRunLeaseLiveness(
     { storageKeys: deps.storageKeys.activeRun ? { activeRun: deps.storageKeys.activeRun } : {} },
     now,
