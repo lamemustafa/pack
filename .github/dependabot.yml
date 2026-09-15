@@ -25,9 +25,29 @@ updates:
 
     groups:
       # Grouped by risk, not convenience. react, react-dom and @wxt-dev/module-react are
-      # the only dependencies that reach a taxpayer's browser; they are deliberately not
-      # grouped, so each runtime update still arrives as its own PR with its own
-      # disposition. Everything below is build- or test-time and cannot ship.
+      # the only dependencies that reach a taxpayer's browser, so each runtime update still
+      # arrives as its own PR with its own disposition. Everything below `react` is build-
+      # or test-time and cannot ship.
+      #
+      # react and react-dom are the one exception, and it is not a relaxation of that rule.
+      # React refuses to run when the two disagree -- "Incompatible React versions: the
+      # react and react-dom packages must have the exact same version" -- so separate PRs
+      # do not produce two independently reviewable updates. They produce one broken PR and
+      # one that cannot be merged before it. #361 bumped react 19.2.8 without react-dom and
+      # failed 25 suites for exactly this reason. Keeping them in one group preserves what
+      # the ungrouped rule was for: this is still a runtime PR of its own, separate from
+      # dev-tooling, reviewed and dispositioned on its own. @wxt-dev/module-react stays
+      # ungrouped -- it carries no such constraint.
+      #
+      # This grouping does not rely on being remembered:
+      # `tests/repo/react-runtime-version-parity.test.ts` fails whenever the resolved
+      # react and react-dom versions diverge, however they came apart.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
       dev-tooling:
         dependency-type: "development"
         # Majors are excluded deliberately. A grouped PR is reviewed as one unit, and a
