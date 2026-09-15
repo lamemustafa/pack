@@ -1192,6 +1192,82 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
     } as never);
   }
 
+  // `control-not-found` is resolved BEFORE any control is clicked, so the helper above only ever
+  // covered the no-action path. The real no-details case is the opposite: Pack arms and clicks the
+  // target-bound Excel control, the portal answers with the no-details dialog instead of a file,
+  // and the blob capture therefore times out. `generation-timeout` is classified as a retained
+  // reason, which is exactly why the post-click inspection used to be skipped here.
+  function armClickedThenTimedOutFailure() {
+    captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
+      ok: false as const,
+      reason: "generation-timeout",
+      safeSignals: [] as string[],
+    } as never);
+  }
+
+  it("inspects a declined artifact after the clicked control times out", async () => {
+    armClickedThenTimedOutFailure();
+    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    // The observable outcome that matters: the inspection actually ran. Asserting only the
+    // returned step would pass even if the runtime never looked at the page.
+    expect(sendMessageToTabWithInjection).toHaveBeenCalledWith(
+      17,
+      expect.objectContaining({ type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3" }),
+    );
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["filed-gstr1-excel-no-details-available"]),
+        state: "blocked",
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow step.");
+    // The generic acquisition failure must not survive alongside the specific answer.
+    expect(response.flowStep.safeSignals).not.toContain("artifact-generation-timeout");
+  });
+
+  it("keeps the timed-out acquisition failure when the visible refusal is not target-bound", async () => {
+    armClickedThenTimedOutFailure();
+    // An unbound refusal is what `detectPostClickBlockedState` returns as null: the dialog on
+    // screen belongs to some other target. Fail closed -- the original reason must stand rather
+    // than a stale dialog marking this period unavailable.
+    const sendMessageToTabWithInjection = messagingDeps({
+      ok: true,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: filedReturnScopeId("GSTR-1"),
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-post-click-blocked-state-not-found"],
+        safeMessage: "Pack did not find a recognized post-click portal block.",
+      },
+    } as PackMessageResponse);
+
+    const response = await triggerAndObserveFiledReturnDownload({
+      activePeriod: "April",
+      artifactType: "EXCEL",
+      deps: { sendMessageToTabWithInjection, storageKeys: {} },
+      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
+      tabId: 17,
+    });
+
+    expect(response).toMatchObject({
+      flowStep: {
+        safeSignals: expect.arrayContaining(["artifact-generation-timeout"]),
+        state: "blocked",
+      },
+    });
+    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow step.");
+    expect(response.flowStep.safeSignals).not.toContain("filed-gstr1-excel-no-details-available");
+  });
+
   it("adopts a target-bound no-details answer after a definitive acquisition failure", async () => {
     armDefinitiveNoActionFailure();
     const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
@@ -1542,40 +1618,15 @@ describe("filed GSTR-1 e-invoice Excel with no details to download", () => {
     summaryStorage.set.mockResolvedValue(undefined);
   });
 
-  it("retains an uncertain acquisition instead of adopting a later decline", async () => {
-    captureMocks.acquirePageGeneratedArtifact.mockResolvedValueOnce({
-      ok: false as const,
-      reason: "generation-timeout",
-      safeSignals: [] as string[],
-    } as never);
-    const sendMessageToTabWithInjection = messagingDeps(noDetailsStep);
-    const persistedBefore = summaryStorage.set.mock.calls.length;
-    const clearedBefore = captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length;
-
-    const response = await triggerAndObserveFiledReturnDownload({
-      activePeriod: "April",
-      artifactType: "EXCEL",
-      deps: { sendMessageToTabWithInjection, storageKeys: { completion: "completion" } },
-      scope: { financialYear: "2025-26", period: "April", returnType: "GSTR-1" },
-      tabId: 17,
-    });
-
-    expect(sendMessageToTabWithInjection).not.toHaveBeenCalledWith(
-      17,
-      expect.objectContaining({ type: "PACK_CONTENT_INSPECT_FILED_RETURN_POST_CLICK_V3" }),
-    );
-    expect(response).toMatchObject({
-      flowStep: {
-        safeSignals: expect.arrayContaining(["artifact-generation-timeout"]),
-        state: "blocked",
-      },
-    });
-    if (!response.ok || !("flowStep" in response)) throw new Error("Expected flow step.");
-    expect(response.flowStep.safeSignals).not.toContain("filed-gstr1-excel-no-details-available");
-    expect(summaryStorage.set.mock.calls.length).toBe(persistedBefore);
-    expect(captureMocks.clearArtifactAcquisitionCheckpoint.mock.calls.length).toBe(clearedBefore);
-    expect(captureMocks.persistArtifactAcquisitionIntent).toHaveBeenCalled();
-  });
+  // REMOVED: "retains an uncertain acquisition instead of adopting a later decline".
+  //
+  // That test asserted the post-click inspection is NOT sent after a `generation-timeout`, which
+  // made the GSTR-1 Excel no-details path unreachable: the dialog is the cause of the timeout, so
+  // the only reason that path can be entered was also the one that suppressed it. Its replacement
+  // is "inspects a declined artifact after the clicked control times out" above, together with
+  // "keeps the timed-out acquisition failure when the visible refusal is not target-bound", which
+  // preserves the property the removed test was actually protecting -- an unrelated dialog must
+  // never mark this target unavailable -- by binding rather than by refusing to look.
 
   it("retains the checkpoint when terminal-decline persistence throws", async () => {
     summaryStorage.set.mockReset();

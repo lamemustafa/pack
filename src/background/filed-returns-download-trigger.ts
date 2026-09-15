@@ -710,19 +710,27 @@ async function triggerPageGeneratedSinglePeriodArtifact(
       };
     }
 
-    // A later page refusal cannot rule out another side effect after an uncertain acquisition.
-    // Keep the original target-bound checkpoint for recovery unless acquisition itself was
-    // definitive; only then can an inspected refusal replace the failure.
-    const declined = retainCheckpointForRecovery
-      ? null
-      : await postClickBlockedStep({
-          artifactType,
-          deps,
-          requestId,
-          returnType,
-          scope,
-          tabId,
-        });
+    // Inspect regardless of the retain decision. Gating this on `retainCheckpointForRecovery`
+    // skipped the inspection in the exact case it exists to recognize: the GSTR-1 Excel
+    // no-details dialog is what makes `capturePortalPdfBlob` return `generation-timeout`, and
+    // that reason is classified as retained. The branch could therefore only ever run after a
+    // failure that happened *before* any click, so the clicked-control path -- the real one --
+    // was never reached.
+    //
+    // Reading the page is safe here because a refusal is adopted only when it binds to this
+    // exact target: `detectPostClickBlockedState` routes through `bindGstr1DetailRefusal` /
+    // `bindGstr2bSummaryRefusal`, each of which returns null when the visible refusal belongs to
+    // another period or route. An unbound or unrecognized page leaves the acquisition failure
+    // standing with its reason intact. The uncertainty this guard was protecting is answered by
+    // that binding, not by declining to look.
+    const declined = await postClickBlockedStep({
+      artifactType,
+      deps,
+      requestId,
+      returnType,
+      scope,
+      tabId,
+    });
     if (declined) {
       // The retain decision above was made about an acquisition failure. This is not one: the
       // portal has established that no download exists for this target, so there is nothing for a
