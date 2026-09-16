@@ -109,15 +109,7 @@ function isExplicitlyRetryableTarget(
 export function allSupportedRecoveryIsWithheld(
   ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "status" | "zipPhase" | "targets">,
 ): boolean {
-  return allSupportedWithheldTarget(ledger) !== null;
-}
-
-/** The target that withholds this plan's recovery, so the reader can be told which one stopped. */
-export function allSupportedWithheldTarget(
-  ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "status" | "zipPhase" | "targets">,
-): FiledReturnsAllSupportedFullFiscalYearTarget | null {
-  const stopped = allSupportedStoppedRecovery(ledger);
-  return stopped?.discardable ? stopped.target : null;
+  return allSupportedStoppedRecovery(ledger)?.discardable === true;
 }
 
 /**
