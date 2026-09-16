@@ -6,6 +6,7 @@ import type {
 import {
   isResolvedFullFiscalYearTargetStatus,
   needsExplicitFullFiscalYearRetry,
+  filedReturnsTargetStatusBehaviour,
 } from "../connectors/gst/filed-returns-contracts";
 import {
   ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
@@ -121,6 +122,9 @@ export function allSupportedWithheldTarget(
     ledger.targets.find(
       (target) =>
         needsExplicitFullFiscalYearRetry(target.status) &&
+        // A person's answer is never a reason to discard the plan holding it (#380). Such a plan
+        // gets no discard here; Pack's options still clear local data if a reader needs out.
+        !filedReturnsTargetStatusBehaviour(target.status).holdsAnswer &&
         target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal)),
     ) ?? null
   );
