@@ -28,6 +28,9 @@ import {
   hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
 
+export const PACK_ACTION_STOPPED_MESSAGE =
+  "Pack stopped responding before that finished. Reopen Pack to see what was saved.";
+
 const UNEXPECTED_PACK_RESPONSE = "Unexpected Pack response.";
 
 export function usePackPopupController() {
@@ -275,7 +278,12 @@ export function usePackPopupController() {
       try {
         await action();
       } catch {
-        showActionError("Pack could not reach the background service. Try the action again.");
+        // Deliberately does not promise that nothing was lost: `restart-*` discards a completed plan
+        // before starting again, so an interruption part-way through is not a no-op. What does hold
+        // for every action here is that Pack persists state before and after each step, so the saved
+        // state -- not this message -- is where the reader finds out what happened. "Try the action
+        // again" used to send them to repeat something that may already have fired (#374).
+        showActionError(PACK_ACTION_STOPPED_MESSAGE);
       } finally {
         setBusy(null);
       }

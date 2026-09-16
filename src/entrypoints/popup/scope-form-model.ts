@@ -150,7 +150,9 @@ export function getScopeFormStartAction(
       return { disabled: true, label: "Run in progress" };
     }
     if (signals.has("filed-returns-run-needs-review")) {
-      return { disabled: true, label: "Reset interrupted run" };
+      // A disabled control. It used to read "Reset interrupted run" -- an imperative on something that
+      // cannot be clicked, rendered once per preset for a single cause (#374).
+      return { disabled: true, label: "Interrupted run needs review" };
     }
     if (
       signals.has("filed-returns-target-review-required") ||

@@ -23,7 +23,11 @@ export type PopupPresentationKind =
   | "complete"
   | "unavailable"
   | "blocked"
-  | "error";
+  // Two kinds, not one. An action that never finished and a download that could not finish need
+  // different next steps -- only the second is helped by opening the GST Portal -- and a single
+  // shared kind let one card's title and button leak onto the other (#374).
+  | "action-error"
+  | "download-error";
 
 export interface PopupPresentationState {
   badge: string;
@@ -32,6 +36,10 @@ export interface PopupPresentationState {
   kind: PopupPresentationKind;
   title: string;
   tone: "neutral" | "ready" | "warning" | "success" | "danger";
+}
+
+export function isErrorPresentation(presentation: Pick<PopupPresentationState, "kind">): boolean {
+  return presentation.kind === "action-error" || presentation.kind === "download-error";
 }
 
 export function getPopupPresentationState(
@@ -68,7 +76,7 @@ export function getPopupPresentationState(
       badge: "Action failed",
       body: actionError,
       icon: "!",
-      kind: "error",
+      kind: "action-error",
       title: "Pack could not finish that action",
       tone: "danger",
     };
@@ -206,7 +214,7 @@ export function getPopupPresentationState(
       badge: "Needs review",
       body: "Pack could not finish this download. Retry after checking the GST Portal page.",
       icon: "!",
-      kind: "error",
+      kind: "download-error",
       title: "Download could not finish",
       tone: "danger",
     };
