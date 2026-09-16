@@ -1,8 +1,8 @@
-import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
 import {
-  hasRetainedFullFiscalYearArtifactEvidence,
-  hasFullFiscalYearRefusalArtifactConflict,
-} from "../connectors/gst/filed-returns-durable-signals";
+  filedReturnsTargetOutcome,
+  targetMissedAnArtifact,
+} from "./filed-returns-full-fiscal-year-summary";
+import { hasFullFiscalYearRefusalArtifactConflict } from "../connectors/gst/filed-returns-durable-signals";
 import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
@@ -107,7 +107,35 @@ export function toAllSupportedFullFiscalYearSummary(
   leaseIsLive = false,
   allTerminalPlanRoots = allSupportedTerminalPlanRoots([ledger]),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
-  const flowStep = summaryStep(ledger, isAllSupportedRunInterrupted(ledger, now, leaseIsLive));
+  // One derivation, consulted by every reader below. Previously the same condition was spelled out
+  // inline for the `status` projection and for `summaryStep`, and the recovery guard did not
+  // consult it at all -- so the summary reported the run as blocked while
+  // `allSupportedExplicitRetryTarget` still treated its target as active and offered nothing.
+  // That disagreement is #366: three exits, all gated on `running`, none reachable.
+  const interrupted = isAllSupportedRunInterrupted(ledger, now, leaseIsLive);
+  return projectAllSupportedFullFiscalYearSummary(
+    ledger,
+    summaryStep(ledger, interrupted),
+    allTerminalPlanRoots,
+    interrupted,
+  );
+}
+
+/**
+ * The one projection of a saved plan into the summary the panel renders.
+ *
+ * A polled read and every runner action both reach the panel through the same state slot, so they
+ * must describe a plan identically; only the step differs, because an action reports the step it
+ * just took. A second copy of this body in the runner drifted when #359 changed how a declined
+ * format reads, and the same target then read as needing review straight after an action and as
+ * not generated once the panel was reopened.
+ */
+export function projectAllSupportedFullFiscalYearSummary(
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+  flowStep: PortalFlowStepResult,
+  allTerminalPlanRoots: ReturnType<typeof allSupportedTerminalPlanRoots>,
+  interrupted: boolean,
+): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
   const zipDelivered =
     ledger.zipPhase === "cleaned-after-download" ||
     ledger.zipPhase === "downloaded-cleanup-pending";
@@ -116,12 +144,6 @@ export function toAllSupportedFullFiscalYearSummary(
       ledger.targets[0]!,
   );
   const resumeMode = allSupportedResumeMode(ledger);
-  // One derivation, consulted by every reader below. Previously the same condition was spelled out
-  // inline for the `status` projection and for `summaryStep`, and the recovery guard did not
-  // consult it at all -- so the summary reported the run as blocked while
-  // `allSupportedExplicitRetryTarget` still treated its target as active and offered nothing.
-  // That disagreement is #366: three exits, all gated on `running`, none reachable.
-  const interrupted = isAllSupportedRunInterrupted(ledger, now, leaseIsLive);
   const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger, interrupted);
   return {
     resumeAvailable: resumeMode !== null,
@@ -299,10 +321,6 @@ function targetOutcome(
     target.status,
     zipDelivered,
     false,
-    target.status === "not-generated"
-      ? hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals)
-      : target.safeSignals.some((signal) =>
-          signal.startsWith("filed-return-artifact-unavailable:"),
-        ),
+    targetMissedAnArtifact(target),
   );
 }
