@@ -284,6 +284,20 @@ describe("all-supported full-fiscal-year ledger", () => {
       expect(allSupportedRecoveryIsWithheld(observed)).toBe(false);
     });
 
+    it("is not withheld when any other target holds a person's answer (#380)", () => {
+      // The discard replaces the whole plan, so protecting only the target that triggers it would
+      // still throw away an answer a person gave on a different one.
+      const ledger = withheldAt(3);
+      const observedElsewhere = {
+        ...ledger,
+        status: "partial" as const,
+        targets: ledger.targets.map((target, position) =>
+          position === 1 ? { ...target, status: "manually-observed" as const } : target,
+        ),
+      };
+      expect(allSupportedRecoveryIsWithheld(observedElsewhere)).toBe(false);
+    });
+
     it("is not withheld when the non-resumable signal sits on a resolved target", () => {
       const ledger = withheldAt(3);
       const resolved = {
