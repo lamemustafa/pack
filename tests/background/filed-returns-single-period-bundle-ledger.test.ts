@@ -931,3 +931,29 @@ function diagnostic(
     status,
   };
 }
+
+describe("the exact filed-return scope comparison (#383)", () => {
+  it("treats an omitted artifact selection as its default and compares every field", async () => {
+    const { sameExactFiledReturnsScope } =
+      await import("../../src/connectors/gst/filed-returns-artifacts");
+    const base = { financialYear: "2025-26", period: "April", returnType: "GSTR-3B" } as const;
+    expect(sameExactFiledReturnsScope(base, { ...base, artifactType: "PDF" })).toBe(true);
+    expect(sameExactFiledReturnsScope(base, { ...base, period: "May" })).toBe(false);
+    expect(sameExactFiledReturnsScope(base, { ...base, financialYear: "2024-25" })).toBe(false);
+    expect(sameExactFiledReturnsScope(base, { ...base, returnType: "GSTR-1" })).toBe(false);
+    expect(
+      sameExactFiledReturnsScope(
+        { ...base, artifactType: "PDF_AND_EXCEL" },
+        { ...base, artifactType: "PDF" },
+      ),
+    ).toBe(false);
+  });
+
+  it("is the same function under every name the modules export", async () => {
+    const artifacts = await import("../../src/connectors/gst/filed-returns-artifacts");
+    const bundle = await import("../../src/background/filed-returns-single-period-bundle-ledger");
+    const fullYear = await import("../../src/background/filed-returns-full-fiscal-year-ledger");
+    expect(bundle.sameSinglePeriodBundleScope).toBe(artifacts.sameExactFiledReturnsScope);
+    expect(fullYear.sameFiledReturnsScope).toBe(artifacts.sameExactFiledReturnsScope);
+  });
+});
