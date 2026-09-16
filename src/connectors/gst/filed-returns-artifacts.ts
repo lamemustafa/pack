@@ -72,6 +72,38 @@ export function normaliseFiledReturnsArtifactType(
   return supportsFiledReturnsArtifactType(returnType, candidate) ? candidate : "PDF";
 }
 
+/**
+ * Whether two filed-return scopes name exactly the same target: year, period, return type, and
+ * artifact selection after normalisation, so an omitted selection equals its default.
+ *
+ * The one implementation. Five identical copies existed in background and popup modules (#383),
+ * and a sixth function in `filed-returns-target-review.ts` shared a copy's name while matching on
+ * overlapping selections instead -- one edit to a scope field away from two targets comparing equal
+ * in one place and different in another.
+ */
+export function sameExactFiledReturnsScope(
+  left: {
+    financialYear: string;
+    period: string;
+    returnType: FiledReturnsReturnType;
+    artifactType?: unknown;
+  },
+  right: {
+    financialYear: string;
+    period: string;
+    returnType: FiledReturnsReturnType;
+    artifactType?: unknown;
+  },
+): boolean {
+  return (
+    left.financialYear === right.financialYear &&
+    left.period === right.period &&
+    left.returnType === right.returnType &&
+    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
+      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
+  );
+}
+
 export function concreteFiledReturnsArtifactTypesForSelection(
   returnType: FiledReturnsReturnType,
   artifactType: FiledReturnsArtifactType | undefined,

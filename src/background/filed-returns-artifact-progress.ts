@@ -6,7 +6,7 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import {
-  normaliseFiledReturnsArtifactType,
+  sameExactFiledReturnsScope,
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
@@ -169,7 +169,7 @@ export async function readPersistedArtifactProgress(
   const summary = storageState.summary;
   const completedArtifactTypes =
     summary.status === "partial" &&
-    sameFiledReturnsScope(summary.scope, scope) &&
+    sameExactFiledReturnsScope(summary.scope, scope) &&
     isValidFiledReturnsDownloadDiagnosticState(summary.flowStep, summary.scope)
       ? downloadedArtifactTypes(summary.flowStep.safeSignals).filter((artifactType) =>
           artifactTypes.includes(artifactType),
@@ -295,17 +295,4 @@ function downloadedArtifactTypes(
         artifactType === "PDF" || artifactType === "JSON" || artifactType === "EXCEL",
     );
   return Array.from(new Set(completedArtifactTypes));
-}
-
-function sameFiledReturnsScope(
-  left: FiledReturnsDownloadScope,
-  right: FiledReturnsDownloadScope,
-): boolean {
-  return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
-  );
 }

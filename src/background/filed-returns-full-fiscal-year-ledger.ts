@@ -9,6 +9,7 @@ import type {
 import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import {
   normaliseFiledReturnsArtifactType,
+  sameExactFiledReturnsScope,
   type FiledReturnsArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
@@ -394,18 +395,8 @@ export function completeFullFiscalYearLedger(
   return completedLedger;
 }
 
-export function sameFiledReturnsScope(
-  left: FiledReturnsDownloadScope,
-  right: FiledReturnsDownloadScope,
-): boolean {
-  return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
-  );
-}
+/** The exact scope comparison, under the name this module's importers use. */
+export const sameFiledReturnsScope = sameExactFiledReturnsScope;
 
 export function isFullFiscalYearLedgerStale(
   ledger: FiledReturnsFullFiscalYearLedger,

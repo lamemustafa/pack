@@ -7,6 +7,7 @@ import type {
 import {
   concreteFiledReturnsArtifactTypesForSelection,
   normaliseFiledReturnsArtifactType,
+  sameExactFiledReturnsScope,
   type FiledReturnsConcreteArtifactType,
 } from "../connectors/gst/filed-returns-artifacts";
 import { isFiledReturnsReturnType } from "../connectors/gst/filed-returns-return-types";
@@ -566,18 +567,8 @@ export function singlePeriodBundleFlowStep(
   };
 }
 
-export function sameSinglePeriodBundleScope(
-  left: FiledReturnsDownloadScope,
-  right: FiledReturnsDownloadScope,
-): boolean {
-  return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
-  );
-}
+/** The exact scope comparison, under the name this module's importers use. */
+export const sameSinglePeriodBundleScope = sameExactFiledReturnsScope;
 
 function parseSinglePeriodBundleLedger(input: unknown): SinglePeriodBundleLedger | null {
   if (!input || typeof input !== "object") return null;
