@@ -242,6 +242,25 @@ describe("all-supported panel progress", () => {
     expect(retryTargetButton(render(reviewable))).not.toContain("disabled");
   });
 
+  it("offers discarding a plan whose recovery Pack withholds, and nothing for one it does not (#376)", () => {
+    // Live, a GSTR-1 period lost its pinned GST Portal tab: retry withheld, resume unproductive,
+    // presets locked by the saved plan. The panel rendered no control at all.
+    vi.stubEnv("MODE", "source-surfaces");
+    const blocked = {
+      ...summary(["saved", "pending"], "running", [0]),
+      status: "blocked" as const,
+    };
+    const label = "Discard the saved FY 2025-26 plan and start again";
+
+    expect(render(blocked)).not.toContain(label);
+    expect(render(blocked)).not.toContain("Discard the saved FY");
+
+    const withheld = { ...blocked, recoveryWithheld: true as const };
+    expect(actionButton(render(withheld), label)).not.toContain("disabled");
+    // It restarts portal work, so it needs a signed-in tab like every other restart.
+    expect(actionButton(render(withheld, SIGNED_OUT), label)).toContain("disabled");
+  });
+
   it("puts an explicit same-year restart beside the completed summary", () => {
     vi.stubEnv("MODE", "source-surfaces");
     const markup = render(summary(["saved", "not-filed"], "complete", [0, 1]));

@@ -5,6 +5,7 @@ import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-sco
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import {
   allSupportedExplicitRetryTarget,
+  allSupportedRecoveryIsWithheld,
   createAllSupportedFullFiscalYearLedger,
   markAllSupportedFullFiscalYearTargetRunning,
   markAllSupportedFullFiscalYearTargetTerminal,
@@ -213,6 +214,72 @@ describe("all-supported full-fiscal-year ledger", () => {
     expect(
       toAllSupportedFullFiscalYearSummary(blocked).allSupportedFullFiscalYearRecovery,
     ).toBeUndefined();
+  });
+
+  describe("recovery withheld (#376)", () => {
+    // The live capture: earlier targets resolved, one blocked on a signal Pack will not retry, the
+    // rest pending. No retry, no productive resume, and a fresh start is refused because the saved
+    // plan holds the root -- discarding it is the only exit, so the predicate must say so.
+    function withheldAt(index: number, signal = "full-fiscal-year-pinned-gst-tab-unavailable") {
+      const ledger = createLedger();
+      return {
+        ...ledger,
+        status: "blocked" as const,
+        targets: ledger.targets.map((target, position) =>
+          position < index
+            ? {
+                ...target,
+                status: "not-filed" as const,
+                ...canonicalDurableTargetStatus(target, "not-filed", [
+                  "filed-return-positively-not-filed",
+                ]),
+              }
+            : position === index
+              ? { ...target, status: "blocked" as const, safeSignals: [signal] }
+              : target,
+        ),
+      };
+    }
+
+    it("is withheld when a later target is blocked on a non-resumable signal", () => {
+      const ledger = withheldAt(3);
+      expect(allSupportedRecoveryIsWithheld(ledger)).toBe(true);
+      expect(allSupportedExplicitRetryTarget(ledger)).toBeNull();
+    });
+
+    it("is withheld for a partial plan stopped the same way", () => {
+      expect(allSupportedRecoveryIsWithheld({ ...withheldAt(3), status: "partial" })).toBe(true);
+    });
+
+    it("is not withheld when the blocked target is one an explicit retry accepts", () => {
+      const ledger = withheldAt(3, "no-filed-returns-candidate");
+      expect(allSupportedExplicitRetryTarget(ledger)).not.toBeNull();
+      expect(allSupportedRecoveryIsWithheld(ledger)).toBe(false);
+    });
+
+    it("is not withheld once a ZIP phase is recorded", () => {
+      expect(
+        allSupportedRecoveryIsWithheld({ ...withheldAt(3), zipPhase: "export-retry-pending" }),
+      ).toBe(false);
+    });
+
+    it.each(["running", "complete", "cancelled"] as const)(
+      "is not withheld for a %s plan",
+      (status) => {
+        expect(allSupportedRecoveryIsWithheld({ ...withheldAt(3), status })).toBe(false);
+      },
+    );
+
+    it("is not withheld when the non-resumable signal sits on a resolved target", () => {
+      const ledger = withheldAt(3);
+      const resolved = {
+        ...ledger,
+        targets: ledger.targets.map((target, position) =>
+          position === 3 ? { ...target, status: "not-filed" as const } : target,
+        ),
+      };
+      expect(allSupportedRecoveryIsWithheld(resolved)).toBe(false);
+    });
   });
 
   it("withholds explicit retry once final ZIP recovery has started", () => {
