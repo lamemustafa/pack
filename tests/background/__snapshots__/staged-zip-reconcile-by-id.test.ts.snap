@@ -1,0 +1,367 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports ID not found identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-download-unconfirmed",
+    "all-supported-full-fiscal-year-zip-download-id-not-found",
+    "all-supported-full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports ID not found identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-download-unconfirmed",
+    "full-fiscal-year-zip-download-id-not-found",
+    "full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports completed identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack confirmed the previously started fiscal-year ZIP by its browser download ID.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-downloaded",
+    "all-supported-full-fiscal-year-zip-reconciled-by-id",
+    "all-supported-full-fiscal-year-opfs-retained",
+    "obs-ok",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "downloaded",
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports completed identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack confirmed the previously started fiscal-year ZIP by its browser download ID.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-downloaded",
+    "full-fiscal-year-zip-reconciled-by-id",
+    "full-fiscal-year-opfs-retained",
+    "obs-ok",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "downloaded",
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports failed with action identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "The browser reported that the saved fiscal-year ZIP download ended unsuccessfully. Pack retained staging for an explicit retry.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-download-unconfirmed",
+    "all-supported-full-fiscal-year-zip-reconciled-by-id",
+    "all-supported-full-fiscal-year-opfs-retained",
+    "obs-failed",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "blocked",
+  "userAction": {
+    "canResume": false,
+    "message": "synthetic",
+    "type": "RETRY_PORTAL_GENERATION",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports failed with action identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "The browser reported that the saved fiscal-year ZIP download ended unsuccessfully. Pack retained staging for an explicit retry.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-download-unconfirmed",
+    "full-fiscal-year-zip-reconciled-by-id",
+    "full-fiscal-year-opfs-retained",
+    "obs-failed",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "blocked",
+  "userAction": {
+    "canResume": false,
+    "message": "synthetic",
+    "type": "RETRY_PORTAL_GENERATION",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports failed without action identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "The browser reported that the saved fiscal-year ZIP download ended unsuccessfully. Pack retained staging for an explicit retry.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-download-unconfirmed",
+    "all-supported-full-fiscal-year-zip-reconciled-by-id",
+    "all-supported-full-fiscal-year-opfs-retained",
+    "obs-failed",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "blocked",
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports failed without action identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "The browser reported that the saved fiscal-year ZIP download ended unsuccessfully. Pack retained staging for an explicit retry.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-download-unconfirmed",
+    "full-fiscal-year-zip-reconciled-by-id",
+    "full-fiscal-year-opfs-retained",
+    "obs-failed",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "blocked",
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports missing download ID identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-download-unconfirmed",
+    "all-supported-full-fiscal-year-zip-download-id-missing",
+    "all-supported-full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports missing download ID identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-download-unconfirmed",
+    "full-fiscal-year-zip-download-id-missing",
+    "full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports not observed identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not yet confirm the saved fiscal-year ZIP download. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-download-unconfirmed",
+    "all-supported-full-fiscal-year-zip-reconciled-by-id",
+    "all-supported-full-fiscal-year-opfs-retained",
+    "obs-none",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports not observed identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not yet confirm the saved fiscal-year ZIP download. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-download-unconfirmed",
+    "full-fiscal-year-zip-reconciled-by-id",
+    "full-fiscal-year-opfs-retained",
+    "obs-none",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports search unavailable identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-download-unconfirmed",
+    "all-supported-full-fiscal-year-zip-download-search-unavailable",
+    "all-supported-full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports search unavailable identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-download-unconfirmed",
+    "full-fiscal-year-zip-download-search-unavailable",
+    "full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports unknown state identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-download-unconfirmed",
+    "all-supported-full-fiscal-year-zip-download-state-unknown",
+    "all-supported-full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports unknown state identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-download-unconfirmed",
+    "full-fiscal-year-zip-download-state-unknown",
+    "full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports wrong phase identically apart from the kind prefix > all-supported-full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "all-supported-full-fiscal-year-zip-download-started",
+    "all-supported-full-fiscal-year-zip-download-unconfirmed",
+    "all-supported-full-fiscal-year-zip-download-id-missing",
+    "all-supported-full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
+
+exports[`exact-ID final ZIP reconciliation, both full-year paths (#383) > reports wrong phase identically apart from the kind prefix > full-fiscal-year 1`] = `
+{
+  "connectorId": "gst",
+  "safeMessage": "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
+  "safeSignals": [
+    "synthetic-complete",
+    "full-fiscal-year-zip-download-started",
+    "full-fiscal-year-zip-download-unconfirmed",
+    "full-fiscal-year-zip-download-id-missing",
+    "full-fiscal-year-opfs-retained",
+  ],
+  "scopeId": "gst-filed-returns-gstr3b-pdf-private-v0",
+  "state": "download-unconfirmed",
+  "userAction": {
+    "canResume": true,
+    "message": "Check browser Downloads for the saved fiscal-year ZIP. Do not start another ZIP until this state is resolved.",
+    "type": "NAVIGATE_TO_SUPPORTED_PAGE",
+  },
+}
+`;
