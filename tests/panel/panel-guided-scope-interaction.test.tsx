@@ -762,6 +762,59 @@ describe("panel guided scope interaction", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it("discards a withheld plan even after a period boundary, bound to its ledger (#376)", async () => {
+    // Refreshing cannot change a withheld plan: its targets are fixed and nothing will advance it.
+    // Revalidating it against today's preset turned the only control into a silent refresh the
+    // moment a month closed -- the no-exit state this control exists to end. Its label promises
+    // starting the year again, not the displayed periods, and the background binds to the ledger.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-25T00:00:00.000Z"));
+    const restart = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => undefined);
+    const displayed = ["April", "May", "June", "July"] as const;
+    expect(panelAllReturnsFullYearPreset("2026-27")?.periodCount).toBeGreaterThan(displayed.length);
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: restart,
+          refreshFlowSummary: refresh,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            recoveryWithheld: true,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            ledgerId: "ledger-under-review",
+            status: "blocked",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", [...displayed]),
+            totalTargets: 28,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+              state: "blocked",
+              safeSignals: ["all-supported-full-fiscal-year-run-needs-action"],
+              safeMessage: "Synthetic withheld recovery.",
+            },
+          },
+        },
+      },
+      false,
+      false,
+    );
+
+    await clickButtonContaining("Discard the saved FY 2026-27 plan and start again");
+
+    expect(restart).toHaveBeenCalledExactlyOnceWith({
+      kind: "all-supported-returns-full-fiscal-year",
+      financialYear: "2026-27",
+      ledgerId: "ledger-under-review",
+    });
+  });
+
   it("refreshes instead of restarting a summary card without its reviewed ledger", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));

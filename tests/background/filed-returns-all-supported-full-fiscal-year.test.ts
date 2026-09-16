@@ -17,6 +17,7 @@ import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-r
 import { readCurrentAllSupportedFullFiscalYearFlowSummary } from "../../src/background/filed-returns-all-supported-full-fiscal-year-summary";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
+import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
 import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
 import * as AllSupportedPlanModule from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import type * as ArtifactAcquisitionState from "../../src/background/artifact-acquisition-state";
@@ -381,6 +382,185 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(
       (response as { flowStep: { safeSignals: readonly string[] } }).flowStep.safeSignals,
     ).toContain("all-supported-full-fiscal-year-restart-plan-not-terminal");
+  });
+
+  describe("a plan stopped on a target Pack will not retry (#376)", () => {
+    // Captured live: GSTR-1 May lost its pinned GST Portal tab. Retry was withheld, resume could
+    // not advance it, and presets were locked by the saved plan -- no control could move it.
+    async function persistWithheldPlan(signal = "full-fiscal-year-pinned-gst-tab-unavailable") {
+      const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+      if (!expansion.ok) throw new Error("expected an expandable plan");
+      let ledger = createAllSupportedFullFiscalYearLedger(
+        request,
+        expansion.targets,
+        FILED_RETURNS_MONTHS.slice(0, 3),
+        NOW,
+      );
+      const first = ledger.targets[0]!;
+      ledger = markAllSupportedFullFiscalYearTargetRunning(ledger, first.targetId, NOW);
+      ledger = markAllSupportedFullFiscalYearTargetTerminal(
+        ledger,
+        first.targetId,
+        "not-filed",
+        notFiledPortalStep(),
+        NOW,
+      );
+      const second = ledger.targets[1]!;
+      ledger = markAllSupportedFullFiscalYearTargetRunning(ledger, second.targetId, NOW);
+      ledger = markAllSupportedFullFiscalYearTargetTerminal(
+        ledger,
+        second.targetId,
+        "blocked",
+        {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-private-v0",
+          state: "blocked",
+          safeSignals: [signal],
+          safeMessage: "Synthetic blocked result.",
+        },
+        NOW,
+      );
+      expect(ledger.status).toBe("blocked");
+      expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
+      await persistAllSupportedFullFiscalYearLedger(deps, ledger);
+      vi.clearAllMocks();
+      zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
+      return ledger;
+    }
+
+    it("discards the withheld plan and starts the year again", async () => {
+      const withheld = await persistWithheldPlan();
+      expect(withheld.targets[1]?.safeSignals).toContain(
+        "full-fiscal-year-pinned-gst-tab-unavailable",
+      );
+      const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+
+      await restartCompletedAllSupportedFullFiscalYearPlan(
+        { ...request, ledgerId: withheld.ledgerId },
+        deps,
+        runner,
+      );
+
+      expect(zip.discard).toHaveBeenCalledWith(withheld.ledgerId);
+      expect(runner).toHaveBeenCalled();
+      expect(allSavedLedgers()).toHaveLength(1);
+      expect(savedLedger().ledgerId).not.toBe(withheld.ledgerId);
+    });
+
+    it("reproduces the live capture: withheld, told why, and offered only the discard", async () => {
+      // The child flow's real pinned-tab response, returned for the second target of a fresh run.
+      let calls = 0;
+      const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
+        calls += 1;
+        if (calls === 1) return notFiledStep();
+        return {
+          ok: true as const,
+          flowStep: {
+            connectorId: "gst" as const,
+            scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+            state: "blocked" as const,
+            safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
+            safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+              "full-fiscal-year-pinned-gst-tab-unavailable",
+            ]),
+          },
+        };
+      });
+
+      const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
+      const reopened = await readCurrentAllSupportedFullFiscalYearFlowSummary(deps);
+
+      expect(savedLedger().status).toBe("blocked");
+      // The popup applies the top-level step too, so it must give the same way out as the summary.
+      expect("flowStep" in response ? response.flowStep.safeMessage : "").toContain("discard");
+      for (const summary of [
+        "allSupportedFullFiscalYearFlowSummary" in response
+          ? response.allSupportedFullFiscalYearFlowSummary
+          : undefined,
+        reopened,
+      ]) {
+        expect(summary?.recoveryWithheld).toBe(true);
+        expect(summary?.allSupportedFullFiscalYearRecovery).toBeUndefined();
+        expect(summary?.resumeAvailable).toBe(false);
+        // The copy names what the panel renders, not a control this surface does not have.
+        expect(summary?.flowStep.safeMessage).not.toContain("Cancel and reset");
+        expect(summary?.flowStep.safeMessage).toContain("discard");
+      }
+    });
+
+    it("still refuses a blocked plan an explicit retry can recover", async () => {
+      const retryable = await persistWithheldPlan("no-filed-returns-candidate");
+      const runner = vi.fn<SinglePeriodRunner>();
+
+      const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+        { ...request, ledgerId: retryable.ledgerId },
+        deps,
+        runner,
+      );
+
+      expect(zip.discard).not.toHaveBeenCalled();
+      expect(runner).not.toHaveBeenCalled();
+      expect(savedLedger().ledgerId).toBe(retryable.ledgerId);
+      expect(
+        (response as { flowStep: { safeSignals: readonly string[] } }).flowStep.safeSignals,
+      ).toContain("all-supported-full-fiscal-year-restart-plan-not-terminal");
+    });
+
+    it("keeps the withheld plan when its local staging cannot be cleared", async () => {
+      const withheld = await persistWithheldPlan();
+      zip.discard.mockResolvedValue([]);
+      const runner = vi.fn<SinglePeriodRunner>();
+
+      const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+        { ...request, ledgerId: withheld.ledgerId },
+        deps,
+        runner,
+      );
+
+      expect(runner).not.toHaveBeenCalled();
+      expect(savedLedger()).toEqual(withheld);
+      // The failure is the news. The withheld-plan copy must not replace it with advice to repeat
+      // the action that just failed.
+      expect("flowStep" in response ? response.flowStep.safeMessage : "").toBe(
+        "Pack could not clear the retained local staging for this fiscal-year plan. The saved plan remains unchanged.",
+      );
+      expect(
+        "allSupportedFullFiscalYearFlowSummary" in response
+          ? response.allSupportedFullFiscalYearFlowSummary?.flowStep.safeMessage
+          : "",
+      ).toBe(
+        "Pack could not clear the retained local staging for this fiscal-year plan. The saved plan remains unchanged.",
+      );
+    });
+
+    it("stays withheld and discardable when the worker stops after staging was cleared", async () => {
+      // Staging is cleared before the replacement is saved. If the worker stops in between, the old
+      // plan must still be the saved one and still offer the same exit, so a second click finishes.
+      const withheld = await persistWithheldPlan();
+      stored.failReplacementSet = true;
+
+      await expect(
+        restartCompletedAllSupportedFullFiscalYearPlan(
+          { ...request, ledgerId: withheld.ledgerId },
+          deps,
+          vi.fn<SinglePeriodRunner>(),
+        ),
+      ).rejects.toThrow("synthetic replacement persistence failure");
+      expect(zip.discard).toHaveBeenCalledWith(withheld.ledgerId);
+      expect(savedLedger()).toEqual(withheld);
+      expect((await readCurrentAllSupportedFullFiscalYearFlowSummary(deps))?.recoveryWithheld).toBe(
+        true,
+      );
+
+      const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+      await restartCompletedAllSupportedFullFiscalYearPlan(
+        { ...request, ledgerId: withheld.ledgerId },
+        deps,
+        runner,
+      );
+      expect(runner).toHaveBeenCalled();
+      expect(savedLedger().ledgerId).not.toBe(withheld.ledgerId);
+    });
   });
 
   it("refuses a restart naming a ledger the root no longer holds", async () => {
