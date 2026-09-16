@@ -4,7 +4,7 @@ import type {
 } from "../../connectors/gst/filed-returns-contracts";
 import {
   concreteFiledReturnsArtifactTypesForSelection,
-  normaliseFiledReturnsArtifactType,
+  sameExactFiledReturnsScope,
 } from "../../connectors/gst/filed-returns-artifacts";
 import { FILED_RETURNS_FILENAME_OVERRIDDEN_SIGNALS } from "../../connectors/gst/filed-returns-durable-signals";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
@@ -167,15 +167,5 @@ export function getScopeMatchedFiledReturnsSummary(
   summary: FiledReturnsFlowSummary | null,
 ): FiledReturnsFlowSummary | null {
   if (!summary) return null;
-  return isSameScope(scope, summary.scope) ? summary : null;
-}
-
-function isSameScope(left: FiledReturnsDownloadScope, right: FiledReturnsDownloadScope): boolean {
-  return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
-  );
+  return sameExactFiledReturnsScope(scope, summary.scope) ? summary : null;
 }
