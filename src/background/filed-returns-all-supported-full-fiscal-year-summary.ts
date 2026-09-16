@@ -12,10 +12,11 @@ import type {
 } from "../connectors/gst/filed-returns-contracts";
 import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../core/recovery-actions";
 import {
   allSupportedExplicitRetryTarget,
   allSupportedResumeMode,
-  allSupportedWithheldTarget,
+  allSupportedStoppedRecovery,
   isAllSupportedFullFiscalYearLedgerStale,
   isAllSupportedRunInterrupted,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
@@ -146,7 +147,7 @@ export function projectAllSupportedFullFiscalYearSummary(
   );
   const resumeMode = allSupportedResumeMode(ledger);
   const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger, interrupted);
-  const withheldTarget = allSupportedWithheldTarget(ledger);
+  const stopped = allSupportedStoppedRecovery(ledger);
   return {
     resumeAvailable: resumeMode !== null,
     ...(resumeMode ? { resumeMode } : {}),
@@ -177,10 +178,10 @@ export function projectAllSupportedFullFiscalYearSummary(
           },
         }
       : {}),
-    ...(withheldTarget ? { recoveryWithheld: true as const } : {}),
+    ...(stopped?.discardable ? { recoveryWithheld: true as const } : {}),
     ...(ledger.currentTargetId ? { currentTargetId: ledger.currentTargetId } : {}),
     flowStepScope,
-    flowStep: withheldTarget ? withheldRecoveryStep(flowStep, withheldTarget) : flowStep,
+    flowStep: stopped ? stoppedRecoveryStep(flowStep, stopped) : flowStep,
   };
 }
 
@@ -197,9 +198,9 @@ export function projectAllSupportedFullFiscalYearSummary(
  * not clear staging, or that the plan changed under the reader -- and replacing it would tell the
  * reader to repeat the action that just failed.
  */
-function withheldRecoveryStep(
+function stoppedRecoveryStep(
   flowStep: PortalFlowStepResult,
-  target: FiledReturnsAllSupportedFullFiscalYearTarget,
+  { target, discardable }: NonNullable<ReturnType<typeof allSupportedStoppedRecovery>>,
 ): PortalFlowStepResult {
   const describesOnlyTheStop = flowStep.safeSignals.every(
     (signal) =>
@@ -209,7 +210,10 @@ function withheldRecoveryStep(
   if (!describesOnlyTheStop) return flowStep;
   return {
     ...flowStep,
-    safeMessage: `Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. To continue, discard the saved plan and start this year again; files already captured for it are downloaded again.`,
+    safeMessage: discardable
+      ? `Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. To continue, discard the saved plan and start this year again; files already captured for it are downloaded again.`
+      : // No control is offered for this plan (#380), so the message is the only way out it has.
+        `Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. The plan holds an answer you recorded, which running the year again would not bring back, so Pack will not discard it from here. To start this year again, use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d in Pack's options.`,
   };
 }
 

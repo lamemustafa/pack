@@ -6,6 +6,7 @@ import type {
 import {
   isResolvedFullFiscalYearTargetStatus,
   needsExplicitFullFiscalYearRetry,
+  filedReturnsTargetStatusBehaviour,
 } from "../connectors/gst/filed-returns-contracts";
 import {
   ALL_SUPPORTED_FULL_FISCAL_YEAR_CATALOGUE_VERSION,
@@ -108,22 +109,39 @@ function isExplicitlyRetryableTarget(
 export function allSupportedRecoveryIsWithheld(
   ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "status" | "zipPhase" | "targets">,
 ): boolean {
-  return allSupportedWithheldTarget(ledger) !== null;
+  return allSupportedStoppedRecovery(ledger)?.discardable === true;
 }
 
-/** The target that withholds this plan's recovery, so the reader can be told which one stopped. */
-export function allSupportedWithheldTarget(
+/**
+ * The target a plan stopped on that Pack will not retry, and whether discarding the plan is
+ * offered as the way out.
+ *
+ * The discard replaces the whole plan. A downloaded or not-filed answer comes back when the year
+ * runs again; one a person gave (#380) does not, so a plan holding one is not discardable here and
+ * its reader must be pointed at clearing local data instead. One derivation for both, so the
+ * control and the message cannot disagree about which case applies.
+ */
+export function allSupportedStoppedRecovery(
   ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "status" | "zipPhase" | "targets">,
-): FiledReturnsAllSupportedFullFiscalYearTarget | null {
+): { target: FiledReturnsAllSupportedFullFiscalYearTarget; discardable: boolean } | null {
   if (ledger.zipPhase) return null;
   if (ledger.status !== "blocked" && ledger.status !== "partial") return null;
-  return (
-    ledger.targets.find(
-      (target) =>
-        needsExplicitFullFiscalYearRetry(target.status) &&
-        target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal)),
-    ) ?? null
+  const target = ledger.targets.find(
+    (candidate) =>
+      needsExplicitFullFiscalYearRetry(candidate.status) &&
+      candidate.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal)),
   );
+  if (!target) return null;
+  return {
+    target,
+    discardable: !ledger.targets.some((candidate) => holdsUnrepeatableAnswer(candidate.status)),
+  };
+}
+
+/** An answer running the year again cannot reproduce: held, but not resolved by the portal. */
+function holdsUnrepeatableAnswer(status: FiledReturnsFullFiscalYearTargetStatus): boolean {
+  const behaviour = filedReturnsTargetStatusBehaviour(status);
+  return behaviour.holdsAnswer && !behaviour.resolved;
 }
 
 /**

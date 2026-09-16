@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
 import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/connectors/gst/filed-returns-contracts";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
@@ -269,6 +270,39 @@ describe("all-supported full-fiscal-year ledger", () => {
         expect(allSupportedRecoveryIsWithheld({ ...withheldAt(3), status })).toBe(false);
       },
     );
+
+    it("is not withheld by a target that holds a person's answer (#380)", () => {
+      // `manually-observed` is unresolved, so the retry machinery considers it, but a person
+      // answered it. Discarding the plan would throw that answer away, and a stale non-resumable
+      // signal beside it is not a reason to.
+      const ledger = withheldAt(3);
+      const observed = {
+        ...ledger,
+        targets: ledger.targets.map((target, position) =>
+          position === 3 ? { ...target, status: "manually-observed" as const } : target,
+        ),
+      };
+      expect(allSupportedRecoveryIsWithheld(observed)).toBe(false);
+    });
+
+    it("is not withheld when any other target holds a person's answer (#380)", () => {
+      // The discard replaces the whole plan, so protecting only the target that triggers it would
+      // still throw away an answer a person gave on a different one.
+      const ledger = withheldAt(3);
+      const observedElsewhere = {
+        ...ledger,
+        status: "partial" as const,
+        targets: ledger.targets.map((target, position) =>
+          position === 1 ? { ...target, status: "manually-observed" as const } : target,
+        ),
+      };
+      expect(allSupportedRecoveryIsWithheld(observedElsewhere)).toBe(false);
+
+      // No control is offered, so the message is the only way out and must name one.
+      const summary = toAllSupportedFullFiscalYearSummary(observedElsewhere);
+      expect(summary.recoveryWithheld).toBeUndefined();
+      expect(summary.flowStep.safeMessage).toContain(PACK_CLEAR_LOCAL_DATA_ACTION_LABEL);
+    });
 
     it("is not withheld when the non-resumable signal sits on a resolved target", () => {
       const ledger = withheldAt(3);
