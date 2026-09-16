@@ -140,34 +140,66 @@ describe("filed returns active run recovery", () => {
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 
-  // A recovery action already bound to a durable record is itself the review the stale lease was
-  // standing in for, so it may take that lease over. These pin the limits of that permission: it
-  // needs to be asked for, it needs the lease to be genuinely stale, and it needs the lease to be
-  // for the scope being acquired -- so an interrupted single-period download, whose lease is the
-  // only record that anything was interrupted, is never cleared by some other flow's start.
+  // A stale lease proves only that a worker stopped. A plan's recovery may take over the stale lease
+  // it OWNS -- the one its own dead run left -- and nothing else.
+  //
+  // This was first written as "same scope", and adversarial review of #375 showed scope is not
+  // identity: every all-supported plan anchors its lease to its first target, GSTR-3B PDF+JSON,
+  // which is exactly the scope of a plain single-return GSTR-3B full-year run. A retry of an
+  // unrelated GSTR-1 target took over and erased that other run's lease, the only record of its
+  // interruption. Ownership is the identity; these pin it.
   describe("taking over a stale lease", () => {
+    const OWNER = "all-supported-returns-full-fiscal-year:2026-27";
     const deps = (at: string) => ({
       storageKeys: { activeRun: "active-run" },
       now: () => new Date(at),
     });
-
-    it("replaces a stale lease for the same scope when asked", async () => {
-      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"), {
-        takeOverStaleLease: true,
-      });
-
-      expect(result).toHaveProperty("run");
+    const written = () => {
       const calls = browserMocks.storage.local.set.mock.calls as unknown as Array<
         [Record<string, ActiveFiledReturnsRun>]
       >;
-      const written = calls.at(-1)?.[0];
-      expect(written?.["active-run"]?.runId).toBeDefined();
-      expect(written?.["active-run"]?.runId).not.toBe(ACTIVE_RUN.runId);
-      expect(written?.["active-run"]?.leaseUpdatedAt).toBe("2026-07-25T00:01:00.000Z");
+      return calls.at(-1)?.[0]?.["active-run"];
+    };
+
+    it("records the owner on a lease it acquires", async () => {
+      browserMocks.storage.local.get.mockResolvedValue({});
+
+      await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"), {
+        owner: OWNER,
+      });
+
+      expect(written()?.owner).toBe(OWNER);
     });
 
-    it("still refuses a stale lease when not asked", async () => {
-      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"));
+    it("writes no owner for a flow that does not claim one", async () => {
+      browserMocks.storage.local.get.mockResolvedValue({});
+
+      await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"));
+
+      expect(written()).toBeDefined();
+      expect(written()).not.toHaveProperty("owner");
+    });
+
+    it("takes over a stale lease it owns", async () => {
+      browserMocks.storage.local.get.mockResolvedValue({
+        "active-run": { ...ACTIVE_RUN, owner: OWNER },
+      });
+
+      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"), {
+        owner: OWNER,
+      });
+
+      expect(result).toHaveProperty("run");
+      expect(written()?.runId).not.toBe(ACTIVE_RUN.runId);
+      expect(written()?.owner).toBe(OWNER);
+    });
+
+    it("refuses a stale lease with no owner, even for the same scope", async () => {
+      // The #375 Critical, reduced to its core: the shape of a legacy lease, or of another flow's
+      // lease that happens to share this scope. Neither is this caller's to discard.
+      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"), {
+        owner: OWNER,
+      });
 
       expect(result).toMatchObject({
         response: { flowStep: { safeSignals: ["filed-returns-run-needs-review"] } },
@@ -175,9 +207,26 @@ describe("filed returns active run recovery", () => {
       expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
     });
 
-    it("refuses a live lease even when asked", async () => {
+    it("refuses a stale lease owned by someone else", async () => {
+      browserMocks.storage.local.get.mockResolvedValue({
+        "active-run": { ...ACTIVE_RUN, owner: "all-supported-returns-full-fiscal-year:2025-26" },
+      });
+
+      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"), {
+        owner: OWNER,
+      });
+
+      expect(result).toHaveProperty("response");
+      expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    });
+
+    it("refuses a live lease even when it owns it", async () => {
+      browserMocks.storage.local.get.mockResolvedValue({
+        "active-run": { ...ACTIVE_RUN, owner: OWNER },
+      });
+
       const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:00:05Z"), {
-        takeOverStaleLease: true,
+        owner: OWNER,
       });
 
       expect(result).toMatchObject({
@@ -186,30 +235,44 @@ describe("filed returns active run recovery", () => {
       expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
     });
 
-    it("refuses a stale lease for a different scope even when asked", async () => {
-      const result = await acquireFiledReturnsRun(
-        { ...ACTIVE_RUN.scope, period: "May" },
-        deps("2026-07-25T00:01:00Z"),
-        { takeOverStaleLease: true },
-      );
-
-      expect(result).toMatchObject({
-        response: { flowStep: { safeSignals: ["filed-returns-run-needs-review"] } },
-      });
-      expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
-    });
-
-    it("refuses malformed lease metadata even when asked", async () => {
+    it("refuses a stale lease when the caller claims no owner", async () => {
       browserMocks.storage.local.get.mockResolvedValue({
-        "active-run": { ...ACTIVE_RUN, revision: 0 },
+        "active-run": { ...ACTIVE_RUN, owner: OWNER },
       });
 
-      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"), {
-        takeOverStaleLease: true,
-      });
+      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"));
 
       expect(result).toHaveProperty("response");
       expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    });
+
+    it("treats a lease with a malformed owner as malformed, not as unowned", async () => {
+      for (const owner of [42, "", "x".repeat(129), "bad\u0000owner"]) {
+        vi.clearAllMocks();
+        browserMocks.storage.local.get.mockResolvedValue({
+          "active-run": { ...ACTIVE_RUN, owner },
+        });
+
+        await expect(
+          readActiveFiledReturnsRunStorageState(deps("2026-07-25T00:01:00Z")),
+        ).resolves.toMatchObject({ state: "malformed" });
+      }
+    });
+
+    it("keeps the owner across a renewal", async () => {
+      // The parser rebuilds the record field by field and renewal spreads what it parsed, so an
+      // owner dropped on read would be written back without it -- silently turning the plan's own
+      // lease into an unowned one that its recovery could never take over again.
+      browserMocks.storage.local.get.mockResolvedValue({
+        "active-run": { ...ACTIVE_RUN, owner: OWNER },
+      });
+
+      await renewFiledReturnsRunLease(
+        { ...ACTIVE_RUN, owner: OWNER },
+        deps("2026-07-25T00:00:20Z"),
+      );
+
+      expect(written()?.owner).toBe(OWNER);
     });
   });
 

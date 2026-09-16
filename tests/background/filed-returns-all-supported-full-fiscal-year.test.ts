@@ -25,6 +25,7 @@ import {
   markAllSupportedFullFiscalYearTargetTerminal,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-ledger";
 import {
+  allSupportedFullFiscalYearPlanRootKey,
   allSupportedFullFiscalYearPlanStorageKey,
   persistAllSupportedFullFiscalYearLedger,
 } from "../../src/background/filed-returns-all-supported-full-fiscal-year-run-state";
@@ -755,11 +756,11 @@ describe("all-supported full-fiscal-year worker", () => {
     }
   });
 
-  it("retries through the real handler past a stale lease the dead worker left behind", async () => {
+  it("retries through the real handler past a stale lease this plan's dead run left behind", async () => {
     // The live run behind #374: the worker died mid-target and its lease stayed in storage. Before
     // the fix the retry the plan offered went to `acquireFiledReturnsRun`, found that stale lease,
     // and refused -- so the only way forward was a separate "Reset stuck run" the reader had to find
-    // first. The retry is bound to this exact plan, so it now takes that lease over itself.
+    // first. The lease records this plan root as its owner, so the plan's retry takes it over.
     const interrupted = interruptedRunLedger(new Date("2026-07-14T23:58:00.000Z"));
     await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
@@ -778,6 +779,7 @@ describe("all-supported full-fiscal-year worker", () => {
       },
       status: "running",
       leaseUpdatedAt: new Date(NOW.getTime() - 60_000).toISOString(),
+      owner: allSupportedFullFiscalYearPlanRootKey(request),
     };
 
     try {
@@ -798,6 +800,74 @@ describe("all-supported full-fiscal-year worker", () => {
       expect(savedLedger().targets[0]!.status).not.toBe("running");
       // Taken over, then released on the way out -- not left behind for the next action to trip on.
       expect(stored.values["active-run"]).toBeUndefined();
+    } finally {
+      delete deps.storageKeys.activeRun;
+    }
+  });
+
+  it("refuses to take over another flow's stale lease that merely shares this plan's scope", async () => {
+    // The adversarial-review Critical on #375, reproduced the way it was found. Every all-supported
+    // plan anchors its lease to its first target -- GSTR-3B, PDF and JSON -- which is exactly the
+    // scope of a plain single-return GSTR-3B full-year run. When that other run dies it leaves a
+    // stale lease with no owner, and before owners existed a retry of ANY target in this plan took it
+    // over and released it, erasing the only record that the GSTR-3B run was interrupted.
+    //
+    // Retrying a GSTR-1 target keeps the scenario honest: nothing about the target being retried
+    // has anything to do with the GSTR-3B run whose evidence is at stake.
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported plan");
+    const gstr1Index = expansion.targets.findIndex((target) => target.returnType === "GSTR-1");
+    expect(gstr1Index).toBeGreaterThan(0);
+    const startedAt = new Date("2026-07-14T23:58:00.000Z");
+    const base = createAllSupportedFullFiscalYearLedger(
+      request,
+      expansion.targets,
+      FILED_RETURNS_MONTHS.slice(0, 3),
+      startedAt,
+    );
+    const gstr1Target = base.targets.find((target) => target.returnType === "GSTR-1")!;
+    const interrupted = markAllSupportedFullFiscalYearTargetRunning(
+      base,
+      gstr1Target.targetId,
+      startedAt,
+    );
+    await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
+
+    const first = expansion.targets[0]!;
+    const otherFlowsLease = {
+      schemaVersion: "1.0",
+      runId: "filed-returns-run-m0stuck1",
+      revision: 5,
+      scope: {
+        financialYear: request.financialYear,
+        period: "FULL_FISCAL_YEAR",
+        returnType: first.returnType,
+        artifactType: first.artifactType,
+      },
+      status: "running",
+      leaseUpdatedAt: new Date(NOW.getTime() - 60_000).toISOString(),
+    };
+    deps.storageKeys.activeRun = "active-run";
+    stored.values["active-run"] = structuredClone(otherFlowsLease);
+
+    try {
+      const response = await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+        {
+          financialYear: request.financialYear,
+          ledgerId: interrupted.ledgerId,
+          targetId: gstr1Target.targetId,
+          expectedRevision: interrupted.revision,
+        },
+        deps,
+      );
+
+      expect(response).toMatchObject({
+        flowStep: { safeSignals: ["filed-returns-run-needs-review"] },
+      });
+      expect(singlePeriod.run).not.toHaveBeenCalled();
+      // The observable outcome that matters: the other run's lease is exactly as it was left, so its
+      // interruption is still there for someone to review.
+      expect(stored.values["active-run"]).toEqual(otherFlowsLease);
     } finally {
       delete deps.storageKeys.activeRun;
     }

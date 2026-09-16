@@ -301,11 +301,11 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
 
-  it("does not let a fresh all-supported start take over a stale lease", async () => {
-    // Only a resume of a retained plan may take over its stale lease (#374). A fresh start has no
-    // durable record of what the stale lease's worker was doing, so clearing it would discard the
-    // only evidence that anything was interrupted. Forcing takeover on for every start passed the
-    // whole background suite before this test existed.
+  it("claims its plan root as the lease owner on a fresh all-supported start", async () => {
+    // Ownership, not a "resuming or fresh" gate, decides takeover (#374, #375 review). A fresh start
+    // still records who holds the lease, so a later recovery of this same root can take over the
+    // stale lease a dead run of it leaves -- and nothing another flow holds. Which leases are refused
+    // is pinned in filed-returns-active-run.test.ts and end to end in the all-supported suite.
     mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
     const activeResponse = {
       ok: true as const,
@@ -327,7 +327,7 @@ describe("filed returns retained target scoping", () => {
     expect(activeRunMocks.acquireFiledReturnsRun).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      { takeOverStaleLease: false },
+      { owner: "all-supported-returns-full-fiscal-year:2026-27" },
     );
     expect(response).toEqual(activeResponse);
   });
@@ -373,9 +373,9 @@ describe("filed returns retained target scoping", () => {
         artifactType: "PDF",
       }),
       expect.anything(),
-      // Resuming a retained plan may take over that plan's own stale lease (#374); a fresh start may
-      // not. This test's saved historical plan is what makes it a resume.
-      { takeOverStaleLease: true },
+      // The plan root is recorded as the lease owner, so this root's own recovery can later take
+      // over a stale lease its dead run leaves (#374).
+      { owner: "all-supported-returns-full-fiscal-year:2026-27" },
     );
     expect(response).toEqual(activeResponse);
     expect(
