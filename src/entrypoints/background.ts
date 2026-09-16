@@ -5,8 +5,12 @@ import { isPackMessage, type PackMessageResponse } from "../connectors/gst/messa
 import { isPackOffscreenBlobUrlMessage } from "../connectors/gst/filed-returns-offscreen-validation";
 import {
   acknowledgeInterruptedFiledReturnsRun,
+  isInterruptedFiledReturnsRun,
+  isStaleLeaseOwnedBy,
+  readActiveFiledReturnsRunStorageState,
   readActiveFiledReturnsRunSummary,
 } from "../background/filed-returns-active-run";
+import { allSupportedFullFiscalYearPlanRootKey } from "../background/filed-returns-all-supported-full-fiscal-year-run-state";
 import { readCurrentFiledReturnsFlowSummary } from "../background/filed-returns-current-state";
 import { readCurrentAllSupportedFullFiscalYearFlowSummary } from "../background/filed-returns-all-supported-full-fiscal-year-summary";
 import {
@@ -337,24 +341,29 @@ async function handleMessage(
       const flowSummary = await readCurrentFiledReturnsFlowSummary({
         storageKeys: filedReturnsStorageKeys(),
       });
-      // A stale compatibility lease has the only acknowledgement route. Show
-      // it long enough to clear that lease; the next summary read returns the
-      // authoritative all-supported root and its retained recovery state.
-      if (
-        allSupportedFullFiscalYearFlowSummary &&
-        !["complete", "cancelled"].includes(allSupportedFullFiscalYearFlowSummary.status) &&
-        isStaleAllSupportedCompatibilityLease(flowSummary, allSupportedFullFiscalYearFlowSummary)
-      ) {
-        return { ok: true, flowSummary };
-      }
       // All-supported runs use one atomic lease for mutual exclusion, but that
       // lease cannot represent their cross-return progress or recovery. Any
       // unresolved root therefore remains authoritative over its compatibility
-      // lease, including after the lease becomes stale.
+      // lease, including after the lease becomes stale -- the root's own resume
+      // and retry take over a stale lease this root owns, so there is no
+      // separate acknowledgement step to route the reader through first (#374).
+      //
+      // The one exception is a stale lease this root does NOT own: one written
+      // before leases had owners, or another flow's lease that shares this
+      // scope. The root's recovery would be refused on it, and showing that
+      // recovery anyway would promise a retry that cannot run. Route the reader
+      // to the view that can clear it instead -- the same predicate the
+      // acquisition uses decides, so the two cannot disagree.
       if (
         allSupportedFullFiscalYearFlowSummary &&
         !["complete", "cancelled"].includes(allSupportedFullFiscalYearFlowSummary.status)
       ) {
+        if (
+          flowSummary?.flowStep.safeSignals.includes("filed-returns-run-needs-review") &&
+          (await hasStaleLeaseRootCannotTakeOver(allSupportedFullFiscalYearFlowSummary))
+        ) {
+          return { ok: true, flowSummary };
+        }
         return { ok: true, allSupportedFullFiscalYearFlowSummary };
       }
       // An atomic recovery is the only record that can authorise work on its
@@ -448,20 +457,24 @@ async function handleMessage(
   return { ok: false, error: "Unsupported Pack message." };
 }
 
-function isStaleAllSupportedCompatibilityLease(
-  flowSummary: Awaited<ReturnType<typeof readCurrentFiledReturnsFlowSummary>>,
+async function hasStaleLeaseRootCannotTakeOver(
   allSupportedSummary: NonNullable<
     Awaited<ReturnType<typeof readCurrentAllSupportedFullFiscalYearFlowSummary>>
   >,
-): boolean {
-  return Boolean(
-    flowSummary &&
-    allSupportedSummary.summaryIdentity &&
-    flowSummary.status === "blocked" &&
-    flowSummary.scope.period === "FULL_FISCAL_YEAR" &&
-    flowSummary.scope.financialYear === allSupportedSummary.summaryIdentity.financialYear &&
-    flowSummary.flowStep.safeSignals.includes("filed-returns-run-needs-review"),
+): Promise<boolean> {
+  const identity = allSupportedSummary.summaryIdentity;
+  // No identity means the saved-plan state itself is unusable -- a malformed index, or provenance
+  // that cannot be verified. That summary routes the reader to Clear local Pack data, which removes
+  // the lease along with everything else, so it must stay authoritative. Clearing only the lease
+  // would not repair the plan state and would hide the one exit that does.
+  if (!identity) return false;
+  const now = new Date();
+  const lease = await readActiveFiledReturnsRunStorageState(
+    { storageKeys: { activeRun: filedReturnsStorageKeys().activeRun } },
+    now,
   );
+  if (lease.state !== "valid" || !isInterruptedFiledReturnsRun(lease.run, now)) return false;
+  return !isStaleLeaseOwnedBy(lease.run, allSupportedFullFiscalYearPlanRootKey(identity), now);
 }
 
 function isNewerTerminalFiledReturnsFlowSummary(

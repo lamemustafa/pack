@@ -377,7 +377,68 @@ describe("background filed returns download defaults", () => {
     });
   });
 
-  it("surfaces a stale all-supported compatibility lease so it can be acknowledged", async () => {
+  it("keeps an unresolved all-supported plan authoritative over its own stale lease", async () => {
+    // This test used to pin the opposite: that a stale compatibility lease is shown INSTEAD of the
+    // plan, "so it can be acknowledged". That detour is #374. It hid the plan's own recovery -- an
+    // explicit retry naming the abandoned target -- behind a generic "stuck run" view whose only
+    // job was to clear a heartbeat nobody was renewing, and a lay tester had to find a collapsed
+    // Recovery options disclosure and press "Reset stuck run" before the real recovery appeared.
+    // The plan's recovery actions now take over their own stale lease, so the detour has nothing
+    // left to do.
+    const now = new Date(Date.now() - 60_000);
+    const financialYear = getFiledReturnsFinancialYearOptions(now)[0]!;
+    const periods = getFiledReturnsFullFiscalYearPeriods(financialYear, now);
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported full-year plan");
+    const planRoot = {
+      kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+      financialYear,
+    } as const;
+    const ledger = createAllSupportedFullFiscalYearLedger(
+      planRoot,
+      expansion.targets,
+      periods,
+      now,
+    );
+    const leaseScope = ledger.targets[0]!;
+    browserMocks.setLocalStorage({
+      [PACK_LOCAL_STORAGE_KEYS.activeFiledReturnsRun]: {
+        schemaVersion: "1.0",
+        runId: "00000000-0000-4000-8000-000000000001",
+        revision: 1,
+        scope: {
+          financialYear: leaseScope.financialYear,
+          period: "FULL_FISCAL_YEAR",
+          returnType: leaseScope.returnType,
+          artifactType: leaseScope.artifactType,
+        },
+        status: "running",
+        leaseUpdatedAt: now.toISOString(),
+        owner: allSupportedFullFiscalYearPlanRootKey(planRoot),
+      },
+      [PACK_LOCAL_STORAGE_KEYS.allSupportedFullFiscalYearLedgerIndex]: {
+        schemaVersion: "1.0",
+        ledgerIdsByPlanRoot: {
+          [allSupportedFullFiscalYearPlanRootKey(planRoot)]: ledger.ledgerId,
+        },
+      },
+      [allSupportedFullFiscalYearPlanStorageKey(ledger.ledgerId)]: ledger,
+    });
+
+    await import("../../src/entrypoints/background");
+
+    const response = await sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
+
+    expect(response).toMatchObject({ ok: true });
+    expect(response).toHaveProperty("allSupportedFullFiscalYearFlowSummary");
+    expect(response).not.toHaveProperty("flowSummary");
+  });
+
+  it("routes to clearing a stale lease the plan does not own, instead of offering a retry that would be refused", async () => {
+    // The fallback that makes owner-bound takeover safe to ship. A lease with no owner -- written by
+    // a build before owners existed, or by another flow sharing this scope -- would be refused by the
+    // plan's own retry. Showing that retry anyway would put the reader back in the #374 dead end, so
+    // the handler returns the stale-lease view whose Clear interrupted run control can release it.
     const now = new Date(Date.now() - 60_000);
     const financialYear = getFiledReturnsFinancialYearOptions(now)[0]!;
     const periods = getFiledReturnsFullFiscalYearPeriods(financialYear, now);
@@ -419,15 +480,16 @@ describe("background filed returns download defaults", () => {
 
     await import("../../src/entrypoints/background");
 
-    await expect(
-      sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
-    ).resolves.toMatchObject({
+    const response = await sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
+
+    expect(response).toMatchObject({
       ok: true,
       flowSummary: {
         status: "blocked",
         flowStep: { safeSignals: ["filed-returns-run-needs-review"] },
       },
     });
+    expect(response).not.toHaveProperty("allSupportedFullFiscalYearFlowSummary");
   });
 
   it("returns a newer ordinary completion instead of retained completed all-supported history", async () => {

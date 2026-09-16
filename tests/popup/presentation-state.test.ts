@@ -126,7 +126,7 @@ describe("popup presentation state", () => {
       ),
     ).toMatchObject({
       body: "Pack stopped while handling this action. Try again.",
-      kind: "error",
+      kind: "action-error",
       title: "Pack could not finish that action",
     });
   });

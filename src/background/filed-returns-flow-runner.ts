@@ -49,6 +49,7 @@ import {
   responseForExistingLedger,
 } from "./filed-returns-full-fiscal-year-run-state";
 import {
+  allSupportedFullFiscalYearPlanRootKey,
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
   readAllSupportedPlanLedgersStorageState,
   savedPlanStorageStateRecoveryMessage,
@@ -353,7 +354,12 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
   const allSupportedLock = await allSupportedPlanStartLockResponse(leaseScope, deps, request);
   if (allSupportedLock) return allSupportedLock;
 
-  const activeRun = await acquireFiledReturnsRun(leaseScope, deps);
+  // The lease records which plan root holds it, so this plan's own recovery can later take over the
+  // stale lease a dead run of this same root left behind (#374) -- and never a lease another flow
+  // holds that merely shares this scope, which is the one thing scope alone could not tell apart.
+  const activeRun = await acquireFiledReturnsRun(leaseScope, deps, {
+    owner: allSupportedFullFiscalYearPlanRootKey(request),
+  });
   if ("response" in activeRun) return activeRun.response;
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
@@ -403,7 +409,11 @@ export async function retryAllSupportedFiledReturnsFullFiscalYearTarget(
   if (existingRecovery) return existingRecovery;
   const allSupportedLock = await allSupportedPlanStartLockResponse(leaseScope, deps, planRoot);
   if (allSupportedLock) return allSupportedLock;
-  const activeRun = await acquireFiledReturnsRun(leaseScope, deps);
+  // Takes over a stale lease only if this plan root owns it (#374). A lease left by a single-return
+  // run with the same scope is refused and routed to review, since it is that run's only record.
+  const activeRun = await acquireFiledReturnsRun(leaseScope, deps, {
+    owner: allSupportedFullFiscalYearPlanRootKey(planRoot),
+  });
   if ("response" in activeRun) return activeRun.response;
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);

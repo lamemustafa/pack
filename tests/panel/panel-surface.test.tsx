@@ -13,6 +13,7 @@ vi.mock("wxt/browser", () => ({
 }));
 
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
+import { PACK_ACTION_STOPPED_MESSAGE } from "../../src/entrypoints/popup/use-pack-popup-controller";
 import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 import { completedPanelSummary, panelController } from "./panel-controller.test-helpers";
 
@@ -178,17 +179,18 @@ describe("panel surface", () => {
     expect(markup).toContain("The GST Portal did not report a filed return for this selection.");
   });
 
-  it("renders a visible message when a panel action fails", () => {
+  it("renders a visible message when a panel action fails, without calling it a download", () => {
+    // This test used to assert the title "Pack could not confirm the download" for exactly this
+    // input -- pinning the #374 defect as the expected output. A panel action that stopped is not a
+    // download failure, and offering to open the GST Portal for it fixes nothing.
     const markup = renderToStaticMarkup(
-      <PanelSurface
-        pack={controller({
-          actionError: "Pack could not reach the background service. Try the action again.",
-        })}
-      />,
+      <PanelSurface pack={controller({ actionError: PACK_ACTION_STOPPED_MESSAGE })} />,
     );
 
-    expect(markup).toContain("Pack could not confirm the download");
-    expect(markup).toContain("Pack could not reach the background service. Try the action again.");
+    expect(markup).toContain("Pack could not finish that action");
+    expect(markup).toContain(PACK_ACTION_STOPPED_MESSAGE);
+    expect(markup).not.toContain("Pack could not confirm the download");
+    expect(markup).not.toContain("Open GST Portal");
   });
 
   it("renders the portal context state rather than a chooser with no portal", () => {

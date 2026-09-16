@@ -19,6 +19,7 @@ const ACTIVE_RUN_REVIEW_MS = 30_000;
 const ACTIVE_RUN_LEASE_RENEWAL_MS = 10_000;
 const ACTIVE_RUN_KEYS = [
   "leaseUpdatedAt",
+  "owner",
   "revision",
   "runId",
   "schemaVersion",
@@ -40,6 +41,30 @@ export interface ActiveFiledReturnsRun {
   scope: FiledReturnsDownloadScope;
   status: "running";
   leaseUpdatedAt: string;
+  /**
+   * Who holds this lease, when a flow claims an identity beyond its scope. Absent for flows that
+   * do not, and on every lease written before owners existed.
+   *
+   * This module stores and compares owners and never interprets them. An owner is only ever
+   * checked by exact equality against a key the caller builds with its own canonical function, so a
+   * value that is not a real key can never match one and can never authorise a takeover. Validating
+   * the key's format here would mean either a second copy of that format or an import of its owner,
+   * which imports this module.
+   */
+  owner?: string;
+}
+
+const MAX_LEASE_OWNER_LENGTH = 128;
+
+function isLeaseOwner(input: unknown): input is string {
+  return (
+    typeof input === "string" &&
+    input.length > 0 &&
+    input.length <= MAX_LEASE_OWNER_LENGTH &&
+    // Control characters have no place in an identity key and would be a storage-corruption signal.
+    // eslint-disable-next-line no-control-regex
+    !/[\u0000-\u001f\u007f]/u.test(input)
+  );
 }
 
 export interface FiledReturnsActiveRunDeps {
@@ -56,12 +81,44 @@ export type ActiveFiledReturnsRunStorageState =
 
 let activeRunCriticalSection = Promise.resolve();
 
+export interface AcquireFiledReturnsRunOptions {
+  /**
+   * The identity this acquisition claims. It is written onto the new lease, and it is what allows
+   * this caller to take over a stale lease: exactly one whose recorded owner is the same.
+   *
+   * A stale lease is a heartbeat nobody renewed; it proves only that a worker stopped. Without
+   * takeover it stood in front of a plan's own recovery as a gate the reader had to clear by hand
+   * before they could reach the retry that actually needs their judgement (#374).
+   *
+   * Identity, not scope. Takeover was first gated on the stale lease having the same scope, and that
+   * is not identity: every all-supported plan anchors its lease to its first target, which is also
+   * the exact scope of a plain single-return GSTR-3B full-year run, so a plan's retry could take
+   * over and erase that other run's lease -- the only record of its interruption (#375 review).
+   *
+   * A live lease, malformed metadata, an unowned lease and one owned by anyone else are all refused.
+   */
+  owner?: string;
+}
+
+/**
+ * Whether `run` is a stale lease belonging to `owner`, and so one that owner may take over.
+ *
+ * The single predicate behind both the takeover in `acquireFiledReturnsRun` and the summary's
+ * decision about whether a plan can reach its own recovery or must first route the reader to
+ * clearing a lease it cannot take over. Two derivations of that fact would drift, and a plan whose
+ * view promised a retry the acquisition then refused is the #374 dead end in a new place.
+ */
+export function isStaleLeaseOwnedBy(run: ActiveFiledReturnsRun, owner: string, now: Date): boolean {
+  return run.owner === owner && isInterruptedFiledReturnsRun(run, now);
+}
+
 export async function acquireFiledReturnsRun(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsActiveRunDeps,
+  options: AcquireFiledReturnsRunOptions = {},
 ): Promise<{ run: ActiveFiledReturnsRun } | { response: PackMessageResponse }> {
   const key = deps.storageKeys.activeRun;
-  if (!key) return { run: createActiveRun(scope, deps.now?.() ?? new Date()) };
+  if (!key) return { run: createActiveRun(scope, deps.now?.() ?? new Date(), options.owner) };
 
   return runFiledReturnsOperationCriticalSection(async () => {
     const now = deps.now?.() ?? new Date();
@@ -70,11 +127,14 @@ export async function acquireFiledReturnsRun(
     if (storedRun.state === "malformed") {
       return { response: malformedActiveRunResponse(scope, now) };
     }
-    if (storedRun.state === "valid") {
+    if (
+      storedRun.state === "valid" &&
+      !(options.owner !== undefined && isStaleLeaseOwnedBy(storedRun.run, options.owner, now))
+    ) {
       return { response: activeRunResponse(storedRun.run, now) };
     }
 
-    const run = createActiveRun(scope, now);
+    const run = createActiveRun(scope, now, options.owner);
     await browser.storage.local.set({ [key]: run });
     return { run };
   });
@@ -202,7 +262,11 @@ export async function runFiledReturnsOperationCriticalSection<T>(
   }
 }
 
-function createActiveRun(scope: FiledReturnsDownloadScope, now: Date): ActiveFiledReturnsRun {
+function createActiveRun(
+  scope: FiledReturnsDownloadScope,
+  now: Date,
+  owner?: string,
+): ActiveFiledReturnsRun {
   return {
     schemaVersion: "1.0",
     runId: createRunId(now),
@@ -210,6 +274,7 @@ function createActiveRun(scope: FiledReturnsDownloadScope, now: Date): ActiveFil
     scope,
     status: "running",
     leaseUpdatedAt: now.toISOString(),
+    ...(owner === undefined ? {} : { owner }),
   };
 }
 
@@ -231,6 +296,9 @@ function parseActiveRun(input: unknown, now: Date): ActiveFiledReturnsRun | null
   if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) return null;
   if (run.status !== "running" && run.status !== "recovery-blocked") return null;
   if (!isCanonicalTimestamp(run.leaseUpdatedAt)) return null;
+  // Present but not a usable owner is malformed, not unowned: reading it as unowned would quietly
+  // strip a plan's claim to its own lease on the next renewal, which spreads what this returns.
+  if ("owner" in run && !isLeaseOwner(run.owner)) return null;
   const scope = parseActiveRunScope(run.scope, now);
   if (!scope) return null;
   return {
@@ -239,6 +307,7 @@ function parseActiveRun(input: unknown, now: Date): ActiveFiledReturnsRun | null
     runId: run.runId,
     schemaVersion: "1.0",
     scope,
+    ...(run.owner === undefined ? {} : { owner: run.owner }),
     // Round-three recovery-blocked records are normalized on read, so an
     // interrupted legacy lease regains the normal acknowledgement exit path.
     status: "running",
@@ -472,7 +541,7 @@ function activeRunStep(
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: interrupted
-        ? "Check browser Downloads first. Acknowledge the interrupted run only after confirming the previous run is safe to discard."
+        ? "Check browser Downloads first, then clear the interrupted run. Clearing it removes only the stopped run's marker; saved files and plan progress are kept."
         : "Wait for the active filed-returns run to finish before starting another one.",
       canResume: true,
     },

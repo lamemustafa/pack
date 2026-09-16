@@ -6,7 +6,7 @@ import {
 } from "../../connectors/gst/filed-returns-declined-artifact";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import { filedReturnsPlanCoverageMessage } from "../../connectors/gst/filed-returns-durable-status";
-import type { PopupPresentationState } from "./presentation-state";
+import { isErrorPresentation, type PopupPresentationState } from "./presentation-state";
 import { canReconcileFiledReturnsTarget, RunProgress } from "./run-summary";
 import {
   getFullFiscalYearCleanupCopy,
@@ -162,7 +162,7 @@ function getInlineStatusCopy(
   fullYearFlowAvailable = true,
 ): { body: string; icon: string; title: string; tone: "warning" | "success" | "neutral" } | null {
   const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
-  if (presentation.kind !== "error" && recoveryAvailability.isWithheldFullYearRecovery) {
+  if (!isErrorPresentation(presentation) && recoveryAvailability.isWithheldFullYearRecovery) {
     return {
       body: recoveryAvailability.guidance!,
       icon: "!",
@@ -347,11 +347,14 @@ function getInlineStatusCopy(
       tone: "warning",
     };
   }
-  if (presentation.kind === "error") {
+  if (isErrorPresentation(presentation)) {
+    // The presentation already names what failed. This used to substitute "Pack could not confirm
+    // the download" for every error, so a background service that stopped mid-action was reported
+    // as a download problem -- the first, and most misleading, thing a reader saw (#374).
     return {
       body: presentation.body,
       icon: "!",
-      title: "Pack could not confirm the download",
+      title: presentation.title,
       tone: "warning",
     };
   }
@@ -401,10 +404,13 @@ export function getInlinePrimaryAction(
     | "onRetryTarget"
   >,
 ): InlinePrimaryAction | null {
-  if (presentation.kind === "error") {
+  if (presentation.kind === "download-error") {
     // The only action that makes the portal ready, so it is never portal-gated.
     return { label: "Open GST Portal", onClick: actions.onOpenPortal, portalDisabledReason: null };
   }
+  // An action that stopped before it finished is not a portal problem, and offering to open the
+  // portal sends the reader somewhere that fixes nothing. Its recovery is the saved state itself.
+  if (presentation.kind === "action-error") return null;
   if (!summary) return null;
 
   const signals = new Set(summary.flowStep.safeSignals);

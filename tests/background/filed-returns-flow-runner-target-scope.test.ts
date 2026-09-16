@@ -301,6 +301,37 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
 
+  it("claims its plan root as the lease owner on a fresh all-supported start", async () => {
+    // Ownership, not a "resuming or fresh" gate, decides takeover (#374, #375 review). A fresh start
+    // still records who holds the lease, so a later recovery of this same root can take over the
+    // stale lease a dead run of it leaves -- and nothing another flow holds. Which leases are refused
+    // is pinned in filed-returns-active-run.test.ts and end to end in the all-supported suite.
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    const activeResponse = {
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked" as const,
+        safeSignals: ["filed-returns-run-needs-review"],
+        safeMessage: "Synthetic stale run.",
+      },
+    };
+    activeRunMocks.acquireFiledReturnsRun.mockResolvedValue({ response: activeResponse });
+
+    const response = await startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+      { kind: "all-supported-returns-full-fiscal-year", financialYear: "2026-27" },
+      { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+    );
+
+    expect(activeRunMocks.acquireFiledReturnsRun).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { owner: "all-supported-returns-full-fiscal-year:2026-27" },
+    );
+    expect(response).toEqual(activeResponse);
+  });
+
   it("takes the run lease from a saved historical plan the current catalogue cannot expand", async () => {
     // The saved plan is validated against a retained historical catalogue, so
     // it stays resumable after the current catalogue stops expanding. The lease
@@ -342,6 +373,9 @@ describe("filed returns retained target scoping", () => {
         artifactType: "PDF",
       }),
       expect.anything(),
+      // The plan root is recorded as the lease owner, so this root's own recovery can later take
+      // over a stale lease its dead run leaves (#374).
+      { owner: "all-supported-returns-full-fiscal-year:2026-27" },
     );
     expect(response).toEqual(activeResponse);
     expect(

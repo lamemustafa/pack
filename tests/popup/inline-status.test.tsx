@@ -441,7 +441,7 @@ describe("inline filed-return recovery status", () => {
         onRestartTarget={vi.fn()}
         onRetryFullFiscalYearTarget={vi.fn()}
         onRetryTarget={vi.fn()}
-        presentation={{ ...blockedPresentation, kind: "error" }}
+        presentation={{ ...blockedPresentation, kind: "download-error" }}
         summary={blockedSummary}
       />,
     );
@@ -483,7 +483,7 @@ describe("inline filed-return recovery status", () => {
           badge: "Portal unavailable",
           body: "Open the GST Portal to continue.",
           icon: "!",
-          kind: "error",
+          kind: "download-error",
           title: "GST Portal unavailable",
           tone: "warning",
         }}
@@ -493,6 +493,34 @@ describe("inline filed-return recovery status", () => {
 
     expect(markup).toContain("Open GST Portal");
     expect(markup).not.toContain("disabled");
+  });
+
+  it("does not offer the GST Portal for an action that stopped, and keeps its own title", () => {
+    // #374: a service worker stopped mid-action was shown as "Pack could not confirm the download"
+    // with an Open GST Portal button. Nothing was downloading and the portal was fine.
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady={true}
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={{
+          badge: "Action failed",
+          body: "Pack stopped responding before that finished. Reopen Pack to see what was saved.",
+          icon: "!",
+          kind: "action-error",
+          title: "Pack could not finish that action",
+          tone: "danger",
+        }}
+        summary={null}
+      />,
+    );
+
+    expect(markup).toContain("Pack could not finish that action");
+    expect(markup).not.toContain("Pack could not confirm the download");
+    expect(markup).not.toContain("Open GST Portal");
   });
 
   it("uses the same resume-saved-run decision on both full-year recovery surfaces", () => {

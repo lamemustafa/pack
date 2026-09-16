@@ -113,7 +113,7 @@ export function RecoveryActions({
               disabled={busy !== null}
               onClick={onAcknowledgeInterruptedRun}
             >
-              {busy === "acknowledge-interrupted-run" ? "Resetting..." : "Reset stuck run"}
+              {busy === "acknowledge-interrupted-run" ? "Clearing..." : "Clear interrupted run"}
             </button>
           ) : null}
           {needsTargetReview ? (

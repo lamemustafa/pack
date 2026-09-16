@@ -28,6 +28,9 @@ import {
   hasUnresolvedFiledReturnsRecovery,
 } from "./flow-summary";
 
+export const PACK_ACTION_STOPPED_MESSAGE =
+  "Pack stopped responding before that finished. Reopen Pack to see what was saved.";
+
 const UNEXPECTED_PACK_RESPONSE = "Unexpected Pack response.";
 
 export function usePackPopupController() {
@@ -275,7 +278,12 @@ export function usePackPopupController() {
       try {
         await action();
       } catch {
-        showActionError("Pack could not reach the background service. Try the action again.");
+        // Deliberately does not promise that nothing was lost: `restart-*` discards a completed plan
+        // before starting again, so an interruption part-way through is not a no-op. What does hold
+        // for every action here is that Pack persists state before and after each step, so the saved
+        // state -- not this message -- is where the reader finds out what happened. "Try the action
+        // again" used to send them to repeat something that may already have fired (#374).
+        showActionError(PACK_ACTION_STOPPED_MESSAGE);
       } finally {
         setBusy(null);
       }
@@ -362,14 +370,20 @@ export function usePackPopupController() {
       if (response.ok && "flowStep" in response) {
         actionErrorSource.current = null;
         setActionError(null);
-        setFiledReturnsFlowSummary(null);
+        // Re-read rather than blank. Clearing a lease is often the step BEFORE recovery, not the end
+        // of it: a plan that could not take over a stale lease routes here, and its retry becomes
+        // available once the lease is gone. The storage listener deliberately ignores a lease-only
+        // removal, so without this nothing re-reads and the still-unresolved plan vanishes until the
+        // panel happens to lose and regain focus (#375 review). Awaited inside the busy action, so the
+        // control reads "Clearing..." until the plan is back rather than flashing an empty panel.
+        await refreshFlowSummary();
       } else {
         showActionError(
           response.ok ? UNEXPECTED_PACK_RESPONSE : (response.safeMessage ?? response.error),
         );
       }
     });
-  }, [showActionError, withBusy]);
+  }, [refreshFlowSummary, showActionError, withBusy]);
 
   const retryFiledReturnsTarget = React.useCallback(async () => {
     const recoveryScope = filedReturnsFlowSummary?.scope;
