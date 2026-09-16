@@ -23,6 +23,7 @@ import type {
 import type { SinglePeriodRunner } from "./filed-returns-full-fiscal-year";
 import {
   allSupportedExplicitRetryTarget,
+  allSupportedRecoveryIsWithheld,
   canCompleteAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearTargetPlan,
@@ -225,7 +226,13 @@ export async function restartCompletedAllSupportedFullFiscalYearPlan(
         "This fiscal-year plan changed since Pack showed it. Refresh this panel and check it before discarding.",
     });
   }
-  if (ledger.status !== "complete" || !ledger.zipPhase || !isCleanedZipPhase(ledger.zipPhase)) {
+  // Two plans may be discarded: a finished one, and one stopped on a target Pack deliberately will
+  // not retry, where discarding is the only way forward (#376). Anything with recovery work of its
+  // own -- a retry, a resume, a ZIP phase -- is refused, because discarding it would destroy
+  // progress the reader could still keep.
+  const finished =
+    ledger.status === "complete" && !!ledger.zipPhase && isCleanedZipPhase(ledger.zipPhase);
+  if (!finished && !allSupportedRecoveryIsWithheld(ledger)) {
     return allSupportedResponse(deps, ledger, {
       ...unresolvedRunStep(ledger),
       safeSignals: [
@@ -752,18 +759,16 @@ async function allSupportedResponse(
   // "blocked, with a retry offered" view with a bare `running` one, taking the recovery control
   // away again. Two derivations of one fact, and the losing one was the one that ran last.
   const interrupted = await planIsInterrupted(deps, ledger, "absent");
-  return {
-    ok: true,
+  const summary = projectAllSupportedFullFiscalYearSummary(
+    ledger,
     flowStep,
-    allSupportedFullFiscalYearFlowSummary: projectAllSupportedFullFiscalYearSummary(
-      ledger,
-      flowStep,
-      storageState.state === "valid"
-        ? allSupportedTerminalPlanRoots(storageState.ledgers)
-        : allSupportedTerminalPlanRoots([ledger]),
-      interrupted,
-    ),
-  };
+    storageState.state === "valid"
+      ? allSupportedTerminalPlanRoots(storageState.ledgers)
+      : allSupportedTerminalPlanRoots([ledger]),
+    interrupted,
+  );
+  // The top-level step is the summary's, so a surface reading either one tells the reader the same.
+  return { ok: true, flowStep: summary.flowStep, allSupportedFullFiscalYearFlowSummary: summary };
 }
 
 function scopeForTarget(

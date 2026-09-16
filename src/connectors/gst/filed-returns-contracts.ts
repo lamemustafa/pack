@@ -577,6 +577,11 @@ export interface FiledReturnsAllSupportedFullFiscalYearFlowSummary {
     expectedRevision: number;
     targetStatus: FiledReturnsFullFiscalYearTargetStatus;
   };
+  /**
+   * The plan stopped on a target Pack deliberately will not retry, so no retry or resume is offered
+   * and discarding the plan is the only way forward. Present only when true.
+   */
+  recoveryWithheld?: true;
   status: "complete" | "running" | "partial" | "blocked" | "cancelled";
   completedAt?: string;
   updatedAt?: string;

@@ -15,6 +15,7 @@ import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descr
 import {
   allSupportedExplicitRetryTarget,
   allSupportedResumeMode,
+  allSupportedWithheldTarget,
   isAllSupportedFullFiscalYearLedgerStale,
   isAllSupportedRunInterrupted,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
@@ -145,6 +146,7 @@ export function projectAllSupportedFullFiscalYearSummary(
   );
   const resumeMode = allSupportedResumeMode(ledger);
   const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger, interrupted);
+  const withheldTarget = allSupportedWithheldTarget(ledger);
   return {
     resumeAvailable: resumeMode !== null,
     ...(resumeMode ? { resumeMode } : {}),
@@ -175,9 +177,28 @@ export function projectAllSupportedFullFiscalYearSummary(
           },
         }
       : {}),
+    ...(withheldTarget ? { recoveryWithheld: true as const } : {}),
     ...(ledger.currentTargetId ? { currentTargetId: ledger.currentTargetId } : {}),
     flowStepScope,
-    flowStep,
+    flowStep: withheldTarget ? withheldRecoveryStep(flowStep, withheldTarget) : flowStep,
+  };
+}
+
+/**
+ * The step for a plan only discarding can move (#376).
+ *
+ * The target's own durable message is shared with the single-return fiscal-year run and names that
+ * run's control, which this surface does not render -- live, the reader was told to use a button
+ * that was not there. Every reader of this summary gets the same replacement, because the
+ * projection is the one place both the polled read and every action response pass through.
+ */
+function withheldRecoveryStep(
+  flowStep: PortalFlowStepResult,
+  target: FiledReturnsAllSupportedFullFiscalYearTarget,
+): PortalFlowStepResult {
+  return {
+    ...flowStep,
+    safeMessage: `Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. To continue, discard the saved plan and start this year again; files already captured for it are downloaded again.`,
   };
 }
 

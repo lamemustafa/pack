@@ -368,7 +368,10 @@ function AllSupportedRunStatus({
   // that needs no portal, and requiring one would disable the only productive
   // control the reader has.
   const localOnlyResume = summary.resumeAvailable && summary.resumeMode === "local-only";
-  const canRestart = fullYearFlowAvailable && summary.status === "complete";
+  // A plan whose recovery Pack withholds can only be discarded; without this it had no control at
+  // all (#376). The background re-derives the same condition before discarding anything.
+  const canRestart =
+    fullYearFlowAvailable && (summary.status === "complete" || summary.recoveryWithheld === true);
   const canResume = fullYearFlowAvailable && summary.resumeAvailable === true;
   const recovery = summary.allSupportedFullFiscalYearRecovery;
   const recoveryEvidence = recovery
@@ -376,9 +379,10 @@ function AllSupportedRunStatus({
     : undefined;
   const canRetryTarget =
     fullYearFlowAvailable && recovery !== undefined && recoveryEvidence !== undefined;
+  const nextAction = summary.status === "complete" ? "run again" : "start again";
   const restartLabel = summary.summaryIdentity
-    ? discardAllReturnsPlanLabel(summary.summaryIdentity.financialYear, "run again")
-    : "Discard the saved plan and run again";
+    ? discardAllReturnsPlanLabel(summary.summaryIdentity.financialYear, nextAction)
+    : `Discard the saved plan and ${nextAction}`;
   return (
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>

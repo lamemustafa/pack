@@ -7,7 +7,10 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { isCanonicalFullFiscalYearLedgerId } from "../connectors/gst/filed-returns-ledger-id";
-import { canCompleteAllSupportedFullFiscalYearLedger } from "./filed-returns-all-supported-full-fiscal-year-ledger";
+import {
+  allSupportedRecoveryIsWithheld,
+  canCompleteAllSupportedFullFiscalYearLedger,
+} from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import {
   isAllSupportedFullFiscalYearLedger,
   isAllSupportedFullFiscalYearPlanRootKey,
@@ -534,9 +537,14 @@ function isAllSupportedPlanRootStorageKey(value: unknown): value is string {
 }
 
 function canReplaceLedger(ledger: FiledReturnsAllSupportedFullFiscalYearLedger): boolean {
+  // The withheld case must match the restart path's own check exactly. That path clears local
+  // staging before it persists the replacement, so a guard here stricter than the one it passed
+  // would throw after the staging was already gone and leave a plan describing files it no
+  // longer has.
   return (
     ledger.status === "cancelled" ||
-    (ledger.status === "complete" && canCompleteAllSupportedFullFiscalYearLedger(ledger))
+    (ledger.status === "complete" && canCompleteAllSupportedFullFiscalYearLedger(ledger)) ||
+    allSupportedRecoveryIsWithheld(ledger)
   );
 }
 

@@ -93,6 +93,40 @@ function isExplicitlyRetryableTarget(
 }
 
 /**
+ * Whether this plan stopped on a target Pack deliberately will not retry, leaving discarding the
+ * plan as the reader's only way forward (#376).
+ *
+ * Derived from the same non-resumable set that withholds the explicit retry, so the two cannot
+ * disagree: every plan this answers `true` for is one `allSupportedExplicitRetryTarget` refuses,
+ * and neither a resume (`allSupportedResumeIsProductive`) nor a fresh start (the saved plan holds
+ * the root) can move it. Before this, a GSTR-1 period that lost its pinned GST Portal tab left the
+ * panel with no control at all, and a copy naming one the panel does not render.
+ *
+ * A recorded ZIP phase is excluded: that plan has its own recovery, and discarding it could
+ * destroy a ZIP the reader has not yet received.
+ */
+export function allSupportedRecoveryIsWithheld(
+  ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "status" | "zipPhase" | "targets">,
+): boolean {
+  return allSupportedWithheldTarget(ledger) !== null;
+}
+
+/** The target that withholds this plan's recovery, so the reader can be told which one stopped. */
+export function allSupportedWithheldTarget(
+  ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "status" | "zipPhase" | "targets">,
+): FiledReturnsAllSupportedFullFiscalYearTarget | null {
+  if (ledger.zipPhase) return null;
+  if (ledger.status !== "blocked" && ledger.status !== "partial") return null;
+  return (
+    ledger.targets.find(
+      (target) =>
+        needsExplicitFullFiscalYearRetry(target.status) &&
+        target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal)),
+    ) ?? null
+  );
+}
+
+/**
  * Whether invoking the same all-supported start again would actually advance this ledger.
  *
  * Mirrors the branches of `continueSavedAllSupportedFullFiscalYearRun` that do work, and only
