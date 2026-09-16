@@ -337,20 +337,12 @@ async function handleMessage(
       const flowSummary = await readCurrentFiledReturnsFlowSummary({
         storageKeys: filedReturnsStorageKeys(),
       });
-      // A stale compatibility lease has the only acknowledgement route. Show
-      // it long enough to clear that lease; the next summary read returns the
-      // authoritative all-supported root and its retained recovery state.
-      if (
-        allSupportedFullFiscalYearFlowSummary &&
-        !["complete", "cancelled"].includes(allSupportedFullFiscalYearFlowSummary.status) &&
-        isStaleAllSupportedCompatibilityLease(flowSummary, allSupportedFullFiscalYearFlowSummary)
-      ) {
-        return { ok: true, flowSummary };
-      }
       // All-supported runs use one atomic lease for mutual exclusion, but that
       // lease cannot represent their cross-return progress or recovery. Any
       // unresolved root therefore remains authoritative over its compatibility
-      // lease, including after the lease becomes stale.
+      // lease, including after the lease becomes stale -- the root's own resume
+      // and retry take that stale lease over, so there is no separate
+      // acknowledgement step to route the reader through first (#374).
       if (
         allSupportedFullFiscalYearFlowSummary &&
         !["complete", "cancelled"].includes(allSupportedFullFiscalYearFlowSummary.status)
@@ -446,22 +438,6 @@ async function handleMessage(
   }
 
   return { ok: false, error: "Unsupported Pack message." };
-}
-
-function isStaleAllSupportedCompatibilityLease(
-  flowSummary: Awaited<ReturnType<typeof readCurrentFiledReturnsFlowSummary>>,
-  allSupportedSummary: NonNullable<
-    Awaited<ReturnType<typeof readCurrentAllSupportedFullFiscalYearFlowSummary>>
-  >,
-): boolean {
-  return Boolean(
-    flowSummary &&
-    allSupportedSummary.summaryIdentity &&
-    flowSummary.status === "blocked" &&
-    flowSummary.scope.period === "FULL_FISCAL_YEAR" &&
-    flowSummary.scope.financialYear === allSupportedSummary.summaryIdentity.financialYear &&
-    flowSummary.flowStep.safeSignals.includes("filed-returns-run-needs-review"),
-  );
 }
 
 function isNewerTerminalFiledReturnsFlowSummary(

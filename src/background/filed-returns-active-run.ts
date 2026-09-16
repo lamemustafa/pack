@@ -14,6 +14,7 @@ import {
 import { isCanonicalFiledReturnsRunId } from "../connectors/gst/filed-returns-operation-id";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
+import { sameFiledReturnsScope } from "./filed-returns-full-fiscal-year-ledger";
 
 const ACTIVE_RUN_REVIEW_MS = 30_000;
 const ACTIVE_RUN_LEASE_RENEWAL_MS = 10_000;
@@ -56,9 +57,28 @@ export type ActiveFiledReturnsRunStorageState =
 
 let activeRunCriticalSection = Promise.resolve();
 
+export interface AcquireFiledReturnsRunOptions {
+  /**
+   * Replace a stale lease for this same scope instead of refusing on it.
+   *
+   * A stale lease is a heartbeat nobody renewed; it proves only that a worker stopped. It stood in
+   * front of every recovery action as a gate the user had to clear by hand -- "Reset stuck run" --
+   * before they could reach the recovery that actually needs their judgement. Pass this only from
+   * an action already bound to a durable record of what was interrupted, because that action *is*
+   * the review the gate was asking for.
+   *
+   * The same conditions `acknowledgeInterruptedFiledReturnsRun` applies still hold: a live lease
+   * and malformed metadata are both refused. And the lease must be for this exact scope, so an
+   * interrupted single-period download -- whose lease is the only record that anything happened --
+   * is never cleared by a different flow's start.
+   */
+  takeOverStaleLease?: boolean;
+}
+
 export async function acquireFiledReturnsRun(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsActiveRunDeps,
+  options: AcquireFiledReturnsRunOptions = {},
 ): Promise<{ run: ActiveFiledReturnsRun } | { response: PackMessageResponse }> {
   const key = deps.storageKeys.activeRun;
   if (!key) return { run: createActiveRun(scope, deps.now?.() ?? new Date()) };
@@ -70,7 +90,14 @@ export async function acquireFiledReturnsRun(
     if (storedRun.state === "malformed") {
       return { response: malformedActiveRunResponse(scope, now) };
     }
-    if (storedRun.state === "valid") {
+    if (
+      storedRun.state === "valid" &&
+      !(
+        options.takeOverStaleLease === true &&
+        isInterruptedFiledReturnsRun(storedRun.run, now) &&
+        sameFiledReturnsScope(storedRun.run.scope, scope)
+      )
+    ) {
       return { response: activeRunResponse(storedRun.run, now) };
     }
 
@@ -472,7 +499,7 @@ function activeRunStep(
     userAction: {
       type: "RETRY_PORTAL_GENERATION",
       message: interrupted
-        ? "Check browser Downloads first. Acknowledge the interrupted run only after confirming the previous run is safe to discard."
+        ? "Check browser Downloads first, then clear the interrupted run. Clearing it removes only the stopped run's marker; saved files and plan progress are kept."
         : "Wait for the active filed-returns run to finish before starting another one.",
       canResume: true,
     },

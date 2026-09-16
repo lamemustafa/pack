@@ -353,7 +353,14 @@ export async function startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
   const allSupportedLock = await allSupportedPlanStartLockResponse(leaseScope, deps, request);
   if (allSupportedLock) return allSupportedLock;
 
-  const activeRun = await acquireFiledReturnsRun(leaseScope, deps);
+  // Resuming a retained plan may take over its own stale lease; a fresh start may not. A stale lease
+  // left by a worker that died mid-plan was otherwise a gate the reader had to clear by hand before
+  // the plan's own recovery could be reached at all (#374). The retained plan is the durable record
+  // of what was interrupted, so resuming it is the review that gate stood in for.
+  const resumingRetainedPlan = await hasRetainedAllSupportedPlan(request, deps);
+  const activeRun = await acquireFiledReturnsRun(leaseScope, deps, {
+    takeOverStaleLease: resumingRetainedPlan,
+  });
   if ("response" in activeRun) return activeRun.response;
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
@@ -403,7 +410,9 @@ export async function retryAllSupportedFiledReturnsFullFiscalYearTarget(
   if (existingRecovery) return existingRecovery;
   const allSupportedLock = await allSupportedPlanStartLockResponse(leaseScope, deps, planRoot);
   if (allSupportedLock) return allSupportedLock;
-  const activeRun = await acquireFiledReturnsRun(leaseScope, deps);
+  // Bound to one plan by `ledgerId` and `expectedRevision`, so this retry is always acting on a
+  // durable record of the interruption and may take over that plan's stale lease (#374).
+  const activeRun = await acquireFiledReturnsRun(leaseScope, deps, { takeOverStaleLease: true });
   if ("response" in activeRun) return activeRun.response;
 
   const stopLeaseRenewal = startFiledReturnsRunLeaseRenewal(activeRun.run, deps);
@@ -504,6 +513,14 @@ function leasedAllSupportedDeps(
   deps: FiledReturnsFlowRunnerDeps,
 ): FiledReturnsFlowRunnerDeps & { runLeaseHeldByThisOperation: true } {
   return { ...deps, runLeaseHeldByThisOperation: true };
+}
+
+async function hasRetainedAllSupportedPlan(
+  request: FiledReturnsAllSupportedFullFiscalYearRequest,
+  deps: FiledReturnsFlowRunnerDeps,
+): Promise<boolean> {
+  if (!deps.storageKeys.allSupportedFullFiscalYearLedgerIndex) return false;
+  return (await readAllSupportedFullFiscalYearLedgerForPlanRoot(deps, request)) !== null;
 }
 
 /**
