@@ -798,6 +798,19 @@ describe("all-supported full-fiscal-year worker", () => {
       });
       expect(singlePeriod.run).toHaveBeenCalled();
       expect(savedLedger().targets[0]!.status).not.toBe("running");
+      // One retry starts the retried target exactly once. A live run after this fix showed three
+      // attempts on a target retried after a stopped worker, and the runner increments `attempts`
+      // in one place -- each time it starts a target -- so this pins that the takeover path cannot
+      // be the source of an extra portal attempt from a single click.
+      expect(savedLedger().targets[0]!.attempts).toBe(interrupted.targets[0]!.attempts + 1);
+      const retriedTargetScope = interrupted.targets[0]!;
+      const startsOfRetriedTarget = singlePeriod.run.mock.calls.filter(([scope]) => {
+        const s = scope as { returnType?: string; period?: string };
+        return (
+          s.returnType === retriedTargetScope.returnType && s.period === retriedTargetScope.period
+        );
+      });
+      expect(startsOfRetriedTarget).toHaveLength(1);
       // Taken over, then released on the way out -- not left behind for the next action to trip on.
       expect(stored.values["active-run"]).toBeUndefined();
     } finally {
