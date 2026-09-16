@@ -232,6 +232,38 @@ describe("filed returns active run recovery", () => {
     expect(browserMocks.storage.local.remove).toHaveBeenCalledWith("active-run");
   });
 
+  // A delayed but still-running worker keeps trying to renew its lease. These pin that it cannot
+  // bring a cleared lease back, and -- the case that matters for taking over a stale lease -- that
+  // it cannot overwrite the lease a newer run took over from it. Review of #374 argued that the old
+  // two-click recovery gave such a worker a second staleness check at the later click; that holds
+  // only if renewal could restore the lease in between, which the first test here shows it cannot.
+  it("does not restore a lease that was cleared while its worker was still renewing", async () => {
+    browserMocks.storage.local.get.mockResolvedValue({});
+
+    await renewFiledReturnsRunLease(ACTIVE_RUN, {
+      storageKeys: { activeRun: "active-run" },
+      now: () => new Date("2026-07-25T00:01:10Z"),
+    });
+
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  it("does not let a delayed worker overwrite a lease another run took over from it", async () => {
+    const takenOver = {
+      ...ACTIVE_RUN,
+      runId: "filed-returns-run-m0zzz999",
+      leaseUpdatedAt: "2026-07-25T00:01:00.000Z",
+    } satisfies ActiveFiledReturnsRun;
+    browserMocks.storage.local.get.mockResolvedValue({ "active-run": takenOver });
+
+    await renewFiledReturnsRunLease(ACTIVE_RUN, {
+      storageKeys: { activeRun: "active-run" },
+      now: () => new Date("2026-07-25T00:01:05Z"),
+    });
+
+    expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+  });
+
   it("renews the active run lease without changing the scope", async () => {
     await renewFiledReturnsRunLease(ACTIVE_RUN, {
       storageKeys: { activeRun: "active-run" },
