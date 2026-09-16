@@ -710,7 +710,7 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Reset stuck run");
+    expect(markup).toContain("Clear interrupted run");
     expect(markup).not.toContain("Acknowledge interrupted run");
   });
 
@@ -726,7 +726,7 @@ describe("popup full-year recovery actions", () => {
       }),
     );
 
-    expect(markup).toContain("Reset interrupted run");
+    expect(markup).toContain("Interrupted run needs review");
     expect(markup).not.toContain("Start download");
   });
 

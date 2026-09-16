@@ -755,6 +755,54 @@ describe("all-supported full-fiscal-year worker", () => {
     }
   });
 
+  it("retries through the real handler past a stale lease the dead worker left behind", async () => {
+    // The live run behind #374: the worker died mid-target and its lease stayed in storage. Before
+    // the fix the retry the plan offered went to `acquireFiledReturnsRun`, found that stale lease,
+    // and refused -- so the only way forward was a separate "Reset stuck run" the reader had to find
+    // first. The retry is bound to this exact plan, so it now takes that lease over itself.
+    const interrupted = interruptedRunLedger(new Date("2026-07-14T23:58:00.000Z"));
+    await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected all-supported plan");
+    const first = expansion.targets[0]!;
+    deps.storageKeys.activeRun = "active-run";
+    stored.values["active-run"] = {
+      schemaVersion: "1.0",
+      runId: "filed-returns-run-m0abc123",
+      revision: 3,
+      scope: {
+        financialYear: request.financialYear,
+        period: "FULL_FISCAL_YEAR",
+        returnType: first.returnType,
+        artifactType: first.artifactType,
+      },
+      status: "running",
+      leaseUpdatedAt: new Date(NOW.getTime() - 60_000).toISOString(),
+    };
+
+    try {
+      const response = await retryAllSupportedFiledReturnsFullFiscalYearTarget(
+        {
+          financialYear: request.financialYear,
+          ledgerId: interrupted.ledgerId,
+          targetId: interrupted.targets[0]!.targetId,
+          expectedRevision: interrupted.revision,
+        },
+        deps,
+      );
+
+      expect(response).not.toMatchObject({
+        flowStep: { safeSignals: ["filed-returns-run-needs-review"] },
+      });
+      expect(singlePeriod.run).toHaveBeenCalled();
+      expect(savedLedger().targets[0]!.status).not.toBe("running");
+      // Taken over, then released on the way out -- not left behind for the next action to trip on.
+      expect(stored.values["active-run"]).toBeUndefined();
+    } finally {
+      delete deps.storageKeys.activeRun;
+    }
+  });
+
   it("treats a stale run as active while its lease is live, and does not replay it", async () => {
     // The branch in `continueSavedAllSupportedFullFiscalYearRun` that the lease-aware derivation
     // changed, and which no test covered. A ledger past the 30s staleness window is NOT interrupted

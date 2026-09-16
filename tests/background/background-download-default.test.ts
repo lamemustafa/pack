@@ -377,7 +377,14 @@ describe("background filed returns download defaults", () => {
     });
   });
 
-  it("surfaces a stale all-supported compatibility lease so it can be acknowledged", async () => {
+  it("keeps an unresolved all-supported plan authoritative over its own stale lease", async () => {
+    // This test used to pin the opposite: that a stale compatibility lease is shown INSTEAD of the
+    // plan, "so it can be acknowledged". That detour is #374. It hid the plan's own recovery -- an
+    // explicit retry naming the abandoned target -- behind a generic "stuck run" view whose only
+    // job was to clear a heartbeat nobody was renewing, and a lay tester had to find a collapsed
+    // Recovery options disclosure and press "Reset stuck run" before the real recovery appeared.
+    // The plan's recovery actions now take over their own stale lease, so the detour has nothing
+    // left to do.
     const now = new Date(Date.now() - 60_000);
     const financialYear = getFiledReturnsFinancialYearOptions(now)[0]!;
     const periods = getFiledReturnsFullFiscalYearPeriods(financialYear, now);
@@ -419,15 +426,11 @@ describe("background filed returns download defaults", () => {
 
     await import("../../src/entrypoints/background");
 
-    await expect(
-      sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" }),
-    ).resolves.toMatchObject({
-      ok: true,
-      flowSummary: {
-        status: "blocked",
-        flowStep: { safeSignals: ["filed-returns-run-needs-review"] },
-      },
-    });
+    const response = await sendBackgroundMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
+
+    expect(response).toMatchObject({ ok: true });
+    expect(response).toHaveProperty("allSupportedFullFiscalYearFlowSummary");
+    expect(response).not.toHaveProperty("flowSummary");
   });
 
   it("returns a newer ordinary completion instead of retained completed all-supported history", async () => {

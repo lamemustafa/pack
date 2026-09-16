@@ -140,6 +140,79 @@ describe("filed returns active run recovery", () => {
     expect(browserMocks.storage.local.remove).not.toHaveBeenCalled();
   });
 
+  // A recovery action already bound to a durable record is itself the review the stale lease was
+  // standing in for, so it may take that lease over. These pin the limits of that permission: it
+  // needs to be asked for, it needs the lease to be genuinely stale, and it needs the lease to be
+  // for the scope being acquired -- so an interrupted single-period download, whose lease is the
+  // only record that anything was interrupted, is never cleared by some other flow's start.
+  describe("taking over a stale lease", () => {
+    const deps = (at: string) => ({
+      storageKeys: { activeRun: "active-run" },
+      now: () => new Date(at),
+    });
+
+    it("replaces a stale lease for the same scope when asked", async () => {
+      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"), {
+        takeOverStaleLease: true,
+      });
+
+      expect(result).toHaveProperty("run");
+      const calls = browserMocks.storage.local.set.mock.calls as unknown as Array<
+        [Record<string, ActiveFiledReturnsRun>]
+      >;
+      const written = calls.at(-1)?.[0];
+      expect(written?.["active-run"]?.runId).toBeDefined();
+      expect(written?.["active-run"]?.runId).not.toBe(ACTIVE_RUN.runId);
+      expect(written?.["active-run"]?.leaseUpdatedAt).toBe("2026-07-25T00:01:00.000Z");
+    });
+
+    it("still refuses a stale lease when not asked", async () => {
+      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"));
+
+      expect(result).toMatchObject({
+        response: { flowStep: { safeSignals: ["filed-returns-run-needs-review"] } },
+      });
+      expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    });
+
+    it("refuses a live lease even when asked", async () => {
+      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:00:05Z"), {
+        takeOverStaleLease: true,
+      });
+
+      expect(result).toMatchObject({
+        response: { flowStep: { safeSignals: ["filed-returns-run-active"] } },
+      });
+      expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    });
+
+    it("refuses a stale lease for a different scope even when asked", async () => {
+      const result = await acquireFiledReturnsRun(
+        { ...ACTIVE_RUN.scope, period: "May" },
+        deps("2026-07-25T00:01:00Z"),
+        { takeOverStaleLease: true },
+      );
+
+      expect(result).toMatchObject({
+        response: { flowStep: { safeSignals: ["filed-returns-run-needs-review"] } },
+      });
+      expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    });
+
+    it("refuses malformed lease metadata even when asked", async () => {
+      browserMocks.storage.local.get.mockResolvedValue({
+        "active-run": { ...ACTIVE_RUN, revision: 0 },
+      });
+
+      const result = await acquireFiledReturnsRun(ACTIVE_RUN.scope, deps("2026-07-25T00:01:00Z"), {
+        takeOverStaleLease: true,
+      });
+
+      expect(result).toHaveProperty("response");
+      expect(browserMocks.storage.local.set).not.toHaveBeenCalled();
+    });
+  });
+
   it("normalizes a legacy checkpoint-read lease so its interrupted run can be acknowledged", async () => {
     browserMocks.storage.local.get.mockResolvedValue({
       "active-run": { ...ACTIVE_RUN, status: "recovery-blocked" },

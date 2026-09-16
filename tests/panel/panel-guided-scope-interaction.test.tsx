@@ -1527,7 +1527,7 @@ describe("panel guided scope interaction", () => {
     await clickButton("Continue");
 
     const action = Array.from(container.querySelectorAll(".panel-guide button")).find((button) =>
-      button.textContent?.includes("Reset interrupted run"),
+      button.textContent?.includes("Interrupted run needs review"),
     );
     expect(action).toBeDefined();
     expect((action as HTMLButtonElement | undefined)?.disabled).toBe(true);

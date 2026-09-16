@@ -301,6 +301,37 @@ describe("filed returns retained target scoping", () => {
     expect(mocks.startSinglePeriodFiledReturnsDownloadFlow).not.toHaveBeenCalled();
   });
 
+  it("does not let a fresh all-supported start take over a stale lease", async () => {
+    // Only a resume of a retained plan may take over its stale lease (#374). A fresh start has no
+    // durable record of what the stale lease's worker was doing, so clearing it would discard the
+    // only evidence that anything was interrupted. Forcing takeover on for every start passed the
+    // whole background suite before this test existed.
+    mocks.readCurrentFiledReturnsTargetReviewStorageState.mockResolvedValue({ state: "missing" });
+    const activeResponse = {
+      ok: true as const,
+      flowStep: {
+        connectorId: "gst" as const,
+        scopeId: "gst-filed-returns-private-v0",
+        state: "blocked" as const,
+        safeSignals: ["filed-returns-run-needs-review"],
+        safeMessage: "Synthetic stale run.",
+      },
+    };
+    activeRunMocks.acquireFiledReturnsRun.mockResolvedValue({ response: activeResponse });
+
+    const response = await startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
+      { kind: "all-supported-returns-full-fiscal-year", financialYear: "2026-27" },
+      { storageKeys: { allSupportedFullFiscalYearLedgerIndex: "all-supported-index" } } as never,
+    );
+
+    expect(activeRunMocks.acquireFiledReturnsRun).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { takeOverStaleLease: false },
+    );
+    expect(response).toEqual(activeResponse);
+  });
+
   it("takes the run lease from a saved historical plan the current catalogue cannot expand", async () => {
     // The saved plan is validated against a retained historical catalogue, so
     // it stays resumable after the current catalogue stops expanding. The lease
@@ -342,6 +373,9 @@ describe("filed returns retained target scoping", () => {
         artifactType: "PDF",
       }),
       expect.anything(),
+      // Resuming a retained plan may take over that plan's own stale lease (#374); a fresh start may
+      // not. This test's saved historical plan is what makes it a resume.
+      { takeOverStaleLease: true },
     );
     expect(response).toEqual(activeResponse);
     expect(

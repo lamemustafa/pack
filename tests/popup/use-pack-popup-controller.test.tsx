@@ -38,7 +38,10 @@ vi.mock("wxt/browser", () => ({
   },
 }));
 
-import { usePackPopupController } from "../../src/entrypoints/popup/use-pack-popup-controller";
+import {
+  PACK_ACTION_STOPPED_MESSAGE,
+  usePackPopupController,
+} from "../../src/entrypoints/popup/use-pack-popup-controller";
 
 let controller: ReturnType<typeof usePackPopupController> | null = null;
 let root: Root | null = null;
@@ -538,18 +541,14 @@ describe("popup background failure presentation", () => {
     await act(async () => {
       await controller?.startFiledReturnsFlow();
     });
-    expect(controller?.actionError).toBe(
-      "Pack could not reach the background service. Try the action again.",
-    );
+    expect(controller?.actionError).toBe(PACK_ACTION_STOPPED_MESSAGE);
 
     // A successful context refresh must not clear a failure it did not cause.
     await act(async () => {
       await controller?.refreshPortalContext();
     });
 
-    expect(controller?.actionError).toBe(
-      "Pack could not reach the background service. Try the action again.",
-    );
+    expect(controller?.actionError).toBe(PACK_ACTION_STOPPED_MESSAGE);
     await act(async () => root?.unmount());
   });
 
@@ -590,7 +589,7 @@ describe("popup background failure presentation", () => {
     await act(async () => {
       await controller?.startFiledReturnsFlow();
     });
-    const flowFailure = "Pack could not reach the background service. Try the action again.";
+    const flowFailure = PACK_ACTION_STOPPED_MESSAGE;
     expect(controller?.actionError).toBe(flowFailure);
 
     await act(async () => {
@@ -628,7 +627,7 @@ describe("popup background failure presentation", () => {
     await act(async () => {
       await controller?.startFiledReturnsFlow();
     });
-    const flowFailure = "Pack could not reach the background service. Try the action again.";
+    const flowFailure = PACK_ACTION_STOPPED_MESSAGE;
     expect(controller?.actionError).toBe(flowFailure);
 
     contextFails = false;
@@ -651,9 +650,7 @@ describe("popup background failure presentation", () => {
       await controller?.startFiledReturnsFlow();
     });
 
-    expect(controller?.actionError).toBe(
-      "Pack could not reach the background service. Try the action again.",
-    );
+    expect(controller?.actionError).toBe(PACK_ACTION_STOPPED_MESSAGE);
     await act(async () => root?.unmount());
   });
 
