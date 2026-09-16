@@ -680,6 +680,82 @@ describe("popup background failure presentation", () => {
     await act(async () => root?.unmount());
   });
 
+  it("re-reads saved state after clearing an interrupted run, so the plan's recovery appears", async () => {
+    // #375 review, confirmed by execution. The stale-lease view is where a plan that cannot take over
+    // its lease routes the reader, and its Clear interrupted run used to blank the summary and stop.
+    // The storage listener deliberately ignores a lease-only removal, so nothing re-read, and the
+    // still-unresolved plan vanished until the panel happened to lose and regain focus -- a blank
+    // panel at the exact moment the reader had just done the right thing.
+    const planAfterClearing = {
+      summaryIdentity: {
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2026-27",
+      },
+      status: "blocked",
+      completedTargetIds: [],
+      targetEvidence: [],
+      totalTargets: 1,
+      ledgerId: "full-fiscal-year-abc123de",
+      resumeAvailable: false,
+      flowStepScope: {
+        financialYear: "2026-27",
+        period: "May",
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+      },
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "blocked",
+        safeSignals: ["all-supported-full-fiscal-year-run-interrupted"],
+        safeMessage: "Retry the interrupted target.",
+      },
+      allSupportedFullFiscalYearRecovery: {
+        targetId: "synthetic-may",
+        expectedRevision: 4,
+        targetStatus: "running",
+      },
+    } as const satisfies FiledReturnsAllSupportedFullFiscalYearFlowSummary;
+    let cleared = false;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_ACKNOWLEDGE_INTERRUPTED_RUN") {
+        cleared = true;
+        return Promise.resolve({
+          ok: true,
+          flowStep: {
+            connectorId: "gst",
+            scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+            state: "user-action-required",
+            safeSignals: ["filed-returns-run-acknowledged"],
+            safeMessage: "Synthetic acknowledgement.",
+          },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve(
+          cleared
+            ? { ok: true, allSupportedFullFiscalYearFlowSummary: planAfterClearing }
+            : { ok: true, flowSummary: null },
+        );
+      }
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      return Promise.resolve({ ok: true, flowSummary: null });
+    });
+
+    await act(async () => {
+      await controller?.acknowledgeInterruptedRun();
+    });
+
+    expect(controller?.allSupportedFullFiscalYearFlowSummary).toEqual(planAfterClearing);
+    expect(controller?.actionError).toBeNull();
+    await act(async () => root?.unmount());
+  });
+
   it("keeps an interrupted-run acknowledgement's specific safe rejection visible", async () => {
     mocks.sendMessage.mockImplementation((message: PackMessage) => {
       if (message.type === "PACK_ACKNOWLEDGE_INTERRUPTED_RUN") {
