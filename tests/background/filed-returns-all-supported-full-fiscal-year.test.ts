@@ -511,7 +511,7 @@ describe("all-supported full-fiscal-year worker", () => {
       zip.discard.mockResolvedValue([]);
       const runner = vi.fn<SinglePeriodRunner>();
 
-      await restartCompletedAllSupportedFullFiscalYearPlan(
+      const response = await restartCompletedAllSupportedFullFiscalYearPlan(
         { ...request, ledgerId: withheld.ledgerId },
         deps,
         runner,
@@ -519,6 +519,47 @@ describe("all-supported full-fiscal-year worker", () => {
 
       expect(runner).not.toHaveBeenCalled();
       expect(savedLedger()).toEqual(withheld);
+      // The failure is the news. The withheld-plan copy must not replace it with advice to repeat
+      // the action that just failed.
+      expect("flowStep" in response ? response.flowStep.safeMessage : "").toBe(
+        "Pack could not clear the retained local staging for this fiscal-year plan. The saved plan remains unchanged.",
+      );
+      expect(
+        "allSupportedFullFiscalYearFlowSummary" in response
+          ? response.allSupportedFullFiscalYearFlowSummary?.flowStep.safeMessage
+          : "",
+      ).toBe(
+        "Pack could not clear the retained local staging for this fiscal-year plan. The saved plan remains unchanged.",
+      );
+    });
+
+    it("stays withheld and discardable when the worker stops after staging was cleared", async () => {
+      // Staging is cleared before the replacement is saved. If the worker stops in between, the old
+      // plan must still be the saved one and still offer the same exit, so a second click finishes.
+      const withheld = await persistWithheldPlan();
+      stored.failReplacementSet = true;
+
+      await expect(
+        restartCompletedAllSupportedFullFiscalYearPlan(
+          { ...request, ledgerId: withheld.ledgerId },
+          deps,
+          vi.fn<SinglePeriodRunner>(),
+        ),
+      ).rejects.toThrow("synthetic replacement persistence failure");
+      expect(zip.discard).toHaveBeenCalledWith(withheld.ledgerId);
+      expect(savedLedger()).toEqual(withheld);
+      expect((await readCurrentAllSupportedFullFiscalYearFlowSummary(deps))?.recoveryWithheld).toBe(
+        true,
+      );
+
+      const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+      await restartCompletedAllSupportedFullFiscalYearPlan(
+        { ...request, ledgerId: withheld.ledgerId },
+        deps,
+        runner,
+      );
+      expect(runner).toHaveBeenCalled();
+      expect(savedLedger().ledgerId).not.toBe(withheld.ledgerId);
     });
   });
 
