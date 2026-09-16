@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
 import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/connectors/gst/filed-returns-contracts";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { FILED_RETURNS_MONTHS } from "../../src/connectors/gst/filed-returns-scope";
@@ -296,6 +297,11 @@ describe("all-supported full-fiscal-year ledger", () => {
         ),
       };
       expect(allSupportedRecoveryIsWithheld(observedElsewhere)).toBe(false);
+
+      // No control is offered, so the message is the only way out and must name one.
+      const summary = toAllSupportedFullFiscalYearSummary(observedElsewhere);
+      expect(summary.recoveryWithheld).toBeUndefined();
+      expect(summary.flowStep.safeMessage).toContain(PACK_CLEAR_LOCAL_DATA_ACTION_LABEL);
     });
 
     it("is not withheld when the non-resumable signal sits on a resolved target", () => {
