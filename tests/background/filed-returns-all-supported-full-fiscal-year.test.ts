@@ -14,6 +14,7 @@ import { retryAllSupportedFiledReturnsFullFiscalYearTarget } from "../../src/bac
 import type { SinglePeriodRunner } from "../../src/background/filed-returns-full-fiscal-year";
 import type { FiledReturnsFlowRunnerDeps } from "../../src/background/filed-returns-flow-runner";
 import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
+import { readCurrentAllSupportedFullFiscalYearFlowSummary } from "../../src/background/filed-returns-all-supported-full-fiscal-year-summary";
 import type { PackMessageResponse } from "../../src/connectors/gst/messages";
 import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../src/core/recovery-actions";
@@ -285,6 +286,59 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(allSavedLedgers()).toHaveLength(1);
     expect(allSavedLedgers()[0]?.ledgerId).toBe(completed.ledgerId);
     expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("describes each target in an action response exactly as the reopened panel does", async () => {
+    // Every runner action returns a summary, and the popup writes it into the same slot the polled
+    // summary fills. Two builders produced them, and #359 corrected how a declined format reads in
+    // only one -- so a year read one way straight after an action and another once reopened.
+    const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+    if (!expansion.ok) throw new Error("expected an expandable plan");
+    let ledger = createAllSupportedFullFiscalYearLedger(
+      request,
+      expansion.targets,
+      FILED_RETURNS_MONTHS.slice(0, 3),
+      NOW,
+    );
+    const target = ledger.targets.find((candidate) => candidate.returnType === "GSTR-2B");
+    if (!target) throw new Error("expected a GSTR-2B target");
+    ledger = markAllSupportedFullFiscalYearTargetRunning(ledger, target.targetId, NOW);
+    ledger = markAllSupportedFullFiscalYearTargetTerminal(
+      ledger,
+      target.targetId,
+      "not-generated",
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+        state: "candidate-not-found",
+        safeSignals: [
+          "filed-gstr2b-not-generated",
+          "gstr2b-summary-route-verified",
+          "gstr2b-visible-period-verified",
+          "filed-return-artifact-unavailable:PDF",
+        ],
+        safeMessage: "Synthetic not-generated result.",
+      },
+      NOW,
+    );
+    expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
+    await persistAllSupportedFullFiscalYearLedger(deps, ledger);
+    vi.clearAllMocks();
+
+    // A refused restart is the shortest action that returns a summary without running a target.
+    const response = await restartCompletedAllSupportedFullFiscalYearPlan(
+      { ...request, ledgerId: ledger.ledgerId },
+      deps,
+      vi.fn<SinglePeriodRunner>(),
+    );
+    const reopened = await readCurrentAllSupportedFullFiscalYearFlowSummary(deps);
+
+    const actionEvidence =
+      "allSupportedFullFiscalYearFlowSummary" in response
+        ? response.allSupportedFullFiscalYearFlowSummary?.targetEvidence
+        : undefined;
+    expect(actionEvidence).toBeDefined();
+    expect(actionEvidence).toEqual(reopened?.targetEvidence);
   });
 
   it("refuses to discard a root that has not finished, and leaves it saved", async () => {

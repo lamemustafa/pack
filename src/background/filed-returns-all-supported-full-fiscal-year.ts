@@ -1,7 +1,5 @@
 import { filedReturnsRunLeaseLiveness } from "./filed-returns-active-run";
-import { filedReturnsTargetOutcome } from "./filed-returns-full-fiscal-year-summary";
 import type {
-  FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsAllSupportedFullFiscalYearRequest,
   FiledReturnsDownloadScope,
   PortalFlowStepResult,
@@ -24,7 +22,6 @@ import type {
 } from "./filed-returns-flow-runner";
 import type { SinglePeriodRunner } from "./filed-returns-full-fiscal-year";
 import {
-  allSupportedResumeMode,
   allSupportedExplicitRetryTarget,
   canCompleteAllSupportedFullFiscalYearLedger,
   createAllSupportedFullFiscalYearLedger,
@@ -37,6 +34,7 @@ import {
 import {
   unresolvedAllSupportedFullFiscalYearStep as unresolvedRunStep,
   allSupportedTerminalPlanRoots,
+  projectAllSupportedFullFiscalYearSummary,
 } from "./filed-returns-all-supported-full-fiscal-year-summary";
 import {
   readAllSupportedFullFiscalYearLedgerForPlanRoot,
@@ -757,7 +755,7 @@ async function allSupportedResponse(
   return {
     ok: true,
     flowStep,
-    allSupportedFullFiscalYearFlowSummary: toAllSupportedSummary(
+    allSupportedFullFiscalYearFlowSummary: projectAllSupportedFullFiscalYearSummary(
       ledger,
       flowStep,
       storageState.state === "valid"
@@ -766,74 +764,6 @@ async function allSupportedResponse(
       interrupted,
     ),
   };
-}
-
-function toAllSupportedSummary(
-  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
-  flowStep: PortalFlowStepResult,
-  allTerminalPlanRoots = allSupportedTerminalPlanRoots([ledger]),
-  interrupted = false,
-): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
-  const resumeMode = allSupportedResumeMode(ledger);
-  const zipDelivered =
-    ledger.zipPhase === "cleaned-after-download" ||
-    ledger.zipPhase === "downloaded-cleanup-pending";
-  const flowStepScope = scopeForTarget(
-    ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
-      ledger.targets[0]!,
-  );
-  const explicitRetryTarget = allSupportedExplicitRetryTarget(ledger, interrupted);
-  return {
-    resumeAvailable: resumeMode !== null,
-    ...(resumeMode ? { resumeMode } : {}),
-    ...(allTerminalPlanRoots.length > 0 ? { terminalPlanRoots: allTerminalPlanRoots } : {}),
-    summaryIdentity: { ...ledger.planRoot },
-    status: interrupted ? "blocked" : ledger.status,
-    ...(ledger.status === "complete" ? { completedAt: ledger.updatedAt } : {}),
-    updatedAt: ledger.updatedAt,
-    completedTargetIds: ledger.targets
-      .filter((target) => isResolvedFullFiscalYearTargetStatus(target.status))
-      .map((target) => target.targetId),
-    targetEvidence: ledger.targets.map((target) => ({
-      targetId: target.targetId,
-      financialYear: target.financialYear,
-      period: target.period,
-      returnType: target.returnType,
-      artifactType: target.artifactType,
-      outcome: targetOutcome(target, zipDelivered),
-    })),
-    totalTargets: ledger.targets.length,
-    ledgerId: ledger.ledgerId,
-    ...(explicitRetryTarget
-      ? {
-          allSupportedFullFiscalYearRecovery: {
-            targetId: explicitRetryTarget.targetId,
-            expectedRevision: ledger.revision,
-            targetStatus: explicitRetryTarget.status,
-          },
-        }
-      : {}),
-    ...(ledger.currentTargetId ? { currentTargetId: ledger.currentTargetId } : {}),
-    flowStepScope,
-    flowStep,
-  };
-}
-
-function targetOutcome(
-  target: FiledReturnsAllSupportedFullFiscalYearTarget,
-  zipDelivered: boolean,
-): FiledReturnsAllSupportedFullFiscalYearFlowSummary["targetEvidence"][number]["outcome"] {
-  // The same exhaustive mapping the single-return fiscal-year path uses. Two hand-written copies
-  // stood here, each ending in a `needs-review` default that silently absorbed any status they had
-  // not been told about -- so a period the portal declined to generate was reported to the user as
-  // needing review, in the one run type where it could not be. The shared record fails to compile
-  // instead, which is the only reason the single-return path was already right.
-  return filedReturnsTargetOutcome(
-    target.status,
-    zipDelivered,
-    false,
-    target.safeSignals.some((signal) => signal.startsWith("filed-return-artifact-unavailable:")),
-  );
 }
 
 function scopeForTarget(

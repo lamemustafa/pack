@@ -409,7 +409,9 @@ export function fullFiscalYearTargetEvidence(
  * record that already scopes it correctly, and only the derivation was reading
  * the wrong one.
  */
-function targetMissedAnArtifact(target: FiledReturnsFullFiscalYearTarget): boolean {
+export function targetMissedAnArtifact(
+  target: Pick<FiledReturnsFullFiscalYearTarget, "status" | "safeSignals">,
+): boolean {
   // Dereferenced without a fallback, like `hasLegacyRetainedStaging` above it.
   // A `?? []` here would read as caution and is the opposite: absent signals
   // would mean no evidence of a gap, which resolves to the *stronger* claim of a
