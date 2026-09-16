@@ -118,16 +118,23 @@ export function allSupportedWithheldTarget(
 ): FiledReturnsAllSupportedFullFiscalYearTarget | null {
   if (ledger.zipPhase) return null;
   if (ledger.status !== "blocked" && ledger.status !== "partial") return null;
+  // The discard replaces the whole plan. A downloaded or not-filed answer comes back when the year
+  // runs again; one a person gave (#380) does not, so a plan holding one is never offered the
+  // discard. Pack's options still clear local data if a reader needs out.
+  if (ledger.targets.some((target) => holdsUnrepeatableAnswer(target.status))) return null;
   return (
     ledger.targets.find(
       (target) =>
         needsExplicitFullFiscalYearRetry(target.status) &&
-        // A person's answer is never a reason to discard the plan holding it (#380). Such a plan
-        // gets no discard here; Pack's options still clear local data if a reader needs out.
-        !filedReturnsTargetStatusBehaviour(target.status).holdsAnswer &&
         target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal)),
     ) ?? null
   );
+}
+
+/** An answer running the year again cannot reproduce: held, but not resolved by the portal. */
+function holdsUnrepeatableAnswer(status: FiledReturnsFullFiscalYearTargetStatus): boolean {
+  const behaviour = filedReturnsTargetStatusBehaviour(status);
+  return behaviour.holdsAnswer && !behaviour.resolved;
 }
 
 /**
