@@ -191,11 +191,22 @@ export function projectAllSupportedFullFiscalYearSummary(
  * run's control, which this surface does not render -- live, the reader was told to use a button
  * that was not there. Every reader of this summary gets the same replacement, because the
  * projection is the one place both the polled read and every action response pass through.
+ *
+ * Only a step that says nothing beyond "this plan is stopped on that target" is replaced. A step
+ * carrying any other signal is reporting something more specific -- that the discard itself could
+ * not clear staging, or that the plan changed under the reader -- and replacing it would tell the
+ * reader to repeat the action that just failed.
  */
 function withheldRecoveryStep(
   flowStep: PortalFlowStepResult,
   target: FiledReturnsAllSupportedFullFiscalYearTarget,
 ): PortalFlowStepResult {
+  const describesOnlyTheStop = flowStep.safeSignals.every(
+    (signal) =>
+      signal === "all-supported-full-fiscal-year-run-needs-action" ||
+      target.safeSignals.includes(signal),
+  );
+  if (!describesOnlyTheStop) return flowStep;
   return {
     ...flowStep,
     safeMessage: `Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. To continue, discard the saved plan and start this year again; files already captured for it are downloaded again.`,

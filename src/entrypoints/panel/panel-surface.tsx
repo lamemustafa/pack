@@ -83,9 +83,14 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
       .map((entry) => `${entry.returnType}:${entry.artifactType}:${entry.period}`)
       .sort()
       .join("|");
+    // A withheld plan is exempt. Refreshing cannot change it -- its targets are fixed and nothing
+    // advances it -- so revalidating turned its only control into a silent refresh once a period
+    // closed (#376). Its label promises starting the year again, not the displayed periods, and
+    // the background still binds the discard to the reviewed ledger.
     if (
+      allSupportedSummary.recoveryWithheld !== true &&
       panelAllReturnsFullYearPreset(financialYear, new Date())?.targetSignature !==
-      displayedTargetSignature
+        displayedTargetSignature
     ) {
       await pack.refreshFlowSummary();
       return;
