@@ -270,6 +270,20 @@ describe("all-supported full-fiscal-year ledger", () => {
       },
     );
 
+    it("is not withheld by a target that holds a person's answer (#380)", () => {
+      // `manually-observed` is unresolved, so the retry machinery considers it, but a person
+      // answered it. Discarding the plan would throw that answer away, and a stale non-resumable
+      // signal beside it is not a reason to.
+      const ledger = withheldAt(3);
+      const observed = {
+        ...ledger,
+        targets: ledger.targets.map((target, position) =>
+          position === 3 ? { ...target, status: "manually-observed" as const } : target,
+        ),
+      };
+      expect(allSupportedRecoveryIsWithheld(observed)).toBe(false);
+    });
+
     it("is not withheld when the non-resumable signal sits on a resolved target", () => {
       const ledger = withheldAt(3);
       const resolved = {
