@@ -7,6 +7,7 @@ import {
   type PortalBlobShimResult,
 } from "../connectors/gst/portal-blob-shim";
 import { downloadAcquiredArtifact, installPortalBlobDownloadSafetyNet } from "./artifact-download";
+import { recordPortalGenerationTiming } from "./portal-generation-timing-probe";
 
 type Gstr3bPdfDeliveryResult =
   | {
@@ -32,6 +33,7 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
   const safetyNet = installPortalBlobDownloadSafetyNet(input.tabId);
   try {
     let captured: PortalBlobShimResult | undefined;
+    const generationStartedAt = performance.now();
     try {
       const [injection] = await browser.scripting.executeScript({
         args: [
@@ -53,6 +55,13 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
       captured = injection?.result as PortalBlobShimResult | undefined;
     } catch {
       return { ok: false, reason: "main-world-execution-failed", safeSignals: [] };
+    } finally {
+      await recordPortalGenerationTiming({
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+        outcome: captured ? (captured.ok ? "captured" : captured.reason) : "no-result",
+        elapsedMs: performance.now() - generationStartedAt,
+      });
     }
     if (!captured?.ok) {
       return {

@@ -11,6 +11,7 @@ import {
 } from "../connectors/gst/portal-artifact-endpoints";
 import { acceptedFiledReturnsMonthTexts } from "../connectors/gst/filed-returns-months";
 import { installPortalBlobDownloadSafetyNet } from "./artifact-download";
+import { recordPortalGenerationTiming } from "./portal-generation-timing-probe";
 
 export async function acquirePageGeneratedArtifact(input: {
   artifactType: "PDF" | "EXCEL";
@@ -31,6 +32,7 @@ export async function acquirePageGeneratedArtifact(input: {
       : GSTR1_PAGE_GENERATED_ARTIFACTS[input.artifactType];
   try {
     let captured: PortalBlobShimResult | undefined;
+    const generationStartedAt = performance.now();
     try {
       const [injection] = await browser.scripting.executeScript({
         args: [
@@ -61,6 +63,13 @@ export async function acquirePageGeneratedArtifact(input: {
       captured = injection?.result as PortalBlobShimResult | undefined;
     } catch {
       return { ok: false, reason: "main-world-execution-failed", safeSignals: [] };
+    } finally {
+      await recordPortalGenerationTiming({
+        returnType: input.returnType,
+        artifactType: input.artifactType,
+        outcome: captured ? (captured.ok ? "captured" : captured.reason) : "no-result",
+        elapsedMs: performance.now() - generationStartedAt,
+      });
     }
     if (!captured?.ok)
       return {
