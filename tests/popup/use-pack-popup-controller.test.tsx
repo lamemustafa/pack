@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
   type FiledReturnsAllSupportedFullFiscalYearFlowSummary,
@@ -40,6 +40,7 @@ vi.mock("wxt/browser", () => ({
 
 import {
   PACK_ACTION_STOPPED_MESSAGE,
+  PACK_RUNNING_SUMMARY_REFRESH_MS,
   usePackPopupController,
 } from "../../src/entrypoints/popup/use-pack-popup-controller";
 
@@ -1178,5 +1179,151 @@ describe("popup background failure presentation", () => {
 
     expect(controller?.lastRunSummary).toEqual(currentSummary);
     await act(async () => root?.unmount());
+  });
+});
+
+describe("a run that becomes interrupted while the surface is open (#368)", () => {
+  // The running -> interrupted transition is a pure function of the clock: a dead worker writes
+  // nothing and never removes its lease, so no storage event fires. Mount and `storage.onChanged`
+  // were the only refresh paths, and an open panel kept rendering "running" with no exit.
+  function runningSummary(
+    status: FiledReturnsAllSupportedFullFiscalYearFlowSummary["status"],
+  ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
+    return {
+      summaryIdentity: {
+        kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND,
+        financialYear: "2025-26",
+      },
+      status,
+      completedTargetIds: [],
+      targetEvidence: [],
+      totalTargets: 0,
+      resumeAvailable: false,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: status === "running" ? "ready" : "user-action-required",
+        safeSignals: [],
+        safeMessage: `Synthetic ${status} summary.`,
+      },
+    };
+  }
+
+  async function mountWithSummaries(
+    summaries: (
+      FiledReturnsAllSupportedFullFiscalYearFlowSummary | FiledReturnsFlowSummary | null
+    )[],
+  ) {
+    let read = 0;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type === "PACK_GET_CONTEXT") {
+        return Promise.resolve({
+          ok: true,
+          context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+        });
+      }
+      if (message.type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        const summary = summaries[Math.min(read, summaries.length - 1)];
+        read += 1;
+        if (summary && "summaryIdentity" in summary) {
+          return Promise.resolve({ ok: true, allSupportedFullFiscalYearFlowSummary: summary });
+        }
+        return Promise.resolve({ ok: true, flowSummary: summary });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    const dom = new JSDOM("<div id='root'></div>", { url: "https://extension.test" });
+    Object.assign(globalThis, { document: dom.window.document, window: dom.window });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    root = createRoot(dom.window.document.getElementById("root") as Element);
+    await act(async () => {
+      root?.render(<Harness onChange={(next) => (controller = next)} />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
+  const summaryReads = () =>
+    mocks.sendMessage.mock.calls.filter(
+      ([message]) => (message as PackMessage).type === "PACK_GET_FILED_RETURNS_FLOW_SUMMARY",
+    ).length;
+
+  async function advance(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.changeListeners.clear();
+    controller = null;
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+    vi.useRealTimers();
+  });
+
+  it("re-reads while a run is shown as running, and renders the interruption with no storage event", async () => {
+    await mountWithSummaries([runningSummary("running"), runningSummary("blocked")]);
+    expect(controller?.allSupportedFullFiscalYearFlowSummary?.status).toBe("running");
+    const readsAtMount = summaryReads();
+
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+
+    expect(summaryReads()).toBe(readsAtMount + 1);
+    expect(controller?.allSupportedFullFiscalYearFlowSummary?.status).toBe("blocked");
+    expect(mocks.changeListeners.size).toBeGreaterThan(0);
+  });
+
+  it("stops re-reading once the run is no longer running", async () => {
+    await mountWithSummaries([runningSummary("running"), runningSummary("blocked")]);
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+    const readsAfterSettling = summaryReads();
+
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS * 5);
+
+    expect(summaryReads()).toBe(readsAfterSettling);
+  });
+
+  it("re-reads a single-return run shown as running too", async () => {
+    const scope = {
+      financialYear: "2025-26",
+      period: "April",
+      returnType: "GSTR-3B",
+      artifactType: "PDF",
+    } as const;
+    const single = (status: FiledReturnsFlowSummary["status"]) =>
+      ({
+        scope,
+        status,
+        flowStep: {
+          connectorId: "gst",
+          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+          state: "ready",
+          safeSignals: [],
+          safeMessage: `Synthetic ${status} run.`,
+        },
+      }) as unknown as FiledReturnsFlowSummary;
+    await mountWithSummaries([single("running"), single("blocked")]);
+    expect(controller?.lastRunSummary?.status).toBe("running");
+
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+
+    expect(controller?.lastRunSummary?.status).toBe("blocked");
+  });
+
+  it("never re-reads on a timer for an idle surface", async () => {
+    await mountWithSummaries([null]);
+    const readsAtMount = summaryReads();
+
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS * 5);
+
+    expect(summaryReads()).toBe(readsAtMount);
   });
 });

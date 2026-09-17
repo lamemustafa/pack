@@ -31,6 +31,16 @@ import {
 export const PACK_ACTION_STOPPED_MESSAGE =
   "Pack stopped responding before that finished. Reopen Pack to see what was saved.";
 
+/**
+ * How often an open surface re-reads the summary while it shows a run in progress (#368).
+ *
+ * A run becomes interrupted by the clock alone: a dead worker writes nothing and never removes its
+ * lease, so no storage event fires, and the lease is judged stale after thirty seconds. Ten seconds
+ * puts the interruption on screen within about forty. A hidden page's timers are throttled, which
+ * degrades this to updating when the reader returns -- what reopening already did.
+ */
+export const PACK_RUNNING_SUMMARY_REFRESH_MS = 10_000;
+
 const UNEXPECTED_PACK_RESPONSE = "Unexpected Pack response.";
 
 export function usePackPopupController() {
@@ -197,6 +207,17 @@ export function usePackPopupController() {
     },
     [showActionError],
   );
+
+  // Gated on a run being shown as running, so an idle surface never polls and the timer stops on its
+  // own once the projection settles. The refresh keeps the reader's own scope selection.
+  const showsRunningRun =
+    allSupportedFullFiscalYearFlowSummary?.status === "running" ||
+    filedReturnsFlowSummary?.status === "running";
+  React.useEffect(() => {
+    if (!showsRunningRun) return;
+    const timer = setInterval(() => void refreshFlowSummary(), PACK_RUNNING_SUMMARY_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [refreshFlowSummary, showsRunningRun]);
 
   React.useEffect(() => {
     const onChanged = (
