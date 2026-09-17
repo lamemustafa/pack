@@ -99,10 +99,11 @@ describe("per-target evidence", () => {
     expect(renderToStaticMarkup(<TargetEvidence summary={summary} />)).toBe("");
     expect(renderToStaticMarkup(<TargetEvidence summary={null} />)).toBe("");
   });
-  // A partly saved period is in none of the other three counts, so without its
-  // own clause the header would say "1 of 2 saved" and leave the second period
-  // unaccounted for anywhere on the line.
-  it("accounts for a partly saved period in the status line", () => {
+  // Every artifact missing from a `partly-saved` period is one the portal itself said does not
+  // exist (a GSTR-1 period without e-invoice details has no Excel). "Partly saved" read as a
+  // failure to a reader (2026-09-17), so the period counts as saved and the line says why some
+  // formats are absent, instead of sending the reader looking for a missing file.
+  it("counts a period with everything the portal offered as saved, and says why formats are missing", () => {
     const markup = renderToStaticMarkup(
       <TargetEvidence
         summary={summaryWith([
@@ -112,18 +113,20 @@ describe("per-target evidence", () => {
       />,
     );
 
-    expect(markup).toContain("1 of 2 saved");
-    expect(markup).toContain("1 partly saved");
+    expect(markup).toContain("2 of 2 saved");
+    expect(markup).toContain("1 without a format the portal does not have");
+    expect(markup).not.toMatch(/partly saved/i);
   });
 
   // The word carries the meaning, not the hue: the row reads the same to someone
   // who cannot separate the colours.
-  it("names the partly saved outcome in the row", () => {
+  it("names the period saved in the row, with the reason formats are missing", () => {
     const markup = renderToStaticMarkup(
       <TargetEvidence summary={summaryWith([{ period: "April", outcome: "partly-saved" }])} />,
     );
 
-    expect(markup).toContain("Partly saved");
+    expect(markup).toContain(">Saved · some formats not on portal<");
+    expect(markup).not.toMatch(/partly saved/i);
     expect(markup).toContain("evidence-partly-saved");
   });
 });
