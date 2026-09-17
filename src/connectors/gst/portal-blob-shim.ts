@@ -5,6 +5,13 @@ export type PortalBlobShimInput = {
   expectedPeriodTexts?: readonly string[];
   expectedTarget?: { financialYear: string; period: string; returnType: string };
   maxPortalBlobBytes?: number;
+  /**
+   * Regex sources (case-insensitive) that, when all match page text which did **not** match them
+   * before the click, mean the portal answered with a dialog instead of a file (#386). The capture
+   * then stops waiting with `generation-timeout`, exactly as the timer would have, only sooner:
+   * what the dialog means is still decided by the bound post-click inspection.
+   */
+  stopWhenPageTextMatchesAll?: readonly string[];
   timeoutMs?: number;
 };
 export const MAX_PORTAL_BLOB_BYTES = 25 * 1024 * 1024;
@@ -266,6 +273,25 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       () => finish({ ok: false, reason: "generation-timeout", safeSignals: [] }),
       input.timeoutMs ?? 20_000,
     );
+    const stopPatterns = (input.stopWhenPageTextMatchesAll ?? []).map(
+      (source) => new RegExp(source, "i"),
+    );
+    const pageShowsStop = () => {
+      const text = (document.body?.innerText || document.body?.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      return stopPatterns.length > 0 && stopPatterns.every((pattern) => pattern.test(text));
+    };
+    // A dialog already on screen belongs to something before this click, so it cannot be this
+    // click's answer; leave that case to the timer.
+    if (stopPatterns.length > 0 && !pageShowsStop()) {
+      const poll = globalThis.setInterval(() => {
+        if (settled) return globalThis.clearInterval(poll);
+        if (!pageShowsStop()) return;
+        globalThis.clearInterval(poll);
+        finish({ ok: false, reason: "generation-timeout", safeSignals: [] });
+      }, 250);
+    }
     try {
       control.click();
     } catch {
