@@ -80,8 +80,8 @@ describe("panel evidence count ownership", () => {
     const markup = renderSummary(summary);
 
     expect(reviewCounts(markup)).toEqual(["1 needs review"]);
-    expect(markup).toContain("1 of 7 saved");
-    expect(markup).toContain("1 partly saved");
+    expect(markup).toContain("2 of 7 saved");
+    expect(markup).toContain("1 without a format the portal does not have");
     expect(markup).toContain("1 captured, ZIP not confirmed");
     for (const label of ["Not filed", "In progress", "Waiting", "Needs review"]) {
       expect(markup).toContain(`>${label}<`);
