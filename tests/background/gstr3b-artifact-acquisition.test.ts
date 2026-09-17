@@ -18,6 +18,7 @@ vi.mock("../../src/background/artifact-download", async (importOriginal) => ({
 
 import { acquireGstr3bPdfAfterPreflight } from "../../src/background/gstr3b-artifact-acquisition";
 import { acquirePageGeneratedArtifact } from "../../src/background/gstr2b-artifact-acquisition";
+import { GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS } from "../../src/connectors/gst/gstr1-excel-no-details-text";
 
 describe("GSTR-3B page-generated acquisition", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -230,6 +231,36 @@ describe("GSTR-2B page-generated acquisition", () => {
     );
     expect(mocks.downloadAcquiredArtifact).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["GSTR-1", "EXCEL", true],
+    ["GSTR-1", "PDF", false],
+    ["GSTR-2B", "EXCEL", false],
+    ["GSTR-2B", "PDF", false],
+  ] as const)(
+    "lets only %s %s stop waiting on the no-details dialog (#386)",
+    async (returnType, artifactType, watches) => {
+      mocks.executeScript.mockResolvedValue([
+        { result: { ok: false, reason: "generation-timeout", safeSignals: [] } },
+      ]);
+      await acquirePageGeneratedArtifact({
+        artifactType,
+        financialYear: "2024-25",
+        period: "April",
+        requestId: `watch-${returnType}-${artifactType}`,
+        returnPeriod: "042024",
+        returnType,
+        tabId: 17,
+      });
+      const [call] = mocks.executeScript.mock.calls;
+      const args = (call?.[0] as { args: [Record<string, unknown>] }).args[0];
+      if (watches) {
+        expect(args.stopWhenPageTextMatchesAll).toBe(GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS);
+      } else {
+        expect(args).not.toHaveProperty("stopWhenPageTextMatchesAll");
+      }
+    },
+  );
 
   it("fails closed when MAIN-world execution rejects", async () => {
     mocks.executeScript.mockRejectedValue(new Error("synthetic execution rejection"));
