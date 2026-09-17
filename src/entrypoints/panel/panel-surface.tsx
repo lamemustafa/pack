@@ -21,7 +21,7 @@ import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
-import { PanelGuidedScope, isPackSourceSurfaceBuildMode } from "./panel-guided-scope";
+import { PanelGuidedScope } from "./panel-guided-scope";
 import {
   discardAllReturnsPlanLabel,
   panelAllReturnsFullYearPreset,
@@ -57,7 +57,19 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const allSupportedRunning = allSupportedSummary?.status === "running";
   const running =
     pack.effectiveBusy !== null || summary?.status === "running" || allSupportedRunning;
-  const fullYearFlowAvailable = isPackSourceSurfaceBuildMode(import.meta.env.MODE);
+  // QUALIFICATION CANDIDATE -- the second half of the full-year gate. See the matching note in
+  // `panel-guided-scope.tsx`.
+  //
+  // This gate is independent of that one and controls recovery rather than entry: `canRestart`,
+  // `canResume`, `getRecoveryFlowAvailability` and `getSavedRunBlock` all read it. Opening only the
+  // guided-scope gate produces a build that can START a full-year run and cannot RECOVER one --
+  // no resume, no restart, no retry control -- which is the exact shape of #366 and makes a
+  // qualification run unfalsifiable: an interrupted plan would look like a product defect rather
+  // than a missing surface.
+  //
+  // Do not merge this file as-is; removing the gate properly retires
+  // `isPackSourceSurfaceBuildMode` and its callers together.
+  const fullYearFlowAvailable = true;
   const recoveryAvailability = getRecoveryFlowAvailability(summary, fullYearFlowAvailable);
   const recoveryReason = recoveryAvailability.message;
 

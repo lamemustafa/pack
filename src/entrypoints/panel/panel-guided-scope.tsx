@@ -81,14 +81,17 @@ export function PanelGuidedScope({
   /** Explicitly discards a completed root before starting that exact plan again. */
   onRestartAllReturnsFullYear?: (plan: PanelAllReturnsFullYearPlan & { ledgerId?: string }) => void;
 }) {
-  // Keep this expression in the panel module: Vite replaces it during a WXT
-  // production build, so the source-surface JSX below is removed from packaged output.
-  // Deliberately the literal comparison rather than `isPackSourceSurfaceBuildMode`, despite the duplication.
-  // A direct `import.meta.env.MODE === "source-surfaces"` constant-folds at build time, so the source-surface JSX below
-  // is dead-code eliminated from a packaged build. Routing it through a function call defeats that:
-  // the branch survives, the `data-pack-source-surface` marker reaches the bundle, and
-  // `verify-extension-package` fails -- which is how this was caught.
-  const sourceSurfacesEnabled = import.meta.env.MODE === "source-surfaces";
+  // QUALIFICATION CANDIDATE -- full-year surfaces enabled in a production build.
+  //
+  // This is the two-line behavioural delta that removing the source-surfaces gate amounts to, made
+  // so the artifact under live test is the artifact we would ship rather than a `--mode
+  // source-surfaces` build. `docs/PUBLICATION_READINESS.md` disqualifies that mode's output as
+  // evidence, so qualifying the gate with it would be circular: the only build showing the
+  // controls would be the one that exists because the controls are hidden.
+  //
+  // Do not merge this file as-is. Removing the gate properly also removes `--source-surfaces` from
+  // the verifiers, `build:source-surfaces` from package.json, and rewrites the readiness doc.
+  const sourceSurfacesEnabled = true;
   const [view, setView] = React.useState<"presets" | "guided">("presets");
   const [activeStep, setActiveStep] = React.useState(0);
   const selectRef = React.useRef<HTMLSelectElement>(null);
@@ -333,12 +336,11 @@ export function PanelGuidedScope({
           ? null
           : { disabled: true as const, label: "Open a signed-in GST Portal tab to continue." });
 
+  // The `data-pack-source-surface` marker is dropped with the gate. It exists only so
+  // `verify-extension-package` can refuse a source-surfaces build; a packaged artifact that
+  // legitimately shows full-year has nothing to declare, and keeping it would fail verification.
   return (
-    <section
-      className="panel-guide"
-      aria-labelledby="panel-guide-title"
-      {...(sourceSurfacesEnabled ? { "data-pack-source-surface": "full-fiscal-year" } : {})}
-    >
+    <section className="panel-guide" aria-labelledby="panel-guide-title">
       <div
         className="panel-guide-progress"
         role="status"
