@@ -1,6 +1,7 @@
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { capturePortalPdfBlob } from "../../src/connectors/gst/portal-blob-shim";
+import { GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS } from "../../src/connectors/gst/gstr1-excel-no-details-text";
 
 describe("capturePortalPdfBlob", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -69,6 +70,88 @@ describe("capturePortalPdfBlob", () => {
     expect(result).toMatchObject({ ok: false, reason: "generation-timeout" });
     expect(click).toHaveBeenCalledOnce();
     expect(view.HTMLAnchorElement.prototype.click).toBe(originalClick);
+  });
+
+  describe("stopping early on a declined-artifact dialog (#386)", () => {
+    // Live, every GSTR-1 period without e-invoice details spent the full generation timeout
+    // waiting for a blob the portal was never going to create: it shows a no-details dialog
+    // instead. The capture may stop waiting when that dialog appears; what the dialog means is
+    // still decided afterwards by the bound post-click inspection, so the reason stays the same.
+    const NO_DETAILS = GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS;
+    // jsdom has no \`innerText\`, and \`textContent\` runs the button's text into the dialog's; a browser's
+    // \`innerText\` separates the two blocks with a line break, which the leading newline stands in for.
+
+    it("stops waiting as soon as the dialog appears after the click", async () => {
+      const { documentRef, view, url } = environment();
+      install(view, url);
+      documentRef.querySelector("button")?.addEventListener("click", () => {
+        setTimeout(() => {
+          const dialog = documentRef.createElement("div");
+          dialog.textContent = "\nNo details available for download of e-Invoices for this period.";
+          documentRef.body.append(dialog);
+        }, 20);
+      });
+      const startedAt = Date.now();
+      const result = await rebuildInMainWorld(capturePortalPdfBlob)({
+        controlSelector: "button",
+        expectedMime: "application/pdf",
+        timeoutMs: 10_000,
+        stopWhenPageTextMatchesAll: NO_DETAILS,
+      });
+      expect(result).toMatchObject({ ok: false, reason: "generation-timeout" });
+      expect(Date.now() - startedAt).toBeLessThan(2_000);
+    });
+
+    it("does not stop early for a dialog already on the page before the click", async () => {
+      const { documentRef, view, url } = environment();
+      install(view, url);
+      const stale = documentRef.createElement("div");
+      stale.textContent = "\nNo details available for download of e-Invoices for this period.";
+      documentRef.body.append(stale);
+      const startedAt = Date.now();
+      const result = await capturePortalPdfBlob({
+        controlSelector: "button",
+        expectedMime: "application/pdf",
+        timeoutMs: 700,
+        stopWhenPageTextMatchesAll: NO_DETAILS,
+      });
+      expect(result).toMatchObject({ ok: false, reason: "generation-timeout" });
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(650);
+    });
+
+    it("still captures a file that arrives while the patterns are being watched", async () => {
+      const { documentRef, view, url } = environment();
+      install(view, url);
+      documentRef
+        .querySelector("button")
+        ?.addEventListener("click", () => savePdf(documentRef, view, "click"));
+      await expect(
+        capturePortalPdfBlob({
+          controlSelector: "button",
+          expectedMime: "application/pdf",
+          timeoutMs: 5_000,
+          stopWhenPageTextMatchesAll: NO_DETAILS,
+        }),
+      ).resolves.toMatchObject({ ok: true });
+    });
+
+    it("does not stop on only one of the patterns", async () => {
+      const { documentRef, view, url } = environment();
+      install(view, url);
+      documentRef.querySelector("button")?.addEventListener("click", () => {
+        const dialog = documentRef.createElement("div");
+        dialog.textContent = "\nNo details available for download.";
+        documentRef.body.append(dialog);
+      });
+      const startedAt = Date.now();
+      await capturePortalPdfBlob({
+        controlSelector: "button",
+        expectedMime: "application/pdf",
+        timeoutMs: 700,
+        stopWhenPageTextMatchesAll: NO_DETAILS,
+      });
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(650);
+    });
   });
 
   it("does not click a generic control after its visible target changes", async () => {

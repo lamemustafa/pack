@@ -6,6 +6,7 @@ import {
   declinedArtifactStep,
 } from "./filed-returns-declined-artifact";
 import { normaliseText } from "./filed-returns-dom";
+import { GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS } from "./gstr1-excel-no-details-text";
 import { readDocumentText } from "./gstr2b-summary";
 
 // A recognised terminal absence is an answer rather than a download failure. Retrying it within
@@ -39,8 +40,9 @@ function detectGstr1ExcelNoDetails(
   safeSignals: string[],
 ): PortalDownloadTriggerResult | null {
   if (
-    !/\bno\s+details\s+available\s+for\s+download\b/i.test(normalised) ||
-    !/\be-?invoices?\b/i.test(normalised)
+    !GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS.every((source) =>
+      new RegExp(source, "i").test(normalised),
+    )
   ) {
     return null;
   }
