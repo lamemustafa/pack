@@ -298,6 +298,14 @@ rtntp: "GSTR3B"}` to `/returns/auth/api/efiledReturns` answered HTTP 200 with
     View Filed Returns, GSTR-3B is offered only under the **Monthly** filing period (not Quarterly).
     Separately, the page reads a selected `<option>` through `innerText` **and** `textContent`
     identically, so any reader joining both doubles the text (`"GSTR3B GSTR3B"`).
+38. **The Returns Dashboard lists only the periods a taxpayer can file for.** Captured live on
+    2026-09-21 on the same taxpayer as entry 37. With 2025-26 selected, the Quarter dropdown offered
+    `Quarter 2 (Jul - Sep)`, `Quarter 3 (Oct - Dec)` and `Quarter 4 (Jan - Mar)`, and no Quarter 1,
+    so April–June have no option to select at all, for GSTR-1 or for the auto-drafted GSTR-2B
+    statement. A search for March showed the GSTR-1 tile as `Status- Filed` with `VIEW`/`DOWNLOAD`,
+    the auto-drafted GSTR-2B statement tile with `VIEW`/`DOWNLOAD`, and `VIEW GSTR3B`. Pack now
+    reads a period missing from a loaded, current list, seen on two consecutive steps, as the
+    portal's answer that nothing exists for it; it had instead waited out its 30-second step limit.
 
 ## The GSTR-2B summary page does carry a Returns Dashboard link, collapsed
 
