@@ -849,6 +849,83 @@ describe("filed returns flow — GSTR-2B dashboard selection", () => {
     }
   });
 
+  // Live, 2026-09-21: GSTR-2B June 2025-26 looped for 11 attempts on search-clicked, re-searching
+  // every 12 s on the dashboard page the previous period had used, while a freshly opened
+  // dashboard found June's View at once. After the one existing re-search, Pack now reopens the
+  // dashboard through the portal's own menu instead of searching the same page again, and stops
+  // with a named reason rather than looping if the reopened page does not settle either.
+  it("reopens the dashboard instead of searching the same page a third time, then stops", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(
+        `
+          <main>
+            <nav><a data-dashboard href="/returns/auth/dashboard">Return Dashboard</a></nav>
+            <form>
+              <select name="fin"><option selected>2025-26</option></select>
+              <select name="quarter"><option selected>Quarter 1 (Apr - Jun)</option></select>
+              <select name="mon"><option selected>June</option></select>
+              <button type="button" data-search>Search</button>
+            </form>
+            <article>
+              <h3>Auto-drafted ITC Statement GSTR-2B</h3>
+              <span data-status>Loading</span>
+              <button data-gstr2b-view>VIEW</button>
+            </article>
+          </main>
+        `,
+        "https://return.gst.gov.in/returns/auth/dashboard",
+      );
+      makeLayoutVisible(documentRef);
+      let searchClicked = 0;
+      let dashboardClicked = 0;
+      documentRef.querySelector("[data-search]")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+      documentRef.querySelector("[data-dashboard]")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        dashboardClicked += 1;
+      });
+      const scope: FiledReturnsDownloadScope = {
+        artifactType: "PDF",
+        financialYear: "2025-26",
+        period: "June",
+        returnType: "GSTR-2B",
+      };
+
+      await runFiledReturnsDownloadStep(documentRef, scope);
+      documentRef.querySelector("[data-gstr2b-view]")?.remove();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(12_000);
+      const research = await runFiledReturnsDownloadStep(documentRef, scope);
+      await vi.advanceTimersByTimeAsync(12_000);
+      const reopen = await runFiledReturnsDownloadStep(documentRef, scope);
+
+      expect(research.safeSignals).toContain("search-clicked");
+      expect(reopen.safeSignals).toContain(
+        "gstr2b-return-dashboard-reopened-after-unsettled-search",
+      );
+      expect(reopen.safeSignals).not.toContain("search-clicked");
+      expect(searchClicked).toBe(2);
+      expect(dashboardClicked).toBe(1);
+
+      // The reopened dashboard gets its own search; if that one does not settle either, stop.
+      const afterReopen = await runFiledReturnsDownloadStep(documentRef, scope);
+      await vi.advanceTimersByTimeAsync(12_000);
+      const stopped = await runFiledReturnsDownloadStep(documentRef, scope);
+
+      expect(afterReopen.safeSignals).toContain("search-clicked");
+      expect(stopped.state).toBe("user-action-required");
+      expect(stopped.safeSignals).toContain(
+        "gstr2b-return-dashboard-search-unsettled-after-reopen",
+      );
+      expect(searchClicked).toBe(3);
+      expect(dashboardClicked).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("waits for the GSTR-2B return dashboard controls when the portal shell is still blank", async () => {
     const documentRef = createGstDocument("", "https://return.gst.gov.in/returns/auth/dashboard");
 
