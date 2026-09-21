@@ -339,10 +339,17 @@ function isAcceptedUserPreference(value: unknown): value is string {
 
 /** RET13510, "No Record found for the provided Inputs": the portal's answer that nothing is filed. */
 function isNoRecordAnswer(payload: unknown): boolean {
+  if (typeof payload !== "object" || payload === null) return false;
+  // The live portal answers HTTP 200 with the code one level down: `{status, error: {errorCode}}`
+  // (probed 2026-09-21). The top-level form is accepted as well; nothing else is.
+  const { errorCode, error } = payload as { errorCode?: unknown; error?: unknown };
+  const nestedCode =
+    typeof error === "object" && error !== null
+      ? (error as { errorCode?: unknown }).errorCode
+      : undefined;
   return (
-    typeof payload === "object" &&
-    payload !== null &&
-    (payload as { errorCode?: unknown }).errorCode === FILED_RETURNS_NO_RECORD_ERROR_CODE
+    errorCode === FILED_RETURNS_NO_RECORD_ERROR_CODE ||
+    nestedCode === FILED_RETURNS_NO_RECORD_ERROR_CODE
   );
 }
 
