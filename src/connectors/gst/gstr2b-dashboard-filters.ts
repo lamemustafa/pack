@@ -6,7 +6,7 @@ import {
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
-import { acceptedFiledReturnsMonthTexts } from "./filed-returns-months";
+import { acceptedFiledReturnsMonthTexts, canonicalFiledReturnsMonth } from "./filed-returns-months";
 import { findReturnDashboardControl } from "./gstr2b-dashboard-view";
 import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import {
@@ -26,6 +26,13 @@ const DASHBOARD_SEARCH_SCOPE_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-scop
 const DASHBOARD_SEARCH_COUNT_ATTRIBUTE = "data-pack-dashboard-search-count";
 const DASHBOARD_REOPENED_SCOPE_ATTRIBUTE = "data-pack-dashboard-reopened-scope";
 const DASHBOARD_SEARCHES_BEFORE_REOPEN = 2;
+const DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE = "data-pack-dashboard-period-not-offered";
+const QUARTER_MONTHS: readonly (readonly string[])[] = [
+  ["April", "May", "June"],
+  ["July", "August", "September"],
+  ["October", "November", "December"],
+  ["January", "February", "March"],
+];
 interface DashboardSearchAttempt {
   candidateView: HTMLElement | null;
   candidateMutationVersion: number | null;
@@ -111,6 +118,15 @@ export async function selectReturnDashboardFiltersAndSearch(
       ]);
     }
   }
+
+  const notOffered = dashboardPeriodNotOffered(
+    documentRef,
+    scope,
+    scopeId,
+    controls,
+    uniqueSignals(safeSignals, diagnosticSignals),
+  );
+  if (notOffered) return notOffered;
 
   if (controls.quarter && !selectMatches(controls.quarter, acceptedQuarterOptions(scope.period))) {
     const quarterSelected = selectOption(controls.quarter, acceptedQuarterOptions(scope.period));
@@ -261,6 +277,96 @@ export function clearGstr2bDashboardSearchPending(documentRef: Document): void {
 export function isReturnDashboardRoute(documentRef: Document): boolean {
   const pathname = documentRef.defaultView?.location.pathname ?? "";
   return /\/returns\/auth\/dashboard\/?$/i.test(pathname);
+}
+
+/**
+ * The Returns Dashboard lists only the periods a taxpayer can file for. Live on 2026-09-21, a
+ * taxpayer whose returns start in July 2025 was offered Quarters 2-4 for 2025-26 and no Quarter 1,
+ * so April had no option to select and the run waited out its step limit. A period missing from a
+ * loaded list is the portal's own answer that nothing exists for it. The list must be loaded and
+ * current: the year already selected, the quarter list recognisable, the month list belonging to
+ * the selected quarter -- and the absence seen on two consecutive steps, so a list still being
+ * rebuilt is never read as an answer.
+ */
+function dashboardPeriodNotOffered(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  scopeId: string,
+  controls: ReturnDashboardControls,
+  safeSignals: readonly string[],
+): PortalFlowStepResult | null {
+  const root = documentRef.documentElement;
+  const scopeKey = dashboardSearchScope(scope);
+  if (
+    !selectMatches(controls.year, [scope.financialYear]) ||
+    !periodMissingFromLoadedLists(scope, controls)
+  ) {
+    if (root.getAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE) === scopeKey) {
+      root.removeAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE);
+    }
+    return null;
+  }
+
+  const signalPrefix = dashboardSignalPrefix(scope);
+  if (root.getAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE) !== scopeKey) {
+    root.setAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE, scopeKey);
+    return dashboardSelectionInProgress(
+      scope,
+      scopeId,
+      safeSignals,
+      [],
+      [`${signalPrefix}-return-dashboard-period-not-offered-pending`],
+    );
+  }
+
+  root.removeAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE);
+  clearGstr2bDashboardSearchPending(documentRef);
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "candidate-not-found",
+    safeSignals: uniqueSignals(safeSignals, [
+      "filed-return-positively-not-filed",
+      `${signalPrefix}-return-dashboard-period-not-offered`,
+    ]),
+    safeMessage: `The GST Portal's Returns Dashboard does not offer ${scope.period} ${scope.financialYear} for this taxpayer, so there is no ${scope.returnType} for that period.`,
+  };
+}
+
+function periodMissingFromLoadedLists(
+  scope: FiledReturnsDownloadScope,
+  controls: ReturnDashboardControls,
+): boolean {
+  if (controls.quarter && !selectMatches(controls.quarter, acceptedQuarterOptions(scope.period))) {
+    const quarterList = Array.from(controls.quarter.options);
+    const listIsLoaded = QUARTER_MONTHS.some((months) =>
+      quarterList.some((option) =>
+        matchesAcceptedText(
+          option.textContent || option.value,
+          acceptedQuarterOptions(months[0] ?? ""),
+        ),
+      ),
+    );
+    return (
+      listIsLoaded &&
+      !selectHasAcceptedOption(controls.quarter, acceptedQuarterOptions(scope.period))
+    );
+  }
+
+  if (selectHasAcceptedOption(controls.period, acceptedFiledReturnsMonthTexts(scope.period))) {
+    return false;
+  }
+  const quarterMonths = QUARTER_MONTHS.find((months) =>
+    months.includes(canonicalFiledReturnsMonth(scope.period) ?? ""),
+  );
+  const listedMonths = Array.from(controls.period.options)
+    .map((option) => canonicalFiledReturnsMonth(option.textContent || option.value))
+    .filter((month): month is string => month !== null);
+  return (
+    quarterMonths !== undefined &&
+    listedMonths.length > 0 &&
+    listedMonths.every((month) => quarterMonths.includes(month))
+  );
 }
 
 function dashboardSelectionInProgress(
