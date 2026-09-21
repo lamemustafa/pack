@@ -27,6 +27,10 @@ const DASHBOARD_SEARCH_COUNT_ATTRIBUTE = "data-pack-dashboard-search-count";
 const DASHBOARD_REOPENED_SCOPE_ATTRIBUTE = "data-pack-dashboard-reopened-scope";
 const DASHBOARD_SEARCHES_BEFORE_REOPEN = 2;
 const DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE = "data-pack-dashboard-period-not-offered";
+// The second look must come late enough that one list rebuild cannot span both, and soon enough
+// that it cannot join a first look from an earlier, unrelated attempt on the same tab.
+const DASHBOARD_NOT_OFFERED_MIN_GAP_MS = 2_000;
+const DASHBOARD_NOT_OFFERED_MAX_GAP_MS = DASHBOARD_SEARCH_PENDING_MS;
 const QUARTER_MONTHS: readonly (readonly string[])[] = [
   ["April", "May", "June"],
   ["July", "August", "September"],
@@ -297,19 +301,23 @@ function dashboardPeriodNotOffered(
 ): PortalFlowStepResult | null {
   const root = documentRef.documentElement;
   const scopeKey = dashboardSearchScope(scope);
+  const firstLookAt = notOfferedFirstLookAt(root, scopeKey);
   if (
     !selectMatches(controls.year, [scope.financialYear]) ||
     !periodMissingFromLoadedLists(scope, controls)
   ) {
-    if (root.getAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE) === scopeKey) {
-      root.removeAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE);
-    }
+    if (firstLookAt !== null) root.removeAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE);
     return null;
   }
 
   const signalPrefix = dashboardSignalPrefix(scope);
-  if (root.getAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE) !== scopeKey) {
-    root.setAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE, scopeKey);
+  const sinceFirstLook = firstLookAt === null ? null : Date.now() - firstLookAt;
+  const firstLookExpired =
+    sinceFirstLook === null || sinceFirstLook > DASHBOARD_NOT_OFFERED_MAX_GAP_MS;
+  if (firstLookExpired) {
+    root.setAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE, `${scopeKey}|${Date.now()}`);
+  }
+  if (firstLookExpired || sinceFirstLook < DASHBOARD_NOT_OFFERED_MIN_GAP_MS) {
     return dashboardSelectionInProgress(
       scope,
       scopeId,
@@ -331,6 +339,15 @@ function dashboardPeriodNotOffered(
     ]),
     safeMessage: `The GST Portal's Returns Dashboard does not offer ${scope.period} ${scope.financialYear} for this taxpayer, so there is no ${scope.returnType} for that period.`,
   };
+}
+
+function notOfferedFirstLookAt(root: Element, scopeKey: string): number | null {
+  const value = root.getAttribute(DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE);
+  if (!value) return null;
+  const separator = value.lastIndexOf("|");
+  if (separator < 0 || value.slice(0, separator) !== scopeKey) return null;
+  const at = Number(value.slice(separator + 1));
+  return Number.isFinite(at) ? at : null;
 }
 
 function periodMissingFromLoadedLists(
