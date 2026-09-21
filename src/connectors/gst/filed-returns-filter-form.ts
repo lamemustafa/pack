@@ -6,7 +6,10 @@ import {
   remainingFiledReturnsAcquisitionTime,
 } from "./filed-returns-acquisition-deadline";
 import { findFiledReturnsFilterRoot } from "./filed-returns-custom-dropdown";
-import { filedReturnsFilterFieldMatches } from "./filed-returns-filter-fields";
+import {
+  filedReturnsFilterFieldMatches,
+  qualificationDiagnoseFilterField,
+} from "./filed-returns-filter-fields";
 import {
   acceptedFilingPeriodOptions,
   acceptedMonthOptions,
@@ -163,11 +166,24 @@ export async function selectFiledReturnsFiltersAndSearch(
         },
         Boolean(search),
       );
+      const qualificationSignals = [
+        `qual-fy-${qualificationDiagnoseFilterField(documentRef, FINANCIAL_YEAR_LABEL, [scope.financialYear])}`,
+        `qual-period-${qualificationDiagnoseFilterField(documentRef, FILING_PERIOD_LABEL, acceptedFilingPeriodOptions(scope))}`,
+        `qual-month-${qualificationDiagnoseFilterField(documentRef, MONTH_LABEL, acceptedMonthOptions(scope))}`,
+        `qual-rettype-${qualificationDiagnoseFilterField(documentRef, RETURN_TYPE_LABEL, acceptedReturnTypeOptions(scope), qualificationExactReturnType)}`,
+        `qual-search-${search ? "found" : "missing"}`,
+        `qual-root-${formRoot ? "form" : "none"}`,
+        `qual-expired-${selectionExpired ? "yes" : "no"}`,
+      ];
       return {
         connectorId: "gst",
         scopeId,
         state: selectionExpired ? "user-action-required" : "clicked",
-        safeSignals: ["filed-return-filter-selection-in-progress", ...selectSignals],
+        safeSignals: [
+          "filed-return-filter-selection-in-progress",
+          ...selectSignals,
+          ...qualificationSignals,
+        ],
         safeMessage: selectionExpired
           ? filedReturnsFilterActionRequiredMessage(selectSignals)
           : `Pack selected part of the filed-return filter form and is waiting for the GST portal to finish updating it.${missingContext}`,
@@ -372,4 +388,14 @@ function describeMissingFilterContext(
   }
 
   return missing.length > 0 ? ` Missing: ${missing.join(", ")}.` : "";
+}
+
+// QUALIFICATION PROBE -- the same exact comparison the return-type reader uses.
+function qualificationExactReturnType(text: string, acceptedTexts: readonly string[]): boolean {
+  const comparable = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return acceptedTexts.some(
+    (accepted) =>
+      comparable(text) === comparable(accepted) ||
+      comparable(text) === `returntype${comparable(accepted)}`,
+  );
 }

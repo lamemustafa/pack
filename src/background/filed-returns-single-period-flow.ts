@@ -3,6 +3,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { delay } from "../core/time";
+import { recordQualificationStepSignals } from "./portal-generation-timing-probe";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { filedReturnScopeId } from "../connectors/gst/filed-returns-return-descriptors";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
@@ -395,6 +396,13 @@ async function runSinglePeriodSteps(
       return response;
     }
 
+    // QUALIFICATION PROBE: record, then strip before anything persists -- an unregistered token
+    // would make durable persistence reject the target.
+    await recordQualificationStepSignals(response.flowStep);
+    response.flowStep = {
+      ...response.flowStep,
+      safeSignals: response.flowStep.safeSignals.filter((signal) => !signal.startsWith("qual-")),
+    };
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;
@@ -617,6 +625,13 @@ async function waitForDetailReadyThenTrigger({
       return response;
     }
 
+    // QUALIFICATION PROBE: record, then strip before anything persists -- an unregistered token
+    // would make durable persistence reject the target.
+    await recordQualificationStepSignals(response.flowStep);
+    response.flowStep = {
+      ...response.flowStep,
+      safeSignals: response.flowStep.safeSignals.filter((signal) => !signal.startsWith("qual-")),
+    };
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     activePeriod = extractActivePeriod(lastStep) ?? activePeriod;

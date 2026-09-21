@@ -25,3 +25,22 @@ export async function recordPortalGenerationTiming(entry: {
     // A probe must never change the flow it measures.
   }
 }
+
+const FILTER_KEY = "pack:qualification-filter-diagnostics";
+
+/** QUALIFICATION PROBE -- keeps the probe's own `qual-` signals from each flow step. */
+export async function recordQualificationStepSignals(step: {
+  state: string;
+  safeSignals: readonly string[];
+}): Promise<void> {
+  const qual = step.safeSignals.filter((signal) => signal.startsWith("qual-"));
+  if (qual.length === 0) return;
+  try {
+    const stored = (await browser.storage.session.get(FILTER_KEY))[FILTER_KEY];
+    const entries = Array.isArray(stored) ? stored : [];
+    entries.push({ at: new Date().toISOString(), state: step.state, signals: step.safeSignals });
+    await browser.storage.session.set({ [FILTER_KEY]: entries.slice(-40) });
+  } catch {
+    // A probe must never change the flow it measures.
+  }
+}

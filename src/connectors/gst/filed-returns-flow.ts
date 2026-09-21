@@ -237,6 +237,16 @@ export async function runFiledReturnsDownloadStep(
       return apiSearchResult;
     }
 
+    const qualificationApiSignals = (label: string, result: PortalFlowStepResult | null) =>
+      result
+        ? [
+            `qual-${label}-${result.state}`,
+            ...result.safeSignals
+              .slice(0, 6)
+              .map((signal) => `qual-${label}-${signal}`.slice(0, 118)),
+          ]
+        : [`qual-${label}-null`];
+    const firstApiSignals = qualificationApiSignals("api1", apiSearchResult);
     const selectionResult = await selectFiledReturnsFiltersAndSearch(
       documentRef,
       scope,
@@ -253,6 +263,14 @@ export async function runFiledReturnsDownloadStep(
       if (apiSearchResult && !shouldFallBackToPortalFilterSelection(apiSearchResult)) {
         return apiSearchResult;
       }
+      return {
+        ...selectionResult,
+        safeSignals: [
+          ...selectionResult.safeSignals,
+          ...firstApiSignals,
+          ...qualificationApiSignals("api2", apiSearchResult),
+        ].slice(0, 32),
+      };
     }
     return selectionResult;
   }

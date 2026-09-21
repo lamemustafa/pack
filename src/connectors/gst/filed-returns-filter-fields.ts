@@ -51,6 +51,28 @@ export function filedReturnsFilterFieldMatches(
   return matchesText(selectedText, acceptedTexts);
 }
 
+/** QUALIFICATION PROBE (#393 investigation) -- not for merge. Field state only, no page text. */
+export function qualificationDiagnoseFilterField(
+  documentRef: Document,
+  labelPattern: RegExp,
+  acceptedTexts: readonly string[],
+  matchesText: AcceptedTextMatcher = matchesAcceptedText,
+): string {
+  const evaluation = evaluateFiledReturnsFilterField(
+    documentRef,
+    labelPattern,
+    acceptedTexts,
+    matchesText,
+  );
+  const fallback = findFallbackSelects(documentRef, labelPattern).length;
+  const selected =
+    (evaluation.state.selectedText ?? "none")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 24) || "empty";
+  return `${evaluation.status}.fb${fallback}.${selected}`;
+}
+
 export function hasFiledReturnsFilterFieldControl(
   documentRef: Document,
   labelPattern: RegExp,

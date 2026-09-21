@@ -3,6 +3,7 @@ import type {
   FiledReturnsTargetReview,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { recordQualificationStepSignals } from "./portal-generation-timing-probe";
 import { delay } from "../core/time";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { SinglePeriodCleanupCheckpointError } from "../connectors/gst/single-period-cleanup-checkpoint";
@@ -1005,6 +1006,12 @@ async function waitForGstr1ExcelDetailReady({
       return { ok: false, response };
     }
 
+    // QUALIFICATION PROBE: record, then strip before anything persists.
+    await recordQualificationStepSignals(response.flowStep);
+    response.flowStep = {
+      ...response.flowStep,
+      safeSignals: response.flowStep.safeSignals.filter((signal) => !signal.startsWith("qual-")),
+    };
     await persistFlowResponse(response, deps);
     lastStep = response.flowStep;
     nextActivePeriod = extractActivePeriod(lastStep) ?? nextActivePeriod;
