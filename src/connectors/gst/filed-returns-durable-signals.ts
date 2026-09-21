@@ -411,6 +411,8 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "gstr1-return-dashboard-filters-selected",
   "gstr1-return-dashboard-route",
   "gstr1-return-dashboard-search-results-pending",
+  "gstr1-return-dashboard-reopened-after-unsettled-search",
+  "gstr1-return-dashboard-search-unsettled-after-reopen",
   "gstr1-detail-heading",
   "gstr1-detail-route",
   "gstr1-dashboard-view-clicked",
@@ -457,6 +459,14 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "gstr2b-return-dashboard-loading",
   "gstr2b-return-dashboard-route",
   "gstr2b-return-dashboard-search-results-pending",
+  "gstr2b-return-dashboard-reopened-after-unsettled-search",
+  "gstr2b-return-dashboard-search-unsettled-after-reopen",
+  // Registered with the flows that emit them (#391, #392). One unregistered token rejects a target's
+  // whole signal array and records the non-resumable durable-status rejection, so a successful
+  // re-click or a named dashboard stop would otherwise have left discarding the plan as the only exit.
+  "filed-gstr3b-capture-reclicked",
+  "gstr3b-return-dashboard-reopened-after-unsettled-search",
+  "gstr3b-return-dashboard-search-unsettled-after-reopen",
   "gstr3b-detail-heading",
   "gstr3b-detail-route",
   "hidden-filed-returns-candidate-clicked",
