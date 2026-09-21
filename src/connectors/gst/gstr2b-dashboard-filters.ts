@@ -8,6 +8,7 @@ import {
 } from "./filed-returns-dom";
 import { acceptedFiledReturnsMonthTexts } from "./filed-returns-months";
 import { findReturnDashboardControl } from "./gstr2b-dashboard-view";
+import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import {
   diagnoseReturnDashboardControls,
   findReturnDashboardControls,
@@ -22,6 +23,9 @@ const DASHBOARD_DEPENDENT_FIELD_ATTEMPTS = 12;
 const DASHBOARD_SEARCH_PENDING_MS = 12_000;
 const DASHBOARD_SEARCH_PENDING_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-pending-at";
 const DASHBOARD_SEARCH_SCOPE_ATTRIBUTE = "data-pack-gstr2b-dashboard-search-scope";
+const DASHBOARD_SEARCH_COUNT_ATTRIBUTE = "data-pack-dashboard-search-count";
+const DASHBOARD_REOPENED_SCOPE_ATTRIBUTE = "data-pack-dashboard-reopened-scope";
+const DASHBOARD_SEARCHES_BEFORE_REOPEN = 2;
 interface DashboardSearchAttempt {
   candidateView: HTMLElement | null;
   candidateMutationVersion: number | null;
@@ -162,7 +166,51 @@ export async function selectReturnDashboardFiltersAndSearch(
     };
   }
 
+  // A search that expires without a usable View is searched once more on the same page. Live, a
+  // page the previous period had used then kept failing for the new one -- GSTR-2B June looped
+  // for 11 attempts -- while a freshly opened dashboard found June's View at once. So the next
+  // unsettled search reopens the dashboard through the portal's own menu, and one that still does
+  // not settle after that stops with a named reason instead of looping.
+  const searchesOnThisPage = dashboardSearchCount(documentRef, scope);
+  const reopened = dashboardReopenedForScope(documentRef, scope);
+  if (searchesOnThisPage >= (reopened ? 1 : DASHBOARD_SEARCHES_BEFORE_REOPEN)) {
+    if (reopened) {
+      return {
+        connectorId: "gst",
+        scopeId,
+        state: "user-action-required",
+        safeSignals: uniqueSignals(safeSignals, diagnosticSignals, [
+          `${signalPrefix}-return-dashboard-search-unsettled-after-reopen`,
+        ]),
+        safeMessage: `The GST Portal did not show a usable ${scope.returnType} result for ${scope.period} even after Pack reopened the Returns Dashboard.`,
+        userAction: {
+          type: "NAVIGATE_TO_SUPPORTED_PAGE",
+          message: `Open the Returns Dashboard, search ${scope.financialYear} ${scope.period} yourself, then retry.`,
+          canResume: true,
+        },
+      };
+    }
+    clearGstr2bDashboardSearchPending(documentRef);
+    documentRef.documentElement.setAttribute(
+      DASHBOARD_REOPENED_SCOPE_ATTRIBUTE,
+      dashboardSearchScope(scope),
+    );
+    const navigation = await navigateToReturnDashboardPage(documentRef, scopeId);
+    return {
+      ...navigation,
+      scopeId,
+      safeSignals: uniqueSignals(safeSignals, diagnosticSignals, navigation.safeSignals, [
+        `${signalPrefix}-return-dashboard-reopened-after-unsettled-search`,
+      ]),
+      safeMessage: `The ${scope.returnType} dashboard search for ${scope.period} did not settle, so Pack reopened the Returns Dashboard to search it fresh.`,
+    };
+  }
+
   markDashboardSearchPending(documentRef, scope, viewControl);
+  documentRef.documentElement.setAttribute(
+    DASHBOARD_SEARCH_COUNT_ATTRIBUTE,
+    `${dashboardSearchScope(scope)}|${searchesOnThisPage + 1}`,
+  );
   activateElement(controls.search);
   return {
     connectorId: "gst",
@@ -205,6 +253,7 @@ function unchangedDashboardViewRecovery(
 export function clearGstr2bDashboardSearchPending(documentRef: Document): void {
   documentRef.documentElement.removeAttribute(DASHBOARD_SEARCH_PENDING_ATTRIBUTE);
   documentRef.documentElement.removeAttribute(DASHBOARD_SEARCH_SCOPE_ATTRIBUTE);
+  documentRef.documentElement.removeAttribute(DASHBOARD_SEARCH_COUNT_ATTRIBUTE);
   dashboardSearchAttempts.get(documentRef)?.observer?.disconnect();
   dashboardSearchAttempts.delete(documentRef);
 }
@@ -360,6 +409,24 @@ function findDashboardResultRoot(viewControl: HTMLElement): HTMLElement {
     if (/gstr-?2b/.test(normaliseText(current.textContent ?? ""))) return current;
   }
   return viewControl.parentElement ?? viewControl;
+}
+
+/** Searches clicked for this scope on the current page; a different scope starts again at 0. */
+function dashboardSearchCount(documentRef: Document, scope: FiledReturnsDownloadScope): number {
+  const [countedScope, count] = (
+    documentRef.documentElement.getAttribute(DASHBOARD_SEARCH_COUNT_ATTRIBUTE) ?? ""
+  ).split("|");
+  return countedScope === dashboardSearchScope(scope) ? Number(count) || 0 : 0;
+}
+
+function dashboardReopenedForScope(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+): boolean {
+  return (
+    documentRef.documentElement.getAttribute(DASHBOARD_REOPENED_SCOPE_ATTRIBUTE) ===
+    dashboardSearchScope(scope)
+  );
 }
 
 function dashboardSearchScope(scope: FiledReturnsDownloadScope): string {
