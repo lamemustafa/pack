@@ -194,10 +194,10 @@ describe("GSTR-3B page-generated acquisition", () => {
         { result: { ok: false, reason: "generation-timeout", safeSignals: [] } },
       ]);
 
-      await expect(acquireGstr3bPdfAfterPreflight(input)).resolves.toMatchObject({
-        ok: false,
-        reason: "generation-timeout",
-      });
+      const result = await acquireGstr3bPdfAfterPreflight(input);
+      expect(result).toMatchObject({ ok: false, reason: "generation-timeout" });
+      // Two clicks reached the portal; a review of the failed target must be able to see that.
+      expect(result.safeSignals).toContain("filed-gstr3b-capture-reclicked");
       expect(mocks.executeScript).toHaveBeenCalledTimes(2);
     });
 
