@@ -290,8 +290,9 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
 37. **View Filed Returns answers "nothing filed" in its search response, not in the page.** Captured
     live on 2026-09-21 on a taxpayer whose GSTR-3B starts in July 2025 (April–June confirmed unfiled
     by hand). The page's own request `{fy: "2025-26", rfp: "Monthly", qtr: null, mth: "May",
-rtntp: "GSTR3B"}` to `/returns/auth/api/efiledReturns` answered `{errorCode: "RET13510",
-message: "No Record found for the provided Inputs"}`. With that message already on screen, a
+rtntp: "GSTR3B"}` to `/returns/auth/api/efiledReturns` answered HTTP 200 with
+    `{status, error: {errorCode: "RET13510", message: "No Record found for the provided Inputs"}}`:
+    the code is nested under `error`, not top-level (confirmed by a second probe the same day). With that message already on screen, a
     second search (April, then May) produced **zero DOM mutations** in the filter form, so the page
     cannot prove a repeat "no record" is fresh; the search response, bound to the request, can. On
     View Filed Returns, GSTR-3B is offered only under the **Monthly** filing period (not Quarterly).
