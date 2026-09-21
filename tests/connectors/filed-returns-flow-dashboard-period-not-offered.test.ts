@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { targetStatusFromFlowStep } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import type { FiledReturnsDownloadScope } from "../../src/connectors/gst/filed-returns-contracts";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
@@ -50,7 +50,26 @@ function countSearches(documentRef: Document): () => number {
   return () => clicks;
 }
 
+// Two looks count only when the second comes 2-12 s after the first: sooner could both land inside
+// one list rebuild, later could join evidence from an earlier, unrelated attempt.
+let now = 1_000_000;
+function wait(ms: number) {
+  now += ms;
+}
+function step(documentRef: Document, target: FiledReturnsDownloadScope, afterMs = 2_500) {
+  wait(afterMs);
+  return runFiledReturnsDownloadStep(documentRef, target);
+}
+
 describe("filed returns flow — a period the Returns Dashboard does not offer", () => {
+  beforeEach(() => {
+    now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it.each(["GSTR-1", "GSTR-2B"] as const)(
     "records %s April as not filed when the loaded quarter list has no Quarter 1, after two looks",
     async (returnType) => {
@@ -62,8 +81,8 @@ describe("filed returns flow — a period the Returns Dashboard does not offer",
       const searches = countSearches(documentRef);
       const target = scope(returnType, "April");
 
-      const first = await runFiledReturnsDownloadStep(documentRef, target);
-      const second = await runFiledReturnsDownloadStep(documentRef, target);
+      const first = await step(documentRef, target);
+      const second = await step(documentRef, target);
 
       expect(first.state).toBe("clicked");
       expect(first.safeSignals).not.toContain("filed-return-positively-not-filed");
@@ -87,8 +106,8 @@ describe("filed returns flow — a period the Returns Dashboard does not offer",
     });
     const target = scope("GSTR-1", "July");
 
-    await runFiledReturnsDownloadStep(documentRef, target);
-    const second = await runFiledReturnsDownloadStep(documentRef, target);
+    await step(documentRef, target);
+    const second = await step(documentRef, target);
 
     expect(second.state).toBe("candidate-not-found");
     expect(second.safeSignals).toContain("filed-return-positively-not-filed");
@@ -103,8 +122,8 @@ describe("filed returns flow — a period the Returns Dashboard does not offer",
     const target = scope("GSTR-1", "April");
 
     const results = [];
-    for (let step = 0; step < 3; step += 1) {
-      results.push(await runFiledReturnsDownloadStep(documentRef, target));
+    for (let look = 0; look < 3; look += 1) {
+      results.push(await step(documentRef, target));
     }
 
     for (const result of results) {
@@ -117,11 +136,69 @@ describe("filed returns flow — a period the Returns Dashboard does not offer",
     const documentRef = dashboard({ year: "2025-26", quarters: ["Select"], months: ["Select"] });
     const target = scope("GSTR-1", "April");
 
-    await runFiledReturnsDownloadStep(documentRef, target);
-    const second = await runFiledReturnsDownloadStep(documentRef, target);
+    await step(documentRef, target);
+    const second = await step(documentRef, target);
 
     expect(second.state).not.toBe("candidate-not-found");
     expect(second.safeSignals).not.toContain("filed-return-positively-not-filed");
+  });
+
+  it("does not count a second look that comes too soon, then counts one inside the window", async () => {
+    const documentRef = dashboard({
+      year: "2025-26",
+      quarters: LIVE_QUARTERS,
+      months: LIVE_MONTHS,
+    });
+    const target = scope("GSTR-1", "April");
+
+    await step(documentRef, target);
+    const tooSoon = await step(documentRef, target, 500);
+    const inWindow = await step(documentRef, target, 2_000);
+
+    expect(tooSoon.state).not.toBe("candidate-not-found");
+    expect(tooSoon.safeSignals).toContain("gstr1-return-dashboard-period-not-offered-pending");
+    expect(inWindow.state).toBe("candidate-not-found");
+  });
+
+  it("never joins a first look from an earlier attempt to a much later one", async () => {
+    const documentRef = dashboard({
+      year: "2025-26",
+      quarters: LIVE_QUARTERS,
+      months: LIVE_MONTHS,
+    });
+    const target = scope("GSTR-1", "April");
+
+    await step(documentRef, target);
+    const hoursLater = await step(documentRef, target, 6 * 60 * 60 * 1_000);
+    const next = await step(documentRef, target);
+
+    expect(hoursLater.state).not.toBe("candidate-not-found");
+    expect(hoursLater.safeSignals).toContain("gstr1-return-dashboard-period-not-offered-pending");
+    expect(next.state).toBe("candidate-not-found");
+  });
+
+  it("does not read a quarter list rebuilt quickly after a year change as an answer", async () => {
+    const documentRef = dashboard({
+      year: "2026-27",
+      quarters: LIVE_QUARTERS,
+      months: LIVE_MONTHS,
+    });
+    const target = scope("GSTR-1", "April");
+
+    const yearStep = await step(documentRef, target);
+    const firstLook = await step(documentRef, target, 200);
+    const tooSoon = await step(documentRef, target, 300);
+    const quarter = documentRef.querySelector<HTMLSelectElement>("#quarter")!;
+    const option = documentRef.createElement("option");
+    option.textContent = "Quarter 1 (Apr - Jun)";
+    quarter.prepend(option);
+    const rebuilt = await step(documentRef, target, 500);
+
+    expect(yearStep.safeSignals).toContain("financial-year-selected");
+    for (const result of [firstLook, tooSoon, rebuilt]) {
+      expect(result.state).not.toBe("candidate-not-found");
+    }
+    expect(rebuilt.safeSignals).toContain("quarter-selected");
   });
 
   it("selects the year first and never concludes from the other year's quarter list", async () => {
@@ -132,7 +209,7 @@ describe("filed returns flow — a period the Returns Dashboard does not offer",
     });
     const target = scope("GSTR-1", "April");
 
-    const first = await runFiledReturnsDownloadStep(documentRef, target);
+    const first = await step(documentRef, target);
 
     expect(first.safeSignals).toContain("financial-year-selected");
     expect(first.safeSignals).not.toContain("filed-return-positively-not-filed");
@@ -146,12 +223,12 @@ describe("filed returns flow — a period the Returns Dashboard does not offer",
     });
     const target = scope("GSTR-1", "April");
 
-    const first = await runFiledReturnsDownloadStep(documentRef, target);
+    const first = await step(documentRef, target);
     const quarter = documentRef.querySelector<HTMLSelectElement>("#quarter")!;
     const option = documentRef.createElement("option");
     option.textContent = "Quarter 1 (Apr - Jun)";
     quarter.prepend(option);
-    const second = await runFiledReturnsDownloadStep(documentRef, target);
+    const second = await step(documentRef, target);
 
     expect(first.safeSignals).toContain("gstr1-return-dashboard-period-not-offered-pending");
     expect(second.state).not.toBe("candidate-not-found");
@@ -167,7 +244,7 @@ describe("filed returns flow — a period the Returns Dashboard does not offer",
     });
     const target = scope("GSTR-1", "July");
 
-    const first = await runFiledReturnsDownloadStep(documentRef, target);
+    const first = await step(documentRef, target);
 
     expect(first.safeSignals).toContain("quarter-selected");
     expect(first.safeSignals).not.toContain("gstr1-return-dashboard-period-not-offered-pending");
