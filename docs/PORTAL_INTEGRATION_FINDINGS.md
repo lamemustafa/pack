@@ -287,6 +287,17 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     capture waited out its full 20 s generation timeout on every such period (5 of 5), while the
     GSTR-1 PDF for the same periods took 40–160 ms.
 
+37. **View Filed Returns answers "nothing filed" in its search response, not in the page.** Captured
+    live on 2026-09-21 on a taxpayer whose GSTR-3B starts in July 2025 (April–June confirmed unfiled
+    by hand). The page's own request `{fy: "2025-26", rfp: "Monthly", qtr: null, mth: "May",
+rtntp: "GSTR3B"}` to `/returns/auth/api/efiledReturns` answered `{errorCode: "RET13510",
+message: "No Record found for the provided Inputs"}`. With that message already on screen, a
+    second search (April, then May) produced **zero DOM mutations** in the filter form, so the page
+    cannot prove a repeat "no record" is fresh; the search response, bound to the request, can. On
+    View Filed Returns, GSTR-3B is offered only under the **Monthly** filing period (not Quarterly).
+    Separately, the page reads a selected `<option>` through `innerText` **and** `textContent`
+    identically, so any reader joining both doubles the text (`"GSTR3B GSTR3B"`).
+
 ## The GSTR-2B summary page does carry a Returns Dashboard link, collapsed
 
 Captured 2026-08-24 from a signed-in `GST Portal` page, by
