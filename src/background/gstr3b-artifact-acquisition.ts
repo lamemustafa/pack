@@ -79,7 +79,9 @@ export async function acquireGstr3bPdfAfterPreflight(input: {
     } catch {
       return { ok: false, reason: "main-world-execution-failed", safeSignals: [] };
     }
-    if (captured?.ok && reclicked) {
+    // Recorded on success and failure alike: two clicks reached the portal either way, and a review
+    // of a failed target must be able to see that.
+    if (captured && reclicked) {
       captured = {
         ...captured,
         safeSignals: [...captured.safeSignals, "filed-gstr3b-capture-reclicked"],
