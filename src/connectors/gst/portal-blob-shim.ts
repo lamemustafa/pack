@@ -5,6 +5,14 @@ export type PortalBlobShimInput = {
   expectedPeriodTexts?: readonly string[];
   expectedTarget?: { financialYear: string; period: string; returnType: string };
   maxPortalBlobBytes?: number;
+  /**
+   * An open portal dialog that answers the click instead of a file (#386): when an element matching
+   * `selector` is visible and its text matches every case-insensitive regex source in
+   * `textPatterns`, and no such dialog was showing before the click, the capture stops waiting with
+   * `generation-timeout`, exactly as the timer would have, only sooner. What the dialog means is
+   * still decided by the bound post-click inspection.
+   */
+  stopWhenDialogShows?: { selector: string; textPatterns: readonly string[] };
   timeoutMs?: number;
 };
 export const MAX_PORTAL_BLOB_BYTES = 25 * 1024 * 1024;
@@ -266,6 +274,27 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       () => finish({ ok: false, reason: "generation-timeout", safeSignals: [] }),
       input.timeoutMs ?? 20_000,
     );
+    const stopDialog = input.stopWhenDialogShows;
+    const stopPatterns = (stopDialog?.textPatterns ?? []).map((source) => new RegExp(source, "i"));
+    const pageShowsStop = () => {
+      if (!stopDialog || stopPatterns.length === 0) return false;
+      return Array.from(document.querySelectorAll<HTMLElement>(stopDialog.selector)).some(
+        (dialog) => {
+          const style = dialog.ownerDocument.defaultView?.getComputedStyle(dialog);
+          if (!style || style.display === "none" || style.visibility === "hidden") return false;
+          const text = (dialog.innerText || dialog.textContent || "").replace(/\s+/g, " ").trim();
+          return stopPatterns.every((pattern) => pattern.test(text));
+        },
+      );
+    };
+    if (stopPatterns.length > 0 && !pageShowsStop()) {
+      const poll = globalThis.setInterval(() => {
+        if (settled) return globalThis.clearInterval(poll);
+        if (!pageShowsStop()) return;
+        globalThis.clearInterval(poll);
+        finish({ ok: false, reason: "generation-timeout", safeSignals: [] });
+      }, 250);
+    }
     try {
       control.click();
     } catch {
