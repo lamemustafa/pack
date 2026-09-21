@@ -696,6 +696,70 @@ describe("filed returns flow — search and no-record observation", () => {
     expect(hasPendingFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
   });
 
+  // Live, 2026-09-21: a retry started on a page still carrying the previous attempt's search marker
+  // over an unchanged "No Record found", so this branch answered "stale" before the filed-return
+  // search -- whose RET13510 answer is bound to the request (#396) -- ever ran. The page cannot tell
+  // a fresh repeat "no record" from a stale one; the search answer can, so it is asked first.
+  describe("an unchanged result surface asks the filed-return search before calling it stale", () => {
+    function unchangedGstPage() {
+      const documentRef = createGstDocument(`
+        <main>
+          <h1>View Filed Returns</h1>
+          <form name="efiledReturns">
+            <select id="finYr"><option selected>2025-26</option></select>
+            <select id="optValue"><option selected>Monthly</option></select>
+            <select id="month"><option selected>March</option></select>
+            <select id="retTyp"><option selected>GSTR3B</option></select>
+            <button id="lotsearch" type="button">Search</button>
+          </form>
+          <section aria-label="Search results">
+            <p>No records found</p>
+          </section>
+        </main>
+      `);
+      markFiledReturnsSearchPending(documentRef, DEFAULT_SCOPE);
+      for (let read = 0; read < 3; read += 1)
+        hasSettledFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE);
+      expect(hasUnchangedFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(true);
+      return documentRef;
+    }
+    function answerSearch(documentRef: Document, body: unknown) {
+      Object.defineProperty(documentRef.defaultView, "fetch", {
+        configurable: true,
+        value: vi.fn(async (input: RequestInfo | URL) =>
+          String(input).includes("/returns/auth/api/rolestatus")
+            ? { ok: true, json: async () => ({ userPref: "M" }) }
+            : { ok: true, json: async () => body },
+        ),
+      });
+    }
+
+    it("records the search's RET13510 answer as not filed", async () => {
+      const documentRef = unchangedGstPage();
+      answerSearch(documentRef, {
+        errorCode: "RET13510",
+        message: "No Record found for the provided Inputs",
+      });
+
+      const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+      expect(result.state).toBe("candidate-not-found");
+      expect(result.safeSignals).toContain("filed-return-positively-not-filed");
+      expect(result.safeSignals).not.toContain("filed-return-search-results-unchanged");
+      expect(hasPendingFiledReturnsSearchForScope(documentRef, DEFAULT_SCOPE)).toBe(false);
+    });
+
+    it("still calls the page stale when the search has no answer either", async () => {
+      const documentRef = unchangedGstPage();
+      answerSearch(documentRef, []);
+
+      const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+      expect(result.safeSignals).toContain("filed-return-search-results-unchanged");
+      expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+    });
+  });
+
   it("makes unchanged GSTR-2B search results explicitly retryable", async () => {
     const scope: FiledReturnsDownloadScope = {
       artifactType: "PDF",
