@@ -407,8 +407,10 @@ describe("filed returns flow — filter selection and API search", () => {
     it.each([
       [false, { errorCode: "RET99999", message: "Something else" }],
       [true, { status: 0, error: { errorCode: "RET99999", message: "Something else" } }],
+      // A no-record code beside a data array is ambiguous; it must never become "not filed".
+      [true, { status: 1, data: [], error: { errorCode: "RET13510", message: "No Record" } }],
     ] as const)(
-      "keeps any other portal error on the visible-filter path (HTTP ok: %s)",
+      "keeps any other or ambiguous portal answer on the visible-filter path (HTTP ok: %s)",
       async (ok, body) => {
         const documentRef = page();
         stubSearchAnswer(documentRef, { ok, body });
