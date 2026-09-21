@@ -184,6 +184,11 @@ export async function runFiledReturnsDownloadStep(
 
   if (hasUnchangedFiledReturnsSearchForScope(documentRef, scope)) {
     clearFiledReturnsSearchAttemptForScope(documentRef, scope);
+    // The page cannot tell a fresh repeat "no record" from a stale one -- the portal re-renders
+    // nothing (2026-09-21) -- but the filed-return search's own answer is bound to the request.
+    // Ask it before calling the page stale; only when it has no answer is the retry the right one.
+    const searchAnswer = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
+    if (searchAnswer && !shouldFallBackToPortalFilterSelection(searchAnswer)) return searchAnswer;
     return {
       connectorId: "gst",
       scopeId,
