@@ -16,6 +16,7 @@ import {
 const EFILED_RETURNS_API_PATH = "/returns/auth/api/efiledReturns";
 const ROLE_STATUS_API_PATH = "/returns/auth/api/rolestatus";
 const GSTR3B_QUARTERLY_ENABLE_PERIOD = "012021";
+const FILED_RETURNS_NO_RECORD_ERROR_CODE = "RET13510";
 
 type OpenResultResponse =
   | { ok: true }
@@ -41,6 +42,18 @@ export async function openFiledReturnFromApiSearch(
   if (!rows) return null;
 
   const descriptor = filedReturnDescriptor(scope.returnType);
+  // The portal's own answer to the exact year, month and return type Pack just asked about. The page
+  // shows the same message without any DOM change when searched again, so page-based evidence cannot
+  // prove a repeat "no record" is fresh; this answer is bound to the request itself (2026-09-21).
+  if (rows === "no-record") {
+    return {
+      connectorId: "gst",
+      scopeId,
+      state: "candidate-not-found",
+      safeSignals: ["filed-return-api-searched", "filed-return-positively-not-filed"],
+      safeMessage: `The GST Portal reported no filed ${descriptor.label} for ${scope.period} ${scope.financialYear}.`,
+    };
+  }
   const matchingRows = rows.filter((row) => rowMatchesScope(row, scope));
   if (matchingRows.length === 0) {
     return null;
@@ -112,7 +125,7 @@ async function queryFiledReturnsApi(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   deadline: number,
-): Promise<FiledReturnsApiRow[] | null> {
+): Promise<FiledReturnsApiRow[] | "no-record" | null> {
   try {
     const response = await fetchBeforeDeadline(
       documentRef,
@@ -134,10 +147,12 @@ async function queryFiledReturnsApi(
       },
       deadline,
     );
-    if (!response.ok) return null;
-
-    const payload: unknown = await response.json();
+    // Read the body before the status: the portal's explicit "no record" answer may arrive with
+    // either, and it is the one error that is itself an answer rather than a failure.
+    const payload: unknown = await response.json().catch(() => null);
     if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) return null;
+    if (isNoRecordAnswer(payload)) return "no-record";
+    if (!response.ok) return null;
     return extractFiledReturnsApiRows(payload);
   } catch {
     return null;
@@ -320,6 +335,15 @@ function readUserPreference(payload: unknown): string | null {
 
 function isAcceptedUserPreference(value: unknown): value is string {
   return value === "M" || value === "Q";
+}
+
+/** RET13510, "No Record found for the provided Inputs": the portal's answer that nothing is filed. */
+function isNoRecordAnswer(payload: unknown): boolean {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    (payload as { errorCode?: unknown }).errorCode === FILED_RETURNS_NO_RECORD_ERROR_CODE
+  );
 }
 
 function normaliseReturnTypeForApi(returnType: FiledReturnsDownloadScope["returnType"]): string {
