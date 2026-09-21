@@ -277,6 +277,16 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     Method note: imports carry IGST only, so the absent CGST head must be read as zero. Treating
     absent as "no match" made the one heading that is structurally IGST-only look unmapped.
 
+36. **The GSTR-1 "no e-invoice details" answer is a Bootstrap modal, not page text.** Captured
+    live on 2026-09-21 (structure only; no page text, identifiers or HTML retained): after the
+    e-invoice details Excel control is clicked for a period without e-invoices, the message is a
+    `p` in `.modal-body > .modal-content > .modal-dialog.sweet`, inside
+    `div.modal.fade.fade-scale.in[role="dialog"]` (fixed, z-index 1050), wrapped in a
+    `conf-dialogue` element. It was the only visible element containing both "no details available
+    for download" and "e-invoice". Timing, measured the same week: without recognising it, the
+    capture waited out its full 20 s generation timeout on every such period (5 of 5), while the
+    GSTR-1 PDF for the same periods took 40–160 ms.
+
 ## The GSTR-2B summary page does carry a Returns Dashboard link, collapsed
 
 Captured 2026-08-24 from a signed-in `GST Portal` page, by
