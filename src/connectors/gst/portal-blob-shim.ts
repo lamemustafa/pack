@@ -6,12 +6,13 @@ export type PortalBlobShimInput = {
   expectedTarget?: { financialYear: string; period: string; returnType: string };
   maxPortalBlobBytes?: number;
   /**
-   * Regex sources (case-insensitive) that, when all match page text which did **not** match them
-   * before the click, mean the portal answered with a dialog instead of a file (#386). The capture
-   * then stops waiting with `generation-timeout`, exactly as the timer would have, only sooner:
-   * what the dialog means is still decided by the bound post-click inspection.
+   * An open portal dialog that answers the click instead of a file (#386): when an element matching
+   * `selector` is visible and its text matches every case-insensitive regex source in
+   * `textPatterns`, and no such dialog was showing before the click, the capture stops waiting with
+   * `generation-timeout`, exactly as the timer would have, only sooner. What the dialog means is
+   * still decided by the bound post-click inspection.
    */
-  stopWhenPageTextMatchesAll?: readonly string[];
+  stopWhenDialogShows?: { selector: string; textPatterns: readonly string[] };
   timeoutMs?: number;
 };
 export const MAX_PORTAL_BLOB_BYTES = 25 * 1024 * 1024;
@@ -273,17 +274,19 @@ export function capturePortalPdfBlob(input: PortalBlobShimInput): Promise<Portal
       () => finish({ ok: false, reason: "generation-timeout", safeSignals: [] }),
       input.timeoutMs ?? 20_000,
     );
-    const stopPatterns = (input.stopWhenPageTextMatchesAll ?? []).map(
-      (source) => new RegExp(source, "i"),
-    );
+    const stopDialog = input.stopWhenDialogShows;
+    const stopPatterns = (stopDialog?.textPatterns ?? []).map((source) => new RegExp(source, "i"));
     const pageShowsStop = () => {
-      const text = (document.body?.innerText || document.body?.textContent || "")
-        .replace(/\s+/g, " ")
-        .trim();
-      return stopPatterns.length > 0 && stopPatterns.every((pattern) => pattern.test(text));
+      if (!stopDialog || stopPatterns.length === 0) return false;
+      return Array.from(document.querySelectorAll<HTMLElement>(stopDialog.selector)).some(
+        (dialog) => {
+          const style = dialog.ownerDocument.defaultView?.getComputedStyle(dialog);
+          if (!style || style.display === "none" || style.visibility === "hidden") return false;
+          const text = (dialog.innerText || dialog.textContent || "").replace(/\s+/g, " ").trim();
+          return stopPatterns.every((pattern) => pattern.test(text));
+        },
+      );
     };
-    // A dialog already on screen belongs to something before this click, so it cannot be this
-    // click's answer; leave that case to the timer.
     if (stopPatterns.length > 0 && !pageShowsStop()) {
       const poll = globalThis.setInterval(() => {
         if (settled) return globalThis.clearInterval(poll);

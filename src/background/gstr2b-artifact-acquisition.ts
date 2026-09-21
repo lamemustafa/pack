@@ -10,7 +10,10 @@ import {
   GSTR2B_PAGE_GENERATED_ARTIFACTS,
 } from "../connectors/gst/portal-artifact-endpoints";
 import { acceptedFiledReturnsMonthTexts } from "../connectors/gst/filed-returns-months";
-import { GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS } from "../connectors/gst/gstr1-excel-no-details-text";
+import {
+  GSTR1_EXCEL_NO_DETAILS_DIALOG_SELECTOR,
+  GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS,
+} from "../connectors/gst/gstr1-excel-no-details-text";
 import { installPortalBlobDownloadSafetyNet } from "./artifact-download";
 
 export async function acquirePageGeneratedArtifact(input: {
@@ -48,7 +51,12 @@ export async function acquirePageGeneratedArtifact(input: {
               : {}),
             expectedMime: artifact.expectedMime,
             ...(input.returnType === "GSTR-1" && input.artifactType === "EXCEL"
-              ? { stopWhenPageTextMatchesAll: GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS }
+              ? {
+                  stopWhenDialogShows: {
+                    selector: GSTR1_EXCEL_NO_DETAILS_DIALOG_SELECTOR,
+                    textPatterns: GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS,
+                  },
+                }
               : {}),
             maxPortalBlobBytes: MAX_PORTAL_BLOB_BYTES,
             expectedTarget: {
