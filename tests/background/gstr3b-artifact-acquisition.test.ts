@@ -18,7 +18,10 @@ vi.mock("../../src/background/artifact-download", async (importOriginal) => ({
 
 import { acquireGstr3bPdfAfterPreflight } from "../../src/background/gstr3b-artifact-acquisition";
 import { acquirePageGeneratedArtifact } from "../../src/background/gstr2b-artifact-acquisition";
-import { GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS } from "../../src/connectors/gst/gstr1-excel-no-details-text";
+import {
+  GSTR1_EXCEL_NO_DETAILS_DIALOG_SELECTOR,
+  GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS,
+} from "../../src/connectors/gst/gstr1-excel-no-details-text";
 
 describe("GSTR-3B page-generated acquisition", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -255,9 +258,12 @@ describe("GSTR-2B page-generated acquisition", () => {
       const [call] = mocks.executeScript.mock.calls;
       const args = (call?.[0] as { args: [Record<string, unknown>] }).args[0];
       if (watches) {
-        expect(args.stopWhenPageTextMatchesAll).toBe(GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS);
+        expect(args.stopWhenDialogShows).toEqual({
+          selector: GSTR1_EXCEL_NO_DETAILS_DIALOG_SELECTOR,
+          textPatterns: GSTR1_EXCEL_NO_DETAILS_TEXT_PATTERNS,
+        });
       } else {
-        expect(args).not.toHaveProperty("stopWhenPageTextMatchesAll");
+        expect(args).not.toHaveProperty("stopWhenDialogShows");
       }
     },
   );
