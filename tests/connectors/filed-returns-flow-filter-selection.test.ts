@@ -352,14 +352,32 @@ describe("filed returns flow — filter selection and API search", () => {
       return fetchFn;
     }
 
-    it.each([true, false])(
-      "records a positive not-filed answer (HTTP ok: %s) without searching the page",
-      async (ok) => {
+    // The live portal answers HTTP 200 with the code nested one level down,
+    // `{status, error: {errorCode: "RET13510", ...}}` (probed 2026-09-21); #396 read only the top level.
+    it.each([
+      [
+        "nested under error, HTTP 200 (the live shape)",
+        true,
+        {
+          status: 0,
+          error: { errorCode: "RET13510", message: "No Record found for the provided Inputs" },
+        },
+      ],
+      [
+        "at the top level, HTTP 200",
+        true,
+        { errorCode: "RET13510", message: "No Record found for the provided Inputs" },
+      ],
+      [
+        "at the top level, HTTP error",
+        false,
+        { errorCode: "RET13510", message: "No Record found for the provided Inputs" },
+      ],
+    ] as const)(
+      "records a positive not-filed answer (%s) without searching the page",
+      async (_shape, ok, body) => {
         const documentRef = page();
-        const fetchFn = stubSearchAnswer(documentRef, {
-          ok,
-          body: { errorCode: "RET13510", message: "No Record found for the provided Inputs" },
-        });
+        const fetchFn = stubSearchAnswer(documentRef, { ok, body });
         let searchClicked = 0;
         documentRef.querySelector("button")?.addEventListener("click", () => {
           searchClicked += 1;
@@ -386,22 +404,25 @@ describe("filed returns flow — filter selection and API search", () => {
       },
     );
 
-    it("keeps any other portal error on the visible-filter path", async () => {
-      const documentRef = page();
-      stubSearchAnswer(documentRef, {
-        ok: false,
-        body: { errorCode: "RET99999", message: "Something else" },
-      });
-      let searchClicked = 0;
-      documentRef.querySelector("button")?.addEventListener("click", () => {
-        searchClicked += 1;
-      });
+    it.each([
+      [false, { errorCode: "RET99999", message: "Something else" }],
+      [true, { status: 0, error: { errorCode: "RET99999", message: "Something else" } }],
+    ] as const)(
+      "keeps any other portal error on the visible-filter path (HTTP ok: %s)",
+      async (ok, body) => {
+        const documentRef = page();
+        stubSearchAnswer(documentRef, { ok, body });
+        let searchClicked = 0;
+        documentRef.querySelector("button")?.addEventListener("click", () => {
+          searchClicked += 1;
+        });
 
-      const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+        const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
 
-      expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
-      expect(searchClicked).toBe(1);
-    });
+        expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+        expect(searchClicked).toBe(1);
+      },
+    );
   });
 
   it("falls back to visible filter selection when the GST API returns no matching rows", async () => {
