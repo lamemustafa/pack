@@ -151,7 +151,10 @@ async function queryFiledReturnsApi(
     // either, and it is the one error that is itself an answer rather than a failure.
     const payload: unknown = await response.json().catch(() => null);
     if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) return null;
-    if (isNoRecordAnswer(payload)) return "no-record";
+    // A no-record code beside a data array is ambiguous: it answers nothing, so never "not filed".
+    if (isNoRecordAnswer(payload)) {
+      return extractFiledReturnsApiRows(payload) === null ? "no-record" : null;
+    }
     if (!response.ok) return null;
     return extractFiledReturnsApiRows(payload);
   } catch {
