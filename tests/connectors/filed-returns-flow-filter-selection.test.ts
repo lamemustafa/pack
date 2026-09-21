@@ -316,6 +316,94 @@ describe("filed returns flow — filter selection and API search", () => {
     expect(efileData).not.toContain("18/04/2025");
   });
 
+  // Live, 2026-09-21: for a taxpayer whose GSTR-3B starts in July, the filed-return search for April,
+  // May and June answered RET13510 "No Record found for the provided Inputs". The API path discarded
+  // it, and the page shows that same message without any DOM change on a repeat search, so Pack
+  // called every such month "results unchanged" and stopped. The portal's answer to Pack's own
+  // request, bound to the year, month and return type Pack sent, is the not-filed evidence.
+  describe("the filed-return search answering RET13510", () => {
+    function page() {
+      return createGstDocument(`
+        <main>
+          <h1>View Filed Returns</h1>
+          <label>Financial Year</label>
+          <select><option>2024-25</option><option>2025-26</option></select>
+          <label>Return Filing Period</label>
+          <select><option>February</option><option>March</option></select>
+          <label>Return Type</label>
+          <select><option>GSTR-1</option><option>GSTR-3B</option></select>
+          <button>Search</button>
+        </main>
+      `);
+    }
+    function stubSearchAnswer(
+      documentRef: Document,
+      answer: { ok: boolean; body: unknown },
+    ): ReturnType<typeof vi.fn> {
+      const fetchFn = vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("/returns/auth/api/rolestatus")
+          ? { ok: true, json: async () => ({ userPref: "M" }) }
+          : { ok: answer.ok, json: async () => answer.body },
+      );
+      Object.defineProperty(documentRef.defaultView, "fetch", {
+        configurable: true,
+        value: fetchFn,
+      });
+      return fetchFn;
+    }
+
+    it.each([true, false])(
+      "records a positive not-filed answer (HTTP ok: %s) without searching the page",
+      async (ok) => {
+        const documentRef = page();
+        const fetchFn = stubSearchAnswer(documentRef, {
+          ok,
+          body: { errorCode: "RET13510", message: "No Record found for the provided Inputs" },
+        });
+        let searchClicked = 0;
+        documentRef.querySelector("button")?.addEventListener("click", () => {
+          searchClicked += 1;
+        });
+
+        const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+        expect(result.state).toBe("candidate-not-found");
+        expect(result.safeSignals).toEqual(
+          expect.arrayContaining([
+            "filed-return-api-searched",
+            "filed-return-positively-not-filed",
+          ]),
+        );
+        expect(searchClicked).toBe(0);
+        const [, init] = fetchFn.mock.calls.find(([input]) =>
+          String(input).includes("/returns/auth/api/efiledReturns"),
+        ) as [RequestInfo, RequestInit];
+        expect(JSON.parse(String(init.body))).toMatchObject({
+          fy: DEFAULT_SCOPE.financialYear,
+          mth: DEFAULT_SCOPE.period,
+          rtntp: "GSTR3B",
+        });
+      },
+    );
+
+    it("keeps any other portal error on the visible-filter path", async () => {
+      const documentRef = page();
+      stubSearchAnswer(documentRef, {
+        ok: false,
+        body: { errorCode: "RET99999", message: "Something else" },
+      });
+      let searchClicked = 0;
+      documentRef.querySelector("button")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+
+      const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+      expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+      expect(searchClicked).toBe(1);
+    });
+  });
+
   it("falls back to visible filter selection when the GST API returns no matching rows", async () => {
     const documentRef = createGstDocument(`
       <main>
