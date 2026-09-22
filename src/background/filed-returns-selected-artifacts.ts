@@ -408,10 +408,14 @@ export async function triggerSelectedArtifacts({
         scope,
       );
     }
+    // The direct-download checkpoint, read back only on the direct-download path (see
+    // `readPersistedArtifactProgress` above). A staging plan child writing it left an unfinished
+    // summary that outlived the plan and replaced its completed card with the presets (#387).
     if (
       artifactTypes.length > 1 &&
       completedArtifactTypes.size < artifactTypes.length &&
-      !singlePeriodBundleLedgerId
+      !singlePeriodBundleLedgerId &&
+      !deps.stageCapturedDownloads
     ) {
       await persistPartialArtifactSummary(scope, combinedFlowStep, artifactDeps);
     }
