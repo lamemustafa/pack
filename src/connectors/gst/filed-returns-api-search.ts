@@ -129,6 +129,22 @@ export async function openFiledReturnFromApiSearch(
   };
 }
 
+/**
+ * The quarterly stop for a "no record" the page reports itself: the same answer, reached without the
+ * filed-return search, so it asks the same per-period question before it can mean "not filed".
+ */
+export async function quarterlyFilerStopForPeriod(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  scopeId: string,
+  deadline = createFiledReturnsAcquisitionDeadline(),
+): Promise<PortalFlowStepResult | null> {
+  if (scope.returnType !== "GSTR-3B" || !canUseFiledReturnsApi(documentRef)) return null;
+  return (await isQuarterlyFilerPeriod(documentRef, scope, deadline))
+    ? quarterlyFilerStop(scope, scopeId)
+    : null;
+}
+
 async function isQuarterlyFilerPeriod(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,

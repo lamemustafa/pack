@@ -163,6 +163,19 @@ export function getRecoveryFlowAvailability(
     };
   }
 
+  // The portal's per-period filing preference said quarterly; a retry asks the same question and gets
+  // the same answer, so the saved plan offers only its exit.
+  if (summary.flowStep.safeSignals.includes("filed-gstr3b-quarterly-filer-unsupported")) {
+    return {
+      availableActions: ["cancel-saved-full-year-run"],
+      canContinueFullYear: false,
+      guidance: null,
+      isWithheldFullYearRecovery: false,
+      message: summary.flowStep.safeMessage,
+      mentionedActions: actionsNamedIn(summary.flowStep.safeMessage),
+    };
+  }
+
   if (summary.flowStep.safeSignals.includes("artifact-acquisition-session-proof-expired")) {
     return {
       availableActions: AVAILABLE_FULL_YEAR_ACTIONS,
