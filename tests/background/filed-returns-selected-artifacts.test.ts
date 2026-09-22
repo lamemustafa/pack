@@ -969,6 +969,75 @@ describe("GSTR-2B all-format selection", () => {
     ]);
   });
 
+  // #387, live 2026-09-17 and 2026-09-22: a plan's child wrote this direct-download checkpoint to
+  // the shared session summary between its first and second format. Staging never reads it back
+  // (above), so it only outlived the plan and replaced the completed plan card with the presets.
+  it.each(["full-fiscal-year", "all-supported-full-fiscal-year"] as const)(
+    "does not write direct-download progress while staging a %s artifact ledger",
+    async (bundleKind) => {
+      mocks.triggerAndObserveFiledReturnDownload
+        .mockResolvedValueOnce(downloaded("PDF"))
+        .mockResolvedValueOnce(downloaded("EXCEL"))
+        .mockResolvedValueOnce(downloaded("JSON"));
+
+      await triggerSelectedArtifacts({
+        activePeriod: "April",
+        deps: {
+          stageCapturedDownloads: { bundleKind, ledgerId: "full-year-synthetic" },
+          storageKeys: {
+            completion: "completion",
+            fullFiscalYearLedger: "ledger",
+            observation: "observation",
+          },
+        } as never,
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-2B",
+        },
+        tabId: 17,
+      });
+
+      expect(mocks.triggerAndObserveFiledReturnDownload).toHaveBeenCalledTimes(3);
+      expect(mocks.persistPartialArtifactSummary).not.toHaveBeenCalled();
+    },
+  );
+
+  // The same checkpoint's second call site: a later format failing after an earlier one saved.
+  // Only a staging child reaches it, so it must not write the shared summary either.
+  it.each(["full-fiscal-year", "all-supported-full-fiscal-year"] as const)(
+    "does not write direct-download progress when a later format fails while staging a %s ledger",
+    async (bundleKind) => {
+      mocks.triggerAndObserveFiledReturnDownload
+        .mockResolvedValueOnce(downloaded("PDF"))
+        .mockResolvedValueOnce(blocked("EXCEL"));
+
+      const response = await triggerSelectedArtifacts({
+        activePeriod: "April",
+        deps: {
+          stageCapturedDownloads: { bundleKind, ledgerId: "full-year-synthetic" },
+          storageKeys: {
+            completion: "completion",
+            fullFiscalYearLedger: "ledger",
+            observation: "observation",
+          },
+        } as never,
+        scope: {
+          artifactType: "PDF_AND_EXCEL",
+          financialYear: "2026-27",
+          period: "April",
+          returnType: "GSTR-2B",
+        },
+        tabId: 17,
+      });
+
+      expect(mocks.triggerAndObserveFiledReturnDownload).toHaveBeenCalledTimes(2);
+      expect(response).toMatchObject({ ok: true, flowStep: { state: "blocked" } });
+      expect(mocks.persistPartialArtifactSummary).not.toHaveBeenCalled();
+    },
+  );
+
   it("routes an ambiguous acquisition failure to review instead of exporting a partial ZIP", async () => {
     bundleMocks.persistSinglePeriodBundleArtifactUnavailable.mockResolvedValueOnce(null as never);
     mocks.triggerAndObserveFiledReturnDownload
