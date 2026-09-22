@@ -338,11 +338,12 @@ describe("filed returns flow — filter selection and API search", () => {
     }
     function stubSearchAnswer(
       documentRef: Document,
-      answer: { ok: boolean; body: unknown },
+      answer: { ok: boolean; body: unknown; roleStatus?: { ok: boolean; body: unknown } },
     ): ReturnType<typeof vi.fn> {
+      const roleStatus = answer.roleStatus ?? { ok: true, body: { userPref: "M" } };
       const fetchFn = vi.fn(async (input: RequestInfo | URL) =>
         String(input).includes("/returns/auth/api/rolestatus")
-          ? { ok: true, json: async () => ({ userPref: "M" }) }
+          ? { ok: roleStatus.ok, json: async () => roleStatus.body }
           : { ok: answer.ok, json: async () => answer.body },
       );
       Object.defineProperty(documentRef.defaultView, "fetch", {
@@ -403,6 +404,44 @@ describe("filed returns flow — filter selection and API search", () => {
         });
       },
     );
+
+    // Live 2026-09-22: a quarterly (QRMP) taxpayer's role status answered `{status, data: {userPref:
+    // "Q"}}` for every month, and "no record" for April and May -- which Pack recorded as "Not filed",
+    // though no GSTR-3B is due in those months. Pack supports monthly filers only, so it stops.
+    const NO_RECORD = {
+      status: 0,
+      error: { errorCode: "RET13510", message: "No Record found for the provided Inputs" },
+    };
+    it("stops for a quarterly filer instead of recording a month as not filed", async () => {
+      const documentRef = page();
+      stubSearchAnswer(documentRef, {
+        ok: true,
+        body: NO_RECORD,
+        roleStatus: { ok: true, body: { status: 1, data: { userType: "x", userPref: "Q" } } },
+      });
+
+      const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+      expect(result.state).toBe("blocked");
+      expect(result.safeSignals).toContain("filed-gstr3b-quarterly-filer-unsupported");
+      expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+      expect(result.safeMessage).toMatch(/quarterly/i);
+      expect(result.safeMessage).toMatch(/monthly filers only/i);
+    });
+
+    it.each([
+      ["a monthly preference", { ok: true, body: { status: 1, data: { userPref: "M" } } }],
+      ["an unavailable role status", { ok: false, body: null }],
+    ] as const)("keeps the not-filed answer with %s", async (_case, roleStatus) => {
+      const documentRef = page();
+      stubSearchAnswer(documentRef, { ok: true, body: NO_RECORD, roleStatus });
+
+      const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+      expect(result.state).toBe("candidate-not-found");
+      expect(result.safeSignals).toContain("filed-return-positively-not-filed");
+      expect(result.safeSignals).not.toContain("filed-gstr3b-quarterly-filer-unsupported");
+    });
 
     it.each([
       [false, { errorCode: "RET99999", message: "Something else" }],
@@ -1114,7 +1153,7 @@ describe("filed returns flow — filter selection and API search", () => {
             dof: "18/04/2025",
           },
         ],
-        roleStatus: { userPref: "Q" },
+        roleStatus: { userPref: "M" },
       });
       let searchClicked = 0;
       documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
@@ -1137,8 +1176,78 @@ describe("filed returns flow — filter selection and API search", () => {
       expect(searchClicked).toBe(0);
       expect(submittedForms).toEqual([{ action: "/returns/auth/gstr3b", method: "POST" }]);
       expect(documentRef.defaultView?.localStorage.getItem("rtn_prd")).toBe("032026");
-      expect(documentRef.defaultView?.localStorage.getItem("gstr3bPref")).toBe("Q");
+      expect(documentRef.defaultView?.localStorage.getItem("gstr3bPref")).toBe("M");
       expect(documentRef.defaultView?.sessionStorage.getItem("viewFiled")).toBe("true");
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 12_000);
+
+  it("stops a quarterly filer's filed quarter-end row instead of opening the quarterly page", async () => {
+    vi.useFakeTimers();
+    try {
+      const documentRef = createGstDocument(`
+        <form name="efiledReturns">
+          <h1>View Filed Returns</h1>
+          <div>
+            <label>Financial year</label>
+            <select id="finYr" data-ng-model="efiledReturns_financialYear_val">
+              <option>Select</option>
+              <option value="string:2025-26">2025-26</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Filing Period</label>
+            <select id="optValue" data-ng-model="efiledReturns_filingPeriod_val">
+              <option>Select</option>
+              <option value="string:Monthly">Monthly</option>
+            </select>
+          </div>
+          <div>
+            <div>Month</div>
+            <select id="periodValue" title="Month">
+              <option>Select</option>
+            </select>
+          </div>
+          <div>
+            <label>Return Type</label>
+            <select id="retTyp" data-ng-model="efiledReturns_gstValue_val">
+              <option>Select</option>
+              <option value="string:GSTR3B">GSTR3B</option>
+            </select>
+          </div>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+      `);
+      const submittedForms = stubFormSubmit(documentRef);
+      stubFiledReturnsApi(documentRef, {
+        rows: [
+          {
+            rtntype: "GSTR3B",
+            fy: "2025-26",
+            taxp: "March",
+            arn: "synthetic-arn",
+            dof: "18/04/2025",
+          },
+        ],
+        roleStatus: { status: 1, data: { userPref: "Q" } },
+      });
+      let searchClicked = 0;
+      documentRef.querySelector("#lotsearch")?.addEventListener("click", () => {
+        searchClicked += 1;
+      });
+
+      const resultPromise = runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+      await vi.advanceTimersByTimeAsync(45_000);
+      const result = await resultPromise;
+
+      expect(result.state).toBe("blocked");
+      expect(result.safeSignals).toContain("filed-gstr3b-quarterly-filer-unsupported");
+      expect(result.safeSignals).not.toContain("filed-return-api-result-posted");
+      expect(searchClicked).toBe(0);
+      // Nothing handed to the portal: the quarterly page it would open has no bindable download yet.
+      expect(submittedForms).toEqual([]);
+      expect(documentRef.defaultView?.localStorage.getItem("gstr3bPref")).toBeNull();
     } finally {
       vi.useRealTimers();
     }

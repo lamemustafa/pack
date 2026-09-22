@@ -10,7 +10,10 @@ import {
   navigateToFiledReturnsPage,
   navigateToReturnDashboardPage,
 } from "./filed-returns-navigator";
-import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
+import {
+  openFiledReturnFromApiSearch,
+  quarterlyFilerStopForPeriod,
+} from "./filed-returns-api-search";
 import { createFiledReturnsAcquisitionDeadline } from "./filed-returns-acquisition-deadline";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
@@ -212,7 +215,7 @@ export async function runFiledReturnsDownloadStep(
       searchSettled,
     );
     if (notFiledEvidence) {
-      return notFiledEvidence;
+      return (await quarterlyFilerStopForPeriod(documentRef, scope, scopeId)) ?? notFiledEvidence;
     }
   }
 

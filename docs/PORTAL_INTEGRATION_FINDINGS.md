@@ -306,6 +306,21 @@ rtntp: "GSTR3B"}` to `/returns/auth/api/efiledReturns` answered HTTP 200 with
     the auto-drafted GSTR-2B statement tile with `VIEW`/`DOWNLOAD`, and `VIEW GSTR3B`. Pack now
     reads a period missing from a loaded, current list, seen on two consecutive steps, as the
     portal's answer that nothing exists for it; it had instead waited out its 30-second step limit.
+39. **A quarterly (QRMP) filer is named per period by the role status, and its GSTR-3B page shows
+    the quarter.** Captured live on 2026-09-22 on a QRMP taxpayer. The role-status call Pack already
+    makes (`rolestatus?rtn_prd=MMYYYY`) answered HTTP 200 `{status, data: {userType, userPref, user,
+barredYearsLimit}}` with `userPref: "Q"` for April, May, June and July 2025 alike, so it names
+    the cadence for the first two months of a quarter too, not only its end. The monthly filed-return
+    search answered `RET13510` for April and May, where no GSTR-3B is due, and Pack had recorded
+    them "Not filed". June, the quarter end, opened a page headed "GSTR-3BQ - Quarterly Return" that
+    shows "Return Period - Apr-Jun", "Status - Filed", a due date, and "FY - 2025-26"; an open
+    Bootstrap modal (`.modal.fade.fade-scale.in`) titled "System generated summary for GSTR-3B:"
+    carried a single CLOSE control over page controls BACK, SAVE GSTR3B, DOWNLOAD FILED GSTR-3B and
+    SYSTEM GENERATED GSTR-3B. The same page listed GSTR-1/1A and GSTR-2B as quarterly, so the whole
+    profile was quarterly. Pack now stops such a period with a named reason instead of recording it
+    not filed or opening the quarterly page. Still unknown before quarterly support (#295): why the
+    summary modal was not dismissed, the PDF preflight answer for a 3BQ period, and what the
+    downloaded file states as its period.
 
 ## The GSTR-2B summary page does carry a Returns Dashboard link, collapsed
 
