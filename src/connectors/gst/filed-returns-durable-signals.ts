@@ -228,6 +228,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "filed-gstr3b-direct-download-start-rejected",
   "filed-gstr3b-direct-download-started",
   "filed-gstr3b-direct-download-target-rejected",
+  "filed-gstr3b-quarterly-filer-unsupported",
   "filed-return-api-result-ambiguous",
   "filed-return-api-result-found",
   "filed-return-api-result-posted",

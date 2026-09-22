@@ -22,7 +22,11 @@ type OpenResultResponse =
   | { ok: true }
   | {
       ok: false;
-      reason: "deadline-expired" | "role-status-unavailable" | "portal-storage-unavailable";
+      reason:
+        | "deadline-expired"
+        | "role-status-unavailable"
+        | "portal-storage-unavailable"
+        | "quarterly-filer";
     };
 
 type RoleStatusResponse =
@@ -46,6 +50,12 @@ export async function openFiledReturnFromApiSearch(
   // shows the same message without any DOM change when searched again, so page-based evidence cannot
   // prove a repeat "no record" is fresh; this answer is bound to the request itself (2026-09-21).
   if (rows === "no-record") {
+    // A quarterly filer has no GSTR-3B for the first two months of a quarter, so "no record" there is
+    // not a missed filing. The role status answers per period; only its explicit "Q" stops here, and
+    // an unavailable answer keeps the not-filed reading Pack gave before it asked.
+    if (await isQuarterlyFilerPeriod(documentRef, scope, deadline)) {
+      return quarterlyFilerStop(scope, scopeId);
+    }
     return {
       connectorId: "gst",
       scopeId,
@@ -83,6 +93,9 @@ export async function openFiledReturnFromApiSearch(
     scope,
     deadline,
   );
+  if (!openResponse.ok && openResponse.reason === "quarterly-filer") {
+    return quarterlyFilerStop(scope, scopeId);
+  }
   if (openResponse.ok) {
     return {
       connectorId: "gst",
@@ -113,6 +126,30 @@ export async function openFiledReturnFromApiSearch(
       message: `Open the exact filed ${descriptor.label} row for the requested period.`,
       canResume: true,
     },
+  };
+}
+
+async function isQuarterlyFilerPeriod(
+  documentRef: Document,
+  scope: FiledReturnsDownloadScope,
+  deadline: number,
+): Promise<boolean> {
+  const rtnPrd = toPortalReturnPeriod(scope.period, scope.financialYear);
+  if (!rtnPrd) return false;
+  const roleStatus = await queryRoleStatus(documentRef, rtnPrd, deadline);
+  return roleStatus.ok && roleStatus.userPref === "Q";
+}
+
+function quarterlyFilerStop(
+  scope: FiledReturnsDownloadScope,
+  scopeId: string,
+): PortalFlowStepResult {
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "blocked",
+    safeSignals: ["filed-return-api-searched", "filed-gstr3b-quarterly-filer-unsupported"],
+    safeMessage: `The GST Portal shows this taxpayer files GSTR-3B quarterly (QRMP) for ${scope.period} ${scope.financialYear}. Pack supports monthly filers only; download quarterly returns from the GST Portal.`,
   };
 }
 
@@ -185,6 +222,10 @@ async function openApiRowWithPortalNavigation(
       ? { ok: false, reason: "deadline-expired" }
       : { ok: false, reason: "role-status-unavailable" };
   }
+
+  // The quarterly (GSTR-3BQ) page this would open shows the quarter, not the month, and has no
+  // download Pack can bind to the requested period yet.
+  if (roleStatus.userPref === "Q") return { ok: false, reason: "quarterly-filer" };
 
   try {
     if (hasFiledReturnsAcquisitionDeadlineExpired(deadline)) {
