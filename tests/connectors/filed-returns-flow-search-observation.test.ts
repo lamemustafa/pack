@@ -44,6 +44,45 @@ describe("filed returns flow — search and no-record observation", () => {
     expect(result.userAction).toBeUndefined();
   });
 
+  // The page's own "No records found" is the same answer the filed-return search gives, and for a
+  // quarterly (QRMP) filer it is no filing fact either: no GSTR-3B is due in months 1-2 (2026-09-22).
+  it.each([
+    ["Q", "blocked", "filed-gstr3b-quarterly-filer-unsupported"],
+    ["M", "candidate-not-found", "filed-return-positively-not-filed"],
+  ] as const)(
+    "asks the filing preference before a page no-record answer becomes not filed (%s)",
+    async (userPref, state, signal) => {
+      const documentRef = createGstDocument(`
+        <main>
+          <h1>View Filed Returns</h1>
+          <form name="efiledReturns">
+            <select id="finYr"><option selected>2025-26</option></select>
+            <select id="optValue"><option selected>Monthly</option></select>
+            <select id="month"><option selected>March</option></select>
+            <select id="retTyp"><option selected>GSTR3B</option></select>
+            <button id="lotsearch" type="button">Search</button>
+          </form>
+          <section aria-label="Search results">
+            <p>No records found</p>
+          </section>
+        </main>
+      `);
+      Object.defineProperty(documentRef.defaultView, "fetch", {
+        configurable: true,
+        value: vi.fn(async () => ({
+          ok: true,
+          json: async () => ({ status: 1, data: { userPref } }),
+        })),
+      });
+      markPackSubmittedSearch(documentRef, DEFAULT_SCOPE);
+
+      const result = await runFiledReturnsDownloadStep(documentRef, DEFAULT_SCOPE);
+
+      expect(result.state).toBe(state);
+      expect(result.safeSignals).toContain(signal);
+    },
+  );
+
   it("checks no-record evidence before reselecting an already matching filter form", async () => {
     const documentRef = createDocument(`
       <main>

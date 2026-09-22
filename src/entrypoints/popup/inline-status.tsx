@@ -298,6 +298,16 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "blocked" && summary?.currentPeriod) {
     const signals = new Set(summary.flowStep.safeSignals);
+    // The portal's per-period filing preference said quarterly. A retry asks the same question, so
+    // neither the generic "retry this period" body nor the step's retry remedy applies.
+    if (signals.has("filed-gstr3b-quarterly-filer-unsupported")) {
+      return {
+        body: summary.flowStep.safeMessage,
+        icon: "!",
+        title: `Full-year run stopped at ${summary.currentPeriod}`,
+        tone: "warning",
+      };
+    }
     // `userAction.message` is the remedy the flow already computed and the
     // durable summary already persists. Nothing rendered it, so 82 blocked
     // states told the reader what was wrong and never what to do -- and the

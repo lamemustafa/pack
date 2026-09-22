@@ -65,6 +65,7 @@ type DurableMessageKey =
   | "partial"
   | "target-cancelled"
   | "target-blocked"
+  | "target-quarterly-filer-unsupported"
   | "target-blocked-or-session-expired"
   | "target-checkpoint-clear-cancel"
   | "target-checkpoint-clear-checkpoint"
@@ -494,6 +495,9 @@ function messageKeyForTarget(
   if (hasCleanupFailureSignal(signals)) {
     return "target-cleanup-blocked";
   }
+  if (signals.includes("filed-gstr3b-quarterly-filer-unsupported")) {
+    return "target-quarterly-filer-unsupported";
+  }
   if (signals.includes("filed-return-positively-not-filed") || status === "not-filed") {
     return "not-filed";
   }
@@ -676,6 +680,8 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     "target-cancelled": `Pack cancelled the unresolved filed-return target for ${period}.`,
     "target-blocked": `Pack paused the saved full-year run at ${period}. Resolve the GST Portal page before retrying this period.`,
     "target-blocked-or-session-expired": FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,
+    // A retry asks the same question and gets the same answer, so the copy offers none.
+    "target-quarterly-filer-unsupported": `The GST Portal shows this taxpayer files GSTR-3B quarterly (QRMP) for ${period}. Pack supports monthly filers only; download quarterly returns from the GST Portal.`,
     "target-checkpoint-clear-cancel":
       "Pack could not confirm cancellation of the exact browser download, so it retained artifact recovery and did not retry.",
     "target-checkpoint-clear-checkpoint":
