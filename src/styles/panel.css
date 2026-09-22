@@ -86,6 +86,12 @@ html[data-pack-surface="panel"] body {
   gap: 4px;
 }
 
+/* A status card can follow the plan card when a single-return run is also open; it carries its own
+   box, so it needs the gap, not a rule. */
+.panel-all-supported-run + :not(.evidence, .panel-run-progress, .panel-presets) {
+  margin-top: 12px;
+}
+
 .panel-all-supported-run p {
   margin: 0;
   color: var(--pack-ink-secondary);
