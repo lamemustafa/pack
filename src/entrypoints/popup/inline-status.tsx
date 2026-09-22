@@ -1,9 +1,5 @@
 import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
-import {
-  declinedArtifactSafeMessage,
-  getBoundDeclinedArtifactSignal,
-} from "../../connectors/gst/filed-returns-declined-artifact";
 import { FULL_FISCAL_YEAR_PERIOD } from "../../connectors/gst/filed-returns-scope";
 import { filedReturnsPlanCoverageMessage } from "../../connectors/gst/filed-returns-durable-status";
 import { isErrorPresentation, type PopupPresentationState } from "./presentation-state";
@@ -256,17 +252,15 @@ function getInlineStatusCopy(
     };
   }
   if (presentation.kind === "unavailable") {
-    const declinedArtifactSignal =
-      summary?.status === "complete"
-        ? getBoundDeclinedArtifactSignal(summary.scope, summary.flowStep.safeSignals)
-        : null;
+    // The presentation already chose this copy for its cause -- a declined artifact, a return not
+    // filed, a statement not generated, or a filed return missing one format. A second copy here
+    // said "No filed return found" for all of them, including a return that was filed.
     return {
-      body: declinedArtifactSignal
-        ? declinedArtifactSafeMessage(declinedArtifactSignal)
-        : "The GST Portal did not report a filed return for this selection.",
-      icon: "–",
-      title: declinedArtifactSignal ? "No artifact available" : "No filed return found",
-      tone: "neutral",
+      body: presentation.body,
+      icon: presentation.icon,
+      title: presentation.title,
+      // An unavailable cause is either informational or a partly-saved warning, never success.
+      tone: presentation.tone === "warning" ? "warning" : "neutral",
     };
   }
   if (presentation.kind === "partial") {
