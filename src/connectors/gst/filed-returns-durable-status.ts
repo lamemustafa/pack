@@ -668,7 +668,11 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
       "Pack could not retain the GST tab identity for this saved plan. Try again with the GST Portal tab open in the foreground.",
     "full-year-zip-review":
       "Pack could not confirm the final fiscal-year ZIP. Check the exact browser download before retrying.",
-    "not-filed": "The GST Portal reported no filed return for the selected period.",
+    // Nobody files an auto-drafted GSTR-2B statement, so its absence is not a filing claim.
+    "not-filed":
+      scope.returnType === "GSTR-2B"
+        ? "The GST Portal has no GSTR-2B statement for the selected period."
+        : "The GST Portal reported no filed return for the selected period.",
     // The portal declined to produce the artifact, in its own words. Retrying cannot change that,
     // so the copy must not send the user to Downloads looking for a file that was never created.
     "not-generated": declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
