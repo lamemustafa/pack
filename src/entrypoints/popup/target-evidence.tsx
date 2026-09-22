@@ -47,7 +47,8 @@ const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
  * reading it out as "Not filed" put a claim about the taxpayer on screen that the portal never made.
  */
 function outcomeLabel(outcome: FiledReturnsTargetOutcome, returnType: string | undefined): string {
-  if (outcome === "not-filed" && returnType === "GSTR-2B") return OUTCOME_LABELS["not-generated"];
+  const autoDraftedStatement = returnType === "GSTR-2B";
+  if (outcome === "not-filed" && autoDraftedStatement) return OUTCOME_LABELS["not-generated"];
   return OUTCOME_LABELS[outcome];
 }
 
