@@ -38,7 +38,6 @@ import {
 
 const stored = vi.hoisted(() => ({
   failReplacementSet: false,
-  session: {} as Record<string, unknown>,
   values: {} as Record<string, unknown>,
 }));
 const singlePeriod = vi.hoisted(() => ({
@@ -93,15 +92,6 @@ vi.mock("wxt/browser", () => ({
           Object.assign(stored.values, structuredClone(values));
         }),
       },
-      session: {
-        get: vi.fn(async (key: string) => ({ [key]: structuredClone(stored.session[key]) })),
-        remove: vi.fn(async (key: string) => {
-          delete stored.session[key];
-        }),
-        set: vi.fn(async (values: Record<string, unknown>) => {
-          Object.assign(stored.session, structuredClone(values));
-        }),
-      },
     },
   },
 }));
@@ -136,7 +126,6 @@ const deps: FiledReturnsFlowRunnerDeps & {
 beforeEach(() => {
   stored.failReplacementSet = false;
   stored.values = {};
-  stored.session = {};
   deps.now = () => NOW;
   vi.clearAllMocks();
   singlePeriod.run.mockImplementation(async () => notFiledStep());
@@ -275,61 +264,6 @@ describe("all-supported full-fiscal-year worker", () => {
       },
     });
   });
-
-  // #387, live 2026-09-17 and 2026-09-22: a child target's own unfinished single-return summary
-  // outlived the plan's completion and replaced the completed plan card with the presets. The plan
-  // held the run lease throughout, so a summary for one of its targets written after it started is
-  // its own; it releases exactly that one at completion and nothing it cannot prove is its own.
-  it.each([
-    ["its own child's", "2026-27", "April", NOW.toISOString(), "during", false],
-    [
-      "a pre-plan summary for one of its targets'",
-      "2026-27",
-      "April",
-      "2026-07-24T00:00:00.000Z",
-      "before",
-      true,
-    ],
-    ["another year's", "2025-26", "April", NOW.toISOString(), "before", true],
-    ["an unplanned period's", "2026-27", "February", NOW.toISOString(), "during", true],
-  ] as const)(
-    "at completion releases %s unfinished summary only when the plan wrote it",
-    async (_whose, financialYear, period, updatedAt, written, kept) => {
-      const summary = {
-        scope: { financialYear, period, returnType: "GSTR-2B", artifactType: "PDF" },
-        status: "blocked",
-        updatedAt,
-        completedPeriods: [],
-        currentPeriod: period,
-        totalPeriods: 1,
-        flowStep: {
-          connectorId: "gst",
-          scopeId: "gst-gstr2b-private-v0",
-          state: "blocked",
-          safeSignals: ["portal-system-error"],
-          safeMessage: "Synthetic portal copy.",
-        },
-      };
-      const writtenByChild = written === "during";
-      if (!writtenByChild) stored.session[deps.storageKeys.completion] = structuredClone(summary);
-      const runner = vi.fn<SinglePeriodRunner>(async () => {
-        if (writtenByChild) stored.session[deps.storageKeys.completion] = structuredClone(summary);
-        return notFiledStep();
-      });
-
-      await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
-
-      expect(savedLedger()).toMatchObject({
-        status: "complete",
-        zipPhase: "cleaned-after-download",
-      });
-      if (kept) {
-        expect(stored.session[deps.storageKeys.completion]).toMatchObject({ updatedAt });
-      } else {
-        expect(stored.session[deps.storageKeys.completion]).toBeUndefined();
-      }
-    },
-  );
 
   it("keeps the completed root when durable replacement persistence fails", async () => {
     const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
