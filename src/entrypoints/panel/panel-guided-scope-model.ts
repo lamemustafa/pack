@@ -185,6 +185,22 @@ export function panelFullFiscalYearPresets(
 }
 
 /**
+ * The fiscal years the all-returns presets offer: this year and last. One list, because the card
+ * on a completed plan hides its own restart exactly when a preset here already offers it.
+ */
+export function allReturnsPresetFinancialYears(asOf = new Date()): string[] {
+  return getFiledReturnsFinancialYearOptions(asOf).slice(0, 2);
+}
+
+/** Whether the presets offer a restart of this completed plan's year, so the card need not. */
+export function allReturnsPresetOffersRestart(financialYear: string, asOf = new Date()): boolean {
+  return (
+    allReturnsPresetFinancialYears(asOf).includes(financialYear) &&
+    panelAllReturnsFullYearPreset(financialYear, asOf) !== null
+  );
+}
+
+/**
  * Build the panel's root-plan affordance from the same canonical catalogue as
  * individual presets. A missing period, return, or offered artifact leaves no
  * safe expansion, so the control is absent rather than pretending an empty

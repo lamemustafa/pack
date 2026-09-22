@@ -18,6 +18,7 @@ import { getScopeFormStartAction } from "../popup/scope-form-model";
 import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import {
   discardAllReturnsPlanLabel,
+  allReturnsPresetFinancialYears,
   panelAllReturnsFullYearPreset,
   panelFullFiscalYearPresets,
   panelGuidedStepForDisplay,
@@ -114,10 +115,10 @@ export function PanelGuidedScope({
     sourceSurfacesEnabled && currentFinancialYear
       ? panelFullFiscalYearPresets(currentFinancialYear, presetAsOf)
       : [];
+  const presetFinancialYears = allReturnsPresetFinancialYears(presetAsOf);
   const allReturnsFinancialYears = [
-    ...financialYears.slice(0, 2),
-    ...(allReturnsResumePlan &&
-    !financialYears.slice(0, 2).includes(allReturnsResumePlan.financialYear)
+    ...presetFinancialYears,
+    ...(allReturnsResumePlan && !presetFinancialYears.includes(allReturnsResumePlan.financialYear)
       ? [allReturnsResumePlan.financialYear]
       : []),
   ];
