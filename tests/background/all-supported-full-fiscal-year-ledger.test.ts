@@ -195,6 +195,8 @@ describe("all-supported full-fiscal-year ledger", () => {
     "single-period-bundle-state-persist-failed",
     "single-period-bundle-state-read-failed",
     "filed-return-durable-status-rejected",
+    // A quarterly filer's answer does not change on retry; the plan can only be discarded.
+    "filed-gstr3b-quarterly-filer-unsupported",
   ])("withholds an explicit retry for a non-resumable target: %s", (signal) => {
     const ledger = createLedger();
     const blocked = {
