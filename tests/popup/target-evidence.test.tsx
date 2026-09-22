@@ -160,7 +160,8 @@ describe("per-target evidence", () => {
       <TargetEvidence summary={summaryWith([{ period: "April", outcome: "partly-saved" }])} />,
     );
 
-    expect(markup).toContain(">Saved · some formats not on portal<");
+    // One line at panel width: the count line above carries the full reason.
+    expect(markup).toContain(">Saved · format n/a<");
     expect(markup).not.toMatch(/partly saved/i);
     expect(markup).toContain("evidence-partly-saved");
   });
