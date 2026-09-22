@@ -175,8 +175,29 @@ describe("panel surface", () => {
       <PanelSurface pack={controller({ scopedFlowSummary: summary })} />,
     );
 
-    expect(markup).toContain("No filed return found");
-    expect(markup).toContain("The GST Portal did not report a filed return for this selection.");
+    // This pinned "No filed return found" for a return that was filed with one format missing.
+    expect(markup).toContain("Download saved with one unavailable file");
+    expect(markup).toContain("One selected file was not offered by the portal for this period.");
+    expect(markup).not.toContain("No filed return");
+  });
+
+  it("never says a GSTR-2B statement was not filed on the result card", () => {
+    const summary = completedSummary({
+      scope: { ...completedSummary().scope, returnType: "GSTR-2B", artifactType: "EXCEL" },
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-gstr2b-private-v0",
+        state: "candidate-not-found",
+        safeSignals: ["filed-return-positively-not-filed"],
+        safeMessage: "Synthetic portal copy.",
+      },
+    });
+    const markup = renderToStaticMarkup(
+      <PanelSurface pack={controller({ scopedFlowSummary: summary })} />,
+    );
+
+    expect(markup).toContain("No GSTR-2B statement for this period");
+    expect(markup).not.toMatch(/not filed|no filed/i);
   });
 
   it("renders a visible message when a panel action fails, without calling it a download", () => {

@@ -23,7 +23,9 @@ function declaredProperty(selector: string, property: string): string | undefine
 }
 
 function summary(
-  outcomes: readonly ("saved" | "captured" | "not-filed" | "pending" | "running")[],
+  outcomes: readonly (
+    "saved" | "captured" | "not-filed" | "pending" | "running" | "needs-review"
+  )[],
   status: "running" | "complete" = "running",
   completedIndexes = outcomes.flatMap((outcome, index) => (outcome === "saved" ? [index] : [])),
 ): FiledReturnsAllSupportedFullFiscalYearFlowSummary {
@@ -261,18 +263,94 @@ describe("all-supported panel progress", () => {
     expect(actionButton(render(withheld, SIGNED_OUT), label)).toContain("disabled");
   });
 
-  it("puts an explicit same-year restart beside the completed summary", () => {
+  // The card's restart is the only way to discard a completed plan for a year the presets do not
+  // offer. For a preset year it duplicated the preset's own discard (live 2026-09-22).
+  describe("a completed plan's restart", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    // A whole year of rows, so the plan is not outdated against today's preset.
+    const MONTHS = [
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "January",
+      "February",
+      "March",
+    ] as const;
+    const inYear = (financialYear: string) => {
+      const completed = summary(["saved", "not-filed"], "complete", [0, 1]);
+      const targetEvidence = MONTHS.flatMap((period) =>
+        (["GSTR-3B", "GSTR-1", "GSTR-2B"] as const).map((returnType) => ({
+          targetId: `${returnType}-${period}`,
+          financialYear,
+          period,
+          returnType,
+          artifactType: "PDF" as const,
+          outcome: period === "April" ? ("not-filed" as const) : ("saved" as const),
+        })),
+      );
+      return {
+        ...completed,
+        summaryIdentity: { ...completed.summaryIdentity!, financialYear },
+        targetEvidence,
+        totalTargets: targetEvidence.length,
+      };
+    };
+
+    it("stays on the card when no preset can restart that year", () => {
+      vi.stubEnv("MODE", "source-surfaces");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-22T09:00:00.000Z"));
+      const markup = render(inYear("2023-24"));
+
+      expect(markup).toContain("Your pack · All supported returns · FY 2023-24");
+      expect(markup).toContain("Discard the saved FY 2023-24 plan and run again");
+      expect(markup).toContain("33 of 36 saved");
+    });
+
+    it("appears once, in the presets, when a preset restarts that year", () => {
+      vi.stubEnv("MODE", "source-surfaces");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-22T09:00:00.000Z"));
+      const markup = render(inYear("2025-26"));
+
+      expect(markup.match(/Discard the saved FY 2025-26 plan/g)).toHaveLength(2); // visible + aria
+      expect(markup).not.toContain("Discard the saved FY 2025-26 plan and run again");
+      expect(markup).toContain("Discard the saved FY 2025-26 plan and run everything last year");
+    });
+  });
+
+  it("drops the progress bar and folds a clean completed plan's rows, keeping the count line", () => {
     vi.stubEnv("MODE", "source-surfaces");
     const markup = render(summary(["saved", "not-filed"], "complete", [0, 1]));
 
-    expect(markup).toContain("Your pack · All supported returns · FY 2025-26");
-    expect(markup).toContain("Discard the saved FY 2025-26 plan and run again");
+    expect(markup).not.toContain("panel-run-progress");
     expect(markup).toContain("1 of 2 saved");
-    expect(markup).toContain("browser may have saved the ZIP under a different name");
-    expect(markup.indexOf("Your pack · All supported returns")).toBeLessThan(
-      markup.indexOf("browser may have saved the ZIP under a different name"),
-    );
-    expect(markup).toContain('style="width:50%"');
+    const fold = markup.indexOf('<details class="panel-finished-run"');
+    expect(fold).toBeGreaterThan(markup.indexOf("1 of 2 saved"));
+    expect(markup.indexOf("GSTR-3B</h3>")).toBeGreaterThan(fold);
+    expect(markup.slice(fold)).toContain("Show what this run saved");
+  });
+
+  it("keeps a completed plan's rows open when any row needs attention", () => {
+    vi.stubEnv("MODE", "source-surfaces");
+    const markup = render(summary(["saved", "needs-review"], "complete", [0]));
+
+    expect(markup).not.toContain('<details class="panel-finished-run"');
+    expect(markup).toContain("GSTR-3B</h3>");
+  });
+
+  it("keeps the progress bar while a plan runs", () => {
+    const markup = render(summary(["saved", "pending"], "running", [0]));
+
+    expect(markup).toContain("panel-run-progress");
   });
 
   it("keeps every mixed all-supported outcome grouped beside a blocked run", () => {

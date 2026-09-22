@@ -79,12 +79,17 @@ html[data-pack-surface="panel"] body {
   padding: 16px;
 }
 
+/* No rule of its own: the band that follows (progress or evidence) draws the one rule between
+   them. Both drawing one left two rules 12px apart with nothing between them. */
 .panel-all-supported-run {
   display: grid;
   gap: 4px;
-  border-bottom: 1px solid var(--pack-border-subtle);
-  margin: 0 0 12px;
-  padding: 0 0 12px;
+}
+
+/* A status card can follow the plan card when a single-return run is also open; it carries its own
+   box, so it needs the gap, not a rule. */
+.panel-all-supported-run + :not(.evidence, .panel-run-progress, .panel-presets) {
+  margin-top: 12px;
 }
 
 .panel-all-supported-run p {
@@ -140,6 +145,14 @@ html[data-pack-surface="panel"] body {
   gap: 8px;
 }
 
+/* A band like any other when something precedes it; without this "What do you need?" sat on the
+   last result row. */
+.panel-body > * + .panel-presets {
+  border-top: 1px solid var(--pack-border-subtle);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
 .panel-preset-list {
   display: grid;
   gap: 8px;
@@ -193,6 +206,8 @@ html[data-pack-surface="panel"] body {
 }
 
 .panel-everything-preset-coverage {
+  flex-shrink: 0;
+  white-space: nowrap;
   color: var(--pack-ink-muted);
   font-family: var(--pack-font-mono);
   font-size: 0.75rem;

@@ -171,6 +171,20 @@ describe("popup presentation state", () => {
     expect(state.body).not.toContain("Browser Downloads");
   });
 
+  it("never says a GSTR-2B statement was not filed", () => {
+    const state = getPopupPresentationState(
+      supportedContext(),
+      summary("complete", ["filed-return-positively-not-filed"], { returnType: "GSTR-2B" }),
+      null,
+    );
+
+    expect(state).toMatchObject({
+      kind: "unavailable",
+      title: "No GSTR-2B statement for this period",
+    });
+    expect(`${state.title} ${state.body}`).not.toMatch(/not filed|no filed/i);
+  });
+
   it.each([
     [
       "GSTR-2B",

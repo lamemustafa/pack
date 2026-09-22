@@ -92,6 +92,41 @@ describe("per-target evidence", () => {
     expect(markup).not.toContain("Needs review");
   });
 
+  // Live 2026-09-22: a taxpayer registered from July read "Not filed" for GSTR-2B April-June,
+  // periods the Returns Dashboard does not offer. Nobody files an auto-drafted statement.
+  it("never says a GSTR-2B statement was not filed, in a single-return run", () => {
+    const summary = summaryWith([
+      { period: "April", outcome: "not-filed" },
+      { period: "May", outcome: "not-filed" },
+    ]);
+    summary.scope = { ...summary.scope, artifactType: "EXCEL", returnType: "GSTR-2B" };
+
+    const markup = renderToStaticMarkup(<TargetEvidence summary={summary} />);
+
+    expect(markup).not.toContain("Not filed");
+    expect(markup.match(/Not generated/g)).toHaveLength(2);
+    expect(markup).toContain("0 of 2 saved");
+  });
+
+  it("says not generated for GSTR-2B and not filed for a filed return, grouped by return", () => {
+    const entry = (returnType: "GSTR-1" | "GSTR-2B") => ({
+      targetId: `${returnType}-April`,
+      financialYear: "2025-26",
+      period: "April" as const,
+      returnType,
+      artifactType: "PDF" as const,
+      outcome: "not-filed" as const,
+    });
+
+    const markup = renderToStaticMarkup(
+      <TargetEvidence evidence={[entry("GSTR-1"), entry("GSTR-2B")]} groupByReturn />,
+    );
+
+    expect(markup.match(/Not filed/g)).toHaveLength(1);
+    expect(markup.match(/Not generated/g)).toHaveLength(1);
+    expect(markup.indexOf("Not filed")).toBeLessThan(markup.indexOf("GSTR-2B"));
+  });
+
   it("renders nothing when the run carries no per-target evidence", () => {
     const summary = summaryWith([{ period: "April", outcome: "saved" }]);
     delete summary.targetEvidence;
@@ -125,7 +160,8 @@ describe("per-target evidence", () => {
       <TargetEvidence summary={summaryWith([{ period: "April", outcome: "partly-saved" }])} />,
     );
 
-    expect(markup).toContain(">Saved · some formats not on portal<");
+    // One line at panel width: the count line above carries the full reason.
+    expect(markup).toContain(">Saved · format n/a<");
     expect(markup).not.toMatch(/partly saved/i);
     expect(markup).toContain("evidence-partly-saved");
   });

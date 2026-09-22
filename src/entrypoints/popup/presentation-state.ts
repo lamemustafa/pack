@@ -118,12 +118,16 @@ export function getPopupPresentationState(
   }
 
   if (summary?.flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
+    // Nobody files an auto-drafted GSTR-2B statement, so its absence is not a filing claim.
+    const statement = summary.scope.returnType === "GSTR-2B";
     return {
       badge: "Unavailable",
-      body: "The GST Portal reports that this return was not filed for the selected period.",
+      body: statement
+        ? "The GST Portal has no GSTR-2B statement for the selected period."
+        : "The GST Portal reports that this return was not filed for the selected period.",
       icon: "–",
       kind: "unavailable",
-      title: "No filed return for this period",
+      title: statement ? "No GSTR-2B statement for this period" : "No filed return for this period",
       tone: "neutral",
     };
   }
