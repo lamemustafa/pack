@@ -85,6 +85,20 @@ export async function readCanonicalFiledReturnsFlowSummaryStorageState(
   });
 }
 
+/** Removes the stored summary only when it parses and `belongs` claims it; reports whether it did. */
+export async function removeCanonicalFiledReturnsFlowSummaryWhen(
+  key: string,
+  belongs: (summary: FiledReturnsFlowSummary) => boolean,
+): Promise<boolean> {
+  return runSummaryMutationCriticalSection(async () => {
+    const values = await browser.storage.session.get(key);
+    const summary = parseDurableFiledReturnsFlowSummary(values[key]);
+    if (!summary || !belongs(summary)) return false;
+    await browser.storage.session.remove(key);
+    return true;
+  });
+}
+
 async function writeCanonicalSummary(
   key: string,
   input: unknown,
