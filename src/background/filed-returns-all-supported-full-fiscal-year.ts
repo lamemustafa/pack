@@ -1,4 +1,3 @@
-import { removeCanonicalFiledReturnsFlowSummaryWhen } from "./filed-returns-session-summary";
 import { filedReturnsRunLeaseLiveness } from "./filed-returns-active-run";
 import type {
   FiledReturnsAllSupportedFullFiscalYearRequest,
@@ -735,7 +734,6 @@ async function finishAllSupportedFinalZip(
     noArtifacts ? "cleaned-without-export" : "cleaned-after-download",
   );
   await persistAllSupportedFullFiscalYearLedger(deps, completed);
-  await releaseOwnChildSummary(deps, completed);
   return allSupportedResponse(deps, completed, {
     ...zipStep,
     safeSignals: Array.from(
@@ -747,35 +745,6 @@ async function finishAllSupportedFinalZip(
     ),
     safeMessage: zipStep.safeMessage,
   });
-}
-
-/**
- * Each child target writes its own single-return summary to the shared session slot. One left
- * unfinished outlived the plan's completion and replaced the completed plan card with the
- * presets (#387). The plan held the run lease throughout, so a summary for one of its targets
- * written after it started is its own, and is released here. Anything it cannot prove is its own
- * -- another return, another year, or one written before it started -- stays, because it may be a
- * separate run's recovery. A failed release leaves only the old display, never lost work.
- */
-async function releaseOwnChildSummary(
-  deps: AllSupportedRunnerDeps,
-  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
-): Promise<void> {
-  const planStartedAt = Date.parse(ledger.createdAt);
-  if (!Number.isFinite(planStartedAt)) return;
-  await removeCanonicalFiledReturnsFlowSummaryWhen(deps.storageKeys.completion, (summary) => {
-    const writtenAt = Date.parse(summary.updatedAt ?? summary.completedAt ?? "");
-    return (
-      Number.isFinite(writtenAt) &&
-      writtenAt >= planStartedAt &&
-      ledger.targets.some(
-        (target) =>
-          target.financialYear === summary.scope.financialYear &&
-          target.returnType === summary.scope.returnType &&
-          target.period === summary.scope.period,
-      )
-    );
-  }).catch(() => false);
 }
 
 async function allSupportedResponse(
