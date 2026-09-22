@@ -374,6 +374,9 @@ export async function triggerSelectedArtifacts({
         combineDownloadedArtifactFlowSteps(combinedFlowStep, response.flowStep, scope),
         response,
       );
+      // Only a staging plan child reaches this without a bundle ledger; it must not leave the
+      // direct-download checkpoint in the shared summary slot either (#387).
+      if (deps.stageCapturedDownloads) return { ...response, flowStep };
       const flowSummary = await persistPartialArtifactSummary(scope, flowStep, deps);
       return {
         ...response,
@@ -409,10 +412,14 @@ export async function triggerSelectedArtifacts({
         scope,
       );
     }
+    // The direct-download checkpoint, read back only on the direct-download path (see
+    // `readPersistedArtifactProgress` above). A staging plan child writing it left an unfinished
+    // summary that outlived the plan and replaced its completed card with the presets (#387).
     if (
       artifactTypes.length > 1 &&
       completedArtifactTypes.size < artifactTypes.length &&
-      !singlePeriodBundleLedgerId
+      !singlePeriodBundleLedgerId &&
+      !deps.stageCapturedDownloads
     ) {
       await persistPartialArtifactSummary(scope, combinedFlowStep, artifactDeps);
     }
