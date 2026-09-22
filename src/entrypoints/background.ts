@@ -368,7 +368,17 @@ async function handleMessage(
       }
       // An atomic recovery is the only record that can authorise work on its
       // exact target. Do not bury it behind retained all-supported history.
-      if (flowSummary && !["complete", "cancelled"].includes(flowSummary.status)) {
+      //
+      // Except the plan's own children: each writes an unfinished single-return
+      // summary while the plan runs, and one of them outlived the plan's
+      // completion and replaced the completed plan card with the presets (#387).
+      // A summary written before the plan completed belongs to that plan; a
+      // separate run's recovery can only start after it.
+      if (
+        flowSummary &&
+        !["complete", "cancelled"].includes(flowSummary.status) &&
+        !isSupersededByCompletedAllSupportedPlan(flowSummary, allSupportedFullFiscalYearFlowSummary)
+      ) {
         return { ok: true, flowSummary };
       }
       if (
@@ -475,6 +485,24 @@ async function hasStaleLeaseRootCannotTakeOver(
   );
   if (lease.state !== "valid" || !isInterruptedFiledReturnsRun(lease.run, now)) return false;
   return !isStaleLeaseOwnedBy(lease.run, allSupportedFullFiscalYearPlanRootKey(identity), now);
+}
+
+function isSupersededByCompletedAllSupportedPlan(
+  candidate: NonNullable<Awaited<ReturnType<typeof readCurrentFiledReturnsFlowSummary>>>,
+  allSupportedSummary: Awaited<
+    ReturnType<typeof readCurrentAllSupportedFullFiscalYearFlowSummary>
+  > | null,
+): boolean {
+  if (allSupportedSummary?.status !== "complete" || !allSupportedSummary.completedAt) return false;
+  const candidateUpdatedAt = candidate.updatedAt ?? candidate.completedAt;
+  if (!candidateUpdatedAt) return false;
+  const candidateTimestamp = Date.parse(candidateUpdatedAt);
+  const completedTimestamp = Date.parse(allSupportedSummary.completedAt);
+  return (
+    Number.isFinite(candidateTimestamp) &&
+    Number.isFinite(completedTimestamp) &&
+    candidateTimestamp < completedTimestamp
+  );
 }
 
 function isNewerTerminalFiledReturnsFlowSummary(
