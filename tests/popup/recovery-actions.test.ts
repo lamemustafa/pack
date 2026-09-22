@@ -20,6 +20,21 @@ describe("popup full-year recovery actions", () => {
     }
   });
 
+  // A quarterly filer's stop asks the portal's per-period filing preference; a retry asks the same
+  // question and gets the same answer, so the plan offers only its exit (2026-09-22).
+  it("offers no retry for a quarterly filer's stop, only its exit", () => {
+    const summary = summaryFor("blocked", "filed-gstr3b-quarterly-filer-unsupported");
+    summary.flowStep.state = "blocked";
+    summary.flowStep.safeMessage =
+      "The GST Portal shows this taxpayer files GSTR-3B quarterly (QRMP) for April 2026-27. Pack supports monthly filers only; download quarterly returns from the GST Portal.";
+
+    const markup = renderFullYearRecovery(summary);
+
+    expect(markup).not.toMatch(/>Retry/);
+    expect(markup).toContain("Cancel and reset");
+    expect(markup).toContain("monthly filers only");
+  });
+
   it("renders resume and discard immediately for a pending saved full-year run", () => {
     const pendingSummary = summaryFor("pending", "full-fiscal-year-resume-confirmation-required");
     const markup = renderToStaticMarkup(
