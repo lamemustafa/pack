@@ -373,6 +373,9 @@ export async function triggerSelectedArtifacts({
         combineDownloadedArtifactFlowSteps(combinedFlowStep, response.flowStep, scope),
         response,
       );
+      // Only a staging plan child reaches this without a bundle ledger; it must not leave the
+      // direct-download checkpoint in the shared summary slot either (#387).
+      if (deps.stageCapturedDownloads) return { ...response, flowStep };
       const flowSummary = await persistPartialArtifactSummary(scope, flowStep, deps);
       return {
         ...response,
