@@ -332,6 +332,52 @@ describe("inline filed-return recovery status", () => {
     expect(markup).toMatch(/Open a signed-in GST Portal tab before [^<]+\./);
   });
 
+  // The quarterly stop asks the portal's per-period filing preference; retrying asks it again. The
+  // banner must say why the run stopped and never tell the reader to retry (2026-09-22).
+  it("names a quarterly filer's stop in the banner without telling the reader to retry", () => {
+    const message =
+      "The GST Portal shows this taxpayer files GSTR-3B quarterly (QRMP) for April 2026-27. Pack supports monthly filers only; download quarterly returns from the GST Portal.";
+    const summary: FiledReturnsFlowSummary = {
+      ...blockedSummary,
+      scope: { ...blockedSummary.scope, period: FULL_FISCAL_YEAR_PERIOD },
+      currentPeriod: "April",
+      fullFiscalYearRecovery: {
+        expectedRevision: 1,
+        ledgerId: "full-fiscal-year-12345678",
+        targetId: "GSTR-3B:2026-27:April",
+        targetStatus: "blocked",
+      },
+      flowStep: {
+        ...blockedSummary.flowStep,
+        state: "blocked",
+        safeSignals: ["filed-return-api-searched", "filed-gstr3b-quarterly-filer-unsupported"],
+        safeMessage: message,
+        userAction: {
+          type: "RETRY_PORTAL_GENERATION",
+          message: "Resolve April, then retry this period.",
+          canResume: true,
+        },
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <InlineStatus
+        busy={null}
+        portalReady
+        onOpenPortal={vi.fn()}
+        onRestartTarget={vi.fn()}
+        onRetryFullFiscalYearTarget={vi.fn()}
+        onRetryTarget={vi.fn()}
+        presentation={blockedPresentation}
+        summary={summary}
+      />,
+    );
+
+    expect(markup).toContain("monthly filers only");
+    expect(markup).not.toMatch(/retry/i);
+    expect(markup).not.toContain("inline-status-primary");
+  });
+
   it("renders every portal-gated primary action disabled with a visible reason", () => {
     const fullYearSummary: FiledReturnsFlowSummary = {
       ...blockedSummary,
