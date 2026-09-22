@@ -23,6 +23,7 @@ import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
 import { PanelGuidedScope, isPackSourceSurfaceBuildMode } from "./panel-guided-scope";
 import {
+  allReturnsPresetOffersRestart,
   discardAllReturnsPlanLabel,
   panelAllReturnsFullYearPreset,
   panelAllReturnsFullYearResumePlan,
@@ -35,6 +36,13 @@ export type PackPanelController = ReturnType<typeof usePackPopupController>;
  * with a controller in any state. The gap this separation exists to close was a terminal
  * run that rendered nothing at all: only a render assertion catches that.
  */
+const SETTLED_TARGET_OUTCOMES: readonly FiledReturnsTargetOutcome[] = [
+  "saved",
+  "partly-saved",
+  "not-filed",
+  "not-generated",
+];
+
 export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const summary = pack.recoverySummary ?? pack.scopedFlowSummary;
   const presentation = getPopupPresentationState(
@@ -67,6 +75,23 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   const savedRunBlock = getSavedRunBlock(savedRun, pack.effectiveBusy, fullYearFlowAvailable);
   const allSupportedRunBlock = getAllSupportedRunBlock(allSupportedSummary, pack.effectiveBusy);
   const allReturnsTerminalBlocks = getAllSupportedTerminalBlocks(allSupportedSummary);
+  const allSupportedComplete = allSupportedSummary?.status === "complete";
+  // A completed plan's rows are history once every row is answered; anything still open stays open.
+  const allSupportedSettled =
+    allSupportedComplete &&
+    allSupportedSummary.targetEvidence.every((target) =>
+      SETTLED_TARGET_OUTCOMES.includes(target.outcome),
+    );
+  const planFinancialYear = allSupportedSummary?.summaryIdentity?.financialYear;
+  // The presets below restart this year's completed plan themselves; the card offering the same
+  // discard put one destructive action on screen twice (live 2026-09-22).
+  const presetOffersRestart =
+    !running &&
+    planFinancialYear !== undefined &&
+    allReturnsTerminalBlocks.some(
+      (block) => block.restartPlan && block.financialYear === planFinancialYear,
+    ) &&
+    allReturnsPresetOffersRestart(planFinancialYear);
 
   /**
    * The summary card's restart, revalidated the way the preset's is. A panel
@@ -171,6 +196,7 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 busy={pack.effectiveBusy}
                 fullYearFlowAvailable={fullYearFlowAvailable}
                 portalReady={portalSignedIn}
+                presetOffersRestart={presetOffersRestart}
                 onRestart={() => void restartFromSummaryCard()}
                 onResume={() => {
                   if (!allSupportedSummary.summaryIdentity) return;
@@ -226,8 +252,16 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
                 completion folds away; anything needing review stays open. */}
             {allSupportedSummary ? (
               <>
-                <PanelRunProgress evidence={allSupportedSummary.targetEvidence} />
-                <TargetEvidence evidence={allSupportedSummary.targetEvidence} groupByReturn />
+                {/* A complete plan has nothing left to progress through; its bar counted only
+                    saved rows, so a finished year with unfiled months read as half done. */}
+                {allSupportedComplete ? null : (
+                  <PanelRunProgress evidence={allSupportedSummary.targetEvidence} />
+                )}
+                <TargetEvidence
+                  evidence={allSupportedSummary.targetEvidence}
+                  groupByReturn
+                  foldRows={allSupportedSettled}
+                />
               </>
             ) : runComplete ? (
               <details className="panel-finished-run">
@@ -347,6 +381,7 @@ function AllSupportedRunStatus({
   busy,
   fullYearFlowAvailable,
   portalReady,
+  presetOffersRestart,
   onRestart,
   onResume,
   onRetryTarget,
@@ -355,6 +390,7 @@ function AllSupportedRunStatus({
   busy: string | null;
   fullYearFlowAvailable: boolean;
   portalReady: boolean;
+  presetOffersRestart: boolean;
   onRestart: () => void;
   onResume: () => void;
   onRetryTarget: () => void;
@@ -376,7 +412,8 @@ function AllSupportedRunStatus({
   // A plan whose recovery Pack withholds can only be discarded; without this it had no control at
   // all (#376). The background re-derives the same condition before discarding anything.
   const canRestart =
-    fullYearFlowAvailable && (summary.status === "complete" || summary.recoveryWithheld === true);
+    fullYearFlowAvailable &&
+    ((summary.status === "complete" && !presetOffersRestart) || summary.recoveryWithheld === true);
   const canResume = fullYearFlowAvailable && summary.resumeAvailable === true;
   const recovery = summary.allSupportedFullFiscalYearRecovery;
   const recoveryEvidence = recovery
