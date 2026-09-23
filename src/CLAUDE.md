@@ -4,18 +4,6 @@ Native content (no sibling `AGENTS.md` in `src/` to import). Root `AGENTS.md`
 and root `CLAUDE.md` still apply; this file adds concrete orientation for
 working inside `src/`.
 
-## Layout
-
-```
-src/
-  entrypoints/   background.ts, content.ts, options/, popup/  (WXT entrypoints)
-  core/          portal-neutral contracts, manifest, naming, csv
-  connectors/gst/ GST-specific types, protocol, DOM, hosts, flow, download
-  background/    service-worker-side logic used by entrypoints/background.ts
-  extension/     manifest-policy.ts (permissions/CSP source of truth), version.ts
-  styles/        global.css
-```
-
 ## core vs connectors/gst boundary
 
 `src/core` must stay portal-neutral: generic contracts (`contracts.ts`),
