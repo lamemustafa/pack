@@ -219,6 +219,10 @@ html[data-pack-surface="panel"] body {
   text-wrap: balance;
 }
 
+.panel-fy {
+  white-space: nowrap;
+}
+
 .panel-everything-preset-coverage {
   flex-shrink: 0;
   white-space: nowrap;

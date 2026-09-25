@@ -523,7 +523,8 @@ function AllReturnsPreset({
           <span>{displayedPlan.label}</span>
           {restart ? (
             <span className="panel-everything-preset-replaces">
-              {`Replaces the saved FY ${restart.savedPlanFinancialYear} pack`}
+              Replaces the saved{" "}
+              <FinancialYearText financialYear={restart.savedPlanFinancialYear} /> pack
             </span>
           ) : null}
         </span>
@@ -536,6 +537,11 @@ function AllReturnsPreset({
       ) : null}
     </React.Fragment>
   );
+}
+
+/** "FY <year>" as one unbreakable unit, so a narrow panel never splits the year at its hyphen. */
+export function FinancialYearText({ financialYear }: { financialYear: string }) {
+  return <span className="panel-fy">{`FY ${financialYear}`}</span>;
 }
 
 /**
