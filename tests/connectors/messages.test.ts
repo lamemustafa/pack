@@ -95,6 +95,29 @@ describe("message boundary", () => {
     ).toBe(false);
   });
 
+  it("accepts the final-ZIP retry confirmation only for a full fiscal year scope", () => {
+    const fullYear = {
+      financialYear: "2025-26",
+      period: FULL_FISCAL_YEAR_PERIOD,
+      returnType: "GSTR-3B",
+    };
+    expect(
+      isPackMessage({ type: "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY", payload: fullYear }),
+    ).toBe(true);
+    expect(
+      isPackMessage({
+        type: "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY",
+        payload: { ...fullYear, period: "May" },
+      }),
+    ).toBe(false);
+    expect(
+      isPackMessage({
+        type: "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY",
+        payload: { ...fullYear, ledgerId: "full-fiscal-year-12345678" },
+      }),
+    ).toBe(false);
+  });
+
   it("accepts only known Pack messages", () => {
     expect(isPackMessage({ type: "PACK_GET_CONTEXT" })).toBe(true);
     expect(isPackMessage({ type: "PACK_START_SYNTHETIC_DEMO" })).toBe(true);

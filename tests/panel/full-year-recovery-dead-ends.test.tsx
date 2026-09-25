@@ -603,6 +603,33 @@ describe("D2: a final ZIP whose browser download ID is gone", () => {
     return findButton(/final ZIP/);
   }
 
+  it("rebuilds the final ZIP only on the explicit confirmation, repeating no portal work", async () => {
+    const ledger = await seedObservingZip();
+    await startWorker();
+    const attemptsBefore = ledger.targets.map((target) => target.attempts);
+
+    // A plain start is not the confirmation: the ambiguous handoff stays in review.
+    await sendAsReader({ type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW", payload: ledger.scope });
+    expect(zip.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect((await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId))?.zipPhase).toBe(
+      "download-intent-persisted",
+    );
+
+    await mountPanel();
+    const checked = await openGuidedAction();
+    expect(checked?.textContent).toBe("I checked—retry final ZIP");
+    await click(checked!);
+
+    expect(zip.exportFullFiscalYearZip).toHaveBeenCalledTimes(1);
+    const exported = zip.exportFullFiscalYearZip.mock
+      .calls[0]![0] as FiledReturnsFullFiscalYearLedger;
+    expect(exported.ledgerId).toBe(ledger.ledgerId);
+    // Pack's own archive was rebuilt from staging; no period was fetched again.
+    const stored = await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId);
+    expect(stored?.targets.map((target) => target.attempts)).toEqual(attemptsBefore);
+    expect(stored?.targets.every((target) => target.status === "downloaded")).toBe(true);
+  });
+
   it("gives the reader a way out after they confirm they checked Downloads", async () => {
     const ledger = await seedObservingZip();
     await startWorker();
