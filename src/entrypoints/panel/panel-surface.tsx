@@ -1,6 +1,5 @@
 import React from "react";
 import { browser } from "wxt/browser";
-import { PACK_CLEAR_LOCAL_DATA_ACTION_LABEL } from "../../core/recovery-actions";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsFlowSummary,
@@ -595,14 +594,15 @@ function getAllSupportedRunBlock(
 ): { disabled: true; label: string } | null {
   if (!summary || busy !== null) return null;
   if (["complete", "cancelled"].includes(summary.status)) return null;
-  // An unconfirmed final-ZIP handoff leaves the card with no discard control, so the way out is the
-  // Options clear the plan's own message names -- not a discard on the run summary.
+  // An unconfirmed final-ZIP handoff leaves the card with no discard control. The plan's own step
+  // names the way out (the Options clear, which this panel deliberately never offers itself), so the
+  // preset reason must not send the reader to a discard on the run summary.
   if (
     summary.flowStep.safeSignals.includes("all-supported-full-fiscal-year-final-zip-manual-review")
   ) {
     return {
       disabled: true,
-      label: `Use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d in Pack's options before starting another return.`,
+      label: "Resolve the saved all-supported fiscal-year plan before starting another return.",
     };
   }
   return {

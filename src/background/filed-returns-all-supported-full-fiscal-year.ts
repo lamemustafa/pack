@@ -34,6 +34,7 @@ import {
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import {
   allSupportedFinalZipReviewStep,
+  isAmbiguousAllSupportedFinalZipHandoff,
   unresolvedAllSupportedFullFiscalYearStep as unresolvedRunStep,
   allSupportedTerminalPlanRoots,
   projectAllSupportedFullFiscalYearSummary,
@@ -429,9 +430,18 @@ async function continueSavedAllSupportedFullFiscalYearRun(
   }
   // A saved final-download intent without an exact browser download ID is
   // deliberately not replayed. Neither a new portal run nor a replacement ZIP
-  // can establish what happened to the first browser request.
-  if (ledger.zipPhase)
-    return allSupportedResponse(deps, ledger, allSupportedFinalZipReviewStep(ledger));
+  // can establish what happened to the first browser request. Any other phase
+  // left here reads as the polled summary reads it, so the same saved plan does
+  // not tell two stories.
+  if (ledger.zipPhase) {
+    return allSupportedResponse(
+      deps,
+      ledger,
+      isAmbiguousAllSupportedFinalZipHandoff(ledger)
+        ? allSupportedFinalZipReviewStep(ledger)
+        : unresolvedRunStep(ledger),
+    );
+  }
   if (ledger.status === "running") {
     // Age alone was the test here, which called a slow-but-live run interrupted and a dead one
     // active depending only on the clock. The lease is the evidence -- it renews every ten seconds

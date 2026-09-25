@@ -4,6 +4,7 @@ import type {
   FiledReturnsFullFiscalYearLedger,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
 import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
@@ -267,6 +268,31 @@ export async function startFullFiscalYearDownloadFlow(
     ["export-pending", "export-retry-pending"].includes(sameScopeExistingLedger.zipPhase ?? "")
   ) {
     return completeRun(deps, sameScopeExistingLedger);
+  }
+  if (options.confirmedFinalZipRetry) {
+    // The confirmation is for a final ZIP. With none waiting in this scope's saved run -- a late click
+    // from a second window after the run was discarded or cleared -- it must stop, never start a year.
+    const flowStep: PortalFlowStepResult = {
+      connectorId: "gst",
+      scopeId: filedReturnsScopeId(scope.returnType),
+      state: "blocked",
+      safeSignals: ["full-fiscal-year-final-zip-confirmation-unmatched"],
+      safeMessage:
+        "Pack found no unconfirmed final ZIP waiting for this confirmation, so it did not start anything. Reopen Pack to see the saved run as it stands.",
+    };
+    return {
+      ok: true,
+      flowStep,
+      flowSummary: sameScopeExistingLedger
+        ? toFullFiscalYearSummary(sameScopeExistingLedger, flowStep)
+        : {
+            scope,
+            status: "blocked",
+            completedPeriods: [],
+            totalPeriods: plannedPeriods.length,
+            flowStep,
+          },
+    };
   }
   const replaceCompletedSameScopeLedger =
     existingLedger &&

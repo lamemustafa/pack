@@ -303,10 +303,25 @@ function summaryStep(
         : "Pack confirmed the final fiscal-year ZIP download.",
     };
   }
-  if (ledger.zipPhase === "download-intent-persisted" || ledger.zipPhase === "download-started") {
-    return allSupportedFinalZipReviewStep(ledger);
-  }
+  if (isAmbiguousAllSupportedFinalZipHandoff(ledger)) return allSupportedFinalZipReviewStep(ledger);
   return unresolvedAllSupportedFullFiscalYearStep(ledger);
+}
+
+/**
+ * Whether the plan's final ZIP may already have been handed to the browser without an exact
+ * download ID Pack can check: an intent saved before the download started, a start with no
+ * recorded ID, or an observation whose ID is missing. The polled summary and the runner both read
+ * this, so one saved state gets one step.
+ */
+export function isAmbiguousAllSupportedFinalZipHandoff(
+  ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "zipPhase" | "zipDownloadAttempt">,
+): boolean {
+  if (ledger.zipPhase === "download-intent-persisted" || ledger.zipPhase === "download-started") {
+    return true;
+  }
+  if (ledger.zipPhase !== "download-observing") return false;
+  const downloadId = ledger.zipDownloadAttempt?.downloadId;
+  return !(typeof downloadId === "number" && Number.isSafeInteger(downloadId) && downloadId >= 0);
 }
 
 /**
