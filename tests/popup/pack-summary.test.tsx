@@ -29,6 +29,20 @@ describe("popup pack summary", () => {
     },
   });
 
+  it("names where the pack lives without claiming whose it is or that it was saved", () => {
+    // Pack does not record which GST account made a saved run, and this summary also renders for
+    // a selection with nothing saved -- so its label may claim only the browser, in every state.
+    for (const summary of [null, singlePeriodSummary("running"), singlePeriodSummary("complete")]) {
+      const markup = renderToStaticMarkup(
+        <PackSummary scope={singlePeriodScope} summary={summary} />,
+      );
+
+      expect(markup).toContain('<section class="pack-summary" aria-label="In this browser">');
+      expect(markup).toContain('<p class="section-label">In this browser</p>');
+      expect(markup).not.toContain("Your pack");
+    }
+  });
+
   it("describes an unstarted single-period selection without claiming it was saved", () => {
     const markup = renderToStaticMarkup(<PackSummary scope={singlePeriodScope} summary={null} />);
 
