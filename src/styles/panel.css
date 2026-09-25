@@ -205,6 +205,24 @@ html[data-pack-surface="panel"] body {
   font-size: 0.9375rem;
 }
 
+.panel-everything-preset-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-everything-preset-replaces {
+  color: var(--pack-ink-muted);
+  font-size: 0.75rem;
+  /* Keep "FY <year> plan" together at the narrowest panel instead of orphaning "plan". */
+  text-wrap: balance;
+}
+
+.panel-fy {
+  white-space: nowrap;
+}
+
 .panel-everything-preset-coverage {
   flex-shrink: 0;
   white-space: nowrap;
