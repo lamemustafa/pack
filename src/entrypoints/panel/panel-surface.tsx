@@ -41,6 +41,7 @@ const SETTLED_TARGET_OUTCOMES: readonly FiledReturnsTargetOutcome[] = [
   "partly-saved",
   "not-filed",
   "not-generated",
+  "quarterly-no-monthly-return",
 ];
 
 export function PanelSurface({ pack }: { pack: PackPanelController }) {

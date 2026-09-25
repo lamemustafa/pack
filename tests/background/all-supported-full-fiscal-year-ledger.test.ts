@@ -931,3 +931,72 @@ describe("a period the portal declined to generate, in an all-returns year", () 
     });
   });
 });
+
+// Live 2026-09-22: a quarterly (QRMP) taxpayer in an "everything last year" run. April and May
+// have no GSTR-3B at all, so the year must settle them and carry on rather than stop or say
+// "Not filed".
+describe("a quarterly filer's month 1-2 GSTR-3B, in an all-returns year", () => {
+  const quarterlyMonthSignals = [
+    "filed-return-api-searched",
+    "filed-gstr3b-quarterly-no-monthly-return",
+  ];
+
+  it("settles it as having no monthly return, and the saved plan stays valid", () => {
+    let ledger = createLedger();
+    const target = ledger.targets.find(
+      (candidate) => candidate.returnType === "GSTR-3B" && candidate.period === "April",
+    );
+    if (!target) throw new Error("expected a GSTR-3B April target in the all-returns plan");
+
+    ledger = markAllSupportedFullFiscalYearTargetRunning(ledger, target.targetId, NOW);
+    ledger = markAllSupportedFullFiscalYearTargetTerminal(
+      ledger,
+      target.targetId,
+      "quarterly-no-monthly-return",
+      {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "candidate-not-found",
+        safeSignals: quarterlyMonthSignals,
+        safeMessage: "x",
+      },
+      NOW,
+    );
+
+    expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
+    const evidence = toAllSupportedFullFiscalYearSummary(ledger).targetEvidence.find(
+      (row) => row.targetId === target.targetId,
+    );
+    expect(evidence?.outcome).toBe("quarterly-no-monthly-return");
+    const stored = ledger.targets.find((candidate) => candidate.targetId === target.targetId);
+    expect(stored?.safeMessage).toMatch(/quarterly/i);
+    expect(stored?.safeMessage).not.toMatch(/not filed|no filed/i);
+  });
+
+  it("rejects a stored month claiming it without the role-status evidence", () => {
+    const ledger = createLedger();
+    const target = ledger.targets.find(
+      (candidate) => candidate.returnType === "GSTR-3B" && candidate.period === "April",
+    );
+    if (!target) throw new Error("expected a GSTR-3B April target in the all-returns plan");
+    const claimed = {
+      ...ledger,
+      targets: ledger.targets.map((candidate) =>
+        candidate.targetId === target.targetId
+          ? {
+              ...candidate,
+              status: "quarterly-no-monthly-return" as const,
+              safeSignals: ["filed-return-api-searched"],
+              safeMessage: canonicalDurableTargetStatus(
+                candidate,
+                "quarterly-no-monthly-return",
+                quarterlyMonthSignals,
+              ).safeMessage,
+            }
+          : candidate,
+      ),
+    };
+
+    expect(isAllSupportedFullFiscalYearLedger(claimed)).toBe(false);
+  });
+});

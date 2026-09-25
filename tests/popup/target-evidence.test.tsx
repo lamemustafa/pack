@@ -92,6 +92,24 @@ describe("per-target evidence", () => {
     expect(markup).not.toContain("Needs review");
   });
 
+  // A quarterly (QRMP) filer has no GSTR-3B for months 1-2 of a quarter. That is neither a claim
+  // that the taxpayer failed to file nor something to review.
+  it("names a quarterly filer's month 1-2 without saying not filed or counting it saved", () => {
+    const markup = renderToStaticMarkup(
+      <TargetEvidence
+        summary={summaryWith([
+          { period: "April", outcome: "quarterly-no-monthly-return" },
+          { period: "May", outcome: "quarterly-no-monthly-return" },
+        ])}
+      />,
+    );
+
+    expect(markup.match(/In quarterly return/g)).toHaveLength(2);
+    expect(markup).toContain("0 of 2 saved");
+    expect(markup).not.toContain("Not filed");
+    expect(markup).not.toContain("Needs review");
+  });
+
   // Live 2026-09-22: a taxpayer registered from July read "Not filed" for GSTR-2B April-June,
   // periods the Returns Dashboard does not offer. Nobody files an auto-drafted statement.
   it("never says a GSTR-2B statement was not filed, in a single-return run", () => {
