@@ -5,6 +5,7 @@ import {
   getClickableElements,
   matchesAcceptedText,
   normaliseText,
+  readElementText,
 } from "./filed-returns-dom";
 import { acceptedFiledReturnsMonthTexts } from "./filed-returns-months";
 import { clickBestReturnDashboardCandidate } from "./filed-returns-navigator";
@@ -320,19 +321,4 @@ function findGstr2bSummaryDashboardBackControl(documentRef: Document): HTMLEleme
       return /^back\s+to\s+dashboard$/.test(text) || /^back$/.test(text);
     }) ?? null
   );
-}
-
-function readElementText(element: HTMLElement): string {
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  return [
-    element.innerText || "",
-    element.textContent || "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ].join(" ");
 }

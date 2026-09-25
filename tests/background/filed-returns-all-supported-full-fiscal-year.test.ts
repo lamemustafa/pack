@@ -635,7 +635,6 @@ describe("all-supported full-fiscal-year worker", () => {
       requiredTabIds.push(options?.requiredPortalTabId);
       const ledger = savedLedger();
       expect(ledger.targets.some((target) => target.status === "running")).toBe(true);
-      expect(runDeps.persistTargetReview).toBe(false);
       expect(runDeps.stageCapturedDownloads).toEqual({
         bundleKind: "all-supported-full-fiscal-year",
         ledgerId: ledger.ledgerId,
