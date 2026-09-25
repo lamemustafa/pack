@@ -305,10 +305,9 @@ async function saveSingleReturnPlanStoppedAtSecondPeriod(): Promise<{
 }
 
 /**
- * The interim guard. Until Pack can read the signed-in account, a browser restart is the point at
- * which it can no longer tell whether the same account is open: the tab-session marker is gone,
- * and tab ids do not survive a restart. "Could not determine" refuses, whichever account is open,
- * and the refusal must not be offered back as a retry that can only refuse again.
+ * The restart refusal. After a restart the tab-session marker differs and tab ids do not survive,
+ * so the run refuses rather than binding to another tab, whichever account is open, and the
+ * refusal must not be offered back as a retry that can only refuse again.
  */
 describe("a single-return full-year plan after a browser restart", () => {
   it("refuses to continue even with the same account open, and says why", async () => {

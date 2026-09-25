@@ -211,8 +211,8 @@ describe("full-year Start preserves existing recovery", () => {
   });
 
   it("refuses a prior browser tab pin instead of rebinding it for a validated retry", async () => {
-    // A pin from an earlier browser session cannot show that the same GST account is still signed
-    // in, so the retry stops with that reason rather than rebinding to whichever tab is active.
+    // After a restart the tab-session marker differs and tab ids do not survive, so the retry
+    // refuses with a named reason rather than rebinding to whichever tab is active.
     const ledger = makeCompletedRecoveryLedger("pending");
     storage.local.ledger = ledger;
     const preparation = await prepareFullFiscalYearTargetRetry(
