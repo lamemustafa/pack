@@ -1,5 +1,6 @@
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { isFullFiscalYearScope } from "../../connectors/gst/filed-returns-scope";
+import { withholdsFiledReturnsExplicitRetry } from "../../connectors/gst/filed-returns-explicit-retry";
 import { hasUnresolvedFiledReturnsRecovery } from "./flow-summary";
 
 /**
@@ -163,9 +164,9 @@ export function getRecoveryFlowAvailability(
     };
   }
 
-  // The portal's per-period filing preference said quarterly; a retry asks the same question and gets
-  // the same answer, so the saved plan offers only its exit.
-  if (summary.flowStep.safeSignals.includes("filed-gstr3b-quarterly-filer-unsupported")) {
+  // A retry that would ask the same question and get the same answer is not offered; the saved
+  // plan offers only its exit.
+  if (withholdsSavedFullYearRunBySignal(summary)) {
     return {
       availableActions: ["cancel-saved-full-year-run"],
       canContinueFullYear: false,
@@ -196,4 +197,42 @@ export function getRecoveryFlowAvailability(
     message: summary.flowStep.safeMessage,
     mentionedActions: AVAILABLE_FULL_YEAR_ACTIONS,
   };
+}
+
+/**
+ * Whether a saved single-return full-year run must not offer its retry.
+ *
+ * Two reasons, with different exits:
+ * - A target carrying a canonical non-resumable signal would be asked the same question again -- a
+ *   pinned GST Portal tab that no longer exists stays gone -- so its retry looped. The run offers
+ *   only Cancel and reset, which is what its message says.
+ * - A `running` target is one the worker died on. The background refuses to retry it, because a
+ *   staged file may exist without its final ledger checkpoint, so offering the retry only produced
+ *   a refusal. Discarding the saved run and starting again stays available: it is the refusal's
+ *   own advice.
+ */
+export function isFullFiscalYearRetryWithheld(summary: FiledReturnsFlowSummary): boolean {
+  return (
+    summary.fullFiscalYearRecovery?.targetStatus === "running" ||
+    withholdsSavedFullYearRunBySignal(summary)
+  );
+}
+
+/** Whether the saved run's retry control may render, given the run's recovery availability. */
+export function canOfferFullFiscalYearRetry(
+  summary: FiledReturnsFlowSummary,
+  availability: Pick<RecoveryFlowAvailability, "canContinueFullYear">,
+): boolean {
+  return availability.canContinueFullYear && !isFullFiscalYearRetryWithheld(summary);
+}
+
+/**
+ * The quarterly-filer signal keeps applying without a saved recovery target, as it did before the
+ * non-resumable set was shared.
+ */
+function withholdsSavedFullYearRunBySignal(summary: FiledReturnsFlowSummary): boolean {
+  if (!summary.fullFiscalYearRecovery) {
+    return summary.flowStep.safeSignals.includes("filed-gstr3b-quarterly-filer-unsupported");
+  }
+  return withholdsFiledReturnsExplicitRetry(summary.flowStep.safeSignals);
 }

@@ -12,7 +12,11 @@ import type {
   PackMessageResponse,
 } from "../connectors/gst/messages";
 import { markFullFiscalYearTargetTerminal } from "./filed-returns-full-fiscal-year-ledger";
-import { toFullFiscalYearSummary } from "./filed-returns-full-fiscal-year-summary";
+import {
+  summariseFullFiscalYearLedger,
+  toFullFiscalYearSummary,
+} from "./filed-returns-full-fiscal-year-summary";
+import { withholdsFiledReturnsExplicitRetry } from "../connectors/gst/filed-returns-explicit-retry";
 import { clearFiledReturnsTargetReview } from "./filed-returns-target-review";
 import { normaliseFiledReturnsArtifactType } from "../connectors/gst/filed-returns-artifacts";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
@@ -75,14 +79,26 @@ export async function prepareFullFiscalYearTargetRetry(
     const checked = await readRecoverableFullFiscalYearTarget(payload, deps);
     if ("response" in checked) return { ok: false, response: checked.response };
     if (checked.target.status === "running") {
+      // The worker died mid-period. The stored ledger still says `running`, so a summary built
+      // from it rendered a live run with no control and no reason. Show the refusal on the
+      // interrupted, blocked view of the run -- the view `summariseFullFiscalYearLedger` gives a
+      // stale run -- so the reader sees why and keeps Cancel and reset.
       return {
         ok: false,
         response: recoveryActionUnavailableResponse(
           "full-fiscal-year-run-interrupted",
           "Pack cannot safely retry an interrupted period because a staged file may exist without its final ledger checkpoint. Discard this saved run before starting again.",
-          checked.ledger,
+          { ...checked.ledger, status: "blocked" },
         ),
       };
+    }
+    if (withholdsFiledReturnsExplicitRetry(checked.target.safeSignals)) {
+      // Pack deliberately will not retry this target: the retry would re-ask a question whose
+      // answer cannot change, such as a pinned GST Portal tab that no longer exists. Accepting it
+      // re-ran the flow into the same block. Answer with the saved run as it stands; its own
+      // message names the way out.
+      const flowSummary = summariseFullFiscalYearLedger(checked.ledger);
+      return { ok: false, response: { ok: true, flowStep: flowSummary.flowStep, flowSummary } };
     }
 
     const now = deps.now?.() ?? new Date();

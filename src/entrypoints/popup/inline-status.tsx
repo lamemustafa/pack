@@ -12,7 +12,11 @@ import {
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
 import { getSavedFullFiscalYearActionDecision } from "./recovery-actions";
-import { getRecoveryFlowAvailability } from "./recovery-flow-availability";
+import {
+  canOfferFullFiscalYearRetry,
+  getRecoveryFlowAvailability,
+  isFullFiscalYearRetryWithheld,
+} from "./recovery-flow-availability";
 
 export interface InlineStatusProps {
   busy: string | null;
@@ -298,9 +302,19 @@ function getInlineStatusCopy(
   }
   if (presentation.kind === "blocked" && summary?.currentPeriod) {
     const signals = new Set(summary.flowStep.safeSignals);
-    // The portal's per-period filing preference said quarterly. A retry asks the same question, so
-    // neither the generic "retry this period" body nor the step's retry remedy applies.
-    if (signals.has("filed-gstr3b-quarterly-filer-unsupported")) {
+    // Pack will not retry this period (see `isFullFiscalYearRetryWithheld`), so neither the generic
+    // "retry this period" body nor the step's retry remedy applies.
+    if (isFullFiscalYearRetryWithheld(summary)) {
+      // A period the worker died on: its step message is whatever the period last recorded, so the
+      // reason and the way out are stated here. A signalled stop's own message already names both.
+      if (summary.fullFiscalYearRecovery?.targetStatus === "running") {
+        return {
+          body: `Pack stopped while checking ${summary.currentPeriod}. A file for ${summary.currentPeriod} may be saved without its final record, so Pack will not retry it. Discard this saved run, or cancel and reset, then start again.`,
+          icon: "!",
+          title: `Full-year run paused at ${summary.currentPeriod}`,
+          tone: "warning",
+        };
+      }
       return {
         body: summary.flowStep.safeMessage,
         icon: "!",
@@ -420,8 +434,10 @@ export function getInlinePrimaryAction(
   const signals = new Set(summary.flowStep.safeSignals);
   if (presentation.kind === "blocked" && summary.currentPeriod && summary.fullFiscalYearRecovery) {
     if (
-      !getRecoveryFlowAvailability(summary, actions.fullYearFlowAvailable ?? true)
-        .canContinueFullYear
+      !canOfferFullFiscalYearRetry(
+        summary,
+        getRecoveryFlowAvailability(summary, actions.fullYearFlowAvailable ?? true),
+      )
     ) {
       return null;
     }
