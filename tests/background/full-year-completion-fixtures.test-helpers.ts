@@ -9,6 +9,8 @@ import {
   FULL_FISCAL_YEAR_PERIOD,
 } from "../../src/connectors/gst/filed-returns-scope";
 import { createFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
+import { getFullFiscalYearTabSessionId } from "../../src/background/filed-returns-active-tab";
+import type { SinglePeriodRunner } from "../../src/background/filed-returns-full-fiscal-year";
 
 export const RECOVERY_TARGET_STATUSES = [
   "pending",
@@ -21,6 +23,23 @@ export const RECOVERY_TARGET_STATUSES = [
 ] as const satisfies readonly FiledReturnsFullFiscalYearTargetStatus[];
 
 export const RECOVERY_NOW = new Date("2026-08-25T00:00:00.000Z");
+// The tab and browser-session marker a real run records when its first target selects the GST
+// tab, before any portal work. A test that resumes a fixture plan seeds this marker as the current
+// session; a different or missing marker is a restart, which the run refuses.
+export const FIXTURE_PORTAL_TAB_ID = 41;
+export const FIXTURE_TAB_SESSION_ID = "fixture-browser-session-0001";
+
+/**
+ * The real child flow's first step, before any portal work: select the GST tab and pin it with
+ * this browser session's marker. Stub runners call it so the plans they produce have the shape the
+ * real flow produces.
+ */
+export async function pinLikeTheChildFlow(
+  options?: Parameters<SinglePeriodRunner>[2],
+): Promise<void> {
+  const marker = await getFullFiscalYearTabSessionId();
+  if (marker) await options?.onPortalTabSelected?.(FIXTURE_PORTAL_TAB_ID, marker);
+}
 export const RECOVERY_SCOPE = {
   artifactType: "PDF",
   financialYear: "2025-26",
@@ -91,6 +110,8 @@ export function makeCompletedRecoveryLedger(
     ...ledger,
     ledgerId: "full-fiscal-year-00000020",
     revision: 7,
+    portalTabId: FIXTURE_PORTAL_TAB_ID,
+    portalTabSessionId: FIXTURE_TAB_SESSION_ID,
     status: "complete",
     currentTargetId: targets[options.currentPositive ? positiveIndex : recoveryIndex]!.targetId,
     targets,

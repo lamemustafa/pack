@@ -5,6 +5,7 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
+import { holdsFullFiscalYearPortalOutcome } from "../connectors/gst/filed-returns-durable-signals";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
   expandAllSupportedFullFiscalYearTargetPlan,
@@ -569,6 +570,21 @@ async function runAllSupportedFullFiscalYearTargets(
       await persistAllSupportedFullFiscalYearLedger(deps, ledger);
       return allSupportedResponse(deps, ledger, blocked);
     }
+    // A plan with no recorded pin -- one saved by an earlier build -- has nothing to compare. Once
+    // it holds a portal outcome, "could not determine" refuses; before that it has done no portal
+    // work and pins on its first target.
+    if (ledger.portalTabId === undefined && holdsFullFiscalYearPortalOutcome(ledger.targets)) {
+      const refused = unboundRunStep(nextTarget);
+      ledger = markAllSupportedFullFiscalYearTargetTerminal(
+        ledger,
+        nextTarget.targetId,
+        "blocked",
+        refused,
+        deps.now?.() ?? new Date(),
+      );
+      await persistAllSupportedFullFiscalYearLedger(deps, ledger);
+      return allSupportedResponse(deps, ledger, refused);
+    }
     const previousSignals = nextTarget.safeSignals;
     let systemErrorPredecessor: SystemErrorPredecessor = "initial";
     ledger = markAllSupportedFullFiscalYearTargetRunning(
@@ -1020,6 +1036,19 @@ function targetArtifactSnapshotMismatchStep(
     safeSignals: ["all-supported-full-fiscal-year-artifact-snapshot-mismatch"],
     safeMessage:
       "Pack retained the saved artifact selection, but the current extension cannot safely resume it after its supported formats changed.",
+  };
+}
+
+function unboundRunStep(
+  target: FiledReturnsAllSupportedFullFiscalYearTarget,
+): PortalFlowStepResult {
+  const safeSignals = ["full-fiscal-year-unbound-run-unverified"];
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(target.returnType),
+    state: "blocked",
+    safeSignals,
+    safeMessage: canonicalDurableTargetStatus(target, "blocked", safeSignals).safeMessage,
   };
 }
 

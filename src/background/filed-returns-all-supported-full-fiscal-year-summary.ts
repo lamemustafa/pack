@@ -3,7 +3,10 @@ import {
   targetMissedAnArtifact,
 } from "./filed-returns-full-fiscal-year-summary";
 import { hasFullFiscalYearRefusalArtifactConflict } from "../connectors/gst/filed-returns-durable-signals";
-import { canonicalDurableTargetStatus } from "../connectors/gst/filed-returns-durable-status";
+import {
+  canonicalDurableTargetStatus,
+  FILED_RETURNS_UNBOUND_RUN_REASON,
+} from "../connectors/gst/filed-returns-durable-status";
 import type {
   FiledReturnsAllSupportedFullFiscalYearFlowSummary,
   FiledReturnsAllSupportedFullFiscalYearTargetEvidence,
@@ -208,12 +211,16 @@ function stoppedRecoveryStep(
       target.safeSignals.includes(signal),
   );
   if (!describesOnlyTheStop) return flowStep;
+  // The replacement names this surface's exit; a reason the reader needs travels with it.
+  const reason = target.safeSignals.includes("full-fiscal-year-unbound-run-unverified")
+    ? `${FILED_RETURNS_UNBOUND_RUN_REASON} `
+    : "";
   return {
     ...flowStep,
     safeMessage: discardable
-      ? `Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. To continue, discard the saved plan and start this year again; files already captured for it are downloaded again.`
+      ? `${reason}Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. To continue, discard the saved plan and start this year again; files already captured for it are downloaded again.`
       : // No control is offered for this plan (#380), so the message is the only way out it has.
-        `Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. The plan holds an answer you recorded, which running the year again would not bring back, so Pack will not discard it from here. To start this year again, use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d in Pack's options.`,
+        `${reason}Pack stopped at ${target.returnType} for ${target.period} and will not retry it in this saved plan. The plan holds an answer you recorded, which running the year again would not bring back, so Pack will not discard it from here. To start this year again, use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d in Pack's options.`,
   };
 }
 

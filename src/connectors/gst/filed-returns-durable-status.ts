@@ -47,10 +47,18 @@ import {
   FILED_RETURNS_PORTAL_SYSTEM_ERROR_MESSAGE,
 } from "./filed-returns-portal-availability";
 
+/**
+ * Why a saved run with no recorded tab pin stopped. Each surface appends the exit it renders: the
+ * single-return run names Cancel and reset, the all-returns plan names its discard.
+ */
+export const FILED_RETURNS_UNBOUND_RUN_REASON =
+  "Pack has no record of where this saved run started, so it will not add files to it, in case a different GST account is now signed in.";
+
 type DurableMessageKey =
   | "complete"
   | "durable-status-rejected"
   | "full-year-account-unverified-after-restart"
+  | "full-year-unbound-run-unverified"
   | "full-year-active"
   | "full-year-complete-download-unconfirmed"
   | "full-year-downloaded-cleanup-blocked"
@@ -493,6 +501,9 @@ function messageKeyForTarget(
   if (signals.includes("full-fiscal-year-restart-account-unverified")) {
     return "full-year-account-unverified-after-restart";
   }
+  if (signals.includes("full-fiscal-year-unbound-run-unverified")) {
+    return "full-year-unbound-run-unverified";
+  }
   if (signals.includes("full-fiscal-year-pinned-gst-tab-unavailable")) {
     return "full-year-pinned-tab-unavailable";
   }
@@ -597,6 +608,9 @@ function messageKeyForSummary(
     if (signals.includes("full-fiscal-year-restart-account-unverified")) {
       return "full-year-account-unverified-after-restart";
     }
+    if (signals.includes("full-fiscal-year-unbound-run-unverified")) {
+      return "full-year-unbound-run-unverified";
+    }
     if (signals.includes("full-fiscal-year-pinned-gst-tab-unavailable")) {
       return "full-year-pinned-tab-unavailable";
     }
@@ -681,6 +695,7 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     // Pack" because the marker is also cleared when the extension is updated, reloaded or disabled.
     "full-year-account-unverified-after-restart":
       "Pack stopped because the browser or Pack restarted after this saved run began. It will not add files to this run after a restart, in case a different GST account is now signed in. Use Cancel and reset to clear it.",
+    "full-year-unbound-run-unverified": `${FILED_RETURNS_UNBOUND_RUN_REASON} Use Cancel and reset to clear it.`,
     "full-year-active": `The saved FY ${scope.financialYear} run is still active.`,
     "full-year-complete-download-unconfirmed":
       "Pack completed the saved fiscal-year run, but could not confirm a final ZIP download. Check browser Downloads before relying on a file.",

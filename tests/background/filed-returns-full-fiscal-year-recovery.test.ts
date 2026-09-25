@@ -46,6 +46,14 @@ import {
 } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { readLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
 
+import {
+  FIXTURE_PORTAL_TAB_ID,
+  FIXTURE_TAB_SESSION_ID,
+  pinLikeTheChildFlow,
+} from "./full-year-completion-fixtures.test-helpers";
+import { PACK_SESSION_STORAGE_KEYS } from "../../src/background/storage-keys";
+import type { SinglePeriodRunner } from "../../src/background/filed-returns-full-fiscal-year";
+
 const sessionValues = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 
 const browserMocks = vi.hoisted(() => ({
@@ -1269,16 +1277,24 @@ describe("full fiscal-year recovery", () => {
       period: FULL_FISCAL_YEAR_PERIOD,
       returnType: "GSTR-1" as const,
     };
-    const runSinglePeriod = vi.fn(async () => ({
-      ok: true as const,
-      flowStep: {
-        connectorId: "gst" as const,
-        scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
-        state: "downloaded" as const,
-        safeSignals: ["filed-return-artifact-downloaded:PDF", "full-fiscal-year-opfs-staged:PDF"],
-        safeMessage: "Synthetic PDF staged.",
+    const runSinglePeriod = vi.fn(
+      async (_scope: unknown, _runDeps?: unknown, options?: Parameters<SinglePeriodRunner>[2]) => {
+        await pinLikeTheChildFlow(options);
+        return {
+          ok: true as const,
+          flowStep: {
+            connectorId: "gst" as const,
+            scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+            state: "downloaded" as const,
+            safeSignals: [
+              "filed-return-artifact-downloaded:PDF",
+              "full-fiscal-year-opfs-staged:PDF",
+            ],
+            safeMessage: "Synthetic PDF staged.",
+          },
+        };
       },
-    }));
+    );
     zipMocks.exportFullFiscalYearZip.mockResolvedValue({
       connectorId: "gst",
       scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
@@ -1590,39 +1606,46 @@ describe("full fiscal-year recovery", () => {
       );
       const browserDownloadStarted = vi.fn();
       const periods = getFiledReturnsFullFiscalYearPeriods(scope.financialYear, now);
-      const runSinglePeriod = vi.fn(async (targetScope: FiledReturnsDownloadScope) => {
-        const periodIndex = periods.findIndex((period) => period === targetScope.period);
-        return {
-          ok: true as const,
-          flowStep: {
-            connectorId: "gst" as const,
-            scopeId: filedReturnsScopeId(returnType),
-            state: "downloaded" as const,
-            safeSignals: [
-              "filed-return-artifact-downloaded:PDF",
-              "full-fiscal-year-opfs-staged:PDF",
-            ],
-            safeMessage: "Synthetic PDF staged.",
-            downloadDiagnostic: {
-              actionId: `00000000-0000-4000-8000-${String(periodIndex + 1).padStart(12, "0")}`,
-              artifactType: "PDF" as const,
-              byteCountClass: "non-empty" as const,
-              downloadPathClass: "captured-portal-request-data" as const,
-              endpointClass:
-                returnType === "GSTR-1"
-                  ? ("gstr1-pdf-portal-blob-captured-download" as const)
-                  : ("gstr3b-portal-blob-captured-download" as const),
-              eventType: "filed-return-download-path" as const,
-              financialYear: targetScope.financialYear,
-              mimeClass: "pdf" as const,
-              period: targetScope.period,
-              returnType,
-              schemaVersion: "1.0" as const,
-              status: "downloaded" as const,
+      const runSinglePeriod = vi.fn(
+        async (
+          targetScope: FiledReturnsDownloadScope,
+          _runDeps?: unknown,
+          options?: Parameters<SinglePeriodRunner>[2],
+        ) => {
+          await pinLikeTheChildFlow(options);
+          const periodIndex = periods.findIndex((period) => period === targetScope.period);
+          return {
+            ok: true as const,
+            flowStep: {
+              connectorId: "gst" as const,
+              scopeId: filedReturnsScopeId(returnType),
+              state: "downloaded" as const,
+              safeSignals: [
+                "filed-return-artifact-downloaded:PDF",
+                "full-fiscal-year-opfs-staged:PDF",
+              ],
+              safeMessage: "Synthetic PDF staged.",
+              downloadDiagnostic: {
+                actionId: `00000000-0000-4000-8000-${String(periodIndex + 1).padStart(12, "0")}`,
+                artifactType: "PDF" as const,
+                byteCountClass: "non-empty" as const,
+                downloadPathClass: "captured-portal-request-data" as const,
+                endpointClass:
+                  returnType === "GSTR-1"
+                    ? ("gstr1-pdf-portal-blob-captured-download" as const)
+                    : ("gstr3b-portal-blob-captured-download" as const),
+                eventType: "filed-return-download-path" as const,
+                financialYear: targetScope.financialYear,
+                mimeClass: "pdf" as const,
+                period: targetScope.period,
+                returnType,
+                schemaVersion: "1.0" as const,
+                status: "downloaded" as const,
+              },
             },
-          },
-        };
-      });
+          };
+        },
+      );
       zipMocks.exportFullFiscalYearZip.mockImplementationOnce(
         async (
           _ledger: FiledReturnsFullFiscalYearLedger,
@@ -1816,6 +1839,11 @@ describe("full fiscal-year recovery", () => {
     );
     const firstTarget = ledger.targets[0]!;
     ledger.status = "running";
+    // The earlier run that staged this target's first file pinned the plan in this session.
+    ledger.portalTabId = FIXTURE_PORTAL_TAB_ID;
+    ledger.portalTabSessionId = FIXTURE_TAB_SESSION_ID;
+    sessionValues.current[PACK_SESSION_STORAGE_KEYS.fullFiscalYearTabSession] =
+      FIXTURE_TAB_SESSION_ID;
     ledger.targets[0] = {
       ...firstTarget,
       safeSignals: canonicalDurableTargetStatus(
@@ -1877,6 +1905,11 @@ describe("full fiscal-year recovery", () => {
     );
     const firstTarget = ledger.targets[0]!;
     ledger.status = "running";
+    // The earlier run that staged this target's first file pinned the plan in this session.
+    ledger.portalTabId = FIXTURE_PORTAL_TAB_ID;
+    ledger.portalTabSessionId = FIXTURE_TAB_SESSION_ID;
+    sessionValues.current[PACK_SESSION_STORAGE_KEYS.fullFiscalYearTabSession] =
+      FIXTURE_TAB_SESSION_ID;
     ledger.targets[0] = {
       ...firstTarget,
       safeSignals: canonicalDurableTargetStatus(
