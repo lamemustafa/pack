@@ -10,7 +10,11 @@ import type {
 } from "../../src/connectors/gst/filed-returns-contracts";
 import { FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND } from "../../src/connectors/gst/filed-returns-contracts";
 import type { PackMessage, PackMessageResponse } from "../../src/connectors/gst/messages";
-import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
+import {
+  canonicalDurableSummaryMessage,
+  canonicalDurableTargetStatus,
+} from "../../src/connectors/gst/filed-returns-durable-status";
+import { filedReturnsScopeId } from "../../src/connectors/gst/filed-returns-return-types";
 import {
   FULL_FISCAL_YEAR_PERIOD,
   getFiledReturnsFinancialYearOptions,
@@ -22,6 +26,7 @@ import { acquireFiledReturnsRun } from "../../src/background/filed-returns-activ
 import {
   createFullFiscalYearLedger,
   markFullFiscalYearTargetRunning,
+  markFullFiscalYearTargetTerminal,
 } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import {
   persistLedger,
@@ -43,7 +48,7 @@ import { filedReturnsStorageKeys } from "../../src/background/storage-keys";
 import type * as FullYearZipModule from "../../src/background/filed-returns-full-fiscal-year-zip";
 
 /**
- * Three suspected recovery dead ends, each driven end to end: the real panel and the real popup
+ * Four suspected recovery dead ends, each driven end to end: the real panel and the real popup
  * controller, talking through `browser.runtime.sendMessage` to the real background entrypoint's
  * message listener, over one in-memory `browser.storage` that raises `onChanged` like Chrome does.
  * Nothing between the click and the rendered text is stubbed except what a unit test cannot host:
@@ -178,7 +183,16 @@ const env = vi.hoisted(() => {
         removeListener: (listener: Listener) => state.listeners.delete(listener),
       },
     },
-    tabs: { create: async () => undefined, onActivated: noopEvent, onUpdated: noopEvent },
+    tabs: {
+      create: async () => undefined,
+      // The saved plan's pinned GST tab no longer exists (D4's premise); nothing else is open.
+      get: async () => {
+        throw new Error("No tab with that id.");
+      },
+      query: async () => [],
+      onActivated: noopEvent,
+      onUpdated: noopEvent,
+    },
   };
   return { browser, state };
 });
@@ -762,3 +776,81 @@ function stagedAllSupportedStep(
     state: "downloaded" as const,
   };
 }
+
+/**
+ * D4. A single-return full-year period stopped because the GST Portal tab pinned to the saved plan
+ * is gone, in the same browser session. The message tells the reader to use Cancel and reset.
+ * Suspicion: the panel still offers "Retry {period}", the background accepts it without looking at
+ * the signal, the flow re-requires the same pinned tab, and the reader lands back on the identical
+ * blocked period with the identical retry -- the single-return sibling of #376.
+ */
+describe("D4: retrying a single-return period whose pinned GST tab is gone", () => {
+  const PINNED_TAB_SIGNAL = "full-fiscal-year-pinned-gst-tab-unavailable";
+  const TAB_SESSION = "synthetic-tab-session-0001";
+
+  async function seedPinnedTabLost() {
+    const stoppedAt = new Date(Date.now() - STALE_BY_MS);
+    const scope = singleReturnScope();
+    const created = createFullFiscalYearLedger(
+      scope,
+      stoppedAt,
+      getFiledReturnsFullFiscalYearPeriods(scope.financialYear, new Date(), scope.returnType),
+    );
+    const targetId = created.targets[0]!.targetId;
+    const running = markFullFiscalYearTargetRunning(created, targetId, stoppedAt);
+    const blocked = markFullFiscalYearTargetTerminal(
+      running,
+      targetId,
+      "blocked",
+      {
+        connectorId: "gst",
+        scopeId: filedReturnsScopeId(scope.returnType),
+        state: "blocked",
+        safeSignals: [PINNED_TAB_SIGNAL],
+        safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [PINNED_TAB_SIGNAL]),
+      },
+      stoppedAt,
+    );
+    const ledger: FiledReturnsFullFiscalYearLedger = {
+      ...blocked,
+      status: "blocked",
+      portalTabId: 4242,
+      portalTabSessionId: TAB_SESSION,
+    };
+    await persistLedger({ storageKeys: STORAGE_KEYS }, ledger);
+    // Same browser session: the tab-session marker still matches the saved plan's.
+    env.state.session["pack:full-fiscal-year-tab-session"] = TAB_SESSION;
+    return { ledger, period: ledger.targets[0]!.period };
+  }
+
+  it("does not offer a retry that returns the reader to the same blocked period", async () => {
+    const { ledger, period } = await seedPinnedTabLost();
+    await startWorker();
+    await mountPanel();
+    await openRecoveryOptions();
+    expect(panelText()).toContain(
+      "GST Portal tab selected for this saved plan is no longer available",
+    );
+
+    const retryLabel = new RegExp(`^Retry ${period}$`);
+    const retry = findButton(retryLabel);
+    if (retry) {
+      await click(retry);
+      await openRecoveryOptions();
+      const stored = await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId);
+      const backWhereItStarted =
+        stored?.targets[0]?.status === "blocked" &&
+        stored.targets[0].safeSignals.includes(PINNED_TAB_SIGNAL);
+      expect(
+        backWhereItStarted && findButton(retryLabel) !== undefined,
+        `after "Retry ${period}" the reader is back on the same blocked period, offered the same retry: ${JSON.stringify(buttonLabels())}`,
+      ).toBe(false);
+    }
+
+    // The way out the message names must be there and accepted.
+    const leave = findButton(/^Cancel and reset$/);
+    expect(leave, `no way out among: ${JSON.stringify(buttonLabels())}`).toBeDefined();
+    await click(leave!);
+    expect(await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId)).toBeNull();
+  });
+});
