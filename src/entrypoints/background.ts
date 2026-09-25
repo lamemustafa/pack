@@ -190,6 +190,7 @@ function backgroundMessageSource(message: unknown): string {
   }
   switch (message.type) {
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
+    case "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY":
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
     case "PACK_RESTART_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
     case "PACK_START_FRESH_FILED_RETURNS_DOWNLOAD_FLOW":
@@ -221,6 +222,8 @@ function backgroundMessageHandlerSite(message: unknown): `background-message-han
   switch (message.type) {
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return "background-message-handler:filed-returns-start";
+    case "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY":
+      return "background-message-handler:full-fiscal-year-zip-retry";
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
       return "background-message-handler:filed-returns-all-supported-start";
     // Its own site: a failure here clears local staging and removes a ledger,
@@ -420,6 +423,10 @@ async function handleMessage(
       );
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps());
+    case "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY":
+      return startFiledReturnsDownloadFlow(message.payload, filedReturnsFlowRunnerDeps(), {
+        confirmedFinalZipRetry: true,
+      });
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
       return startAllSupportedFiledReturnsFullFiscalYearDownloadFlow(
         message.payload,

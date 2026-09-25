@@ -142,6 +142,7 @@ export interface FiledReturnsFlowStepObservation {
 export async function startFiledReturnsDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
+  options: { confirmedFinalZipRetry?: boolean } = {},
 ): Promise<PackMessageResponse> {
   let targetReviewState;
   try {
@@ -247,6 +248,7 @@ export async function startFiledReturnsDownloadFlow(
         scope,
         deps,
         startSinglePeriodFiledReturnsDownloadFlow,
+        { confirmedFinalZipRetry: options.confirmedFinalZipRetry === true },
       );
     }
     return await startSinglePeriodFiledReturnsDownloadFlow(scope, deps);

@@ -145,7 +145,7 @@ export async function startFullFiscalYearDownloadFlow(
   scope: FiledReturnsDownloadScope,
   deps: FiledReturnsFlowRunnerDeps,
   runSinglePeriod: SinglePeriodRunner,
-  options: { allowExistingLedgerResume?: boolean } = {},
+  options: { allowExistingLedgerResume?: boolean; confirmedFinalZipRetry?: boolean } = {},
 ): Promise<PackMessageResponse> {
   const now = deps.now?.() ?? new Date();
   const plannedPeriods = getFiledReturnsFullFiscalYearPeriods(
@@ -233,6 +233,22 @@ export async function startFullFiscalYearDownloadFlow(
     // A saved intent without a correlated download ID is ambiguous across an
     // MV3 restart. Keep the staged files and require explicit review/discard;
     // a repeated Start must never infer that the previous ZIP may be replayed.
+    //
+    // The reader's "I checked—retry final ZIP" is that explicit review. What it
+    // repeats is Pack's own archive, rebuilt from the staging this run still
+    // retains -- never a portal action -- so it moves the run on to a fresh export.
+    if (
+      options.confirmedFinalZipRetry &&
+      canCompleteFullFiscalYearLedger(sameScopeExistingLedger)
+    ) {
+      const retryLedger = markFullFiscalYearZipPhase(
+        sameScopeExistingLedger,
+        now,
+        "export-retry-pending",
+      );
+      await persistLedger(deps, retryLedger);
+      return completeRun(deps, retryLedger);
+    }
     const reviewLedger = markFullFiscalYearZipManualReview(sameScopeExistingLedger, now);
     const reviewStep = await restorePersistedFullFiscalYearSummaryOutcome(
       deps,

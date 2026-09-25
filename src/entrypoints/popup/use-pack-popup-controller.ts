@@ -26,6 +26,7 @@ import {
 import {
   getScopeMatchedFiledReturnsSummary,
   hasUnresolvedFiledReturnsRecovery,
+  isFullFiscalYearZipRetryConfirmation,
 } from "./flow-summary";
 
 export const PACK_ACTION_STOPPED_MESSAGE =
@@ -294,15 +295,21 @@ export function usePackPopupController() {
   const startFiledReturnsFlow = React.useCallback(
     async (requestedScope?: FiledReturnsDownloadScope) => {
       const target = normaliseFiledReturnsScope(requestedScope ?? scope);
+      // In the state where the start button reads "I checked—retry final ZIP", pressing it is the
+      // reader's confirmation, and the background needs to know that rather than see a plain start.
+      const confirmsFinalZipRetry = isFullFiscalYearZipRetryConfirmation(
+        getScopeMatchedFiledReturnsSummary(target, filedReturnsFlowSummary),
+      );
       await withBusy("start-filed-returns-flow", async () => {
-        const response = await sendPackMessage({
-          type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW",
-          payload: target,
-        });
+        const response = await sendPackMessage(
+          confirmsFinalZipRetry
+            ? { type: "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY", payload: target }
+            : { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW", payload: target },
+        );
         applyFlowResponse(response);
       });
     },
-    [applyFlowResponse, scope, withBusy],
+    [applyFlowResponse, filedReturnsFlowSummary, scope, withBusy],
   );
 
   const startAllSupportedFullFiscalYearFlow = React.useCallback(

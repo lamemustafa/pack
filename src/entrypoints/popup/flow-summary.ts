@@ -87,6 +87,22 @@ export function canRetryFiledReturnsTargetWithoutPortal(
   return summary.flowStep.safeSignals.includes("filed-returns-target-local-cleanup-required");
 }
 
+/**
+ * Whether starting this scope is the reader's "I checked—retry final ZIP": the saved run's final
+ * ZIP handoff is ambiguous and no browser download ID is recorded for it. The start button's label
+ * and the message the controller sends both read this, so the button cannot promise a retry that
+ * the background then treats as a plain start and keeps in review.
+ */
+export function isFullFiscalYearZipRetryConfirmation(
+  summary: FiledReturnsFlowSummary | null | undefined,
+): boolean {
+  return (
+    canRetryFullFiscalYearZipWithoutPortal(summary) &&
+    !hasPersistedFullFiscalYearZipDownloadId(summary) &&
+    isAmbiguousFullFiscalYearZipHandoff(summary)
+  );
+}
+
 export function isAmbiguousFullFiscalYearZipHandoff(
   summary: FiledReturnsFlowSummary | null | undefined,
 ): boolean {
