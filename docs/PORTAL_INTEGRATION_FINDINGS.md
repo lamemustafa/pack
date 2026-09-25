@@ -322,6 +322,16 @@ barredYearsLimit}}` with `userPref: "Q"` for April, May, June and July 2025 alik
     summary modal was not dismissed, the PDF preflight answer for a 3BQ period, and what the
     downloaded file states as its period.
 
+    Follow-up 2026-09-25, **fixture only, not live**: on a page built to the structure above (the
+    `.modal.fade.fade-scale.in` with one CLOSE, over the four page controls), Pack's existing summary
+    dismissal found the modal and clicked CLOSE, then clicked BACK, because "Return Period - Apr-Jun"
+    reads as April and April is not the requested June. The portal shows the modal again each time
+    the page opens, so a run looping through BACK would always be seen with the modal open. How the
+    live CLOSE behaves is still to be captured. Separately, months 1-2 of a quarter for which the
+    role status answers `userPref: "Q"`, and the search answers `RET13510`, are now recorded as
+    having no monthly GSTR-3B (their own settled outcome, never "Not filed"); the quarter-end month
+    still stops.
+
 ## The GSTR-2B summary page does carry a Returns Dashboard link, collapsed
 
 Captured 2026-08-24 from a signed-in `GST Portal` page, by

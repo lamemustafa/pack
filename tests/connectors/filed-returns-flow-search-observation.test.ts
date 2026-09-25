@@ -83,6 +83,39 @@ describe("filed returns flow — search and no-record observation", () => {
     },
   );
 
+  it("records a quarterly filer's month 1 no-record page as having no monthly GSTR-3B", async () => {
+    const scope = { ...DEFAULT_SCOPE, period: "April" };
+    const documentRef = createGstDocument(`
+      <main>
+        <h1>View Filed Returns</h1>
+        <form name="efiledReturns">
+          <select id="finYr"><option selected>2025-26</option></select>
+          <select id="optValue"><option selected>Monthly</option></select>
+          <select id="month"><option selected>April</option></select>
+          <select id="retTyp"><option selected>GSTR3B</option></select>
+          <button id="lotsearch" type="button">Search</button>
+        </form>
+        <section aria-label="Search results">
+          <p>No records found</p>
+        </section>
+      </main>
+    `);
+    const fetchFn = vi.fn<(input: RequestInfo | URL) => Promise<unknown>>(async () => ({
+      ok: true,
+      json: async () => ({ status: 1, data: { userPref: "Q" } }),
+    }));
+    Object.defineProperty(documentRef.defaultView, "fetch", { configurable: true, value: fetchFn });
+    markPackSubmittedSearch(documentRef, scope);
+
+    const result = await runFiledReturnsDownloadStep(documentRef, scope);
+
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain("rtn_prd=042025");
+    expect(result.state).toBe("candidate-not-found");
+    expect(result.safeSignals).toContain("filed-gstr3b-quarterly-no-monthly-return");
+    expect(result.safeSignals).not.toContain("filed-return-positively-not-filed");
+    expect(result.safeSignals).not.toContain("filed-gstr3b-quarterly-filer-unsupported");
+  });
+
   it("checks no-record evidence before reselecting an already matching filter form", async () => {
     const documentRef = createDocument(`
       <main>

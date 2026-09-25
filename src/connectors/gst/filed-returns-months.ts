@@ -15,6 +15,18 @@ export const FILED_RETURNS_MONTHS = [
   "March",
 ] as const;
 
+/** GST quarters of a financial year, in order; a quarterly (QRMP) return is filed for the last month. */
+export const FILED_RETURNS_QUARTER_MONTHS: readonly (readonly string[])[] = [
+  ["April", "May", "June"],
+  ["July", "August", "September"],
+  ["October", "November", "December"],
+  ["January", "February", "March"],
+];
+
+export function isFiledReturnsQuarterEndMonth(period: string): boolean {
+  return FILED_RETURNS_QUARTER_MONTHS.some((months) => months[months.length - 1] === period);
+}
+
 const MONTH_ALIASES: Record<string, string[]> = {
   april: ["April", "Apr"],
   may: ["May"],

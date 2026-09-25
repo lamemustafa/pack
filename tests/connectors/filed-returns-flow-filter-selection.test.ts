@@ -429,6 +429,80 @@ describe("filed returns flow — filter selection and API search", () => {
       expect(result.safeMessage).toMatch(/monthly filers only/i);
     });
 
+    // Under QRMP a GSTR-3B is filed only for the quarter's last month, so for months 1-2 "no record"
+    // is neither "not filed" nor a reason to stop the year: it is its own settled outcome. The
+    // preference is read for the exact month asked about; a taxpayer can change cadence per quarter.
+    it.each([
+      ["April", "2025-26", "042025"],
+      ["May", "2025-26", "052025"],
+      ["August", "2025-26", "082025"],
+      ["November", "2025-26", "112025"],
+      ["January", "2025-26", "012026"],
+      ["February", "2025-26", "022026"],
+    ] as const)(
+      "records %s of a quarterly filer as having no monthly GSTR-3B",
+      async (period, financialYear, rtnPrd) => {
+        const documentRef = page();
+        const roleStatusAsked: string[] = [];
+        const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (!url.includes("/returns/auth/api/rolestatus")) {
+            return { ok: true, json: async () => NO_RECORD };
+          }
+          const asked = new URL(url, "https://return.gst.gov.in").searchParams.get("rtn_prd") ?? "";
+          roleStatusAsked.push(asked);
+          return {
+            ok: true,
+            json: async () => ({ status: 1, data: { userPref: asked === rtnPrd ? "Q" : "M" } }),
+          };
+        });
+        Object.defineProperty(documentRef.defaultView, "fetch", {
+          configurable: true,
+          value: fetchFn,
+        });
+
+        const result = await runFiledReturnsDownloadStep(documentRef, {
+          financialYear,
+          period,
+          returnType: "GSTR-3B",
+        });
+
+        expect(roleStatusAsked).toEqual([rtnPrd]);
+        expect(result.state).toBe("candidate-not-found");
+        expect(result.safeSignals).toEqual([
+          "filed-return-api-searched",
+          "filed-gstr3b-quarterly-no-monthly-return",
+        ]);
+        expect(result.safeMessage).toMatch(/quarterly/i);
+        expect(result.safeMessage).not.toMatch(/not filed|no filed/i);
+        expect(result.userAction).toBeUndefined();
+      },
+    );
+
+    // What a quarter-end "no record" means for a quarterly filer is not captured yet, so it keeps
+    // the named stop rather than borrowing either the monthly or the months 1-2 reading.
+    it.each(["June", "September", "December", "March"] as const)(
+      "keeps the quarterly stop for the quarter-end month %s",
+      async (period) => {
+        const documentRef = page();
+        stubSearchAnswer(documentRef, {
+          ok: true,
+          body: NO_RECORD,
+          roleStatus: { ok: true, body: { status: 1, data: { userPref: "Q" } } },
+        });
+
+        const result = await runFiledReturnsDownloadStep(documentRef, {
+          financialYear: "2025-26",
+          period,
+          returnType: "GSTR-3B",
+        });
+
+        expect(result.state).toBe("blocked");
+        expect(result.safeSignals).toContain("filed-gstr3b-quarterly-filer-unsupported");
+        expect(result.safeSignals).not.toContain("filed-gstr3b-quarterly-no-monthly-return");
+      },
+    );
+
     it.each([
       ["a monthly preference", { ok: true, body: { status: 1, data: { userPref: "M" } } }],
       ["an unavailable role status", { ok: false, body: null }],

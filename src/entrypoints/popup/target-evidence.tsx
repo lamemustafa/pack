@@ -36,6 +36,8 @@ const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   // Not "Not filed": an auto-drafted statement is never filed by the taxpayer, and saying so
   // would put a claim about them on screen that the portal never made.
   "not-generated": "Not generated",
+  // A quarterly (QRMP) filer's month 1-2: nothing is missing, the quarter's return covers it.
+  "quarterly-no-monthly-return": "In quarterly return",
   "needs-review": "Needs review",
   running: "In progress",
   pending: "Waiting",
@@ -64,6 +66,7 @@ const OUTCOME_GLYPHS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   captured: "•",
   "not-filed": "–",
   "not-generated": "–",
+  "quarterly-no-monthly-return": "–",
   "needs-review": "!",
   running: "…",
   pending: "·",

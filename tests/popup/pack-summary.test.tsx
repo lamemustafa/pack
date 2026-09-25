@@ -53,6 +53,22 @@ describe("popup pack summary", () => {
     expect(markup).toContain("Saved by your browser");
   });
 
+  it("does not claim a quarterly filer's month 1-2 was saved", () => {
+    const summary = singlePeriodSummary("complete");
+    summary.flowStep.state = "candidate-not-found";
+    summary.flowStep.safeSignals = [
+      "filed-return-api-searched",
+      "filed-gstr3b-quarterly-no-monthly-return",
+    ];
+
+    const markup = renderToStaticMarkup(
+      <PackSummary scope={singlePeriodScope} summary={summary} />,
+    );
+
+    expect(markup).toContain("No browser download needed");
+    expect(markup).not.toContain("Browser download not confirmed");
+  });
+
   it("does not claim a complete-but-not-filed period was saved", () => {
     const summary = singlePeriodSummary("complete");
     summary.flowStep.state = "candidate-not-found";
