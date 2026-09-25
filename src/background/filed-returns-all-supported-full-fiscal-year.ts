@@ -574,7 +574,6 @@ async function runAllSupportedFullFiscalYearTargets(
           deps.onFlowStepObservation?.(observation);
           if (!observation.portalSystemError) systemErrorPredecessor = observation.category;
         },
-        persistTargetReview: false,
         stageCapturedDownloads: {
           bundleKind: "all-supported-full-fiscal-year",
           ledgerId: ledger.ledgerId,

@@ -1,4 +1,9 @@
-import { getClickableElements, isVisible, normaliseText } from "./filed-returns-dom";
+import {
+  getClickableElements,
+  isVisible,
+  normaliseText,
+  readElementText,
+} from "./filed-returns-dom";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
 
 export function findGstr2bDashboardControl(
@@ -157,19 +162,4 @@ function otherReturnTypePattern(returnType: FiledReturnsReturnType): RegExp {
   if (returnType === "GSTR-1") return /gstr-?1a\b|gstr-?2a\b|gstr-?2b\b|gstr-?3b\b/;
   if (returnType === "GSTR-2B") return /gstr-?1a?\b|gstr-?2a\b|gstr-?3b\b/;
   return /gstr-?1a?\b|gstr-?2a\b|gstr-?2b\b/;
-}
-
-function readElementText(element: HTMLElement): string {
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  return [
-    element.innerText || "",
-    element.textContent || "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ].join(" ");
 }

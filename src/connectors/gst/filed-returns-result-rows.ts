@@ -3,6 +3,7 @@ import {
   CLICKABLE_CONTROL_SELECTOR,
   getClickableElements,
   normaliseText,
+  readElementText,
 } from "./filed-returns-dom";
 import { extractTaxPeriodFromRow } from "./filed-returns-detail-identity";
 import {
@@ -235,28 +236,4 @@ function readCellByHeader(cells: readonly Element[], headers: readonly string[],
   const index = headers.findIndex((header) => pattern.test(header));
   if (index < 0) return null;
   return readElementText(cells[index]).replace(/\s+/g, " ").trim() || null;
-}
-
-export function readElementText(element: Element | null | undefined): string {
-  if (!element) return "";
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  const seenTexts = new Set<string>();
-  return [
-    "innerText" in element ? (element as HTMLElement).innerText : "",
-    element.textContent ?? "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ]
-    .filter((text) => {
-      const comparable = normaliseText(text);
-      if (!comparable || seenTexts.has(comparable)) return false;
-      seenTexts.add(comparable);
-      return true;
-    })
-    .join(" ");
 }

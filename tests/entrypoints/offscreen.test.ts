@@ -784,6 +784,100 @@ describe("offscreen Blob URL entrypoint", () => {
     );
   });
 
+  it("names a GSTR-2B year with no staged portal data as having no workbook source", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-summary.pdf`,
+      // A GSTR-2B PDF is refused below the portal's minimum size, so the synthetic one is padded.
+      new Blob([`%PDF-1.7 portal summary\n${"0".repeat(20 * 1024)}\n%%EOF\n`]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "gstr2b-pdf-only-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-2B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "PDF", entryNames: ["april-summary.pdf"] }],
+        summaryPlan: [
+          {
+            artifactType: "PDF",
+            entryNames: ["april-summary.pdf"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-2B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      zipEntryCount: 2,
+      summaryEntryCount: 1,
+      summary: { status: "included", workbookOutcome: "no-source", outcomeOnly: true },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    expect([...entries.keys()]).toEqual(["april-summary.pdf", "full-year-summary.csv"]);
+  });
+
+  it("names a GSTR-2B source with no invoice-level record as having no records", async () => {
+    await loadOffscreenEntrypoint();
+    opfsFiles.set(
+      `filed-return-packs/${TEST_FULL_YEAR_LEDGER_ID}/april-data.json`,
+      new Blob([
+        JSON.stringify({
+          data: {
+            gstin: "27ABCDE1234F1Z0",
+            rtnprd: "042026",
+            // A nil month: the portal's ITC summary is present, no section holds an invoice.
+            itcsumm: {
+              itcavl: { nonrevsup: { txval: 0, igst: 0, cgst: 0, sgst: 0, cess: 0 } },
+            },
+            docdata: {},
+          },
+        }),
+      ]),
+    );
+
+    const zip = await sendOffscreenMessage({
+      type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
+      target: PACK_OFFSCREEN_BLOB_URL_TARGET,
+      payload: {
+        requestId: "gstr2b-nil-summary-request",
+        generatedAt: "2026-08-19T12:00:00.000Z",
+        ledgerId: TEST_FULL_YEAR_LEDGER_ID,
+        expectedReturnType: "GSTR-2B",
+        expectedEntryCount: 1,
+        expectedEntries: [{ artifactType: "JSON", entryNames: ["april-data.json"] }],
+        summaryPlan: [
+          {
+            artifactType: "JSON",
+            entryNames: ["april-data.json"],
+            financialYear: "2026-27",
+            outcomeCategory: "staged",
+            period: "April",
+            returnType: "GSTR-2B",
+          },
+        ],
+      },
+    });
+
+    expect(zip).toMatchObject({
+      ok: true,
+      zipEntryCount: 2,
+      summaryEntryCount: 1,
+      summary: { status: "included", workbookOutcome: "no-records" },
+    });
+    const entries = await extractStoredZipEntries(createdBlobs[0]!);
+    // No workbook, so the tidy CSV is the fallback rather than being dropped.
+    expect([...entries.keys()]).toEqual(["april-data.json", "full-year-summary.csv"]);
+  });
+
   it("ships the GSTR-2B invoice-level workbook in place of the tidy CSV", async () => {
     await loadOffscreenEntrypoint();
     opfsFiles.set(
