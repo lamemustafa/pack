@@ -17,6 +17,12 @@ import {
 } from "./flow-summary";
 import { getBoundDeclinedArtifactSignal } from "../../connectors/gst/filed-returns-declined-artifact";
 
+/**
+ * Where a saved pack lives. Pack does not record which GST account made a saved run, so no
+ * heading may claim it belongs to whoever is signed in -- only that this browser holds it.
+ */
+export const SAVED_PACK_LOCATION_LABEL = "Saved in this browser";
+
 export function PackSummary({
   scope,
   summary,

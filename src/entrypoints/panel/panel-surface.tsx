@@ -14,14 +14,18 @@ import {
 } from "../popup/flow-summary";
 import { InlineStatus } from "../popup/inline-status";
 import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
-import { PackSummary } from "../popup/pack-summary";
+import { PackSummary, SAVED_PACK_LOCATION_LABEL } from "../popup/pack-summary";
 import { TargetEvidence } from "../popup/target-evidence";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
-import { PanelGuidedScope, isPackSourceSurfaceBuildMode } from "./panel-guided-scope";
+import {
+  FinancialYearText,
+  PanelGuidedScope,
+  isPackSourceSurfaceBuildMode,
+} from "./panel-guided-scope";
 import {
   allReturnsPresetOffersRestart,
   discardAllReturnsPlanLabel,
@@ -430,8 +434,13 @@ function AllSupportedRunStatus({
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>
         <strong>
-          Your pack · All supported returns
-          {summary.summaryIdentity ? ` · FY ${summary.summaryIdentity.financialYear}` : ""}
+          {SAVED_PACK_LOCATION_LABEL} · All supported returns
+          {summary.summaryIdentity ? (
+            <>
+              {" · "}
+              <FinancialYearText financialYear={summary.summaryIdentity.financialYear} />
+            </>
+          ) : null}
         </strong>
       </p>
       {summary.targetEvidence.length > 0 ? (
