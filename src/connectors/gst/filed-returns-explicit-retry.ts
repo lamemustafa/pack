@@ -12,6 +12,8 @@
 export const FILED_RETURNS_NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS: ReadonlySet<string> = new Set([
   "all-supported-full-fiscal-year-artifact-snapshot-mismatch",
   "full-fiscal-year-pinned-gst-tab-unavailable",
+  // A saved run stopped after a browser or extension restart; retrying cannot change that.
+  "full-fiscal-year-restart-account-unverified",
   "single-period-bundle-ledger-malformed",
   "single-period-bundle-scope-conflict",
   "single-period-bundle-state-persist-failed",

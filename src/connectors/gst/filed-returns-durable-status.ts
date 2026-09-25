@@ -50,6 +50,7 @@ import {
 type DurableMessageKey =
   | "complete"
   | "durable-status-rejected"
+  | "full-year-account-unverified-after-restart"
   | "full-year-active"
   | "full-year-complete-download-unconfirmed"
   | "full-year-downloaded-cleanup-blocked"
@@ -489,6 +490,9 @@ function messageKeyForTarget(
   }
   if (signals.includes("full-fiscal-year-restaging-required")) return "target-restaging";
   if (signals.includes("full-fiscal-year-target-retry-approved")) return "target-retry-approved";
+  if (signals.includes("full-fiscal-year-restart-account-unverified")) {
+    return "full-year-account-unverified-after-restart";
+  }
   if (signals.includes("full-fiscal-year-pinned-gst-tab-unavailable")) {
     return "full-year-pinned-tab-unavailable";
   }
@@ -590,6 +594,9 @@ function messageKeyForSummary(
   const blockingRecoveryKey = blockingSummaryRecoveryMessageKey(signals, isFullFiscalYear);
   if (isFullFiscalYear && (status === "blocked" || status === "partial")) {
     if (blockingRecoveryKey) return blockingRecoveryKey;
+    if (signals.includes("full-fiscal-year-restart-account-unverified")) {
+      return "full-year-account-unverified-after-restart";
+    }
     if (signals.includes("full-fiscal-year-pinned-gst-tab-unavailable")) {
       return "full-year-pinned-tab-unavailable";
     }
@@ -670,6 +677,10 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     complete: `Pack completed the local filed-return download for ${period}.`,
     "durable-status-rejected":
       "Pack rejected non-canonical recovery metadata and will not continue automatically.",
+    // Names only the exit the panel offers: the retry is withheld for this signal. "Browser or
+    // Pack" because the marker is also cleared when the extension is updated, reloaded or disabled.
+    "full-year-account-unverified-after-restart":
+      "Pack stopped because the browser or Pack restarted after this saved run began. It will not add files to this run after a restart, in case a different GST account is now signed in. Use Cancel and reset to clear it.",
     "full-year-active": `The saved FY ${scope.financialYear} run is still active.`,
     "full-year-complete-download-unconfirmed":
       "Pack completed the saved fiscal-year run, but could not confirm a final ZIP download. Check browser Downloads before relying on a file.",

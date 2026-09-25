@@ -351,6 +351,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "all-supported-full-fiscal-year-zip-reconciled-by-id",
   "all-supported-full-fiscal-year-zip-target-plan-invalid",
   "full-fiscal-year-artifact-staging-incomplete",
+  "full-fiscal-year-restart-account-unverified",
   "full-fiscal-year-complete",
   "full-fiscal-year-completed-staging-cleanup-failed",
   "full-fiscal-year-download-unconfirmed",

@@ -233,9 +233,11 @@ run identifier, or dated observation. Unevidenced claims stay unchecked.
       authorised user.
 - [ ] Full fiscal year ledger resumes after service-worker restart without
       repeating a downloaded target.
-- [ ] Full fiscal year ledger resumes after browser restart without retaining
+- [ ] Full fiscal year ledger survives a browser restart without retaining
       raw URLs, filenames, local paths, portal HTML, GSTIN/PAN, taxpayer names,
-      cookies, credentials, OTP, or CAPTCHA data.
+      cookies, credentials, OTP, or CAPTCHA data. A plan with targets still to
+      acquire refuses portal work after the restart with a named reason; a plan
+      with every target staged still finishes its ZIP.
 - [ ] Authorised live full fiscal year run reconciles every eligible target as
       downloaded, positively not filed, blocked, or failed in the local ledger.
 - [ ] The authorised live full fiscal year recovery matrix below is complete:
