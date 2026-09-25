@@ -535,6 +535,8 @@ export function usePackPopupController() {
     : null;
   const scopeLockedForReview = recoverySummary !== null;
   const setScope = React.useCallback((nextScope: FiledReturnsDownloadScope) => {
+    // The reader's own choice cancels any adoption a superseding refresh would otherwise inherit.
+    adoptingRefreshEpoch.current = null;
     setScopeState(nextScope);
   }, []);
   const scopedFlowSummary = getScopeMatchedFiledReturnsSummary(scope, filedReturnsFlowSummary);
