@@ -31,6 +31,24 @@ import {
 export const PACK_ACTION_STOPPED_MESSAGE =
   "Pack stopped responding before that finished. Reopen Pack to see what was saved.";
 
+/**
+ * How often an open surface re-reads the summary while it shows a run in progress (#368).
+ *
+ * A run becomes interrupted by the clock alone: a dead worker writes nothing and never removes its
+ * lease, so no storage event fires. The background decides staleness -- `ACTIVE_RUN_REVIEW_MS` in
+ * `filed-returns-active-run.ts` for a run lease, `isAllSupportedFullFiscalYearLedgerStale` for an
+ * all-supported ledger -- and this interval only bounds how long after that the open surface
+ * notices. It is a latency choice, not derived from either. A hidden page's timers are throttled,
+ * which degrades this to updating when the reader returns -- what reopening already did.
+ *
+ * A tick never claims the refresh epoch and never adopts a scope, so it cannot discard a storage
+ * event's adopting read or override the reader's selection; it drops its own reply if any other
+ * summary refresh started while it was in flight. The accepted cost: a slow adopting read that
+ * lands after a tick replaces the tick's newer summary with its own, slightly older one, until
+ * the next tick.
+ */
+export const PACK_RUNNING_SUMMARY_REFRESH_MS = 10_000;
+
 const UNEXPECTED_PACK_RESPONSE = "Unexpected Pack response.";
 
 export function usePackPopupController() {
@@ -159,8 +177,10 @@ export function usePackPopupController() {
    * that selection is theirs, not the saved run's.
    */
   const refreshFlowSummary = React.useCallback(
-    async (adoptSummaryScope = false) => {
-      const refreshEpoch = ++summaryRefreshEpoch.current;
+    async (adoptSummaryScope = false, claimEpoch = true) => {
+      // Claiming the epoch supersedes any read in flight. The running-run tick does not claim it:
+      // superseding a storage event's adopting read would drop that read's adoption.
+      const refreshEpoch = claimEpoch ? ++summaryRefreshEpoch.current : summaryRefreshEpoch.current;
       try {
         const response = await sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
         if (refreshEpoch !== summaryRefreshEpoch.current) return;
@@ -197,6 +217,20 @@ export function usePackPopupController() {
     },
     [showActionError],
   );
+
+  // Gated on a run being shown as running, so an idle surface never polls and the timer stops on its
+  // own once the projection settles. The refresh keeps the reader's own scope selection.
+  const showsRunningRun =
+    allSupportedFullFiscalYearFlowSummary?.status === "running" ||
+    filedReturnsFlowSummary?.status === "running";
+  React.useEffect(() => {
+    if (!showsRunningRun) return;
+    const timer = setInterval(
+      () => void refreshFlowSummary(false, false),
+      PACK_RUNNING_SUMMARY_REFRESH_MS,
+    );
+    return () => clearInterval(timer);
+  }, [refreshFlowSummary, showsRunningRun]);
 
   React.useEffect(() => {
     const onChanged = (
