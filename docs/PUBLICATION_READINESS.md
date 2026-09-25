@@ -241,6 +241,12 @@ run identifier, or dated observation. Unevidenced claims stay unchecked.
 - [ ] The authorised live full fiscal year recovery matrix below is complete:
       every observation matches a completion-eligible row in the cell legend,
       and every recorded date is valid and no later than the current UTC date.
+- [ ] The authorised live full fiscal year export-window restart matrix below is complete:
+      every observation matches a completion-eligible row in the cell legend,
+      and every recorded date is valid and no later than the current UTC date.
+- [ ] The authorised live full fiscal year all-returns recovery matrix below is complete:
+      every observation matches a completion-eligible row in the cell legend,
+      and every recorded date is valid and no later than the current UTC date.
 
 The selection rows are derived from the supported Cartesian product of
 `FILED_RETURNS_RETURN_TYPES` and `FILED_RETURNS_ARTIFACT_TYPES`; a test keeps
@@ -256,23 +262,60 @@ resumed path must not repeat a completed target. An unproven path remains
 non-complete until retry or cancellation. Manual observation is only an
 explicit non-completing action and still requires retry before ZIP staging.
 
+The two plain restart columns can both be satisfied while targets are still
+being acquired, before any ZIP exists, so they say nothing about the export
+window. The export-window pair records a restart made after the last target is
+saved and before the ZIP download is confirmed: one with the service worker
+stopped, one with the whole browser quit, because only the browser restart also
+tears down the offscreen document that assembles the ZIP. Each passes only when
+the resumed run rebuilds and saves the ZIP without repeating a portal target and
+never reports a partial ZIP as complete. A refusal in that window is recordable
+as `fail-closed-as-expected` but is not completion-eligible there: rebuilding and
+exporting is the property the column claims, and a refusal does not demonstrate
+it.
+
+The export window is shared by every selection. Both full-year paths build and
+save the ZIP through one exporter and resume from the ledger's saved export
+phase. The only step that differs is the offscreen builder for derived files,
+which branches by return type and by whether portal JSON was staged. The
+export-window matrix therefore records the pair once per full-year return, on
+the selection that stages every offered format (else the only format), and a
+test derives those rows. This gives up a live observation of a restart during
+export for a PDF-only or single-format year. That builder path is a subset of
+the observed branch; the offscreen tests cover the builder's outcome for each
+return type without staged portal JSON, and with it wherever the return offers
+it; and the recovery under test is the same code in every case.
+
+The panel's all-returns presets run a separate plan with its own ledger and a
+combined final ZIP, which no selection row enters. Its export has its own entry
+point, `exportAllSupportedFullFiscalYearZip`, its own export phases and its own
+resume path, so the all-returns matrix records that plan in one row with its own
+export-window pair. The pair is there for that separate orchestration, not for
+the builder: a mixed plan takes the same no-workbook branch as a GSTR-1 year.
+Its contents cell is derived from the canonical plan expansion,
+`expandAllSupportedFullFiscalYearTargetPlan`, so adding a return or a format to
+the catalogue fails the test until the row is re-recorded; evidence gathered
+against the old plan cannot stand for the new one. Every observation in all
+three matrices uses the same legend.
+
 Every cell must match one complete row in this legend. The test renders the
 legend from the same rule table used for validation, so state, reason, date,
 column, and completion semantics cannot drift into an independent vocabulary.
 
 <!-- BEGIN: full-year-recovery-cell-legend -->
 
-| State                     | Date constraint                             | Reason                              | Allowed column           | Derived row capability    | Recorded capability claim | Completion-eligible |
-| ------------------------- | ------------------------------------------- | ----------------------------------- | ------------------------ | ------------------------- | ------------------------- | ------------------- |
-| `pass`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | any derived capability    | none                      | yes                 |
-| `fail`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns         | any derived capability    | none                      | no                  |
-| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | scenario columns         | any derived capability    | none                      | yes                 |
-| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | final expectation column | `acquisition-capable`     | `acquisition-capable`     | yes                 |
-| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns         | `acquisition-capable`     | none                      | no                  |
-| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns         | `not-acquisition-capable` | none                      | yes                 |
-| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `selection-not-acquisition-capable` | final expectation column | `not-acquisition-capable` | `not-acquisition-capable` | yes                 |
-| `not-yet-run`             | `not-recorded`                              | none                                | scenario columns         | any derived capability    | none                      | no                  |
-| `not-yet-run`             | `not-recorded`                              | `not-recorded`                      | final expectation column | any derived capability    | none                      | no                  |
+| State                     | Date constraint                             | Reason                              | Allowed column            | Derived row capability    | Recorded capability claim | Completion-eligible |
+| ------------------------- | ------------------------------------------- | ----------------------------------- | ------------------------- | ------------------------- | ------------------------- | ------------------- |
+| `pass`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns          | any derived capability    | none                      | yes                 |
+| `fail`                    | valid `YYYY-MM-DD`, today or earlier in UTC | none                                | scenario columns          | any derived capability    | none                      | no                  |
+| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | recovery scenario columns | any derived capability    | none                      | yes                 |
+| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | export-window columns     | any derived capability    | none                      | no                  |
+| `fail-closed-as-expected` | valid `YYYY-MM-DD`, today or earlier in UTC | `expected-fail-closed-boundary`     | final expectation column  | `acquisition-capable`     | `acquisition-capable`     | yes                 |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns          | `acquisition-capable`     | none                      | no                  |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `recovery-scenario-not-applicable`  | scenario columns          | `not-acquisition-capable` | none                      | yes                 |
+| `not-applicable`          | valid `YYYY-MM-DD`, today or earlier in UTC | `selection-not-acquisition-capable` | final expectation column  | `not-acquisition-capable` | `not-acquisition-capable` | yes                 |
+| `not-yet-run`             | `not-recorded`                              | none                                | scenario columns          | any derived capability    | none                      | no                  |
+| `not-yet-run`             | `not-recorded`                              | `not-recorded`                      | final expectation column  | any derived capability    | none                      | no                  |
 
 <!-- END: full-year-recovery-cell-legend -->
 
@@ -297,6 +340,24 @@ data are unrepresentable in the matrix.
 | GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
 
 <!-- END: full-year-recovery-matrix -->
+
+<!-- BEGIN: full-year-export-window-recovery-matrix -->
+
+| Return type | Artifact type | Service-worker restart during export | Browser restart during export   |
+| ----------- | ------------- | ------------------------------------ | ------------------------------- |
+| GSTR-3B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded |
+| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded |
+| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded |
+
+<!-- END: full-year-export-window-recovery-matrix -->
+
+<!-- BEGIN: full-year-all-returns-recovery-matrix -->
+
+| Plan                  | Returns and formats                                               | Service-worker restart          | Browser restart                 | Service-worker restart during export | Browser restart during export   | Interrupted download            | Cancellation/discard and cleanup | Retained checkpoint; browser record unavailable | Expected fail-closed / not applicable                 |
+| --------------------- | ----------------------------------------------------------------- | ------------------------------- | ------------------------------- | ------------------------------------ | ------------------------------- | ------------------------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| All supported returns | GSTR-3B: PDF, JSON; GSTR-1: PDF, EXCEL; GSTR-2B: PDF, EXCEL, JSON | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+
+<!-- END: full-year-all-returns-recovery-matrix -->
 
 - [ ] Action-bound capture is tested in clean Chrome and Brave profiles plus the
       real profile where the native Save dialog appeared, with "Ask where to
