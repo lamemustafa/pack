@@ -47,6 +47,8 @@ const mocks = vi.hoisted(() => {
     downloadAcquiredArtifact: vi.fn(),
     stageOffscreenFiledReturn: vi.fn(),
     startFullFiscalYearDownloadFlow: vi.fn(),
+    actualStartFullFiscalYearDownloadFlow: null as
+      null | (typeof FullFiscalYearModule)["startFullFiscalYearDownloadFlow"],
   };
 });
 
@@ -77,16 +79,23 @@ vi.mock("../../src/background/filed-returns-active-run", async (importOriginal) 
 }));
 // Past the plan-entry scan the Start would drive the portal. It is replaced by a no-op so the
 // only storage write under test is the scan's own.
-vi.mock("../../src/background/filed-returns-full-fiscal-year", async (importOriginal) => ({
-  ...(await importOriginal<typeof FullFiscalYearModule>()),
-  startFullFiscalYearDownloadFlow: mocks.startFullFiscalYearDownloadFlow,
-}));
+vi.mock("../../src/background/filed-returns-full-fiscal-year", async (importOriginal) => {
+  const actual = await importOriginal<typeof FullFiscalYearModule>();
+  mocks.actualStartFullFiscalYearDownloadFlow = actual.startFullFiscalYearDownloadFlow;
+  return { ...actual, startFullFiscalYearDownloadFlow: mocks.startFullFiscalYearDownloadFlow };
+});
 
 import { triggerAndObserveFiledReturnDownload } from "../../src/background/filed-returns-download-trigger";
-import { startFiledReturnsDownloadFlow } from "../../src/background/filed-returns-flow-runner";
+import {
+  retryFullFiscalYearTargetDownloadFlow,
+  startFiledReturnsDownloadFlow,
+} from "../../src/background/filed-returns-flow-runner";
 import { readCurrentFiledReturnsFlowSummary } from "../../src/background/filed-returns-current-state";
 import { createFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
-import { persistLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
+import {
+  persistLedger,
+  readLedgerForScope,
+} from "../../src/background/filed-returns-full-fiscal-year-run-state";
 import { summariseFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { persistCanonicalFiledReturnsFlowSummary } from "../../src/background/filed-returns-session-summary";
 
@@ -159,9 +168,10 @@ function stageOrStartDownloadThenTimeOut() {
 async function runChild(
   target: ChildTarget,
   stageCapturedDownloads?: { bundleKind: "full-fiscal-year"; ledgerId: string },
+  period = "May",
 ) {
   return triggerAndObserveFiledReturnDownload({
-    activePeriod: "May",
+    activePeriod: period,
     artifactType: target.artifactType,
     deps: {
       sendMessageToTabWithInjection: vi.fn(async () => readyArtifact()),
@@ -169,7 +179,7 @@ async function runChild(
       storageKeys,
       ...(stageCapturedDownloads ? { stageCapturedDownloads } : {}),
     },
-    scope: { ...target, financialYear: "2025-26", period: "May" },
+    scope: { ...target, financialYear: "2025-26", period },
     tabId: 17,
   });
 }
@@ -248,3 +258,49 @@ function readyArtifact(): PackMessageResponse {
     },
   };
 }
+
+// Review finding on this change: the full-year single-target Retry does not run the plan-entry scan,
+// so a direct run's checkpoint for the retried target is found by the plan child instead, and the
+// child writes the review. The review is correct -- the browser holds a download Pack cannot account
+// for -- so what matters is that the plan stops on it and never completes over it.
+describe("a plan child that finds a direct run's checkpoint (#402 review)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storage.local = {};
+    storage.session = {};
+    stageOrStartDownloadThenTimeOut();
+    mocks.downloadsSearch.mockResolvedValue([{ id: 91, state: "in_progress" }]);
+    mocks.startFullFiscalYearDownloadFlow.mockImplementation(
+      mocks.actualStartFullFiscalYearDownloadFlow!,
+    );
+  });
+
+  it("stops the plan at the reviewed month instead of completing over the review", async () => {
+    const target = CHILD_TARGETS[0];
+    const created = createFullFiscalYearLedger(planScope(target), NOW, ["April", "May"]);
+    await persistLedger(deps, created);
+    const april = created.targets.find((planTarget) => planTarget.period === "April")!;
+    await runChild(target, undefined, "April");
+    const ledgerBefore = await readLedgerForScope(deps, planScope(target));
+
+    await retryFullFiscalYearTargetDownloadFlow(
+      {
+        expectedRevision: ledgerBefore!.revision ?? 1,
+        ledgerId: created.ledgerId,
+        targetId: april.targetId,
+      },
+      deps as never,
+    );
+
+    const ledgerAfter = await readLedgerForScope(deps, planScope(target));
+    expect(ledgerAfter?.status).not.toBe("complete");
+    expect(ledgerAfter?.targets.find((planTarget) => planTarget.period === "May")?.status).toBe(
+      "pending",
+    );
+    expect(storage.local[storageKeys.targetReview]).toBeDefined();
+    await expect(readCurrentFiledReturnsFlowSummary(deps)).resolves.toMatchObject({
+      scope: { ...target, period: "April" },
+      status: "blocked",
+    });
+  });
+});
