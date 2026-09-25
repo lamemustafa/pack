@@ -2,6 +2,7 @@ import { prepareFullFiscalYearCompletion } from "./filed-returns-full-fiscal-yea
 import type {
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
+  FiledReturnsFullFiscalYearTarget,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
@@ -9,6 +10,7 @@ import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-re
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
 import { filedReturnsSummaryStatusMessage } from "../connectors/gst/filed-returns-summary-status";
+import { canonicalDurableSummaryMessage } from "../connectors/gst/filed-returns-durable-status";
 import type {
   FiledReturnsFlowRunnerDeps,
   FiledReturnsFlowStepCategory,
@@ -367,35 +369,31 @@ export async function startFullFiscalYearDownloadFlow(
 
   await persistLedger(deps, ledger);
 
-  // An explicitly confirmed resume may cross a browser restart. Rebind only
-  // when that durable tab-session marker differs from this browser session;
-  // a matching marker must retain its original tab binding.
+  // Resume must not continue across a different signed-in account. The tab-session marker lives in
+  // storage.session, which a browser restart and an extension update, reload or disable all clear;
+  // once it differs, nothing ties the run to the tab it started in, so the run refuses rather than
+  // binding to another. Portal work only: the local-only ZIP and cleanup phases return above, and
+  // a run with no target left goes straight to its ZIP. An unreadable marker is not refused here;
+  // the pinned child run reports it under its own named reason.
   const currentTabSessionId =
-    options.allowExistingLedgerResume &&
-    ledger.portalTabId !== undefined &&
-    ledger.portalTabSessionId !== undefined
+    ledger.portalTabId !== undefined && ledger.portalTabSessionId !== undefined
       ? await getFullFiscalYearTabSessionId()
       : null;
-  let mustRebindPortalTab =
-    options.allowExistingLedgerResume &&
-    ledger.portalTabId !== undefined &&
-    ledger.portalTabSessionId !== undefined &&
-    currentTabSessionId !== null &&
-    currentTabSessionId !== ledger.portalTabSessionId;
+  const browserRestartedSinceBinding =
+    currentTabSessionId !== null && currentTabSessionId !== ledger.portalTabSessionId;
 
   while (true) {
     const nextTarget = nextRunnableFullFiscalYearTarget(ledger);
     if (!nextTarget) return completeRun(deps, ledger);
+    if (browserRestartedSinceBinding) {
+      return refuseAfterBrowserRestart(deps, ledger, nextTarget);
+    }
     const retryScope = scopeForFullFiscalYearTarget(nextTarget);
     const previousTargetSafeSignals = nextTarget.safeSignals;
     let systemErrorPredecessor: FullFiscalYearSystemErrorPredecessor = "initial";
 
     let targetMarkedRunning = false;
-    if (
-      !mustRebindPortalTab &&
-      ledger.portalTabId !== undefined &&
-      ledger.portalTabSessionId !== undefined
-    ) {
+    if (ledger.portalTabId !== undefined && ledger.portalTabSessionId !== undefined) {
       ledger = markFullFiscalYearTargetRunning(
         ledger,
         nextTarget.targetId,
@@ -419,7 +417,7 @@ export async function startFullFiscalYearDownloadFlow(
       },
       {
         onPortalTabSelected: async (tabId, tabSessionId) => {
-          if (ledger.portalTabId !== undefined && !mustRebindPortalTab) return;
+          if (ledger.portalTabId !== undefined) return;
           ledger = {
             ...ledger,
             portalTabId: tabId,
@@ -428,7 +426,6 @@ export async function startFullFiscalYearDownloadFlow(
             updatedAt: (deps.now?.() ?? new Date()).toISOString(),
           };
           await persistLedger(deps, ledger);
-          mustRebindPortalTab = false;
           if (!targetMarkedRunning) {
             ledger = markFullFiscalYearTargetRunning(
               ledger,
@@ -440,9 +437,7 @@ export async function startFullFiscalYearDownloadFlow(
           }
         },
         persistSinglePeriodSummary: false,
-        ...(!mustRebindPortalTab &&
-        ledger.portalTabId !== undefined &&
-        ledger.portalTabSessionId !== undefined
+        ...(ledger.portalTabId !== undefined && ledger.portalTabSessionId !== undefined
           ? {
               requiredPortalTabId: ledger.portalTabId,
               requiredPortalTabSessionId: ledger.portalTabSessionId,
@@ -494,6 +489,41 @@ export async function startFullFiscalYearDownloadFlow(
     }
     return { ...response, flowStep: terminalFlowStep, flowSummary };
   }
+}
+
+/**
+ * Records the restart refusal on the target the run would have started next, so the saved run
+ * carries its reason: every later reading withholds the retry and names the one exit.
+ */
+async function refuseAfterBrowserRestart(
+  deps: FiledReturnsFlowRunnerDeps,
+  ledger: FiledReturnsFullFiscalYearLedger,
+  target: FiledReturnsFullFiscalYearTarget,
+): Promise<PackMessageResponse> {
+  const scope = scopeForFullFiscalYearTarget(target);
+  const safeSignals = ["full-fiscal-year-restart-account-unverified"];
+  const flowStep: PortalFlowStepResult = {
+    connectorId: "gst",
+    scopeId: filedReturnsScopeId(scope.returnType),
+    state: "blocked",
+    safeSignals,
+    // The run's own full-year scope, not the month's: the refusal is about the saved run.
+    safeMessage: canonicalDurableSummaryMessage(ledger.scope, "blocked", safeSignals),
+    userAction: {
+      type: "RETRY_PORTAL_GENERATION",
+      message: "Use Cancel and reset for this saved run.",
+      canResume: false,
+    },
+  };
+  const refused = markFullFiscalYearTargetTerminal(
+    ledger,
+    target.targetId,
+    "blocked",
+    flowStep,
+    deps.now?.() ?? new Date(),
+  );
+  await persistLedgerAndSummary(deps, refused, flowStep);
+  return { ok: true, flowStep, flowSummary: toFullFiscalYearSummary(refused, flowStep) };
 }
 
 // A target the run does not need to stop for: the portal answered, and the answer is final for
