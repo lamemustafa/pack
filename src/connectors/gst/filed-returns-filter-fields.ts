@@ -3,7 +3,7 @@ import {
   findFiledReturnsFilterRoot,
   getCustomDropdownControls,
 } from "./filed-returns-custom-dropdown";
-import { isHidden, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
+import { isHidden, matchesAcceptedText, normaliseText, readElementText } from "./filed-returns-dom";
 
 export interface FiledReturnsFilterFieldState {
   present: boolean;
@@ -269,30 +269,12 @@ function uniqueSelects(selects: Array<HTMLSelectElement | null | undefined>): HT
 }
 
 /**
- * A selected option's text, read once. `readElementText` joins `innerText` and `textContent`, which a
- * browser both fills, so an option read through it came back doubled ("GSTR3B GSTR3B"). The loose
- * matchers tolerated that; the exact return-type matcher never matched, and GSTR-3B stopped at the
- * dropdowns on every retry (2026-09-21). Every other reader in the connector already reads
- * `textContent`; this is the same reading.
+ * A selected option's text, read once. The field reader used to join `innerText` and `textContent`,
+ * which a browser both fills, so an option came back doubled ("GSTR3B GSTR3B"). The loose matchers
+ * tolerated that; the exact return-type matcher never matched, and GSTR-3B stopped at the dropdowns
+ * on every retry (2026-09-21). Every other reader in the connector already reads `textContent`;
+ * this is the same reading.
  */
 function readSelectedOptionText(select: HTMLSelectElement): string {
   return select.selectedOptions[0]?.textContent || select.value;
-}
-
-function readElementText(element: Element | null | undefined): string {
-  if (!element) return "";
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  return [
-    "innerText" in element ? (element as HTMLElement).innerText : "",
-    element.textContent ?? "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ]
-    .filter(Boolean)
-    .join(" ");
 }
