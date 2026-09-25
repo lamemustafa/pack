@@ -10,6 +10,7 @@ import {
 } from "../../connectors/gst/filed-returns-capabilities";
 import { getFiledReturnsFinancialYearOptions } from "../../connectors/gst/filed-returns-scope";
 import { ScopeFormAction } from "../popup/components";
+import { FinancialYearText } from "../popup/financial-year-text";
 import {
   canRetryFullFiscalYearZipWithoutPortal,
   getScopeMatchedFiledReturnsSummary,
@@ -537,11 +538,6 @@ function AllReturnsPreset({
       ) : null}
     </React.Fragment>
   );
-}
-
-/** "FY <year>" as one unbreakable unit, so a narrow panel never splits the year at its hyphen. */
-export function FinancialYearText({ financialYear }: { financialYear: string }) {
-  return <span className="panel-fy">{`FY ${financialYear}`}</span>;
 }
 
 /**

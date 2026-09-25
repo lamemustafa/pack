@@ -14,6 +14,7 @@ import {
 } from "../popup/flow-summary";
 import { InlineStatus } from "../popup/inline-status";
 import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
+import { FinancialYearText } from "../popup/financial-year-text";
 import { PackSummary } from "../popup/pack-summary";
 import { TargetEvidence } from "../popup/target-evidence";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
@@ -21,11 +22,7 @@ import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
 import { getRecoveryFlowAvailability } from "../popup/recovery-flow-availability";
 import { getScopeFormStartAction } from "../popup/scope-form-model";
 import type { usePackPopupController } from "../popup/use-pack-popup-controller";
-import {
-  FinancialYearText,
-  PanelGuidedScope,
-  isPackSourceSurfaceBuildMode,
-} from "./panel-guided-scope";
+import { PanelGuidedScope, isPackSourceSurfaceBuildMode } from "./panel-guided-scope";
 import {
   allReturnsPresetOffersRestart,
   discardAllReturnsPlanLabel,

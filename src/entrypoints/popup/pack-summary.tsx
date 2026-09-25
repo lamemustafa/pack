@@ -16,6 +16,7 @@ import {
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
 import { getBoundDeclinedArtifactSignal } from "../../connectors/gst/filed-returns-declined-artifact";
+import { FinancialYearText } from "./financial-year-text";
 
 /**
  * Pack does not record which GST account made a saved run, and this summary also describes a
@@ -45,7 +46,7 @@ export function PackSummary({
         <div>
           <p className="section-label">{PACK_SUMMARY_LABEL}</p>
           <h2>
-            {scope.returnType} · FY {scope.financialYear.replace("-", "–")}
+            {scope.returnType} · <FinancialYearText financialYear={scope.financialYear} />
           </h2>
         </div>
         <div className="pack-motif" aria-hidden="true">
