@@ -735,7 +735,7 @@ describe("D3: an all-returns plan stopped at a final-ZIP download intent", () =>
     const ledger = await seedIntentPlan();
     await startWorker();
     await mountPanel();
-    expect(panelText()).toContain("Your pack · All supported returns");
+    expect(panelText()).toContain("All supported returns · FY");
     // Worker start does not move this phase on: no ID exists to reconcile.
     expect((await readAllSupportedFullFiscalYearLedgerById(ledger.ledgerId))?.zipPhase).toBe(
       "download-intent-persisted",
@@ -746,7 +746,7 @@ describe("D3: an all-returns plan stopped at a final-ZIP download intent", () =>
     expect(await readAllSupportedFullFiscalYearLedgerById(ledger.ledgerId)).toBeNull();
 
     await returnToPanel();
-    expect(panelText()).not.toContain("Your pack · All supported returns");
+    expect(panelText()).not.toContain("All supported returns · FY");
     expect(panelText()).toContain("What do you need?");
   });
 
@@ -761,6 +761,7 @@ describe("D3: an all-returns plan stopped at a final-ZIP download intent", () =>
     expect(panelText(), `Panel offers no plan control and says: ${panelText()}`).toContain(
       PACK_CLEAR_LOCAL_DATA_ACTION_LABEL,
     );
+    expect(panelText()).not.toContain("from its run summary");
   });
 
   it("pins what the panel offers today: no plan control, and a resume would not move it", async () => {
@@ -782,6 +783,8 @@ describe("D3: an all-returns plan stopped at a final-ZIP download intent", () =>
           safeSignals: expect.arrayContaining([
             "all-supported-full-fiscal-year-final-zip-manual-review",
           ]),
+          // An action's answer names the same exit as the polled summary: one step, not two.
+          safeMessage: expect.stringContaining(PACK_CLEAR_LOCAL_DATA_ACTION_LABEL),
         },
       },
     });
