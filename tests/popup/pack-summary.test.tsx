@@ -43,6 +43,13 @@ describe("popup pack summary", () => {
     }
   });
 
+  it("writes its FY the way every other Pack surface does, as one unbreakable unit", () => {
+    const markup = renderToStaticMarkup(<PackSummary scope={singlePeriodScope} summary={null} />);
+
+    expect(markup).toContain('GSTR-3B · <span class="panel-fy">FY 2026-27</span>');
+    expect(markup).not.toContain("2026–27");
+  });
+
   it("describes an unstarted single-period selection without claiming it was saved", () => {
     const markup = renderToStaticMarkup(<PackSummary scope={singlePeriodScope} summary={null} />);
 

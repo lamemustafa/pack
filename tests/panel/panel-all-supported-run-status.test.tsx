@@ -161,7 +161,7 @@ describe("all-supported panel progress", () => {
     expect(packaged).not.toContain("Discard the saved FY 2025-26 plan and run again");
     expect(packaged).not.toContain("Resume this plan");
     // The summary itself still renders; only the actions are withheld.
-    // Pack cannot tell which GST account made a saved plan, so the heading claims only where it lives.
+    // Pack does not record which GST account made a saved plan, so the heading claims only where it lives.
     expect(packaged).toContain(
       'Saved in this browser · All supported returns · <span class="panel-fy">FY 2025-26</span>',
     );
