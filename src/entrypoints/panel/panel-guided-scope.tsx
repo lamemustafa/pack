@@ -209,12 +209,15 @@ export function PanelGuidedScope({
                       : {})}
                     {...(terminalBlock?.restartPlan && onRestartAllReturnsFullYear
                       ? {
-                          onRestart: (plan: PanelAllReturnsFullYearPlan) =>
-                            onRestartAllReturnsFullYear(
-                              terminalBlock.ledgerId === undefined
-                                ? plan
-                                : { ...plan, ledgerId: terminalBlock.ledgerId },
-                            ),
+                          restart: {
+                            savedPlanFinancialYear: terminalBlock.financialYear,
+                            onRestart: (plan: PanelAllReturnsFullYearPlan) =>
+                              onRestartAllReturnsFullYear(
+                                terminalBlock.ledgerId === undefined
+                                  ? plan
+                                  : { ...plan, ledgerId: terminalBlock.ledgerId },
+                              ),
+                          },
                         }
                       : {})}
                     portalReady={portalSignedIn}
@@ -430,8 +433,8 @@ function AllReturnsPreset({
   plan,
   portalReady,
   resumePlan,
+  restart,
   sharedDisabledReasonId,
-  onRestart,
   onStart,
   onStalePlan,
 }: {
@@ -441,8 +444,12 @@ function AllReturnsPreset({
   plan: PanelAllReturnsFullYearPreset;
   portalReady: boolean;
   resumePlan?: PanelAllReturnsFullYearResumePlan;
+  /** A completed plan this preset discards; its financial year comes from the saved plan itself. */
+  restart?: {
+    savedPlanFinancialYear: string;
+    onRestart: (plan: PanelAllReturnsFullYearPlan) => void;
+  };
   sharedDisabledReasonId?: string;
-  onRestart?: (plan: PanelAllReturnsFullYearPlan) => void;
   onStart: (plan: PanelAllReturnsFullYearPlan) => void;
   onStalePlan: () => void;
 }) {
@@ -461,13 +468,16 @@ function AllReturnsPreset({
         note: `Saved plan · ${resumePlan.periodCount} eligible ${plural(resumePlan.periodCount, "period")} retained.`,
       }
     : plan;
-  const restartable = onRestart !== undefined;
   const coverageLabel = displayedPlan.returnTypes.map(shortReturnLabel).join(" · ");
   const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
-  const restartLabel = discardAllReturnsPlanLabel(
-    displayedPlan.financialYear,
-    `run ${displayedPlan.label.toLowerCase()}`,
-  );
+  // The visible label stays the preset's plain name, with the replaced pack named beneath it. The
+  // accessible name keeps the explicit discard, so no reader meets the destructive action unnamed.
+  const restartLabel = restart
+    ? discardAllReturnsPlanLabel(
+        restart.savedPlanFinancialYear,
+        `run ${displayedPlan.label.toLowerCase()}`,
+      )
+    : null;
 
   return (
     <React.Fragment>
@@ -476,9 +486,9 @@ function AllReturnsPreset({
         type="button"
         disabled={disabled}
         aria-describedby={disabledReason ? (sharedDisabledReasonId ?? disabledReasonId) : undefined}
-        aria-label={`${restartable ? restartLabel : displayedPlan.label}. ${coverageLabel}.`}
+        aria-label={`${restartLabel ?? displayedPlan.label}. ${coverageLabel}.`}
         onClick={() => {
-          if (onRestart) {
+          if (restart) {
             // Restart discards a completed plan and starts a new one. A panel
             // left open across a month or fiscal-year boundary renders from an
             // older snapshot, so dispatching the captured plan would silently
@@ -487,7 +497,7 @@ function AllReturnsPreset({
             // ordinary start uses; the destructive branch needs it more, not
             // less.
             if (planMatchesToday(plan)) {
-              onRestart({ kind: plan.kind, financialYear: plan.financialYear });
+              restart.onRestart({ kind: plan.kind, financialYear: plan.financialYear });
             } else {
               onStalePlan();
             }
@@ -509,7 +519,14 @@ function AllReturnsPreset({
           onStart({ kind: plan.kind, financialYear: plan.financialYear });
         }}
       >
-        <span>{restartable ? restartLabel : displayedPlan.label}</span>
+        <span className="panel-everything-preset-title">
+          <span>{displayedPlan.label}</span>
+          {restart ? (
+            <span className="panel-everything-preset-replaces">
+              {`Replaces the saved FY ${restart.savedPlanFinancialYear} pack`}
+            </span>
+          ) : null}
+        </span>
         <span className="panel-everything-preset-coverage">{coverageLabel}</span>
       </button>
       {disabledReason && !sharedDisabledReasonId ? (
