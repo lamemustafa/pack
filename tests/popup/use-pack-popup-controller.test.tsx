@@ -1231,6 +1231,25 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
     } as unknown as FiledReturnsFlowSummary;
   }
 
+  // Every later summary read answers `summary`; the first is held until `release` is called.
+  function holdFirstSummaryRead(summary: FiledReturnsFlowSummary) {
+    const held = { release: () => undefined as void, reads: 0 };
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type !== "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({ ok: true });
+      }
+      const response = { ok: true, flowSummary: summary };
+      held.reads += 1;
+      if (held.reads === 1) {
+        return new Promise((resolve) => {
+          held.release = () => resolve(response);
+        });
+      }
+      return Promise.resolve(response);
+    });
+    return held;
+  }
+
   function fireSummaryStorageEvent() {
     mocks.changeListeners.forEach((listener) =>
       listener({ "pack:last-filed-returns-flow-summary": { newValue: {} } }, "session"),
@@ -1359,30 +1378,16 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
     await mountWithSummaries([singleRun("running", "April")]);
     expect(controller?.scopedFlowSummary?.status).toBe("running");
 
-    let releaseAdoptingRead: () => void = () => undefined;
-    let pendingReads = 0;
-    mocks.sendMessage.mockImplementation((message: PackMessage) => {
-      if (message.type !== "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
-        return Promise.resolve({ ok: true });
-      }
-      const response = { ok: true, flowSummary: singleRun("running", "May") };
-      pendingReads += 1;
-      if (pendingReads === 1) {
-        return new Promise((resolve) => {
-          releaseAdoptingRead = () => resolve(response);
-        });
-      }
-      return Promise.resolve(response);
-    });
+    const held = holdFirstSummaryRead(singleRun("running", "May"));
 
     await act(async () => {
       fireSummaryStorageEvent();
       await Promise.resolve();
     });
     await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
-    expect(pendingReads).toBe(2);
+    expect(held.reads).toBe(2);
     await act(async () => {
-      releaseAdoptingRead();
+      held.release();
       await Promise.resolve();
     });
 
@@ -1391,8 +1396,42 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
 
     // Nor does a later tick change that.
     await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
-    expect(pendingReads).toBe(3);
+    expect(held.reads).toBe(3);
     expect(controller?.scope.period).toBe("May");
     expect(controller?.scopedFlowSummary?.status).toBe("running");
+  });
+
+  it("keeps a scope the reader picks while an adopting read is in flight, through the next tick", async () => {
+    // A storage event's read would adopt the saved April run's scope, but it is slow. The reader
+    // picks May meanwhile, then a tick supersedes the slow read. The reader's choice is theirs:
+    // the tick must not carry the superseded read's adoption over it, or the selector snaps back
+    // to April and the next start runs a scope the reader moved away from.
+    await mountWithSummaries([singleRun("running", "April")]);
+    expect(controller?.scope.period).toBe("April");
+    const held = holdFirstSummaryRead(singleRun("running", "April"));
+
+    await act(async () => {
+      fireSummaryStorageEvent();
+      await Promise.resolve();
+    });
+    const may = { ...(controller?.scope as FiledReturnsFlowSummary["scope"]), period: "May" };
+    await act(async () => {
+      controller?.setScope(may);
+      await Promise.resolve();
+    });
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+    expect(held.reads).toBe(2);
+
+    expect(controller?.scope.period).toBe("May");
+    // The April run is still read and still running; it just is not the reader's scope.
+    expect(controller?.lastRunSummary?.status).toBe("running");
+    expect(controller?.scopedFlowSummary).toBeNull();
+
+    // The superseded read landing late changes nothing either.
+    await act(async () => {
+      held.release();
+      await Promise.resolve();
+    });
+    expect(controller?.scope.period).toBe("May");
   });
 });
