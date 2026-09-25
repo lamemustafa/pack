@@ -321,9 +321,13 @@ describe("all-supported panel progress", () => {
       vi.setSystemTime(new Date("2026-09-22T09:00:00.000Z"));
       const markup = render(inYear("2025-26"));
 
-      expect(markup.match(/Discard the saved FY 2025-26 plan/g)).toHaveLength(2); // visible + aria
+      // Visible copy names what the preset replaces; the discard lives only in the accessible name.
+      expect(markup.match(/Replaces the saved FY 2025-26 pack/g)).toHaveLength(1);
+      expect(markup.match(/Discard the saved FY 2025-26 plan/g)).toHaveLength(1);
       expect(markup).not.toContain("Discard the saved FY 2025-26 plan and run again");
-      expect(markup).toContain("Discard the saved FY 2025-26 plan and run everything last year");
+      expect(markup).toContain(
+        'aria-label="Discard the saved FY 2025-26 plan and run everything last year. 3B · R1 · 2B."',
+      );
     });
   });
 
@@ -458,7 +462,7 @@ describe("all-supported panel progress", () => {
 
     // This all-returns preset is source-surfaces-only. Its rendered restart control is
     // the precondition that keeps the grouped-evidence assertions non-vacuous.
-    expect(markup).toContain("Discard the saved FY 2025-26 plan and run everything last year");
+    expect(markup).toContain("Replaces the saved FY 2025-26 pack");
     expect(markup.match(/class="evidence-row /g)).toHaveLength(36);
     expect(markup).toContain('aria-label="GSTR-1 results"');
     expect(markup).toContain('aria-label="GSTR-2B results"');
