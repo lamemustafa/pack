@@ -1209,6 +1209,34 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
     };
   }
 
+  function singleRun(
+    status: FiledReturnsFlowSummary["status"],
+    period = "April",
+  ): FiledReturnsFlowSummary {
+    return {
+      scope: {
+        financialYear: "2025-26",
+        period,
+        returnType: "GSTR-3B",
+        artifactType: "PDF",
+      },
+      status,
+      flowStep: {
+        connectorId: "gst",
+        scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+        state: "ready",
+        safeSignals: [],
+        safeMessage: `Synthetic ${status} run.`,
+      },
+    } as unknown as FiledReturnsFlowSummary;
+  }
+
+  function fireSummaryStorageEvent() {
+    mocks.changeListeners.forEach((listener) =>
+      listener({ "pack:last-filed-returns-flow-summary": { newValue: {} } }, "session"),
+    );
+  }
+
   async function mountWithSummaries(
     summaries: (
       FiledReturnsAllSupportedFullFiscalYearFlowSummary | FiledReturnsFlowSummary | null
@@ -1283,7 +1311,11 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
 
   it("stops re-reading once the run is no longer running", async () => {
     await mountWithSummaries([runningSummary("running"), runningSummary("blocked")]);
+    const readsAtMount = summaryReads();
     await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+    // The tick has to have fired for "stops" to mean anything.
+    expect(summaryReads()).toBe(readsAtMount + 1);
+    expect(controller?.allSupportedFullFiscalYearFlowSummary?.status).toBe("blocked");
     const readsAfterSettling = summaryReads();
 
     await advance(PACK_RUNNING_SUMMARY_REFRESH_MS * 5);
@@ -1292,25 +1324,7 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
   });
 
   it("re-reads a single-return run shown as running too", async () => {
-    const scope = {
-      financialYear: "2025-26",
-      period: "April",
-      returnType: "GSTR-3B",
-      artifactType: "PDF",
-    } as const;
-    const single = (status: FiledReturnsFlowSummary["status"]) =>
-      ({
-        scope,
-        status,
-        flowStep: {
-          connectorId: "gst",
-          scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
-          state: "ready",
-          safeSignals: [],
-          safeMessage: `Synthetic ${status} run.`,
-        },
-      }) as unknown as FiledReturnsFlowSummary;
-    await mountWithSummaries([single("running"), single("blocked")]);
+    await mountWithSummaries([singleRun("running"), singleRun("blocked")]);
     expect(controller?.lastRunSummary?.status).toBe("running");
 
     await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
@@ -1318,12 +1332,67 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
     expect(controller?.lastRunSummary?.status).toBe("blocked");
   });
 
-  it("never re-reads on a timer for an idle surface", async () => {
-    await mountWithSummaries([null]);
+  it("re-reads on a timer only once a run is shown as running", async () => {
+    await mountWithSummaries([null, singleRun("running"), singleRun("blocked")]);
     const readsAtMount = summaryReads();
 
     await advance(PACK_RUNNING_SUMMARY_REFRESH_MS * 5);
-
     expect(summaryReads()).toBe(readsAtMount);
+
+    await act(async () => {
+      fireSummaryStorageEvent();
+      await Promise.resolve();
+    });
+    expect(controller?.lastRunSummary?.status).toBe("running");
+    const readsOnceRunning = summaryReads();
+
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+    expect(summaryReads()).toBe(readsOnceRunning + 1);
+    expect(controller?.lastRunSummary?.status).toBe("blocked");
+  });
+
+  it("keeps the scope a storage event adopts when a tick lands while that read is in flight", async () => {
+    // Shown running for April. A storage event reports a run for May; its read adopts May's
+    // scope, but it is still in flight when the tick fires. Were the tick's reply to supersede
+    // the adoption, the panel would hold May's summary under April's scope, match nothing, and
+    // drop the running run from view while it is still running.
+    await mountWithSummaries([singleRun("running", "April")]);
+    expect(controller?.scopedFlowSummary?.status).toBe("running");
+
+    let releaseAdoptingRead: () => void = () => undefined;
+    let pendingReads = 0;
+    mocks.sendMessage.mockImplementation((message: PackMessage) => {
+      if (message.type !== "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
+        return Promise.resolve({ ok: true });
+      }
+      const response = { ok: true, flowSummary: singleRun("running", "May") };
+      pendingReads += 1;
+      if (pendingReads === 1) {
+        return new Promise((resolve) => {
+          releaseAdoptingRead = () => resolve(response);
+        });
+      }
+      return Promise.resolve(response);
+    });
+
+    await act(async () => {
+      fireSummaryStorageEvent();
+      await Promise.resolve();
+    });
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+    expect(pendingReads).toBe(2);
+    await act(async () => {
+      releaseAdoptingRead();
+      await Promise.resolve();
+    });
+
+    expect(controller?.scopedFlowSummary?.status).toBe("running");
+    expect(controller?.scope.period).toBe("May");
+
+    // Nor does a later tick change that.
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+    expect(pendingReads).toBe(3);
+    expect(controller?.scope.period).toBe("May");
+    expect(controller?.scopedFlowSummary?.status).toBe("running");
   });
 });
