@@ -160,6 +160,66 @@ describe("all-supported full-fiscal-year ZIP", () => {
     expect(mocks.browser.downloads.download).not.toHaveBeenCalled();
   });
 
+  // A quarterly (QRMP) filer's month 1-2 GSTR-3B has no return at all. The year's ZIP must still
+  // build, name the month's outcome in its index, and expect no GSTR-3B file for it.
+  it("builds the ZIP around a quarterly filer's month that has no monthly GSTR-3B", async () => {
+    const initial = createAllSupportedFullFiscalYearLedger(
+      { kind: FILED_RETURNS_ALL_SUPPORTED_FULL_FISCAL_YEAR_KIND, financialYear: "2025-26" },
+      expandedPlan(),
+      ["April"],
+      NOW,
+    );
+    const ledger = initial.targets.reduce(
+      (current, target, index) =>
+        markAllSupportedFullFiscalYearTargetTerminal(
+          current,
+          target.targetId,
+          target.returnType === "GSTR-3B" ? "quarterly-no-monthly-return" : "downloaded",
+          target.returnType === "GSTR-3B"
+            ? {
+                connectorId: "gst",
+                scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+                state: "candidate-not-found",
+                safeSignals: [
+                  "filed-return-api-searched",
+                  "filed-gstr3b-quarterly-no-monthly-return",
+                ],
+                safeMessage: "x",
+              }
+            : stagedTargetStep(target),
+          new Date(NOW.getTime() + (index + 1) * 1_000),
+        ),
+      initial,
+    );
+    expect(isAllSupportedFullFiscalYearLedger(ledger)).toBe(true);
+    // The other returns' five files; nothing for GSTR-3B.
+    mocks.createOffscreenFiledReturnZipUrl.mockResolvedValueOnce({
+      status: "created",
+      blobUrl: "blob:pack-owned/all-supported-full-year-zip",
+      zipEntryCount: 5,
+      artifactEntryCount: 5,
+      summaryEntryCount: 0,
+      summary: { status: "failed", reasonCategory: "generation-failed" },
+    });
+
+    const result = await exportAllSupportedFullFiscalYearZip(ledger, completeStep());
+
+    expect(result.state).toBe("downloaded");
+    const [, plan] = mocks.createOffscreenFiledReturnZipUrl.mock.calls[0] as [
+      string,
+      {
+        entries: Array<{ returnType: string }>;
+        summaryPlan: Array<{ returnType: string; outcomeCategory: string }>;
+      },
+    ];
+    expect(plan.entries.some((entry) => entry.returnType === "GSTR-3B")).toBe(false);
+    const gstr3bRows = plan.summaryPlan.filter((row) => row.returnType === "GSTR-3B");
+    expect(gstr3bRows.length).toBeGreaterThan(0);
+    expect(gstr3bRows.every((row) => row.outcomeCategory === "quarterly-no-monthly-return")).toBe(
+      true,
+    );
+  });
+
   it("rejects a cross-return path collision before the offscreen worker can build a ZIP", () => {
     const message = {
       type: "PACK_OFFSCREEN_CREATE_FILED_RETURN_ZIP",
