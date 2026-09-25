@@ -3,6 +3,7 @@ import type {
   FiledReturnsFlowSummary,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
+import { statesFullFiscalYearTargetAbsence } from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import type { FiledReturnsFlowRunnerDeps } from "./filed-returns-flow-runner";
 import { persistCanonicalFiledReturnsFlowSummary } from "./filed-returns-session-summary";
@@ -98,7 +99,7 @@ function toSinglePeriodSummary(
 ): FiledReturnsFlowSummary {
   const isReconciled =
     flowStep.state === "downloaded" ||
-    ["not-filed", "not-generated"].includes(targetStatusFromFlowStep(flowStep, scope.returnType)) ||
+    statesFullFiscalYearTargetAbsence(targetStatusFromFlowStep(flowStep, scope.returnType)) ||
     (scope.returnType === "GSTR-1" &&
       scope.artifactType === "EXCEL" &&
       flowStep.safeSignals.includes("filed-gstr1-excel-no-details-available"));

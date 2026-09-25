@@ -53,12 +53,16 @@ describe("what a target status means", () => {
     if (behaviour.statedAbsence) expect(behaviour.producedFile).toBe(false);
   });
 
-  it("treats both stated absences alike, and nothing else as one", () => {
+  it("treats every stated absence alike, and nothing else as one", () => {
     const absences = statuses.filter((status) => statesFullFiscalYearTargetAbsence(status));
-    // Distinct to a reader -- one is a claim about the taxpayer, the other about the portal -- and
-    // the same answer to "is there a file to expect?". Every site that asked the second question
-    // by naming only `not-filed` was wrong.
-    expect([...absences].sort()).toEqual(["not-filed", "not-generated"]);
+    // Distinct to a reader -- one is a claim about the taxpayer, one about the portal, and one
+    // about the filing cadence -- and the same answer to "is there a file to expect?". Every site
+    // that asked the second question by naming only `not-filed` was wrong.
+    expect([...absences].sort()).toEqual([
+      "not-filed",
+      "not-generated",
+      "quarterly-no-monthly-return",
+    ]);
   });
 
   it("requires corroborating evidence for every claim that can be asserted without it", () => {
@@ -66,6 +70,6 @@ describe("what a target status means", () => {
     const requiring = statuses
       .filter((status) => filedReturnsTargetStatusBehaviour(status).requiredEvidenceSignal)
       .sort();
-    expect(requiring).toEqual(["not-filed", "not-generated"]);
+    expect(requiring).toEqual(["not-filed", "not-generated", "quarterly-no-monthly-return"]);
   });
 });

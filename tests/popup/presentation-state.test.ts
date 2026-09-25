@@ -171,6 +171,26 @@ describe("popup presentation state", () => {
     expect(state.body).not.toContain("Browser Downloads");
   });
 
+  // A quarterly (QRMP) filer's month 1-2 has no GSTR-3B at all; that is not a missed filing.
+  it("says a quarterly filer's month 1-2 has no monthly return, never that it was not filed", () => {
+    const state = getPopupPresentationState(
+      supportedContext(),
+      summary("complete", [
+        "filed-return-api-searched",
+        "filed-gstr3b-quarterly-no-monthly-return",
+      ]),
+      null,
+    );
+
+    expect(state).toMatchObject({
+      kind: "unavailable",
+      title: "No monthly GSTR-3B for this period",
+      tone: "neutral",
+    });
+    expect(state.body).toMatch(/quarterly/i);
+    expect(`${state.title} ${state.body}`).not.toMatch(/not filed|no filed|Downloads/i);
+  });
+
   it("never says a GSTR-2B statement was not filed", () => {
     const state = getPopupPresentationState(
       supportedContext(),

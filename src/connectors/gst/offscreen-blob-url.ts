@@ -369,6 +369,7 @@ function isSummaryOutcomeCategory(
     value === "staged" ||
     value === "not-filed" ||
     value === "not-generated" ||
+    value === "quarterly-no-monthly-return" ||
     value === "artifact-unavailable"
   );
 }

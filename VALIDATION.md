@@ -141,7 +141,7 @@ budget at four. A was faster but expanded to eight controls. C was fastest but i
 was monthly-specific and its four-control self-report omitted the Advanced disclosure.
 
 The following prototype inventory is superseded. The current catalogue has eight rows: supported
-monthly GSTR-1 and GSTR-2B; supported monthly GSTR-3B (quarterly filers stop with a named reason);
+monthly GSTR-1 and GSTR-2B; supported monthly GSTR-3B (for a quarterly filer, months 1-2 of a quarter are recorded as having no monthly return and the quarter-end month stops with a named reason);
 unsupported annual GSTR-9/GSTR-9C; unsupported quarterly
 GSTR-4A; unsupported monthly IFF; and unsupported non-period Ledgers. Unsupported rows are never
 controls.
@@ -475,7 +475,7 @@ reviewed persistence and failure contracts.
 - Exact state inventory: loading, empty/ready, unsupported, access denied, downloading, partial,
   complete, unavailable, blocked, error and cancelled. Permanent component assertions now cover
   each family; cancelled confirmation no longer disappears when presentation returns to `ready`.
-- Exact catalogue inventory: supported monthly GSTR-3B (quarterly filers stop with a named reason);
+- Exact catalogue inventory: supported monthly GSTR-3B (for a quarterly filer, months 1-2 of a quarter are recorded as having no monthly return and the quarter-end month stops with a named reason);
   supported monthly GSTR-1 and GSTR-2B; unsupported annual
   GSTR-9 and GSTR-9C; unsupported quarterly GSTR-4A; unsupported monthly IFF; and
   unsupported non-periodic Ledgers. Every row's decision is pinned. Unsupported rows render zero

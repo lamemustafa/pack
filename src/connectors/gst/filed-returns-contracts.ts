@@ -242,6 +242,9 @@ export const FILED_RETURNS_FULL_FISCAL_YEAR_TARGET_STATUSES = [
   // submitted by the taxpayer, so recording it as unfiled would print a claim about them that
   // the portal never made.
   "not-generated",
+  // A quarterly (QRMP) filer files GSTR-3B only for a quarter's last month, so months 1-2 have no
+  // return to download. Not `not-filed`: that is a claim the taxpayer missed a filing.
+  "quarterly-no-monthly-return",
   "download-unconfirmed",
   "blocked",
   "failed",
@@ -321,6 +324,12 @@ const TARGET_STATUS_BEHAVIOUR: Readonly<
     statedAbsence: true,
     holdsAnswer: true,
     requiredEvidenceSignal: "filed-gstr2b-not-generated",
+  }),
+  "quarterly-no-monthly-return": base({
+    resolved: true,
+    statedAbsence: true,
+    holdsAnswer: true,
+    requiredEvidenceSignal: "filed-gstr3b-quarterly-no-monthly-return",
   }),
   "download-unconfirmed": base({}),
   blocked: base({}),
@@ -521,6 +530,8 @@ export type FiledReturnsTargetOutcome =
   // The portal never drafted anything for this period. Separate from `not-filed`, which says
   // something about the taxpayer, and from `needs-review`, which says a re-run might help.
   | "not-generated"
+  // A quarterly filer's month 1-2: no monthly return exists. Neither a missed filing nor a fault.
+  | "quarterly-no-monthly-return"
   | "captured"
   | "not-filed"
   | "needs-review"
