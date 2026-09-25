@@ -1231,21 +1231,24 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
     } as unknown as FiledReturnsFlowSummary;
   }
 
-  // Every later summary read answers `summary`; the first is held until `release` is called.
-  function holdFirstSummaryRead(summary: FiledReturnsFlowSummary) {
+  // The first summary read answers `heldSummary`, held until `release` is called; every later
+  // read answers `laterSummary` at once.
+  function holdFirstSummaryRead(
+    heldSummary: FiledReturnsFlowSummary,
+    laterSummary: FiledReturnsFlowSummary = heldSummary,
+  ) {
     const held = { release: () => undefined as void, reads: 0 };
     mocks.sendMessage.mockImplementation((message: PackMessage) => {
       if (message.type !== "PACK_GET_FILED_RETURNS_FLOW_SUMMARY") {
         return Promise.resolve({ ok: true });
       }
-      const response = { ok: true, flowSummary: summary };
       held.reads += 1;
       if (held.reads === 1) {
         return new Promise((resolve) => {
-          held.release = () => resolve(response);
+          held.release = () => resolve({ ok: true, flowSummary: heldSummary });
         });
       }
-      return Promise.resolve(response);
+      return Promise.resolve({ ok: true, flowSummary: laterSummary });
     });
     return held;
   }
@@ -1403,9 +1406,9 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
 
   it("keeps a scope the reader picks while an adopting read is in flight, through the next tick", async () => {
     // A storage event's read would adopt the saved April run's scope, but it is slow. The reader
-    // picks May meanwhile, then a tick supersedes the slow read. The reader's choice is theirs:
-    // the tick must not carry the superseded read's adoption over it, or the selector snaps back
-    // to April and the next start runs a scope the reader moved away from.
+    // picks May meanwhile, then a tick lands. The reader's choice is theirs: the tick must not
+    // adopt over it, or the selector snaps back to April and the next start runs a scope the
+    // reader moved away from.
     await mountWithSummaries([singleRun("running", "April")]);
     expect(controller?.scope.period).toBe("April");
     const held = holdFirstSummaryRead(singleRun("running", "April"));
@@ -1426,12 +1429,32 @@ describe("a run that becomes interrupted while the surface is open (#368)", () =
     // The April run is still read and still running; it just is not the reader's scope.
     expect(controller?.lastRunSummary?.status).toBe("running");
     expect(controller?.scopedFlowSummary).toBeNull();
+    // Not asserted: the held storage read, started before the reader picked May, still adopts
+    // April when it lands. That predates the timer and is out of this test's scope.
+  });
 
-    // The superseded read landing late changes nothing either.
+  it("drops a tick's reply that lands after another summary refresh has started", async () => {
+    // The tick never claims the refresh epoch, so it cannot discard an adopting read. The price is
+    // that it must yield instead: a reply that lands after a storage, focus or action refresh has
+    // started is older than that refresh's and must not overwrite it.
+    await mountWithSummaries([singleRun("running")]);
+    const held = holdFirstSummaryRead(singleRun("running"), singleRun("blocked"));
+
+    await advance(PACK_RUNNING_SUMMARY_REFRESH_MS);
+    expect(held.reads).toBe(1);
+    await act(async () => {
+      fireSummaryStorageEvent();
+      await Promise.resolve();
+    });
+    expect(held.reads).toBe(2);
+    expect(controller?.lastRunSummary?.status).toBe("blocked");
+
     await act(async () => {
       held.release();
       await Promise.resolve();
     });
-    expect(controller?.scope.period).toBe("May");
+
+    expect(controller?.lastRunSummary?.status).toBe("blocked");
+    expect(controller?.scopedFlowSummary?.status).toBe("blocked");
   });
 });
