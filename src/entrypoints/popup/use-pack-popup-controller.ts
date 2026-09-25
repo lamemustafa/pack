@@ -35,9 +35,11 @@ export const PACK_ACTION_STOPPED_MESSAGE =
  * How often an open surface re-reads the summary while it shows a run in progress (#368).
  *
  * A run becomes interrupted by the clock alone: a dead worker writes nothing and never removes its
- * lease, so no storage event fires, and the lease is judged stale after thirty seconds. Ten seconds
- * puts the interruption on screen within about forty. A hidden page's timers are throttled, which
- * degrades this to updating when the reader returns -- what reopening already did.
+ * lease, so no storage event fires. The background decides staleness -- `ACTIVE_RUN_REVIEW_MS` in
+ * `filed-returns-active-run.ts` for a run lease, `isAllSupportedFullFiscalYearLedgerStale` for an
+ * all-supported ledger -- and this interval only bounds how long after that the open surface
+ * notices. It is a latency choice, not derived from either. A hidden page's timers are throttled,
+ * which degrades this to updating when the reader returns -- what reopening already did.
  */
 export const PACK_RUNNING_SUMMARY_REFRESH_MS = 10_000;
 
@@ -55,6 +57,8 @@ export function usePackPopupController() {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const summaryRefreshEpoch = React.useRef(0);
+  // The epoch of the latest summary refresh that owes a scope adoption it has not yet applied.
+  const adoptingRefreshEpoch = React.useRef<number | null>(null);
   // `actionError` is shared with flow actions, so a successful context refresh
   // must clear only an error the context read itself produced. Clearing it
   // unconditionally wiped an unrelated download failure whenever the panel
@@ -171,9 +175,17 @@ export function usePackPopupController() {
   const refreshFlowSummary = React.useCallback(
     async (adoptSummaryScope = false) => {
       const refreshEpoch = ++summaryRefreshEpoch.current;
+      // A refresh that directly supersedes one still owing an adoption inherits it; a read that
+      // completes, even with a failure, owes nothing further. Otherwise a running-run tick or a
+      // focus refresh landing while a storage event's read is in flight discards that read and
+      // never adopts: the new run's summary then sits under the old scope, matches nothing, and
+      // the running run disappears from view while it is still running.
+      const adoptScope = adoptSummaryScope || adoptingRefreshEpoch.current === refreshEpoch - 1;
+      adoptingRefreshEpoch.current = adoptScope ? refreshEpoch : null;
       try {
         const response = await sendPackMessage({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" });
         if (refreshEpoch !== summaryRefreshEpoch.current) return;
+        adoptingRefreshEpoch.current = null;
         if (response.ok && "allSupportedFullFiscalYearFlowSummary" in response) {
           setAllSupportedFullFiscalYearFlowSummary(response.allSupportedFullFiscalYearFlowSummary);
           setFiledReturnsFlowSummary(null);
@@ -186,7 +198,7 @@ export function usePackPopupController() {
         if (response.ok && "flowSummary" in response) {
           setFiledReturnsFlowSummary(response.flowSummary ?? null);
           setAllSupportedFullFiscalYearFlowSummary(null);
-          if (adoptSummaryScope && response.flowSummary) setScopeState(response.flowSummary.scope);
+          if (adoptScope && response.flowSummary) setScopeState(response.flowSummary.scope);
           if (actionErrorSource.current === "summary") {
             actionErrorSource.current = null;
             setActionError(null);
@@ -202,6 +214,7 @@ export function usePackPopupController() {
         );
       } catch {
         if (refreshEpoch !== summaryRefreshEpoch.current) return;
+        adoptingRefreshEpoch.current = null;
         showActionError("Pack could not read saved local recovery state. Try again.", "summary");
       }
     },
