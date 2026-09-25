@@ -373,7 +373,6 @@ export async function startFullFiscalYearDownloadFlow(
             systemErrorPredecessor = observation.category;
           }
         },
-        persistTargetReview: false,
         stageCapturedDownloads: { bundleKind: "full-fiscal-year", ledgerId: ledger.ledgerId },
       },
       {

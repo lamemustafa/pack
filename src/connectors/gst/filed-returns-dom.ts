@@ -115,6 +115,36 @@ export function normaliseText(value: string): string {
 }
 
 /**
+ * An element's readable text: rendered text, text content, an input's value, and its accessible
+ * name, each once. A browser fills both `innerText` and `textContent`, so joining them without
+ * de-duplicating read every label twice ("view view"), and an exact or anchored check never
+ * matched (#394, #395). jsdom has no `innerText`, so only a test that gives it one can see this.
+ */
+export function readElementText(element: Element | null | undefined): string {
+  if (!element) return "";
+  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
+  const inputValue =
+    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
+      ? element.value
+      : "";
+  const seenTexts = new Set<string>();
+  return [
+    "innerText" in element ? (element as HTMLElement).innerText : "",
+    element.textContent ?? "",
+    inputValue,
+    element.getAttribute("aria-label") ?? "",
+    element.getAttribute("title") ?? "",
+  ]
+    .filter((text) => {
+      const comparable = normaliseText(text);
+      if (!comparable || seenTexts.has(comparable)) return false;
+      seenTexts.add(comparable);
+      return true;
+    })
+    .join(" ");
+}
+
+/**
  * Uses the filed-returns result-surface visibility contract. This is intentionally
  * distinct from isVisible: it includes aria-hidden and ancestor traversal, but does
  * not require a rendered box.

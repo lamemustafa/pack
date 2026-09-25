@@ -111,7 +111,6 @@ export interface FiledReturnsFlowRunnerDeps {
   portalTabIncognito?: boolean;
   /** Internal fixed projection; it never receives portal-derived flow data. */
   onFlowStepObservation?: (observation: FiledReturnsFlowStepObservation) => void;
-  persistTargetReview?: boolean;
   selectFiltersInMainWorld?: (
     tabId: number,
     scope: FiledReturnsDownloadScope,

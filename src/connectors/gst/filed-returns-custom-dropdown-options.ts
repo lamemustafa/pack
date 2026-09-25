@@ -4,7 +4,13 @@ import {
   hasFiledReturnsAcquisitionDeadlineExpired,
   remainingFiledReturnsAcquisitionTime,
 } from "./filed-returns-acquisition-deadline";
-import { isHtmlElement, isVisible, matchesAcceptedText, normaliseText } from "./filed-returns-dom";
+import {
+  isHtmlElement,
+  isVisible,
+  matchesAcceptedText,
+  normaliseText,
+  readElementText,
+} from "./filed-returns-dom";
 
 const DROPDOWN_POLL_MS = 50;
 const DROPDOWN_OPEN_TIMEOUT_MS = 400;
@@ -147,21 +153,4 @@ function newOptionRoots(
     (element): element is HTMLElement =>
       isHtmlElement(documentRef, element) && !beforeOpenElements.has(element) && isVisible(element),
   );
-}
-
-function readElementText(element: Element): string {
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  return [
-    "innerText" in element ? (element as HTMLElement).innerText : "",
-    element.textContent ?? "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ]
-    .filter(Boolean)
-    .join(" ");
 }

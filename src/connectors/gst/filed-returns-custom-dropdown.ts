@@ -12,6 +12,7 @@ import {
   isVisible,
   matchesAcceptedText,
   normaliseText,
+  readElementText,
 } from "./filed-returns-dom";
 import { waitForVisibleCustomDropdownOption } from "./filed-returns-custom-dropdown-options";
 
@@ -126,23 +127,6 @@ export function getCustomDropdownControls(root: ParentNode): HTMLElement[] {
         element.matches("[role='button'],[ng-click],[data-ng-click]") ||
         element.matches(extraSelector)),
   );
-}
-
-function readElementText(element: Element): string {
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  return [
-    "innerText" in element ? (element as HTMLElement).innerText : "",
-    element.textContent ?? "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ]
-    .filter(Boolean)
-    .join(" ");
 }
 
 function hasFiledReturnsFilterLabels(element: HTMLElement): boolean {
