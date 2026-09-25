@@ -20,6 +20,7 @@ import {
   getFullFiscalYearTabSessionId,
   getRequiredGstTab,
 } from "../../src/background/filed-returns-active-tab";
+import { readCurrentAllSupportedFullFiscalYearFlowSummary } from "../../src/background/filed-returns-all-supported-full-fiscal-year-summary";
 import { isAllSupportedFullFiscalYearLedger } from "../../src/background/filed-returns-all-supported-full-fiscal-year-validation";
 import { prepareFullFiscalYearTargetRetry } from "../../src/background/filed-returns-full-fiscal-year-recovery";
 import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
@@ -292,9 +293,8 @@ describe("resuming a single-return full-year plan", () => {
 });
 
 /**
- * Runs a single-return plan for real until the portal session ends at its second period: the first
- * period is staged, the plan is pinned, and the second period is blocked with a sign-in request.
- * Signing in again and pressing retry is the route the panel offers.
+ * Runs a single-return plan for real until its second period is blocked: the first period is
+ * staged, the plan is pinned, and retry is the route the panel offers.
  */
 async function saveSingleReturnPlanStoppedAtSecondPeriod(): Promise<{
   ledgerId: string;
@@ -553,6 +553,44 @@ describe("a saved plan with no recorded tab pin", () => {
         : undefined;
     expect(summary).toMatchObject({ status: "blocked", resumeAvailable: false });
     expect(summary?.flowStep.safeSignals).toContain("full-fiscal-year-unbound-run-unverified");
+    // The reason reaches the reader straight after the refusal and when the panel is reopened.
+    expect(summary?.flowStep.safeMessage).toMatch(/GST account/i);
+    const reopened = await readCurrentAllSupportedFullFiscalYearFlowSummary(deps);
+    expect(reopened?.flowStep.safeMessage).toMatch(/GST account/i);
+    expect(reopened?.flowStep.safeMessage).toMatch(/discard/i);
+  });
+
+  it("keeps a refused single-return plan refused on every later attempt, changing nothing", async () => {
+    const stopped = await saveSingleReturnPlanStoppedAtSecondPeriod();
+    const key = deps.storageKeys.fullFiscalYearLedger;
+    stored.local[key] = withoutPin(stored.local[key]);
+    await retrySingleReturnTarget(stopped);
+    const refused = structuredClone(stored.local[key]);
+    if (!isFullFiscalYearLedger(refused)) throw new Error("expected the refused plan to be saved");
+    const runner = vi.fn<SinglePeriodRunner>(portalRunner);
+
+    const retried = await prepareFullFiscalYearTargetRetry(
+      {
+        ledgerId: refused.ledgerId,
+        targetId: stopped.targetId,
+        expectedRevision: refused.revision ?? 1,
+      },
+      deps,
+    );
+    const resumed = await startFullFiscalYearDownloadFlow(SINGLE_RETURN_SCOPE, deps, runner, {
+      allowExistingLedgerResume: true,
+    });
+    await startFullFiscalYearDownloadFlow(SINGLE_RETURN_SCOPE, deps, runner);
+    const summary = "flowSummary" in resumed ? resumed.flowSummary : undefined;
+    if (!summary) throw new Error("expected the refusal to carry a flow summary");
+    const offer = getRecoveryFlowAvailability(summary, true);
+
+    expect(retried.ok).toBe(false);
+    expect(runner).not.toHaveBeenCalled();
+    expect(portal.staged.get(stopped.ledgerId)).toEqual(["first-account"]);
+    expect(stored.local[key]).toEqual(refused);
+    expect(offer.availableActions).toContain("cancel-saved-full-year-run");
+    expect(offer.availableActions).not.toContain("continue-saved-full-year-run");
   });
 
   it("still runs a single-return plan whose first period stopped before a tab was pinned", async () => {

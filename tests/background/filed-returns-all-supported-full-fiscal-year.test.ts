@@ -1734,7 +1734,7 @@ describe("all-supported full-fiscal-year worker", () => {
 /**
  * The real child flow selects and pins the GST tab before any portal work, so a plan's saved
  * outcomes always come with the tab they came from. Stub runners take that first step too; a plan
- * holding outcomes with no pin is a shape the real flow never produces, and the run refuses it.
+ * holding outcomes with no pin can only have been saved by an earlier build, and the run refuses it.
  */
 function childRun(
   respond: (...args: Parameters<SinglePeriodRunner>) => ReturnType<SinglePeriodRunner>,
