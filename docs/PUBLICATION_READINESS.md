@@ -282,18 +282,21 @@ export-window matrix therefore records the pair once per full-year return, on
 the selection that stages every offered format (else the only format), and a
 test derives those rows. This gives up a live observation of a restart during
 export for a PDF-only or single-format year. That builder path is a subset of
-the observed branch, and unit tests cover the builder's outcome for each format;
-the recovery under test is the same code in every case.
+the observed branch; the offscreen tests cover the builder's outcome for each
+return type without staged portal JSON, and with it wherever the return offers
+it; and the recovery under test is the same code in every case.
 
 The panel's all-returns presets run a separate plan with its own ledger and a
-combined final ZIP, which no selection row enters, and its mixed plan takes a
-builder branch no single-return selection reaches. The all-returns matrix
-records that plan in one row, with its own export-window pair. Its contents
-cell is derived from the canonical plan expansion,
+combined final ZIP, which no selection row enters. Its export has its own entry
+point, `exportAllSupportedFullFiscalYearZip`, its own export phases and its own
+resume path, so the all-returns matrix records that plan in one row with its own
+export-window pair. The pair is there for that separate orchestration, not for
+the builder: a mixed plan takes the same no-workbook branch as a GSTR-1 year.
+Its contents cell is derived from the canonical plan expansion,
 `expandAllSupportedFullFiscalYearTargetPlan`, so adding a return or a format to
-the catalogue fails the test until the row is re-recorded;
-evidence gathered against the old plan cannot stand for the new one. Every
-observation in all three matrices uses the same legend.
+the catalogue fails the test until the row is re-recorded; evidence gathered
+against the old plan cannot stand for the new one. Every observation in all
+three matrices uses the same legend.
 
 Every cell must match one complete row in this legend. The test renders the
 legend from the same rule table used for validation, so state, reason, date,
