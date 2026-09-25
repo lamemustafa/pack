@@ -321,10 +321,10 @@ describe("all-supported panel progress", () => {
       vi.setSystemTime(new Date("2026-09-22T09:00:00.000Z"));
       const markup = render(inYear("2025-26"));
 
-      // Visible copy names what the preset replaces; the discard lives only in the accessible name.
+      // Visible copy names the plan the preset replaces; the discard lives only in the accessible name.
       // The FY is one unbreakable unit, so a narrow panel never splits it at the year's hyphen.
       expect(
-        markup.match(/Replaces the saved <span class="panel-fy">FY 2025-26<\/span> pack/g),
+        markup.match(/Replaces the saved <span class="panel-fy">FY 2025-26<\/span> plan/g),
       ).toHaveLength(1);
       expect(declaredProperty(".panel-fy", "white-space")).toBe("nowrap");
       expect(markup.match(/Discard the saved FY 2025-26 plan/g)).toHaveLength(1);
@@ -466,7 +466,7 @@ describe("all-supported panel progress", () => {
 
     // This all-returns preset is source-surfaces-only. Its rendered restart control is
     // the precondition that keeps the grouped-evidence assertions non-vacuous.
-    expect(markup).toContain('Replaces the saved <span class="panel-fy">FY 2025-26</span> pack');
+    expect(markup).toContain('Replaces the saved <span class="panel-fy">FY 2025-26</span> plan');
     expect(markup.match(/class="evidence-row /g)).toHaveLength(36);
     expect(markup).toContain('aria-label="GSTR-1 results"');
     expect(markup).toContain('aria-label="GSTR-2B results"');
