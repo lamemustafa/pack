@@ -21,6 +21,11 @@ export const RECOVERY_TARGET_STATUSES = [
 ] as const satisfies readonly FiledReturnsFullFiscalYearTargetStatus[];
 
 export const RECOVERY_NOW = new Date("2026-08-25T00:00:00.000Z");
+// The tab and browser-session marker a real run records when its first target selects the GST
+// tab, before any portal work. A test that resumes a fixture plan seeds this marker as the current
+// session; a different or missing marker is a restart, which the run refuses.
+export const FIXTURE_PORTAL_TAB_ID = 41;
+export const FIXTURE_TAB_SESSION_ID = "fixture-browser-session-0001";
 export const RECOVERY_SCOPE = {
   artifactType: "PDF",
   financialYear: "2025-26",
@@ -91,6 +96,8 @@ export function makeCompletedRecoveryLedger(
     ...ledger,
     ledgerId: "full-fiscal-year-00000020",
     revision: 7,
+    portalTabId: FIXTURE_PORTAL_TAB_ID,
+    portalTabSessionId: FIXTURE_TAB_SESSION_ID,
     status: "complete",
     currentTargetId: targets[options.currentPositive ? positiveIndex : recoveryIndex]!.targetId,
     targets,

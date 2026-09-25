@@ -14,8 +14,11 @@ import {
   summariseFullFiscalYearLedger,
 } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
+import { PACK_SESSION_STORAGE_KEYS } from "../../src/background/storage-keys";
 import { isFullFiscalYearLedger } from "../../src/background/filed-returns-full-fiscal-year-ledger";
 import {
+  FIXTURE_PORTAL_TAB_ID,
+  FIXTURE_TAB_SESSION_ID,
   makeCompletedRecoveryLedger,
   RECOVERY_NOW,
   RECOVERY_SCOPE,
@@ -72,7 +75,10 @@ describe("full-year Start preserves existing recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storage.local = {};
-    storage.session = {};
+    // The browser session the fixture plan was pinned in: these resumes happen in that session.
+    storage.session = {
+      [PACK_SESSION_STORAGE_KEYS.fullFiscalYearTabSession]: FIXTURE_TAB_SESSION_ID,
+    };
   });
 
   it.each(
@@ -206,6 +212,9 @@ describe("full-year Start preserves existing recovery", () => {
       {
         onPortalTabSelected: expect.any(Function),
         persistSinglePeriodSummary: false,
+        // The retry stays on the tab the plan was pinned to in this browser session.
+        requiredPortalTabId: FIXTURE_PORTAL_TAB_ID,
+        requiredPortalTabSessionId: FIXTURE_TAB_SESSION_ID,
       },
     );
   });

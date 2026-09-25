@@ -128,7 +128,7 @@ beforeEach(() => {
   stored.values = {};
   deps.now = () => NOW;
   vi.clearAllMocks();
-  singlePeriod.run.mockImplementation(async () => notFiledStep());
+  singlePeriod.run.mockImplementation(childRun(async () => notFiledStep()));
   zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-cleared"]);
   zip.reconcile.mockResolvedValue(unconfirmedZipStep());
   zip.export.mockImplementation(async (_ledger, _step, checkpoints) => {
@@ -232,7 +232,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("replaces only the requested completed root with a durable fresh plan", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     const earlierRequest = { ...request, financialYear: "2025-26" } as const;
     await startAllSupportedFullFiscalYearDownloadFlow(earlierRequest, deps, runner);
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
@@ -266,7 +266,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("keeps the completed root when durable replacement persistence fails", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     const completed = allSavedLedgers()[0];
     if (!completed) throw new Error("expected completed all-supported root");
@@ -433,7 +433,7 @@ describe("all-supported full-fiscal-year worker", () => {
       expect(withheld.targets[1]?.safeSignals).toContain(
         "full-fiscal-year-pinned-gst-tab-unavailable",
       );
-      const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+      const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
       await restartCompletedAllSupportedFullFiscalYearPlan(
         { ...request, ledgerId: withheld.ledgerId },
@@ -450,22 +450,24 @@ describe("all-supported full-fiscal-year worker", () => {
     it("reproduces the live capture: withheld, told why, and offered only the discard", async () => {
       // The child flow's real pinned-tab response, returned for the second target of a fresh run.
       let calls = 0;
-      const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
-        calls += 1;
-        if (calls === 1) return notFiledStep();
-        return {
-          ok: true as const,
-          flowStep: {
-            connectorId: "gst" as const,
-            scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
-            state: "blocked" as const,
-            safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
-            safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
-              "full-fiscal-year-pinned-gst-tab-unavailable",
-            ]),
-          },
-        };
-      });
+      const runner = vi.fn<SinglePeriodRunner>(
+        childRun(async (scope) => {
+          calls += 1;
+          if (calls === 1) return notFiledStep();
+          return {
+            ok: true as const,
+            flowStep: {
+              connectorId: "gst" as const,
+              scopeId: "gst-filed-returns-gstr1-pdf-private-v0",
+              state: "blocked" as const,
+              safeSignals: ["full-fiscal-year-pinned-gst-tab-unavailable"],
+              safeMessage: canonicalDurableSummaryMessage(scope, "blocked", [
+                "full-fiscal-year-pinned-gst-tab-unavailable",
+              ]),
+            },
+          };
+        }),
+      );
 
       const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
       const reopened = await readCurrentAllSupportedFullFiscalYearFlowSummary(deps);
@@ -552,7 +554,7 @@ describe("all-supported full-fiscal-year worker", () => {
         true,
       );
 
-      const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+      const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
       await restartCompletedAllSupportedFullFiscalYearPlan(
         { ...request, ledgerId: withheld.ledgerId },
         deps,
@@ -568,7 +570,7 @@ describe("all-supported full-fiscal-year worker", () => {
     // surface replaces or completes this root in between, the indexed ledger
     // is a different plan -- and this path removes it. The fiscal year alone
     // cannot tell those apart.
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     const current = allSavedLedgers()[0];
     if (!current) throw new Error("expected a saved root");
@@ -605,7 +607,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("retains the completed root when its scoped local cleanup fails", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     vi.clearAllMocks();
     zip.discard.mockResolvedValue(["all-supported-full-fiscal-year-opfs-clear-failed"]);
@@ -673,7 +675,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("keeps every retained terminal root in a completed action response", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     await startAllSupportedFullFiscalYearDownloadFlow(
       { ...request, financialYear: "2025-26" },
       deps,
@@ -716,7 +718,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("stops at the first unresolved target and never starts a final ZIP", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => blockedStep()));
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -739,10 +741,12 @@ describe("all-supported full-fiscal-year worker", () => {
       .mockResolvedValueOnce(["all-supported-full-fiscal-year-opfs-clear-failed"])
       .mockResolvedValueOnce(["all-supported-full-fiscal-year-opfs-cleared"]);
     const attemptedScopes: string[] = [];
-    const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
-      attemptedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
-      return notFiledStep();
-    });
+    const runner = vi.fn<SinglePeriodRunner>(
+      childRun(async (scope) => {
+        attemptedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
+        return notFiledStep();
+      }),
+    );
 
     const first = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -766,7 +770,7 @@ describe("all-supported full-fiscal-year worker", () => {
 
   it("finishes the no-artifact cleanup route without claiming a ZIP download", async () => {
     zip.export.mockImplementation(async () => noArtifactsZipStep());
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -784,10 +788,12 @@ describe("all-supported full-fiscal-year worker", () => {
 
   it("records a settled not-filed target, completes later targets, and exposes its period in the completed evidence", async () => {
     const attemptedPeriods: string[] = [];
-    const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
-      attemptedPeriods.push(`${scope.returnType}:${scope.period}`);
-      return notFiledStep();
-    });
+    const runner = vi.fn<SinglePeriodRunner>(
+      childRun(async (scope) => {
+        attemptedPeriods.push(`${scope.returnType}:${scope.period}`);
+        return notFiledStep();
+      }),
+    );
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -810,10 +816,12 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("turns a child-runner failure into the persisted safe blocked summary", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => ({
-      ok: false as const,
-      error: "synthetic child failure",
-    }));
+    const runner = vi.fn<SinglePeriodRunner>(
+      childRun(async () => ({
+        ok: false as const,
+        error: "synthetic child failure",
+      })),
+    );
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -854,7 +862,7 @@ describe("all-supported full-fiscal-year worker", () => {
     const abandoned = interrupted.targets[0]!;
     expect(abandoned.status).toBe("running");
 
-    const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const retryRunner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     const response = await retryAllSupportedFullFiscalYearTarget(
       {
         financialYear: request.financialYear,
@@ -898,7 +906,7 @@ describe("all-supported full-fiscal-year worker", () => {
     };
 
     try {
-      const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+      const retryRunner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
       const response = await retryAllSupportedFullFiscalYearTarget(
         {
           financialYear: request.financialYear,
@@ -929,10 +937,12 @@ describe("all-supported full-fiscal-year worker", () => {
     await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
     deps.storageKeys.activeRun = "active-run";
     const leaseDuringChild: unknown[] = [];
-    singlePeriod.run.mockImplementation(async () => {
-      leaseDuringChild.push(stored.values["active-run"]);
-      return notFiledStep();
-    });
+    singlePeriod.run.mockImplementation(
+      childRun(async () => {
+        leaseDuringChild.push(stored.values["active-run"]);
+        return notFiledStep();
+      }),
+    );
 
     try {
       await retryAllSupportedFiledReturnsFullFiscalYearTarget(
@@ -1142,7 +1152,7 @@ describe("all-supported full-fiscal-year worker", () => {
     };
 
     try {
-      const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+      const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
       const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
       // Reported as still running, not interrupted, and still never replayed.
@@ -1182,10 +1192,12 @@ describe("all-supported full-fiscal-year worker", () => {
     );
     await persistAllSupportedFullFiscalYearLedger(deps, interrupted);
     const attemptedScopes: string[] = [];
-    const runner = vi.fn<SinglePeriodRunner>(async (scope) => {
-      attemptedScopes.push(`${scope.returnType}:${scope.period}`);
-      return notFiledStep();
-    });
+    const runner = vi.fn<SinglePeriodRunner>(
+      childRun(async (scope) => {
+        attemptedScopes.push(`${scope.returnType}:${scope.period}`);
+        return notFiledStep();
+      }),
+    );
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -1219,7 +1231,7 @@ describe("all-supported full-fiscal-year worker", () => {
     const partialCheckpoint = { ...checkpoint, status: "partial" as const };
     expect(partialCheckpoint.status).toBe("partial");
     await persistAllSupportedFullFiscalYearLedger(deps, partialCheckpoint);
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -1231,7 +1243,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("retries only the current reviewed all-supported target after persisting its reset", async () => {
-    const blockedRunner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
+    const blockedRunner = vi.fn<SinglePeriodRunner>(childRun(async () => blockedStep()));
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, blockedRunner);
     const blocked = savedLedger();
     const blockedTarget = blocked.targets[0];
@@ -1239,7 +1251,7 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(blockedTarget.status).toBe("blocked");
     expect(blocked.targets.slice(1).every((target) => target.status === "pending")).toBe(true);
 
-    const staleRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const staleRunner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     const staleResponse = await retryAllSupportedFullFiscalYearTarget(
       {
         financialYear: request.financialYear,
@@ -1256,10 +1268,12 @@ describe("all-supported full-fiscal-year worker", () => {
     expect(staleRunner).not.toHaveBeenCalled();
 
     const retriedScopes: string[] = [];
-    const retryRunner = vi.fn<SinglePeriodRunner>(async (scope) => {
-      retriedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
-      return notFiledStep();
-    });
+    const retryRunner = vi.fn<SinglePeriodRunner>(
+      childRun(async (scope) => {
+        retriedScopes.push(`${scope.returnType}:${scope.period}:${scope.artifactType}`);
+        return notFiledStep();
+      }),
+    );
     const response = await retryAllSupportedFullFiscalYearTarget(
       {
         financialYear: request.financialYear,
@@ -1285,31 +1299,33 @@ describe("all-supported full-fiscal-year worker", () => {
   it.each(["filed-gstr2b-not-generated", "artifact-filed-gstr2b-not-generated"])(
     "stops a fresh all-supported run when staged output conflicts with %s",
     async (refusal) => {
-      const runner = vi.fn<SinglePeriodRunner>(async (scope, childDeps) => {
-        if (scope.returnType !== "GSTR-2B") return notFiledStep();
-        expect(childDeps.stageCapturedDownloads).toMatchObject({
-          bundleKind: "all-supported-full-fiscal-year",
-          ledgerId: expect.any(String),
-        });
-        // The selected-artifact runner accumulates the first format's staging evidence
-        // before returning the subsequent format's refusal to this active year loop.
-        return {
-          ok: true as const,
-          flowStep: {
-            connectorId: "gst" as const,
-            scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
-            state: "candidate-not-found" as const,
-            safeSignals: [
-              "filed-return-artifact-downloaded:PDF",
-              "all-supported-full-fiscal-year-opfs-staged:PDF",
-              refusal,
-              "gstr2b-summary-route-verified",
-              "gstr2b-visible-period-verified",
-            ],
-            safeMessage: "Synthetic later-format refusal.",
-          },
-        };
-      });
+      const runner = vi.fn<SinglePeriodRunner>(
+        childRun(async (scope, childDeps) => {
+          if (scope.returnType !== "GSTR-2B") return notFiledStep();
+          expect(childDeps.stageCapturedDownloads).toMatchObject({
+            bundleKind: "all-supported-full-fiscal-year",
+            ledgerId: expect.any(String),
+          });
+          // The selected-artifact runner accumulates the first format's staging evidence
+          // before returning the subsequent format's refusal to this active year loop.
+          return {
+            ok: true as const,
+            flowStep: {
+              connectorId: "gst" as const,
+              scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+              state: "candidate-not-found" as const,
+              safeSignals: [
+                "filed-return-artifact-downloaded:PDF",
+                "all-supported-full-fiscal-year-opfs-staged:PDF",
+                refusal,
+                "gstr2b-summary-route-verified",
+                "gstr2b-visible-period-verified",
+              ],
+              safeMessage: "Synthetic later-format refusal.",
+            },
+          };
+        }),
+      );
 
       const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
       const ledger = savedLedger();
@@ -1350,42 +1366,46 @@ describe("all-supported full-fiscal-year worker", () => {
   );
 
   it("blocks a later bound GSTR-2B refusal after a staged artifact without exporting again", async () => {
-    const firstRunner = vi.fn<SinglePeriodRunner>(async (scope) =>
-      scope.returnType === "GSTR-2B"
-        ? {
-            ok: true as const,
-            flowStep: {
-              connectorId: "gst" as const,
-              scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
-              state: "downloaded" as const,
-              safeSignals: [
-                "filed-return-artifact-downloaded:PDF",
-                "all-supported-full-fiscal-year-opfs-staged:PDF",
-              ],
-              safeMessage: "Synthetic staged artifact.",
-            },
-          }
-        : notFiledStep(),
+    const firstRunner = vi.fn<SinglePeriodRunner>(
+      childRun(async (scope) =>
+        scope.returnType === "GSTR-2B"
+          ? {
+              ok: true as const,
+              flowStep: {
+                connectorId: "gst" as const,
+                scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+                state: "downloaded" as const,
+                safeSignals: [
+                  "filed-return-artifact-downloaded:PDF",
+                  "all-supported-full-fiscal-year-opfs-staged:PDF",
+                ],
+                safeMessage: "Synthetic staged artifact.",
+              },
+            }
+          : notFiledStep(),
+      ),
     );
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, firstRunner);
     const checkpoint = savedLedger();
     const target = checkpoint.targets.find((candidate) => candidate.returnType === "GSTR-2B");
     if (!target) throw new Error("expected a GSTR-2B target");
     vi.clearAllMocks();
-    const refusalRunner = vi.fn<SinglePeriodRunner>(async () => ({
-      ok: true as const,
-      flowStep: {
-        connectorId: "gst" as const,
-        scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
-        state: "candidate-not-found" as const,
-        safeSignals: [
-          "filed-gstr2b-not-generated",
-          "gstr2b-summary-route-verified",
-          "gstr2b-visible-period-verified",
-        ],
-        safeMessage: "Synthetic bound refusal.",
-      },
-    }));
+    const refusalRunner = vi.fn<SinglePeriodRunner>(
+      childRun(async () => ({
+        ok: true as const,
+        flowStep: {
+          connectorId: "gst" as const,
+          scopeId: "gst-filed-returns-gstr2b-pdf-private-v0",
+          state: "candidate-not-found" as const,
+          safeSignals: [
+            "filed-gstr2b-not-generated",
+            "gstr2b-summary-route-verified",
+            "gstr2b-visible-period-verified",
+          ],
+          safeMessage: "Synthetic bound refusal.",
+        },
+      })),
+    );
 
     const response = await retryAllSupportedFullFiscalYearTarget(
       {
@@ -1414,13 +1434,13 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("refuses a retry that names a different reviewed target", async () => {
-    const blockedRunner = vi.fn<SinglePeriodRunner>(async () => blockedStep());
+    const blockedRunner = vi.fn<SinglePeriodRunner>(childRun(async () => blockedStep()));
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, blockedRunner);
     const blocked = savedLedger();
     const blockedSnapshot = structuredClone(blocked);
     const blockedTarget = blocked.targets[0];
     if (!blockedTarget) throw new Error("expected the first target to be blocked");
-    const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const retryRunner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     const response = await retryAllSupportedFullFiscalYearTarget(
       {
@@ -1452,10 +1472,10 @@ describe("all-supported full-fiscal-year worker", () => {
       await checkpoints.onDownloadStarted(41);
       return unconfirmedZipStep();
     });
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     const finalZipRecovery = savedLedger();
-    const retryRunner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const retryRunner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     expect(isAllSupportedFullFiscalYearLedger(finalZipRecovery)).toBe(true);
     expect(finalZipRecovery.zipPhase).toBe("download-observing");
@@ -1481,7 +1501,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("creates a new completed plan when the current eligible period has advanced", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     const completedPlan = savedLedger();
@@ -1500,7 +1520,7 @@ describe("all-supported full-fiscal-year worker", () => {
 
   it("records each return type's own current-year eligible periods", async () => {
     deps.now = () => new Date("2026-07-13T12:30:00.000Z");
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -1514,7 +1534,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("does not replace a completed plan when clock correction narrows eligibility", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     const completedPlan = savedLedger();
@@ -1528,7 +1548,7 @@ describe("all-supported full-fiscal-year worker", () => {
   });
 
   it("does not restart a completed plan when the selected year has no eligible periods", async () => {
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     const completedPlan = savedLedger();
     const completedCallCount = runner.mock.calls.length;
@@ -1554,7 +1574,7 @@ describe("all-supported full-fiscal-year worker", () => {
 
   it("surfaces a malformed saved-plan index without starting portal work", async () => {
     stored.values["all-supported-index"] = { schemaVersion: "3.0", ledgerIdsByPlanRoot: {} };
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -1588,7 +1608,7 @@ describe("all-supported full-fiscal-year worker", () => {
         "all-supported-returns-full-fiscal-year:2026-27": ledger.ledgerId,
       },
     };
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     const response = await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
 
@@ -1650,7 +1670,7 @@ describe("all-supported full-fiscal-year worker", () => {
       await checkpoints.onDownloadStarted(41);
       return unconfirmedZipStep();
     });
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     expect(savedLedger()).toMatchObject({ zipPhase: "download-observing" });
@@ -1682,7 +1702,7 @@ describe("all-supported full-fiscal-year worker", () => {
       await checkpoints.onDownloadStarted(41);
       return unconfirmedZipStep();
     });
-    const runner = vi.fn<SinglePeriodRunner>(async () => notFiledStep());
+    const runner = vi.fn<SinglePeriodRunner>(childRun(async () => notFiledStep()));
 
     await startAllSupportedFullFiscalYearDownloadFlow(request, deps, runner);
     await startAllSupportedFullFiscalYearDownloadFlow(
@@ -1710,6 +1730,20 @@ describe("all-supported full-fiscal-year worker", () => {
     );
   });
 });
+
+/**
+ * The real child flow selects and pins the GST tab before any portal work, so a plan's saved
+ * outcomes always come with the tab they came from. Stub runners take that first step too; a plan
+ * holding outcomes with no pin is a shape the real flow never produces, and the run refuses it.
+ */
+function childRun(
+  respond: (...args: Parameters<SinglePeriodRunner>) => ReturnType<SinglePeriodRunner>,
+): SinglePeriodRunner {
+  return async (scope, runDeps, options) => {
+    await options?.onPortalTabSelected?.(9, "synthetic-tab-session");
+    return respond(scope, runDeps, options);
+  };
+}
 
 function savedLedger() {
   const ledger = allSavedLedgers()[0];

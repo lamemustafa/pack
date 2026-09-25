@@ -46,6 +46,12 @@ import {
 } from "../../src/background/filed-returns-full-fiscal-year-summary";
 import { readLedger } from "../../src/background/filed-returns-full-fiscal-year-run-state";
 
+import {
+  FIXTURE_PORTAL_TAB_ID,
+  FIXTURE_TAB_SESSION_ID,
+} from "./full-year-completion-fixtures.test-helpers";
+import { PACK_SESSION_STORAGE_KEYS } from "../../src/background/storage-keys";
+
 const sessionValues = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 
 const browserMocks = vi.hoisted(() => ({
@@ -1816,6 +1822,11 @@ describe("full fiscal-year recovery", () => {
     );
     const firstTarget = ledger.targets[0]!;
     ledger.status = "running";
+    // The earlier run that staged this target's first file pinned the plan in this session.
+    ledger.portalTabId = FIXTURE_PORTAL_TAB_ID;
+    ledger.portalTabSessionId = FIXTURE_TAB_SESSION_ID;
+    sessionValues.current[PACK_SESSION_STORAGE_KEYS.fullFiscalYearTabSession] =
+      FIXTURE_TAB_SESSION_ID;
     ledger.targets[0] = {
       ...firstTarget,
       safeSignals: canonicalDurableTargetStatus(
@@ -1877,6 +1888,11 @@ describe("full fiscal-year recovery", () => {
     );
     const firstTarget = ledger.targets[0]!;
     ledger.status = "running";
+    // The earlier run that staged this target's first file pinned the plan in this session.
+    ledger.portalTabId = FIXTURE_PORTAL_TAB_ID;
+    ledger.portalTabSessionId = FIXTURE_TAB_SESSION_ID;
+    sessionValues.current[PACK_SESSION_STORAGE_KEYS.fullFiscalYearTabSession] =
+      FIXTURE_TAB_SESSION_ID;
     ledger.targets[0] = {
       ...firstTarget,
       safeSignals: canonicalDurableTargetStatus(
