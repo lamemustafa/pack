@@ -303,22 +303,34 @@ function summaryStep(
         : "Pack confirmed the final fiscal-year ZIP download.",
     };
   }
-  // A final-ZIP handoff Pack cannot confirm: the ZIP may already have been saved, so the plan offers
-  // no retry, resume or discard of its own. The generic step told the reader nothing to do, and the
-  // preset reason pointed at a discard control this card does not render; name the exit that works.
   if (ledger.zipPhase === "download-intent-persisted" || ledger.zipPhase === "download-started") {
-    return {
-      connectorId,
-      scopeId,
-      state: "blocked",
-      safeSignals: [
-        "all-supported-full-fiscal-year-final-zip-manual-review",
-        "all-supported-full-fiscal-year-opfs-retained",
-      ],
-      safeMessage: `Pack may have started the final fiscal-year ZIP before it stopped, so it will not build it again on its own. Check browser Downloads. If the ZIP is not there, open Pack's options and use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d, which removes every saved plan, then start the year again.`,
-    };
+    return allSupportedFinalZipReviewStep(ledger);
   }
   return unresolvedAllSupportedFullFiscalYearStep(ledger);
+}
+
+/**
+ * The one step for an all-returns plan whose final-ZIP handoff Pack cannot confirm. The ZIP may
+ * already have been saved, so the plan offers no retry, resume or discard of its own; the step names
+ * the exit that works. Both the polled summary and every action response use it -- two copies of
+ * this step disagreed, and only one named the exit.
+ */
+export function allSupportedFinalZipReviewStep(
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+): PortalFlowStepResult {
+  const current =
+    ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
+    ledger.targets[0]!;
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(current.returnType),
+    state: "blocked",
+    safeSignals: [
+      "all-supported-full-fiscal-year-final-zip-manual-review",
+      "all-supported-full-fiscal-year-opfs-retained",
+    ],
+    safeMessage: `Pack may have started the final fiscal-year ZIP before it stopped, so it will not build it again on its own. Check browser Downloads. If the ZIP is not there, open Pack's options and use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d, which removes every saved plan, then start the year again.`,
+  };
 }
 
 export function unresolvedAllSupportedFullFiscalYearStep(

@@ -33,6 +33,7 @@ import {
   nextRunnableAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-ledger";
 import {
+  allSupportedFinalZipReviewStep,
   unresolvedAllSupportedFullFiscalYearStep as unresolvedRunStep,
   allSupportedTerminalPlanRoots,
   projectAllSupportedFullFiscalYearSummary,
@@ -401,7 +402,7 @@ async function continueSavedAllSupportedFullFiscalYearRun(
       downloadId < 0 ||
       allSupportedZipOwners(storageState.ledgers, downloadId).length !== 1
     ) {
-      return allSupportedResponse(deps, ledger, finalZipReviewStep(ledger));
+      return allSupportedResponse(deps, ledger, allSupportedFinalZipReviewStep(ledger));
     }
     return reconcileAllSupportedFinalZip(deps, ledger);
   }
@@ -429,7 +430,8 @@ async function continueSavedAllSupportedFullFiscalYearRun(
   // A saved final-download intent without an exact browser download ID is
   // deliberately not replayed. Neither a new portal run nor a replacement ZIP
   // can establish what happened to the first browser request.
-  if (ledger.zipPhase) return allSupportedResponse(deps, ledger, finalZipReviewStep(ledger));
+  if (ledger.zipPhase)
+    return allSupportedResponse(deps, ledger, allSupportedFinalZipReviewStep(ledger));
   if (ledger.status === "running") {
     // Age alone was the test here, which called a slow-but-live run interrupted and a dead one
     // active depending only on the clock. The lease is the evidence -- it renews every ten seconds
@@ -980,21 +982,6 @@ function interruptedRunStep(
       message: "Review the saved targets before resuming this fiscal-year run.",
       canResume: true,
     },
-  };
-}
-
-function finalZipReviewStep(
-  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
-): PortalFlowStepResult {
-  return {
-    ...unresolvedRunStep(ledger),
-    state: "download-unconfirmed",
-    safeSignals: [
-      "all-supported-full-fiscal-year-final-zip-manual-review",
-      "all-supported-full-fiscal-year-opfs-retained",
-    ],
-    safeMessage:
-      "Pack may have started the final fiscal-year ZIP before the previous run stopped. Check browser Downloads before taking another action.",
   };
 }
 
