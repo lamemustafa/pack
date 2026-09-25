@@ -56,7 +56,6 @@ export interface FiledReturnsFlowMessagingDeps {
   };
   now?: () => Date;
   portalTabIncognito?: boolean;
-  persistTargetReview?: boolean;
   stageCapturedDownloads?: {
     bundleKind?: "all-supported-full-fiscal-year" | "full-fiscal-year" | "single-period";
     ledgerId: string;
