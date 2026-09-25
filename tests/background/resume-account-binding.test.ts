@@ -28,6 +28,15 @@ import { FULL_FISCAL_YEAR_PERIOD } from "../../src/connectors/gst/filed-returns-
 import { canonicalDurableSummaryMessage } from "../../src/connectors/gst/filed-returns-durable-status";
 import { getRecoveryFlowAvailability } from "../../src/entrypoints/popup/recovery-flow-availability";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../../src/connectors/gst/filed-returns-artifacts";
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import { JSDOM } from "jsdom";
+import type {
+  FiledReturnsAllSupportedFullFiscalYearFlowSummary,
+  FiledReturnsFlowSummary,
+} from "../../src/connectors/gst/filed-returns-contracts";
+import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
+import { panelController } from "../panel/panel-controller.test-helpers";
 
 /**
  * A saved plan's ZIP is one taxpayer's record, so resuming it must not continue across a different
@@ -634,6 +643,107 @@ describe("a saved plan with no recorded tab pin", () => {
     expect(response).toMatchObject({
       allSupportedFullFiscalYearFlowSummary: { status: "complete" },
     });
+  });
+});
+
+/**
+ * The refusals above assert the recovery model's `availableActions`, but the panel's controls do
+ * not render from that list. These render the real panel with the real refusal and read the
+ * buttons a reader can press, so the guard is proven where it matters.
+ */
+describe("what the panel offers after an account-safety refusal", () => {
+  async function renderedButtons(
+    summary: FiledReturnsFlowSummary | null,
+    allSupported: FiledReturnsAllSupportedFullFiscalYearFlowSummary | null = null,
+  ): Promise<{ labels: string[]; text: string }> {
+    // Render the panel as a build that runs full-year plans does; the packaged build on master
+    // still withholds them and would replace the reason with its own. The gate-removal change drops
+    // this stub.
+    vi.stubEnv("MODE", "source-surfaces");
+    const dom = new JSDOM("<div id='root'></div>", {
+      pretendToBeVisual: true,
+      url: "https://extension.test",
+    });
+    Object.assign(globalThis, { document: dom.window.document, window: dom.window });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const container = dom.window.document.getElementById("root")!;
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        React.createElement(PanelSurface, {
+          pack: panelController({
+            context: { connectorId: "gst", pageKind: "gst-filed-returns", supported: true },
+            scopedFlowSummary: summary,
+            lastRunSummary: summary,
+            recoverySummary: summary,
+            ...(summary ? { scope: summary.scope, scopeLockedForReview: true } : {}),
+            allSupportedFullFiscalYearFlowSummary: allSupported,
+          }),
+        }),
+      );
+    });
+    // "Recovery options" is a collapsed disclosure; a reader opens it to see what is inside.
+    for (const details of container.querySelectorAll<HTMLDetailsElement>("details")) {
+      await act(async () => {
+        details.open = true;
+        details.dispatchEvent(
+          new (dom.window as unknown as { Event: typeof Event }).Event("toggle", { bubbles: true }),
+        );
+      });
+    }
+    const labels = [...container.querySelectorAll("button")].map(
+      (button) => button.textContent ?? "",
+    );
+    const text = container.textContent ?? "";
+    await act(async () => root.unmount());
+    vi.unstubAllEnvs();
+    return { labels, text };
+  }
+
+  const continuing = /^(Retry\b|Resume\b|Continue\b|I checked)/;
+
+  it("offers only Cancel and reset after a single-return restart refusal", async () => {
+    const stopped = await saveSingleReturnPlanStoppedAtSecondPeriod();
+    stored.session = {};
+    const response = await retrySingleReturnTarget(stopped);
+    const summary = "flowSummary" in response ? (response.flowSummary ?? null) : null;
+    expect(summary).not.toBeNull();
+
+    const { labels, text } = await renderedButtons(summary);
+
+    expect(text, `${text}\n${JSON.stringify(labels)}`).toMatch(/GST account/i);
+    expect(labels.filter((label) => continuing.test(label))).toEqual([]);
+    expect(labels).toContain("Cancel and reset");
+  });
+
+  it("offers only Cancel and reset after a single-return unbound-run refusal", async () => {
+    const stopped = await saveSingleReturnPlanStoppedAtSecondPeriod();
+    const key = deps.storageKeys.fullFiscalYearLedger;
+    stored.local[key] = withoutPin(stored.local[key]);
+    const response = await retrySingleReturnTarget(stopped);
+    const summary = "flowSummary" in response ? (response.flowSummary ?? null) : null;
+    expect(summary).not.toBeNull();
+
+    const { labels, text } = await renderedButtons(summary);
+
+    expect(text).toMatch(/GST account/i);
+    expect(labels.filter((label) => continuing.test(label))).toEqual([]);
+    expect(labels).toContain("Cancel and reset");
+  });
+
+  it("offers only the discard after an all-returns unbound-run refusal", async () => {
+    const interrupted = await savePlanInterruptedDuringSecondTarget();
+    const [key] = savedLedgerEntry();
+    stored.local[key] = withoutPin(stored.local[key]);
+    await resumeAbandonedTarget(interrupted);
+    const reopened = await readCurrentAllSupportedFullFiscalYearFlowSummary(deps);
+    expect(reopened).not.toBeNull();
+
+    const { labels, text } = await renderedButtons(null, reopened);
+
+    expect(text).toMatch(/GST account/i);
+    expect(labels.filter((label) => continuing.test(label))).toEqual([]);
+    expect(labels.some((label) => /^Discard the saved FY .+ plan/.test(label))).toBe(true);
   });
 });
 
