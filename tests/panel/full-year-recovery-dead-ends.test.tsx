@@ -567,7 +567,10 @@ describe("D1: retrying a period the worker died on", () => {
  * offered "I checked—retry final ZIP".
  */
 describe("D2: a final ZIP whose browser download ID is gone", () => {
-  async function seedObservingZip() {
+  async function seedObservingZip(
+    phase: "download-observing" | "download-started" = "download-observing",
+    settledPeriods?: number,
+  ) {
     const handedOffAt = new Date(Date.now() - STALE_BY_MS);
     const scope = singleReturnScope();
     const created = createFullFiscalYearLedger(
@@ -580,9 +583,15 @@ describe("D2: a final ZIP whose browser download ID is gone", () => {
       revision: 5,
       status: "blocked",
       updatedAt: handedOffAt.toISOString(),
-      zipPhase: "download-observing",
-      zipDownloadAttempt: { downloadId: 481, requestedAt: handedOffAt.toISOString() },
-      targets: downloadedTargets(created, handedOffAt),
+      zipPhase: phase,
+      ...(phase === "download-observing"
+        ? { zipDownloadAttempt: { downloadId: 481, requestedAt: handedOffAt.toISOString() } }
+        : {}),
+      targets: downloadedTargets(created, handedOffAt).map((target, index) =>
+        settledPeriods === undefined || index < settledPeriods
+          ? target
+          : { ...created.targets[index]!, status: "pending" as const },
+      ),
     };
     delete ledger.currentTargetId;
     await persistLedger({ storageKeys: STORAGE_KEYS }, ledger);
@@ -628,6 +637,53 @@ describe("D2: a final ZIP whose browser download ID is gone", () => {
     const stored = await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId);
     expect(stored?.targets.map((target) => target.attempts)).toEqual(attemptsBefore);
     expect(stored?.targets.every((target) => target.status === "downloaded")).toBe(true);
+  });
+
+  it("rebuilds from a start recorded without a download ID when the reader confirms", async () => {
+    const ledger = await seedObservingZip("download-started");
+    await startWorker();
+    const attemptsBefore = ledger.targets.map((target) => target.attempts);
+
+    await sendAsReader({ type: "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY", payload: ledger.scope });
+
+    expect(zip.exportFullFiscalYearZip).toHaveBeenCalledTimes(1);
+    const stored = await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId);
+    expect(stored?.targets.map((target) => target.attempts)).toEqual(attemptsBefore);
+  });
+
+  it("does not rebuild the final ZIP for a year with a period still unsettled", async () => {
+    const ledger = await seedObservingZip("download-started", 1);
+    await startWorker();
+
+    const response = await sendAsReader({
+      type: "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY",
+      payload: ledger.scope,
+    });
+
+    expect(zip.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ ok: true, flowSummary: { status: "blocked" } });
+  });
+
+  it("never turns a confirmation into portal work when no final ZIP is waiting for it", async () => {
+    // A confirmation can arrive late: from a second window, after the saved run was discarded or
+    // cleared. It confirms a final ZIP, so with none waiting it must stop, not start a new year.
+    await startWorker();
+    const response = await sendAsReader({
+      type: "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY",
+      payload: singleReturnScope(),
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-final-zip-confirmation-unmatched"],
+      },
+    });
+    expect(zip.exportFullFiscalYearZip).not.toHaveBeenCalled();
+    expect(
+      Object.keys(env.state.local).some((key) => key.startsWith("pack:filed-returns-plan:")),
+    ).toBe(false);
   });
 
   it("gives the reader a way out after they confirm they checked Downloads", async () => {
@@ -687,7 +743,11 @@ describe("D2: a final ZIP whose browser download ID is gone", () => {
  * the worker stopped. No exact download ID exists, so the runner will not replay the ZIP.
  */
 describe("D3: an all-returns plan stopped at a final-ZIP download intent", () => {
-  async function seedIntentPlan() {
+  async function seedIntentPlan(
+    zipPhase: NonNullable<
+      FiledReturnsAllSupportedFullFiscalYearLedger["zipPhase"]
+    > = "download-intent-persisted",
+  ) {
     const at = new Date(Date.now() - STALE_BY_MS);
     const financialYear = getFiledReturnsFinancialYearOptions(new Date())[1]!;
     const expansion = expandAllSupportedFullFiscalYearTargetPlan();
@@ -715,8 +775,10 @@ describe("D3: an all-returns plan stopped at a final-ZIP download intent", () =>
       revision: staged.revision + 1,
       status: "blocked",
       updatedAt: intentAt.toISOString(),
-      zipPhase: "download-intent-persisted",
-      zipDownloadAttempt: { requestedAt: intentAt.toISOString() },
+      zipPhase,
+      ...(zipPhase === "download-intent-persisted"
+        ? { zipDownloadAttempt: { requestedAt: intentAt.toISOString() } }
+        : {}),
     };
     delete ledger.currentTargetId;
     await persistAllSupportedFullFiscalYearLedger({ storageKeys: STORAGE_KEYS }, ledger);
@@ -763,6 +825,34 @@ describe("D3: an all-returns plan stopped at a final-ZIP download intent", () =>
     );
     expect(panelText()).not.toContain("from its run summary");
   });
+
+  it.each([
+    "download-intent-persisted",
+    "download-started",
+    "restaging-required",
+    "legacy-cleanup-pending",
+  ] as const)(
+    "tells one story for a plan at %s, whether polled or answered after an action",
+    async (zipPhase) => {
+      const ledger = await seedIntentPlan(zipPhase);
+      expect(await readAllSupportedFullFiscalYearLedgerById(ledger.ledgerId)).not.toBeNull();
+      await startWorker();
+
+      const polled = (await sendAsReader({ type: "PACK_GET_FILED_RETURNS_FLOW_SUMMARY" })) as {
+        allSupportedFullFiscalYearFlowSummary?: { flowStep: PortalFlowStepResult };
+      };
+      const answered = (await sendAsReader({
+        type: "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW",
+        payload: ledger.planRoot,
+      })) as { allSupportedFullFiscalYearFlowSummary?: { flowStep: PortalFlowStepResult } };
+
+      const polledMessage = polled.allSupportedFullFiscalYearFlowSummary?.flowStep.safeMessage;
+      expect(polledMessage).toBeDefined();
+      expect(answered.allSupportedFullFiscalYearFlowSummary?.flowStep.safeMessage).toBe(
+        polledMessage,
+      );
+    },
+  );
 
   it("pins what the panel offers today: no plan control, and a resume would not move it", async () => {
     const ledger = await seedIntentPlan();
