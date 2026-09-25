@@ -1,1 +1,1 @@
-export const PACK_PRODUCT_VERSION = "0.5.1"; // x-release-please-version
+export const PACK_PRODUCT_VERSION = "0.6.0"; // x-release-please-version
