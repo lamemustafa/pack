@@ -210,7 +210,9 @@ describe("full-year Start preserves existing recovery", () => {
     );
   });
 
-  it("rebinds a prior browser tab pin before an explicitly validated retry acts", async () => {
+  it("refuses a prior browser tab pin instead of rebinding it for a validated retry", async () => {
+    // A pin from an earlier browser session cannot show that the same GST account is still signed
+    // in, so the retry stops with that reason rather than rebinding to whichever tab is active.
     const ledger = makeCompletedRecoveryLedger("pending");
     storage.local.ledger = ledger;
     const preparation = await prepareFullFiscalYearTargetRetry(
@@ -228,22 +230,24 @@ describe("full-year Start preserves existing recovery", () => {
       portalTabId: 41,
       portalTabSessionId: "prior-browser-session",
     };
-    const runSinglePeriod = vi.fn(async (_scope, _deps, options) => {
-      expect(options?.requiredPortalTabId).toBeUndefined();
-      expect(options?.requiredPortalTabSessionId).toBeUndefined();
-      await options?.onPortalTabSelected?.(73, "current-browser-session");
-      expect(storage.local.ledger).toMatchObject({
-        portalTabId: 73,
-        portalTabSessionId: "current-browser-session",
-      });
-      return { ok: false as const, error: "Synthetic stop." };
-    });
+    const runSinglePeriod = vi.fn(async () => ({ ok: false as const, error: "Synthetic stop." }));
 
-    await startFullFiscalYearDownloadFlow(RECOVERY_SCOPE, deps, runSinglePeriod, {
+    const response = await startFullFiscalYearDownloadFlow(RECOVERY_SCOPE, deps, runSinglePeriod, {
       allowExistingLedgerResume: true,
     });
 
-    expect(runSinglePeriod).toHaveBeenCalledTimes(1);
+    expect(runSinglePeriod).not.toHaveBeenCalled();
+    expect(storage.local.ledger).toMatchObject({
+      portalTabId: 41,
+      portalTabSessionId: "prior-browser-session",
+    });
+    expect(response).toMatchObject({
+      flowStep: {
+        state: "blocked",
+        safeSignals: ["full-fiscal-year-restart-account-unverified"],
+      },
+      flowSummary: { status: "blocked" },
+    });
   });
 
   it("keeps a matching-session tab pin during an explicitly validated retry", async () => {
