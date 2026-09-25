@@ -29,7 +29,7 @@ import {
   getFullFiscalYearCleanupCopy,
   getScopeMatchedFiledReturnsSummary,
   hasPersistedFullFiscalYearZipDownloadId,
-  isAmbiguousFullFiscalYearZipHandoff,
+  isFullFiscalYearZipRetryConfirmation,
 } from "./flow-summary";
 
 export function createScopeFormModel(scope: FiledReturnsDownloadScope) {
@@ -139,7 +139,7 @@ export function getScopeFormStartAction(
       disabled: false,
       label: hasPersistedFullFiscalYearZipDownloadId(matchedSummary)
         ? "Check final ZIP status"
-        : isAmbiguousFullFiscalYearZipHandoff(matchedSummary)
+        : isFullFiscalYearZipRetryConfirmation(matchedSummary)
           ? "I checked—retry final ZIP"
           : (cleanupCopy?.label ?? "Retry final ZIP"),
     };

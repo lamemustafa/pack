@@ -354,6 +354,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "full-fiscal-year-complete",
   "full-fiscal-year-completed-staging-cleanup-failed",
   "full-fiscal-year-download-unconfirmed",
+  "full-fiscal-year-final-zip-confirmation-unmatched",
   "full-fiscal-year-final-zip-manual-review",
   "full-fiscal-year-final-zip-retry",
   "full-fiscal-year-gst-tab-session-unavailable",

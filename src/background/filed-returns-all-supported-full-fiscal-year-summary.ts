@@ -303,7 +303,49 @@ function summaryStep(
         : "Pack confirmed the final fiscal-year ZIP download.",
     };
   }
+  if (isAmbiguousAllSupportedFinalZipHandoff(ledger)) return allSupportedFinalZipReviewStep(ledger);
   return unresolvedAllSupportedFullFiscalYearStep(ledger);
+}
+
+/**
+ * Whether the plan's final ZIP may already have been handed to the browser without an exact
+ * download ID Pack can check: an intent saved before the download started, a start with no
+ * recorded ID, or an observation whose ID is missing. The polled summary and the runner both read
+ * this, so one saved state gets one step.
+ */
+export function isAmbiguousAllSupportedFinalZipHandoff(
+  ledger: Pick<FiledReturnsAllSupportedFullFiscalYearLedger, "zipPhase" | "zipDownloadAttempt">,
+): boolean {
+  if (ledger.zipPhase === "download-intent-persisted" || ledger.zipPhase === "download-started") {
+    return true;
+  }
+  if (ledger.zipPhase !== "download-observing") return false;
+  const downloadId = ledger.zipDownloadAttempt?.downloadId;
+  return !(typeof downloadId === "number" && Number.isSafeInteger(downloadId) && downloadId >= 0);
+}
+
+/**
+ * The one step for an all-returns plan whose final-ZIP handoff Pack cannot confirm. The ZIP may
+ * already have been saved, so the plan offers no retry, resume or discard of its own; the step names
+ * the exit that works. Both the polled summary and every action response use it -- two copies of
+ * this step disagreed, and only one named the exit.
+ */
+export function allSupportedFinalZipReviewStep(
+  ledger: FiledReturnsAllSupportedFullFiscalYearLedger,
+): PortalFlowStepResult {
+  const current =
+    ledger.targets.find((target) => target.targetId === ledger.currentTargetId) ??
+    ledger.targets[0]!;
+  return {
+    connectorId: "gst",
+    scopeId: filedReturnScopeId(current.returnType),
+    state: "blocked",
+    safeSignals: [
+      "all-supported-full-fiscal-year-final-zip-manual-review",
+      "all-supported-full-fiscal-year-opfs-retained",
+    ],
+    safeMessage: `Pack may have started the final fiscal-year ZIP before it stopped, so it will not build it again on its own. Check browser Downloads. If the ZIP is not there, open Pack's options and use \u201c${PACK_CLEAR_LOCAL_DATA_ACTION_LABEL}\u201d, which removes every saved plan, then start the year again.`,
+  };
 }
 
 export function unresolvedAllSupportedFullFiscalYearStep(

@@ -594,6 +594,17 @@ function getAllSupportedRunBlock(
 ): { disabled: true; label: string } | null {
   if (!summary || busy !== null) return null;
   if (["complete", "cancelled"].includes(summary.status)) return null;
+  // An unconfirmed final-ZIP handoff leaves the card with no discard control. The plan's own step
+  // names the way out (the Options clear, which this panel deliberately never offers itself), so the
+  // preset reason must not send the reader to a discard on the run summary.
+  if (
+    summary.flowStep.safeSignals.includes("all-supported-full-fiscal-year-final-zip-manual-review")
+  ) {
+    return {
+      disabled: true,
+      label: "Resolve the saved all-supported fiscal-year plan before starting another return.",
+    };
+  }
   return {
     disabled: true,
     label: summary.summaryIdentity

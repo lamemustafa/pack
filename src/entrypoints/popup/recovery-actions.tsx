@@ -1,7 +1,10 @@
 import React from "react";
 import type { FiledReturnsFlowSummary } from "../../connectors/gst/filed-returns-contracts";
 import { canRetryFiledReturnsTargetWithoutPortal } from "./flow-summary";
-import { getRecoveryFlowAvailability } from "./recovery-flow-availability";
+import {
+  canOfferFullFiscalYearRetry,
+  getRecoveryFlowAvailability,
+} from "./recovery-flow-availability";
 import {
   canReconcileFiledReturnsTarget,
   DiagnosticSignals,
@@ -200,19 +203,21 @@ export function RecoveryActions({
               ) : null}
               {recoveryAvailability.canContinueFullYear ? (
                 <>
-                  <button
-                    type="button"
-                    className={collapsed ? "secondary" : undefined}
-                    disabled={retryDisabled}
-                    aria-describedby={
-                      portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
-                    }
-                    onClick={onRetryFullFiscalYearTarget}
-                  >
-                    {busy === "retry-full-fiscal-year-target"
-                      ? "Retrying..."
-                      : getSavedFullFiscalYearActionDecision(summary).label}
-                  </button>
+                  {canOfferFullFiscalYearRetry(summary, recoveryAvailability) ? (
+                    <button
+                      type="button"
+                      className={collapsed ? "secondary" : undefined}
+                      disabled={retryDisabled}
+                      aria-describedby={
+                        portalDisabledReason ? "recovery-portal-disabled-reason" : undefined
+                      }
+                      onClick={onRetryFullFiscalYearTarget}
+                    >
+                      {busy === "retry-full-fiscal-year-target"
+                        ? "Retrying..."
+                        : getSavedFullFiscalYearActionDecision(summary).label}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="secondary"

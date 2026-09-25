@@ -1991,7 +1991,9 @@ describe("full fiscal-year recovery", () => {
       "full-year-ledger": createRecoveryLedger({
         revision: 2,
         targetStatus: "cancelled",
-        safeSignals: ["full-fiscal-year-target-cancelled"],
+        // The registered signal a real cancellation writes. An unregistered one is stored as a
+        // rejected durable status, on which Pack deliberately withholds the retry.
+        safeSignals: ["filed-returns-target-cancelled"],
       }),
     });
 

@@ -33,18 +33,7 @@ import {
   type FiledReturnsAllSupportedFullFiscalYearPeriodPlan,
   type FiledReturnsAllSupportedFullFiscalYearTarget,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
-
-const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
-  "all-supported-full-fiscal-year-artifact-snapshot-mismatch",
-  "full-fiscal-year-pinned-gst-tab-unavailable",
-  "single-period-bundle-ledger-malformed",
-  "single-period-bundle-scope-conflict",
-  "single-period-bundle-state-persist-failed",
-  "single-period-bundle-state-read-failed",
-  "filed-return-durable-status-rejected",
-  // The portal's per-period filing preference; retrying asks the same question.
-  "filed-gstr3b-quarterly-filer-unsupported",
-]);
+import { withholdsFiledReturnsExplicitRetry } from "../connectors/gst/filed-returns-explicit-retry";
 
 /**
  * The first unresolved target is the only child an explicit retry may replay.
@@ -89,10 +78,7 @@ function isExplicitlyRetryableTarget(
   // active is what left the plan with no exit at all.
   const retryable =
     needsExplicitFullFiscalYearRetry(target.status) || (interrupted && target.status === "running");
-  return (
-    retryable &&
-    !target.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal))
-  );
+  return retryable && !withholdsFiledReturnsExplicitRetry(target.safeSignals);
 }
 
 /**
@@ -131,7 +117,7 @@ export function allSupportedStoppedRecovery(
   const target = ledger.targets.find(
     (candidate) =>
       needsExplicitFullFiscalYearRetry(candidate.status) &&
-      candidate.safeSignals.some((signal) => NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS.has(signal)),
+      withholdsFiledReturnsExplicitRetry(candidate.safeSignals),
   );
   if (!target) return null;
   return {

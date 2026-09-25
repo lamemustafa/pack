@@ -22,6 +22,7 @@ import {
 import type { ArtifactRequest, ArtifactFailureReason } from "./artifact-source";
 import {
   FULL_FISCAL_YEAR_PERIOD,
+  isFullFiscalYearScope,
   isStructurallySupportedFiledReturnsScope,
   isStructurallySupportedFiledReturnsStartScope as hasStructurallySupportedFiledReturnsStartScope,
   isSupportedFiledReturnsStartScope,
@@ -91,6 +92,12 @@ export type PackMessage =
   | { type: "PACK_TRIGGER_FILED_GSTR3B_DOWNLOAD"; payload: FiledReturnsDownloadTarget }
   | { type: "PACK_RUN_FILED_RETURNS_DOWNLOAD_STEP"; payload: FiledReturnsDownloadScope }
   | { type: "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW"; payload: FiledReturnsDownloadScope }
+  /**
+   * The reader's "I checked—retry final ZIP": after reviewing Browser Downloads, rebuild the saved
+   * full-year run's final ZIP from its retained staging. Distinct from a start, which keeps an
+   * ambiguous final-ZIP handoff in review.
+   */
+  | { type: "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY"; payload: FiledReturnsDownloadScope }
   | {
       type: "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW";
       payload: FiledReturnsAllSupportedFullFiscalYearRequest;
@@ -308,6 +315,8 @@ export function isPackMessage(
       return isFiledReturnsDownloadScope(input.payload);
     case "PACK_START_FILED_RETURNS_DOWNLOAD_FLOW":
       return isFiledReturnsStartScope(input.payload);
+    case "PACK_CONFIRM_FULL_FISCAL_YEAR_ZIP_RETRY":
+      return isFiledReturnsStartScope(input.payload) && isFullFiscalYearScope(input.payload);
     case "PACK_START_ALL_SUPPORTED_FILED_RETURNS_FULL_FISCAL_YEAR_FLOW":
       // Deliberately not sharing the restart predicate: a start carries the
       // root identity and nothing else, and folding the two together would let

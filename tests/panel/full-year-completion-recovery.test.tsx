@@ -52,7 +52,15 @@ describe("whole-panel unresolved completion recovery", () => {
       expect(markup).not.toContain("Download complete");
       expect(markup).not.toContain("Periods processed, ZIP unconfirmed");
       expect(markup).not.toContain("saved as one ZIP");
-      expect(markup).toContain(status === "pending" ? "Resume saved run" : "Retry May");
+      if (status === "running") {
+        // The worker died on May. The background refuses to retry a running period (a staged file
+        // may exist without its checkpoint), so the panel does not offer that retry; it offers the
+        // refusal's own advice instead: discard the saved run, or cancel and reset.
+        expect(markup).not.toContain("Retry May");
+        expect(markup).toContain("so Pack will not retry it. Discard this saved run");
+      } else {
+        expect(markup).toContain(status === "pending" ? "Resume saved run" : "Retry May");
+      }
       if (status === "pending") expect(markup).toContain("same GST account");
       if (status === "running") expect(markup).toContain("1 needs review");
       expect(retry).not.toHaveBeenCalled();
