@@ -5,6 +5,7 @@ import {
   rowMatchesScope,
   type FiledReturnsApiRow,
 } from "./filed-returns-api-rows";
+import { isFiledReturnsQuarterEndMonth } from "./filed-returns-months";
 import { filedReturnDescriptor } from "./filed-returns-return-descriptors";
 import { toPortalReturnPeriod } from "./filed-returns-return-period";
 import {
@@ -51,10 +52,10 @@ export async function openFiledReturnFromApiSearch(
   // prove a repeat "no record" is fresh; this answer is bound to the request itself (2026-09-21).
   if (rows === "no-record") {
     // A quarterly filer has no GSTR-3B for the first two months of a quarter, so "no record" there is
-    // not a missed filing. The role status answers per period; only its explicit "Q" stops here, and
-    // an unavailable answer keeps the not-filed reading Pack gave before it asked.
+    // not a missed filing. The role status answers per period; only its explicit "Q" changes the
+    // reading, and an unavailable answer keeps the not-filed reading Pack gave before it asked.
     if (await isQuarterlyFilerPeriod(documentRef, scope, deadline)) {
-      return quarterlyFilerStop(scope, scopeId);
+      return quarterlyFilerNoRecordAnswer(scope, scopeId);
     }
     return {
       connectorId: "gst",
@@ -130,10 +131,10 @@ export async function openFiledReturnFromApiSearch(
 }
 
 /**
- * The quarterly stop for a "no record" the page reports itself: the same answer, reached without the
+ * The quarterly reading of a "no record" the page reports itself: the same answer, reached without the
  * filed-return search, so it asks the same per-period question before it can mean "not filed".
  */
-export async function quarterlyFilerStopForPeriod(
+export async function quarterlyFilerAnswerForPeriod(
   documentRef: Document,
   scope: FiledReturnsDownloadScope,
   scopeId: string,
@@ -141,8 +142,27 @@ export async function quarterlyFilerStopForPeriod(
 ): Promise<PortalFlowStepResult | null> {
   if (scope.returnType !== "GSTR-3B" || !canUseFiledReturnsApi(documentRef)) return null;
   return (await isQuarterlyFilerPeriod(documentRef, scope, deadline))
-    ? quarterlyFilerStop(scope, scopeId)
+    ? quarterlyFilerNoRecordAnswer(scope, scopeId)
     : null;
+}
+
+/**
+ * "No record" for a month the role status names quarterly. Months 1-2 of a quarter have no GSTR-3B
+ * at all -- the quarter's return is filed for its last month -- so that is a settled answer. What a
+ * quarter-end "no record" means for a quarterly filer is not captured yet, so it keeps the stop.
+ */
+function quarterlyFilerNoRecordAnswer(
+  scope: FiledReturnsDownloadScope,
+  scopeId: string,
+): PortalFlowStepResult {
+  if (isFiledReturnsQuarterEndMonth(scope.period)) return quarterlyFilerStop(scope, scopeId);
+  return {
+    connectorId: "gst",
+    scopeId,
+    state: "candidate-not-found",
+    safeSignals: ["filed-return-api-searched", "filed-gstr3b-quarterly-no-monthly-return"],
+    safeMessage: `The GST Portal shows this taxpayer files GSTR-3B quarterly (QRMP) for ${scope.period} ${scope.financialYear}, so there is no monthly GSTR-3B for it; the quarter's return is filed for the quarter's last month.`,
+  };
 }
 
 async function isQuarterlyFilerPeriod(

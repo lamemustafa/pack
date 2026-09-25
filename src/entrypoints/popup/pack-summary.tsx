@@ -67,7 +67,12 @@ function getSinglePeriodMeta(summary: FiledReturnsFlowSummary | null): string {
   if (hasConfirmedSinglePeriodBrowserDownload(summary)) {
     return "Saved by your browser";
   }
-  if (signals.has("filed-return-positively-not-filed")) return "No browser download needed";
+  if (
+    signals.has("filed-return-positively-not-filed") ||
+    signals.has("filed-gstr3b-quarterly-no-monthly-return")
+  ) {
+    return "No browser download needed";
+  }
   if (summary?.status === "running") return "Filed-returns run in progress";
   if (summary && summary.status !== "cancelled") return "Browser download not confirmed";
   return "Local browser download";

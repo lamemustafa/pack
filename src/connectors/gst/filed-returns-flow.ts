@@ -12,7 +12,7 @@ import {
 } from "./filed-returns-navigator";
 import {
   openFiledReturnFromApiSearch,
-  quarterlyFilerStopForPeriod,
+  quarterlyFilerAnswerForPeriod,
 } from "./filed-returns-api-search";
 import { createFiledReturnsAcquisitionDeadline } from "./filed-returns-acquisition-deadline";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
@@ -215,7 +215,7 @@ export async function runFiledReturnsDownloadStep(
       searchSettled,
     );
     if (notFiledEvidence) {
-      return (await quarterlyFilerStopForPeriod(documentRef, scope, scopeId)) ?? notFiledEvidence;
+      return (await quarterlyFilerAnswerForPeriod(documentRef, scope, scopeId)) ?? notFiledEvidence;
     }
   }
 
