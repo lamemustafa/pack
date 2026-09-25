@@ -215,7 +215,7 @@ html[data-pack-surface="panel"] body {
 .panel-everything-preset-replaces {
   color: var(--pack-ink-muted);
   font-size: 0.75rem;
-  /* Keep "FY <year> pack" together at the narrowest panel instead of orphaning "pack". */
+  /* Keep "FY <year> plan" together at the narrowest panel instead of orphaning "plan". */
   text-wrap: balance;
 }
 

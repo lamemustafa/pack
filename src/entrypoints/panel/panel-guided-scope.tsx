@@ -470,7 +470,7 @@ function AllReturnsPreset({
     : plan;
   const coverageLabel = displayedPlan.returnTypes.map(shortReturnLabel).join(" · ");
   const disabledReasonId = `preset-all-returns-${plan.financialYear}-reason`;
-  // The visible label stays the preset's plain name, with the replaced pack named beneath it. The
+  // The visible label stays the preset's plain name, with the replaced plan named beneath it. The
   // accessible name keeps the explicit discard, so no reader meets the destructive action unnamed.
   const restartLabel = restart
     ? discardAllReturnsPlanLabel(
@@ -524,7 +524,7 @@ function AllReturnsPreset({
           {restart ? (
             <span className="panel-everything-preset-replaces">
               Replaces the saved{" "}
-              <FinancialYearText financialYear={restart.savedPlanFinancialYear} /> pack
+              <FinancialYearText financialYear={restart.savedPlanFinancialYear} /> plan
             </span>
           ) : null}
         </span>
