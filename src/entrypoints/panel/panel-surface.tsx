@@ -14,6 +14,7 @@ import {
 } from "../popup/flow-summary";
 import { InlineStatus } from "../popup/inline-status";
 import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
+import { FinancialYearText } from "../popup/financial-year-text";
 import { PackSummary } from "../popup/pack-summary";
 import { TargetEvidence } from "../popup/target-evidence";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
@@ -377,6 +378,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   );
 }
 
+/**
+ * The saved-plan card renders only for a plan persisted in this browser. Pack does not record
+ * which GST account made it, so the heading claims where it is saved, never whose it is.
+ */
+export const SAVED_PLAN_CARD_LABEL = "Saved in this browser";
+
 function AllSupportedRunStatus({
   summary,
   busy,
@@ -430,8 +437,13 @@ function AllSupportedRunStatus({
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>
         <strong>
-          Your pack · All supported returns
-          {summary.summaryIdentity ? ` · FY ${summary.summaryIdentity.financialYear}` : ""}
+          {SAVED_PLAN_CARD_LABEL} · All supported returns
+          {summary.summaryIdentity ? (
+            <>
+              {" · "}
+              <FinancialYearText financialYear={summary.summaryIdentity.financialYear} />
+            </>
+          ) : null}
         </strong>
       </p>
       {summary.targetEvidence.length > 0 ? (
