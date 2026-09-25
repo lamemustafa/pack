@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  FiledReturnsFlowSummary,
   FiledReturnsDownloadDiagnostic,
   FiledReturnsDownloadScope,
   FiledReturnsFullFiscalYearLedger,
@@ -214,6 +215,7 @@ vi.mock("../../src/background/filed-returns-full-fiscal-year-zip", async (import
 
 import { PanelSurface } from "../../src/entrypoints/panel/panel-surface";
 import { usePackPopupController } from "../../src/entrypoints/popup/use-pack-popup-controller";
+import { panelController } from "./panel-controller.test-helpers";
 
 const STORAGE_KEYS = filedReturnsStorageKeys();
 /** Older than every staleness window (ledger 30s, lease 30s), so the worker is demonstrably gone. */
@@ -499,6 +501,45 @@ describe("D1: retrying a period the worker died on", () => {
     await click(leave!);
     expect(await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId)).toBeNull();
     expect(panelText()).toContain("The previous recovery state was cleared.");
+  });
+
+  it("shows a refused retry as a stopped run with its reason, never as a live one", async () => {
+    // A panel still showing an older offer can send the retry the current panel withholds; the
+    // background's answer is what the reader then sees.
+    const { ledger, period } = await seedInterruptedRun();
+    // The reader has already cleared the dead worker's lease, as the panel asks them to.
+    delete env.state.local[STORAGE_KEYS.activeRun];
+    await startWorker();
+    const response = await sendAsReader({
+      type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
+      payload: {
+        ledgerId: ledger.ledgerId,
+        targetId: ledger.targets[0]!.targetId,
+        expectedRevision: ledger.revision ?? 1,
+      },
+    });
+
+    expect(response).toMatchObject({ ok: true, flowSummary: { status: "blocked" } });
+    const refused = (response as { flowSummary: FiledReturnsFlowSummary }).flowSummary;
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <PanelSurface
+          pack={panelController({ scopedFlowSummary: refused, lastRunSummary: refused })}
+        />,
+      );
+    });
+    await openRecoveryOptions();
+
+    expect(panelText()).not.toContain("Packing your files");
+    expect(panelText()).toContain(
+      "Pack cannot safely retry an interrupted period because a staged file may exist without its final ledger checkpoint.",
+    );
+    expect(findButton(new RegExp(`^Retry ${period}$`))).toBeUndefined();
+    expect(findButton(/^Cancel and reset$/)).toBeDefined();
+    // Nothing was reset or replayed.
+    const stored = await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId);
+    expect(stored?.targets[0]?.status).toBe("running");
   });
 
   it("accepts Cancel and reset for the interrupted period when no retry was attempted first", async () => {
@@ -852,5 +893,28 @@ describe("D4: retrying a single-return period whose pinned GST tab is gone", () 
     expect(leave, `no way out among: ${JSON.stringify(buttonLabels())}`).toBeDefined();
     await click(leave!);
     expect(await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId)).toBeNull();
+  });
+
+  it("refuses a retry sent for that period without re-running the flow", async () => {
+    const { ledger } = await seedPinnedTabLost();
+    await startWorker();
+    const response = await sendAsReader({
+      type: "PACK_RETRY_FULL_FISCAL_YEAR_TARGET",
+      payload: {
+        ledgerId: ledger.ledgerId,
+        targetId: ledger.targets[0]!.targetId,
+        expectedRevision: ledger.revision ?? 1,
+      },
+    });
+
+    // The saved run is answered as it stands: its own message names the exit.
+    expect(response).toMatchObject({
+      ok: true,
+      flowSummary: { status: "blocked" },
+      flowStep: { safeSignals: expect.arrayContaining([PINNED_TAB_SIGNAL]) },
+    });
+    const stored = await readLedgerById({ storageKeys: STORAGE_KEYS }, ledger.ledgerId);
+    expect(stored?.revision).toBe(ledger.revision);
+    expect(stored?.targets[0]?.status).toBe("blocked");
   });
 });
