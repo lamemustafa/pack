@@ -149,6 +149,7 @@ const TARGET_OUTCOMES: Readonly<
   downloaded: "saved",
   "not-filed": "not-filed",
   "not-generated": "not-generated",
+  "quarterly-no-monthly-return": "quarterly-no-monthly-return",
   // A person reporting what they saw is not correlated download evidence, so
   // this sits with the failures rather than with `saved`.
   "manually-observed": "needs-review",
@@ -171,6 +172,10 @@ export function targetStatusFromFlowStep(
   }
   if (step.safeSignals.includes("filed-return-positively-not-filed")) {
     return "not-filed";
+  }
+  // No monthly return exists for a quarterly filer's month 1-2. Also an answer, not a failure.
+  if (step.safeSignals.includes("filed-gstr3b-quarterly-no-monthly-return")) {
+    return "quarterly-no-monthly-return";
   }
   // The portal stated it produced nothing for this period. A positive answer, like
   // `filed-return-positively-not-filed` above -- not an inability to determine.

@@ -6,7 +6,11 @@ import {
   matchesAcceptedText,
   normaliseText,
 } from "./filed-returns-dom";
-import { acceptedFiledReturnsMonthTexts, canonicalFiledReturnsMonth } from "./filed-returns-months";
+import {
+  FILED_RETURNS_QUARTER_MONTHS,
+  acceptedFiledReturnsMonthTexts,
+  canonicalFiledReturnsMonth,
+} from "./filed-returns-months";
 import { findReturnDashboardControl } from "./gstr2b-dashboard-view";
 import { navigateToReturnDashboardPage } from "./filed-returns-navigator";
 import {
@@ -31,12 +35,6 @@ const DASHBOARD_NOT_OFFERED_SCOPE_ATTRIBUTE = "data-pack-dashboard-period-not-of
 // that it cannot join a first look from an earlier, unrelated attempt on the same tab.
 const DASHBOARD_NOT_OFFERED_MIN_GAP_MS = 2_000;
 const DASHBOARD_NOT_OFFERED_MAX_GAP_MS = DASHBOARD_SEARCH_PENDING_MS;
-const QUARTER_MONTHS: readonly (readonly string[])[] = [
-  ["April", "May", "June"],
-  ["July", "August", "September"],
-  ["October", "November", "December"],
-  ["January", "February", "March"],
-];
 interface DashboardSearchAttempt {
   candidateView: HTMLElement | null;
   candidateMutationVersion: number | null;
@@ -356,7 +354,7 @@ function periodMissingFromLoadedLists(
 ): boolean {
   if (controls.quarter && !selectMatches(controls.quarter, acceptedQuarterOptions(scope.period))) {
     const quarterList = Array.from(controls.quarter.options);
-    const listIsLoaded = QUARTER_MONTHS.some((months) =>
+    const listIsLoaded = FILED_RETURNS_QUARTER_MONTHS.some((months) =>
       quarterList.some((option) =>
         matchesAcceptedText(
           option.textContent || option.value,
@@ -373,7 +371,7 @@ function periodMissingFromLoadedLists(
   if (selectHasAcceptedOption(controls.period, acceptedFiledReturnsMonthTexts(scope.period))) {
     return false;
   }
-  const quarterMonths = QUARTER_MONTHS.find((months) =>
+  const quarterMonths = FILED_RETURNS_QUARTER_MONTHS.find((months) =>
     months.includes(canonicalFiledReturnsMonth(scope.period) ?? ""),
   );
   const listedMonths = Array.from(controls.period.options)

@@ -117,6 +117,18 @@ export function getPopupPresentationState(
     };
   }
 
+  if (summary?.flowStep.safeSignals.includes("filed-gstr3b-quarterly-no-monthly-return")) {
+    // Not a filing claim: under QRMP the quarter's return, filed for its last month, covers this one.
+    return {
+      badge: "Unavailable",
+      body: "The GST Portal shows this taxpayer files GSTR-3B quarterly (QRMP), so this month has no GSTR-3B of its own; the quarter's return is filed for its last month.",
+      icon: "–",
+      kind: "unavailable",
+      title: "No monthly GSTR-3B for this period",
+      tone: "neutral",
+    };
+  }
+
   if (summary?.flowStep.safeSignals.includes("filed-return-positively-not-filed")) {
     // Nobody files an auto-drafted GSTR-2B statement, so its absence is not a filing claim.
     const statement = summary.scope.returnType === "GSTR-2B";

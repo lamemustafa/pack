@@ -63,6 +63,7 @@ type DurableMessageKey =
   | "not-filed"
   | "not-generated"
   | "partial"
+  | "quarterly-no-monthly-return"
   | "target-cancelled"
   | "target-blocked"
   | "target-quarterly-filer-unsupported"
@@ -126,6 +127,12 @@ export function parseDurableTargetStatus(
   if (
     status === "not-generated" &&
     getBoundDeclinedArtifactSignal(scope, safeSignals) !== "filed-gstr2b-not-generated"
+  ) {
+    return null;
+  }
+  if (
+    status === "quarterly-no-monthly-return" &&
+    !safeSignals.includes("filed-gstr3b-quarterly-no-monthly-return")
   ) {
     return null;
   }
@@ -498,6 +505,12 @@ function messageKeyForTarget(
   if (signals.includes("filed-gstr3b-quarterly-filer-unsupported")) {
     return "target-quarterly-filer-unsupported";
   }
+  if (
+    signals.includes("filed-gstr3b-quarterly-no-monthly-return") ||
+    status === "quarterly-no-monthly-return"
+  ) {
+    return "quarterly-no-monthly-return";
+  }
   if (signals.includes("filed-return-positively-not-filed") || status === "not-filed") {
     return "not-filed";
   }
@@ -597,6 +610,8 @@ function messageKeyForSummary(
     return "full-year-active";
   }
   if (blockingRecoveryKey) return blockingRecoveryKey;
+  if (signals.includes("filed-gstr3b-quarterly-no-monthly-return"))
+    return "quarterly-no-monthly-return";
   if (signals.includes("filed-return-positively-not-filed")) return "not-filed";
   if (signals.includes("filed-returns-gst-tab-focus-unavailable")) {
     return "target-tab-focus-unavailable";
@@ -677,6 +692,9 @@ function renderDurableMessage(key: DurableMessageKey, scope: FiledReturnsDownloa
     // so the copy must not send the user to Downloads looking for a file that was never created.
     "not-generated": declinedArtifactSafeMessage("filed-gstr2b-not-generated"),
     partial: `Pack retained verified artifact progress for ${period}; the selection is not complete.`,
+    // Not "not filed": the claim is about the filing cadence, and it names no remedy because none
+    // is needed -- the quarter's return covers this month.
+    "quarterly-no-monthly-return": `There is no monthly GSTR-3B for ${scope.period === FULL_FISCAL_YEAR_PERIOD ? "this month" : period}: the GST Portal shows this taxpayer files GSTR-3B quarterly (QRMP), and the quarter's return is filed for its last month.`,
     "target-cancelled": `Pack cancelled the unresolved filed-return target for ${period}.`,
     "target-blocked": `Pack paused the saved full-year run at ${period}. Resolve the GST Portal page before retrying this period.`,
     "target-blocked-or-session-expired": FILED_RETURNS_PORTAL_BLOCKED_OR_SESSION_EXPIRED_MESSAGE,

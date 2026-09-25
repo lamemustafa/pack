@@ -48,7 +48,7 @@ export const FILED_RETURNS_SUMMARY_HEADERS = [
 ] as const;
 
 export type FiledReturnsSummaryOutcomeCategory =
-  "staged" | "not-filed" | "not-generated" | "artifact-unavailable";
+  "staged" | "not-filed" | "not-generated" | "quarterly-no-monthly-return" | "artifact-unavailable";
 
 /**
  * What the ZIP should say about one artifact of one period.
@@ -65,6 +65,7 @@ export function filedReturnsSummaryOutcomeCategory(
 ): FiledReturnsSummaryOutcomeCategory {
   if (targetStatus === "not-filed") return "not-filed";
   if (targetStatus === "not-generated") return "not-generated";
+  if (targetStatus === "quarterly-no-monthly-return") return "quarterly-no-monthly-return";
   return safeSignals.has(`filed-return-artifact-unavailable:${artifactType}`)
     ? "artifact-unavailable"
     : "staged";
