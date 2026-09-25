@@ -42,6 +42,8 @@ const NON_RESUMABLE_EXPLICIT_RETRY_SIGNALS = new Set([
   "single-period-bundle-state-persist-failed",
   "single-period-bundle-state-read-failed",
   "filed-return-durable-status-rejected",
+  // The portal's per-period filing preference; retrying asks the same question.
+  "filed-gstr3b-quarterly-filer-unsupported",
 ]);
 
 /**

@@ -119,6 +119,8 @@ export async function downloadAcquiredArtifact(
 
 export function installPortalBlobDownloadSafetyNet(tabId: number): {
   bind(blobUrl: unknown): Promise<void>;
+  /** Whether the browser created any blob download from this tab before a capture was bound. */
+  sawDownload(): boolean;
   remove(): void;
 } {
   let expectedFingerprint: string | null = null;
@@ -144,6 +146,7 @@ export function installPortalBlobDownloadSafetyNet(tabId: number): {
       if (!expectedFingerprint) return;
       for (const candidate of candidates.values()) void handle(candidate).catch(() => undefined);
     },
+    sawDownload: () => candidates.size > 0,
     remove: () => browser.downloads.onCreated.removeListener(listener),
   };
 }

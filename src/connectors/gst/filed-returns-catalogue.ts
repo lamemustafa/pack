@@ -62,7 +62,8 @@ const PORTAL_DATA: ArtifactCapability = {
  */
 export const FILED_RETURNS_CAPABILITIES = {
   "GSTR-3B": {
-    cadenceLabel: "Monthly or quarterly, as set on the GST Portal",
+    // Pack stops for a quarterly (QRMP) filer; the label must not promise what the runtime refuses.
+    cadenceLabel: "Monthly (quarterly filing is not currently supported by Pack)",
     label: "GSTR-3B",
     periodicity: "monthly",
     supportStatus: "supported",

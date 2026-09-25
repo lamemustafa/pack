@@ -1,4 +1,3 @@
-import { browser } from "wxt/browser";
 import type { PortalFlowStepResult } from "../connectors/gst/filed-returns-contracts";
 import type { PackOffscreenFiledReturnZipExpectedEntry } from "../connectors/gst/offscreen-blob-url";
 import type { FiledReturnsSummaryPlanEntry } from "../connectors/gst/filed-returns-summary-sheet";
@@ -10,23 +9,17 @@ import {
   type FiledReturnsAllSupportedFullFiscalYearLedger,
 } from "./filed-returns-all-supported-full-fiscal-year-validation";
 import {
-  type DownloadCreatedItem,
-  observeBrowserDownloadById,
-  type SafeDownloadObservation,
-} from "./download-observer";
-import {
   safeAllSupportedFullFiscalYearZipEntryPath,
   safeAllSupportedFullFiscalYearZipFilename,
 } from "./filed-returns-download-filename";
 import {
-  checkBrowserDownloadsAction,
   exportStagedFiledReturnsZip,
-  filedReturnsZipObservationContext,
   opfsClearSignals,
+  reconcileStagedZipDownloadById,
+  unconfirmedZipReconciliation,
 } from "./filed-returns-staged-zip";
 import { clearOffscreenFiledReturnLedger, closeOffscreenBlobDocument } from "./offscreen-blob-url";
 
-const USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS = 45 * 1000;
 const ZIP_KIND = "all-supported-full-fiscal-year" as const;
 
 interface ZipDownloadCheckpointCallbacks {
@@ -127,53 +120,12 @@ export async function reconcileAllSupportedFullFiscalYearZipDownload(
 ): Promise<PortalFlowStepResult> {
   if (!isAllSupportedFullFiscalYearLedger(ledger)) {
     return unconfirmedZipReconciliation(
+      ZIP_KIND,
       completeStep,
       "all-supported-full-fiscal-year-zip-ledger-invalid",
     );
   }
-  const attempt = ledger.zipDownloadAttempt;
-  const downloadId = attempt?.downloadId;
-  if (
-    ledger.zipPhase !== "download-observing" ||
-    !attempt ||
-    !Number.isSafeInteger(downloadId) ||
-    downloadId === undefined ||
-    downloadId < 0
-  ) {
-    return unconfirmedZipReconciliation(
-      completeStep,
-      "all-supported-full-fiscal-year-zip-download-id-missing",
-    );
-  }
-
-  let item: DownloadCreatedItem | undefined;
-  try {
-    [item] = await browser.downloads.search({ id: downloadId });
-  } catch {
-    return unconfirmedZipReconciliation(
-      completeStep,
-      "all-supported-full-fiscal-year-zip-download-search-unavailable",
-    );
-  }
-  if (!item || item.id !== downloadId) {
-    return unconfirmedZipReconciliation(
-      completeStep,
-      "all-supported-full-fiscal-year-zip-download-id-not-found",
-    );
-  }
-  if (!["complete", "in_progress", "interrupted"].includes(item.state ?? "")) {
-    return unconfirmedZipReconciliation(
-      completeStep,
-      "all-supported-full-fiscal-year-zip-download-state-unknown",
-    );
-  }
-  const observed = await observeBrowserDownloadById(
-    browser.downloads,
-    downloadId,
-    filedReturnsZipObservationContext(downloadId, new Date(attempt.requestedAt)),
-    USER_MEDIATED_ZIP_DOWNLOAD_WAIT_MS,
-  );
-  return reconciledZipStep(completeStep, observed);
+  return reconcileStagedZipDownloadById(ZIP_KIND, ledger, completeStep);
 }
 
 export async function discardAllSupportedFullFiscalYearFiledReturnsZip(
@@ -236,68 +188,5 @@ function allSupportedFullFiscalYearStagingRequirement(
     expectedEntries,
     missingArtifactCount,
     summaryPlan,
-  };
-}
-
-function reconciledZipStep(
-  completeStep: PortalFlowStepResult,
-  observed: SafeDownloadObservation,
-): PortalFlowStepResult {
-  if (observed.state === "completed") {
-    return {
-      ...completeStep,
-      state: "downloaded",
-      safeSignals: [
-        ...completeStep.safeSignals,
-        `${ZIP_KIND}-zip-download-started`,
-        `${ZIP_KIND}-zip-downloaded`,
-        `${ZIP_KIND}-zip-reconciled-by-id`,
-        `${ZIP_KIND}-opfs-retained`,
-        ...observed.safeSignals,
-      ],
-      safeMessage:
-        "Pack confirmed the previously started fiscal-year ZIP by its browser download ID.",
-    };
-  }
-  return {
-    ...completeStep,
-    state: observed.state === "failed" ? "blocked" : "download-unconfirmed",
-    safeSignals: [
-      ...completeStep.safeSignals,
-      `${ZIP_KIND}-zip-download-started`,
-      `${ZIP_KIND}-zip-download-unconfirmed`,
-      `${ZIP_KIND}-zip-reconciled-by-id`,
-      `${ZIP_KIND}-opfs-retained`,
-      ...observed.safeSignals,
-    ],
-    safeMessage:
-      observed.state === "failed"
-        ? "The browser reported that the saved fiscal-year ZIP download ended unsuccessfully. Pack retained staging for an explicit retry."
-        : "Pack could not yet confirm the saved fiscal-year ZIP download. Check browser Downloads before taking another action.",
-    ...(observed.state === "failed"
-      ? observed.userAction
-        ? { userAction: observed.userAction }
-        : {}
-      : { userAction: checkBrowserDownloadsAction(ZIP_KIND) }),
-  };
-}
-
-function unconfirmedZipReconciliation(
-  completeStep: PortalFlowStepResult,
-  signal: string,
-): PortalFlowStepResult {
-  return {
-    ...completeStep,
-    state: "download-unconfirmed",
-    safeSignals: [
-      ...completeStep.safeSignals,
-      `${ZIP_KIND}-zip-download-started`,
-      `${ZIP_KIND}-zip-download-unconfirmed`,
-      signal,
-      `${ZIP_KIND}-opfs-retained`,
-    ],
-    safeMessage:
-      "Pack could not confirm the saved fiscal-year ZIP download by its browser ID. Check browser Downloads before taking another action.",
-    userAction: checkBrowserDownloadsAction(ZIP_KIND),
   };
 }

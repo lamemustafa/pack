@@ -10,7 +10,10 @@ import {
   navigateToFiledReturnsPage,
   navigateToReturnDashboardPage,
 } from "./filed-returns-navigator";
-import { openFiledReturnFromApiSearch } from "./filed-returns-api-search";
+import {
+  openFiledReturnFromApiSearch,
+  quarterlyFilerStopForPeriod,
+} from "./filed-returns-api-search";
 import { createFiledReturnsAcquisitionDeadline } from "./filed-returns-acquisition-deadline";
 import { selectFiledReturnsFiltersAndSearch } from "./filed-returns-filter-form";
 import { detectPositiveNotFiledEvidence } from "./filed-returns-not-filed-evidence";
@@ -184,6 +187,11 @@ export async function runFiledReturnsDownloadStep(
 
   if (hasUnchangedFiledReturnsSearchForScope(documentRef, scope)) {
     clearFiledReturnsSearchAttemptForScope(documentRef, scope);
+    // The page cannot tell a fresh repeat "no record" from a stale one -- the portal re-renders
+    // nothing (2026-09-21) -- but the filed-return search's own answer is bound to the request.
+    // Ask it before calling the page stale; only when it has no answer is the retry the right one.
+    const searchAnswer = await openFiledReturnFromApiSearch(documentRef, scope, scopeId);
+    if (searchAnswer && !shouldFallBackToPortalFilterSelection(searchAnswer)) return searchAnswer;
     return {
       connectorId: "gst",
       scopeId,
@@ -207,7 +215,7 @@ export async function runFiledReturnsDownloadStep(
       searchSettled,
     );
     if (notFiledEvidence) {
-      return notFiledEvidence;
+      return (await quarterlyFilerStopForPeriod(documentRef, scope, scopeId)) ?? notFiledEvidence;
     }
   }
 

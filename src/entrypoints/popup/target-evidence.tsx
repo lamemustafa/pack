@@ -26,7 +26,11 @@ type TargetEvidenceEntry =
 
 const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   saved: "Saved",
-  "partly-saved": "Partly saved",
+  // Every format missing from such a period is one the portal said does not exist -- the bundle
+  // ledger only records a declined-artifact reason as unavailable. "Partly saved" read as a failure
+  // and sent the reader looking for a file the portal never had.
+  // Short enough for one line at panel width; the count line above names the reason in full.
+  "partly-saved": "Saved · format n/a",
   captured: "Captured",
   "not-filed": "Not filed",
   // Not "Not filed": an auto-drafted statement is never filed by the taxpayer, and saying so
@@ -37,14 +41,24 @@ const OUTCOME_LABELS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   pending: "Waiting",
 };
 
+/**
+ * The portal auto-drafts a GSTR-2B statement; nobody files one. A 2B period with no statement --
+ * one the Returns Dashboard does not offer -- is recorded under the shared `not-filed` outcome, and
+ * reading it out as "Not filed" put a claim about the taxpayer on screen that the portal never made.
+ */
+function outcomeLabel(outcome: FiledReturnsTargetOutcome, returnType: string | undefined): string {
+  const autoDraftedStatement = returnType === "GSTR-2B";
+  if (outcome === "not-filed" && autoDraftedStatement) return OUTCOME_LABELS["not-generated"];
+  return OUTCOME_LABELS[outcome];
+}
+
 // Text, not colour alone. The panel is read in a side strip beside a dense
 // portal page, and a glyph that only differs by hue says nothing to a reader who
 // cannot separate the hues.
 const OUTCOME_GLYPHS: Readonly<Record<FiledReturnsTargetOutcome, string>> = {
   saved: "✓",
-  // Half of a tick: some of the selection arrived. Distinct from the review
-  // mark, because nothing here is wrong -- the portal did not offer the rest.
-  "partly-saved": "◐",
+  // A tick: everything the portal offered was saved, and nothing here is wrong.
+  "partly-saved": "✓",
   // A filled mark for a file Pack holds, an outline for one the browser has
   // confirmed. The difference is the whole point of the column.
   captured: "•",
@@ -59,10 +73,13 @@ export function TargetEvidence({
   summary,
   evidence: suppliedEvidence,
   groupByReturn = false,
+  foldRows = false,
 }: {
   summary?: FiledReturnsFlowSummary | null;
   evidence?: readonly TargetEvidenceEntry[];
   groupByReturn?: boolean;
+  /** A settled run's rows are history: keep the count line, fold the rows. */
+  foldRows?: boolean;
 }) {
   const evidence = suppliedEvidence ?? summary?.targetEvidence;
   if (!evidence || evidence.length === 0) return null;
@@ -71,6 +88,19 @@ export function TargetEvidence({
   const partlySaved = evidence.filter((entry) => entry.outcome === "partly-saved").length;
   const captured = evidence.filter((entry) => entry.outcome === "captured").length;
   const needsReview = evidence.filter((entry) => entry.outcome === "needs-review").length;
+
+  const rowsView = groupByReturn ? (
+    <div className="evidence-groups">
+      {groupAllSupportedEvidenceByReturn(evidence).map(([returnType, returnEvidence]) => (
+        <section className="evidence-group" key={returnType} aria-label={`${returnType} results`}>
+          <h3>{returnType}</h3>
+          <EvidenceList evidence={returnEvidence} returnType={returnType} />
+        </section>
+      ))}
+    </div>
+  ) : (
+    <EvidenceList evidence={evidence} returnType={summary?.scope.returnType} />
+  );
 
   return (
     <section
@@ -90,14 +120,16 @@ export function TargetEvidence({
             "files" would overstate a single-return run and understate an
             all-supported one, and the ZIP is where a file count is answerable. */}
         <strong>
-          {saved} of {evidence.length} saved
+          {saved + partlySaved} of {evidence.length} saved
         </strong>
-        {/* Counted separately rather than folded into either neighbour. A partly
-            saved period is not in the `saved` total, so without its own clause
-            it would simply disappear from this line and leave the reader
-            unable to account for the difference. */}
+        {/* Such a period holds everything the portal offered, so it is in the saved total. Its own
+            clause says why some formats are absent, so a reader comparing the line with the ZIP
+            can account for them. */}
         {partlySaved > 0 ? (
-          <span className="evidence-partly"> · {partlySaved} partly saved</span>
+          <span className="evidence-partly">
+            {" "}
+            · {partlySaved} without a format the portal does not have
+          </span>
         ) : null}
         {captured > 0 ? (
           <span className="evidence-captured"> · {captured} captured, ZIP not confirmed</span>
@@ -106,27 +138,25 @@ export function TargetEvidence({
           <span className="evidence-review"> · {needsReview} needs review</span>
         ) : null}
       </p>
-      {groupByReturn ? (
-        <div className="evidence-groups">
-          {groupAllSupportedEvidenceByReturn(evidence).map(([returnType, returnEvidence]) => (
-            <section
-              className="evidence-group"
-              key={returnType}
-              aria-label={`${returnType} results`}
-            >
-              <h3>{returnType}</h3>
-              <EvidenceList evidence={returnEvidence} />
-            </section>
-          ))}
-        </div>
+      {foldRows ? (
+        <details className="panel-finished-run">
+          <summary>Show what this run saved</summary>
+          {rowsView}
+        </details>
       ) : (
-        <EvidenceList evidence={evidence} />
+        rowsView
       )}
     </section>
   );
 }
 
-function EvidenceList({ evidence }: { evidence: readonly TargetEvidenceEntry[] }) {
+function EvidenceList({
+  evidence,
+  returnType,
+}: {
+  evidence: readonly TargetEvidenceEntry[];
+  returnType: string | undefined;
+}) {
   return (
     <ul className="evidence-list">
       {evidence.map((entry) => (
@@ -135,7 +165,9 @@ function EvidenceList({ evidence }: { evidence: readonly TargetEvidenceEntry[] }
             {OUTCOME_GLYPHS[entry.outcome]}
           </span>
           <span className="evidence-period">{entry.period}</span>
-          <span className="evidence-outcome">{OUTCOME_LABELS[entry.outcome]}</span>
+          <span className="evidence-outcome">
+            {outcomeLabel(entry.outcome, "returnType" in entry ? entry.returnType : returnType)}
+          </span>
         </li>
       ))}
     </ul>

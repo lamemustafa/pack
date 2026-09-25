@@ -277,6 +277,51 @@ This log records live diagnostic findings that constrain Pack's local, target-bo
     Method note: imports carry IGST only, so the absent CGST head must be read as zero. Treating
     absent as "no match" made the one heading that is structurally IGST-only look unmapped.
 
+36. **The GSTR-1 "no e-invoice details" answer is a Bootstrap modal, not page text.** Captured
+    live on 2026-09-21 (structure only; no page text, identifiers or HTML retained): after the
+    e-invoice details Excel control is clicked for a period without e-invoices, the message is a
+    `p` in `.modal-body > .modal-content > .modal-dialog.sweet`, inside
+    `div.modal.fade.fade-scale.in[role="dialog"]` (fixed, z-index 1050), wrapped in a
+    `conf-dialogue` element. It was the only visible element containing both "no details available
+    for download" and "e-invoice". Timing, measured the same week: without recognising it, the
+    capture waited out its full 20 s generation timeout on every such period (5 of 5), while the
+    GSTR-1 PDF for the same periods took 40–160 ms.
+
+37. **View Filed Returns answers "nothing filed" in its search response, not in the page.** Captured
+    live on 2026-09-21 on a taxpayer whose GSTR-3B starts in July 2025 (April–June confirmed unfiled
+    by hand). The page's own request `{fy: "2025-26", rfp: "Monthly", qtr: null, mth: "May",
+rtntp: "GSTR3B"}` to `/returns/auth/api/efiledReturns` answered HTTP 200 with
+    `{status, error: {errorCode: "RET13510", message: "No Record found for the provided Inputs"}}`:
+    the code is nested under `error`, not top-level (confirmed by a second probe the same day). With that message already on screen, a
+    second search (April, then May) produced **zero DOM mutations** in the filter form, so the page
+    cannot prove a repeat "no record" is fresh; the search response, bound to the request, can. On
+    View Filed Returns, GSTR-3B is offered only under the **Monthly** filing period (not Quarterly).
+    Separately, the page reads a selected `<option>` through `innerText` **and** `textContent`
+    identically, so any reader joining both doubles the text (`"GSTR3B GSTR3B"`).
+38. **The Returns Dashboard lists only the periods a taxpayer can file for.** Captured live on
+    2026-09-21 on the same taxpayer as entry 37. With 2025-26 selected, the Quarter dropdown offered
+    `Quarter 2 (Jul - Sep)`, `Quarter 3 (Oct - Dec)` and `Quarter 4 (Jan - Mar)`, and no Quarter 1,
+    so April–June have no option to select at all, for GSTR-1 or for the auto-drafted GSTR-2B
+    statement. A search for March showed the GSTR-1 tile as `Status- Filed` with `VIEW`/`DOWNLOAD`,
+    the auto-drafted GSTR-2B statement tile with `VIEW`/`DOWNLOAD`, and `VIEW GSTR3B`. Pack now
+    reads a period missing from a loaded, current list, seen on two consecutive steps, as the
+    portal's answer that nothing exists for it; it had instead waited out its 30-second step limit.
+39. **A quarterly (QRMP) filer is named per period by the role status, and its GSTR-3B page shows
+    the quarter.** Captured live on 2026-09-22 on a QRMP taxpayer. The role-status call Pack already
+    makes (`rolestatus?rtn_prd=MMYYYY`) answered HTTP 200 `{status, data: {userType, userPref, user,
+barredYearsLimit}}` with `userPref: "Q"` for April, May, June and July 2025 alike, so it names
+    the cadence for the first two months of a quarter too, not only its end. The monthly filed-return
+    search answered `RET13510` for April and May, where no GSTR-3B is due, and Pack had recorded
+    them "Not filed". June, the quarter end, opened a page headed "GSTR-3BQ - Quarterly Return" that
+    shows "Return Period - Apr-Jun", "Status - Filed", a due date, and "FY - 2025-26"; an open
+    Bootstrap modal (`.modal.fade.fade-scale.in`) titled "System generated summary for GSTR-3B:"
+    carried a single CLOSE control over page controls BACK, SAVE GSTR3B, DOWNLOAD FILED GSTR-3B and
+    SYSTEM GENERATED GSTR-3B. The same page listed GSTR-1/1A and GSTR-2B as quarterly, so the whole
+    profile was quarterly. Pack now stops such a period with a named reason instead of recording it
+    not filed or opening the quarterly page. Still unknown before quarterly support (#295): why the
+    summary modal was not dismissed, the PDF preflight answer for a 3BQ period, and what the
+    downloaded file states as its period.
+
 ## The GSTR-2B summary page does carry a Returns Dashboard link, collapsed
 
 Captured 2026-08-24 from a signed-in `GST Portal` page, by

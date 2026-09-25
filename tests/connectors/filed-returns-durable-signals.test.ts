@@ -1,5 +1,6 @@
 import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "../../src/connectors/gst/offscreen-blob-url";
 import { describe, expect, it, vi } from "vitest";
+import { canonicalDurableTargetStatus } from "../../src/connectors/gst/filed-returns-durable-status";
 import {
   durableFiledReturnsSignalRejectionReason,
   isDurableFiledReturnsSignal,
@@ -559,5 +560,30 @@ describe("filed-return durable signal contract", () => {
     } finally {
       for (const sink of sinks) sink.mockRestore();
     }
+  });
+});
+
+// Two flow changes merged on 2026-09-21 emitted signals the durable allowlist did not carry. One
+// unregistered token rejects a target's whole signal array, which records the non-resumable
+// `filed-return-durable-status-rejected` -- a successful GSTR-3B re-click, or a dashboard stop
+// after reopening, would have left a plan whose only exit is discarding it.
+describe("signals introduced by #391 and #392 survive durable persistence", () => {
+  it.each([
+    "filed-gstr3b-capture-reclicked",
+    "gstr1-return-dashboard-reopened-after-unsettled-search",
+    "gstr1-return-dashboard-search-unsettled-after-reopen",
+    "gstr2b-return-dashboard-reopened-after-unsettled-search",
+    "gstr2b-return-dashboard-search-unsettled-after-reopen",
+    "gstr3b-return-dashboard-reopened-after-unsettled-search",
+    "gstr3b-return-dashboard-search-unsettled-after-reopen",
+  ])("%s", (signal) => {
+    expect(isDurableFiledReturnsSignal(signal)).toBe(true);
+    expect(
+      canonicalDurableTargetStatus(
+        { financialYear: "2025-26", period: "April", returnType: "GSTR-3B", artifactType: "PDF" },
+        "blocked",
+        [signal],
+      ).safeSignals,
+    ).not.toContain("filed-return-durable-status-rejected");
   });
 });

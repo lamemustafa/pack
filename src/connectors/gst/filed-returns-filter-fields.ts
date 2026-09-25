@@ -47,7 +47,7 @@ export function filedReturnsFilterFieldMatches(
   const fallbackSelect = fallbackSelects[0];
   if (!fallbackSelect) return false;
 
-  const selectedText = readElementText(fallbackSelect.selectedOptions[0]) || fallbackSelect.value;
+  const selectedText = readSelectedOptionText(fallbackSelect);
   return matchesText(selectedText, acceptedTexts);
 }
 
@@ -151,7 +151,7 @@ function evaluateFiledReturnsFilterField(
     : [];
   if (scopedSelects.length > 0) {
     return evaluateSelectedTexts(
-      scopedSelects.map((select) => readElementText(select.selectedOptions[0]) || select.value),
+      scopedSelects.map(readSelectedOptionText),
       acceptedTexts,
       matchesText,
     );
@@ -161,7 +161,7 @@ function evaluateFiledReturnsFilterField(
   const scopedSelect = fieldRoot?.querySelector("select");
   if (scopedSelect && !isHidden(scopedSelect)) {
     return evaluateSelectedTexts(
-      [readElementText(scopedSelect.selectedOptions[0]) || scopedSelect.value],
+      [readSelectedOptionText(scopedSelect)],
       acceptedTexts,
       matchesText,
     );
@@ -225,7 +225,7 @@ function findMonthSelectBetweenPeriodAndReturnType(
 function readNativeSelectState(select: HTMLSelectElement): FiledReturnsFilterFieldState {
   return {
     present: true,
-    selectedText: readElementText(select.selectedOptions[0]) || select.value || null,
+    selectedText: readSelectedOptionText(select) || null,
   };
 }
 
@@ -266,6 +266,17 @@ function findScopedFilterRoot(documentRef: Document): HTMLElement | null {
 
 function uniqueSelects(selects: Array<HTMLSelectElement | null | undefined>): HTMLSelectElement[] {
   return Array.from(new Set(selects.filter(Boolean) as HTMLSelectElement[]));
+}
+
+/**
+ * A selected option's text, read once. `readElementText` joins `innerText` and `textContent`, which a
+ * browser both fills, so an option read through it came back doubled ("GSTR3B GSTR3B"). The loose
+ * matchers tolerated that; the exact return-type matcher never matched, and GSTR-3B stopped at the
+ * dropdowns on every retry (2026-09-21). Every other reader in the connector already reads
+ * `textContent`; this is the same reading.
+ */
+function readSelectedOptionText(select: HTMLSelectElement): string {
+  return select.selectedOptions[0]?.textContent || select.value;
 }
 
 function readElementText(element: Element | null | undefined): string {

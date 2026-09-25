@@ -694,7 +694,7 @@ describe("panel guided scope interaction", () => {
     expect(onRestart).not.toHaveBeenCalled();
   });
 
-  it("binds the summary-card restart to the reviewed ledger, and refreshes when stale", async () => {
+  it("binds the preset restart of a completed plan to the reviewed ledger, without a duplicate on the card", async () => {
     // Two restart controls exist -- the preset card and the run-summary card --
     // and they are separate callbacks. Guarding only the preset left this one
     // dispatching a captured identity, which deletes the completed ledger and
@@ -741,22 +741,60 @@ describe("panel guided scope interaction", () => {
       false,
     );
 
-    // Fresh: the displayed periods still match the live plan, and the request
-    // names the ledger the reader reviewed rather than only its fiscal year.
-    await clickButtonContaining("Discard the saved FY 2026-27 plan and run again");
+    // Fresh: the displayed periods still match the live plan. The preset carries the restart, so
+    // the card does not repeat it, and the request names the ledger the reader reviewed.
+    expect(container.querySelector(".panel-all-supported-action")).toBeNull();
+    await clickButtonContaining("Discard the saved FY 2026-27 plan and run everything this year");
     expect(restart).toHaveBeenCalledExactlyOnceWith({
       kind: "all-supported-returns-full-fiscal-year",
       financialYear: "2026-27",
       ledgerId: "ledger-under-review",
     });
+  });
 
-    // Stale: another period became eligible while this panel stayed open.
-    restart.mockClear();
-    refresh.mockClear();
+  it("keeps the summary-card restart when the presets cannot restart a stale plan, and refreshes", async () => {
+    // Another period became eligible after the plan completed, so the presets no longer offer this
+    // plan's restart and the card's control is the one shown. It must not dispatch a captured
+    // identity: that would delete the completed ledger and run periods the evidence never held.
+    vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-25T00:00:00.000Z"));
-    expect(panelAllReturnsFullYearPreset("2026-27")?.periodCount).toBeGreaterThan(
-      eligibleNow.length,
+    const restart = vi.fn(async () => undefined);
+    const refresh = vi.fn(async () => undefined);
+    const displayed = ["April", "May", "June", "July"] as const;
+    expect(panelAllReturnsFullYearPreset("2026-27")?.periodCount).toBeGreaterThan(displayed.length);
+    await mount(
+      {
+        overrides: {
+          restartAllSupportedFullFiscalYearFlow: restart,
+          refreshFlowSummary: refresh,
+          allSupportedFullFiscalYearFlowSummary: {
+            resumeAvailable: false,
+            summaryIdentity: {
+              kind: "all-supported-returns-full-fiscal-year",
+              financialYear: "2026-27",
+            },
+            ledgerId: "ledger-under-review",
+            status: "complete",
+            completedAt: "2026-08-26T00:00:00.000Z",
+            updatedAt: "2026-08-26T00:00:00.000Z",
+            completedTargetIds: [],
+            targetEvidence: savedAllReturnsEvidence("2026-27", [...displayed]),
+            totalTargets: 28,
+            flowStepScope: PANEL_TEST_SCOPE,
+            flowStep: {
+              connectorId: "gst",
+              scopeId: "gst-filed-returns-gstr3b-pdf-private-v0",
+              state: "downloaded",
+              safeSignals: ["all-supported-full-fiscal-year-complete"],
+              safeMessage: "Synthetic all-supported completion.",
+            },
+          },
+        },
+      },
+      false,
+      false,
     );
+
     await clickButtonContaining("Discard the saved FY 2026-27 plan and run again");
     expect(restart).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalled();
@@ -1016,12 +1054,8 @@ describe("panel guided scope interaction", () => {
         .filter((preset) => !preset.classList.contains("panel-everything-preset"))
         .every((preset) => !preset.disabled),
     ).toBe(true);
-    const summaryRestart = container.querySelector<HTMLButtonElement>(
-      ".panel-all-supported-action",
-    );
-    const summaryRestartLabel = "Discard the saved FY 2025-26 plan and run again";
-    expect(summaryRestart?.textContent?.trim()).toBe(summaryRestartLabel);
-    expect(summaryRestart?.getAttribute("aria-label")).toBe(summaryRestartLabel);
+    // The preset below restarts this year, so the summary card does not repeat the same discard.
+    expect(container.querySelector(".panel-all-supported-action")).toBeNull();
 
     const priorYearPresetRestart = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".panel-everything-preset"),

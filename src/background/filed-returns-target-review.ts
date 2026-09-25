@@ -9,6 +9,7 @@ import type {
 import {
   concreteFiledReturnsArtifactTypesForSelection,
   normaliseFiledReturnsArtifactType,
+  sameExactFiledReturnsScope,
 } from "../connectors/gst/filed-returns-artifacts";
 import {
   clearArtifactAcquisitionCheckpoints,
@@ -97,7 +98,8 @@ export async function readFiledReturnsTargetReview(
   if (!key) return null;
 
   const state = await readCanonicalTargetReviewStorageStateByKey(key);
-  return state.state === "valid" && sameFiledReturnsScope(state.review.scope, scope)
+  return state.state === "valid" &&
+    sameFiledReturnsScopeWithOverlappingArtifacts(state.review.scope, scope)
     ? state.review
     : null;
 }
@@ -147,7 +149,11 @@ export async function persistFiledReturnsTargetReview(
   return runTargetReviewMutationCriticalSection(async () => {
     const state = await readTargetReviewStorageStateByKey(key);
     if (state.state === "malformed") return null;
-    if (state.state === "valid" && !sameFiledReturnsScope(state.review.scope, scope)) return null;
+    if (
+      state.state === "valid" &&
+      !sameFiledReturnsScopeWithOverlappingArtifacts(state.review.scope, scope)
+    )
+      return null;
 
     const existingReview = state.state === "valid" ? state.review : null;
     const diagnosticState = mergeFiledReturnsDownloadDiagnosticState(
@@ -213,7 +219,7 @@ export async function replaceFiledReturnsTargetReview(
     if (
       state.review.targetId !== review.targetId ||
       targetReviewRevision(state.review) !== targetReviewRevision(review) ||
-      !sameFiledReturnsScope(state.review.scope, review.scope)
+      !sameFiledReturnsScopeWithOverlappingArtifacts(state.review.scope, review.scope)
     ) {
       return false;
     }
@@ -237,12 +243,16 @@ export async function updateFiledReturnsTargetReview(
   if (!key) return false;
   return runTargetReviewMutationCriticalSection(async () => {
     const state = await readTargetReviewStorageStateByKey(key);
-    if (state.state !== "valid" || !sameFiledReturnsScope(state.review.scope, scope)) return false;
+    if (
+      state.state !== "valid" ||
+      !sameFiledReturnsScopeWithOverlappingArtifacts(state.review.scope, scope)
+    )
+      return false;
     const updated = update(state.review);
     if (
       !updated ||
       updated.targetId !== state.review.targetId ||
-      !sameFiledReturnsScope(updated.scope, state.review.scope)
+      !sameFiledReturnsScopeWithOverlappingArtifacts(updated.scope, state.review.scope)
     ) {
       return false;
     }
@@ -338,7 +348,7 @@ async function clearFiledReturnsTargetReviewAttempt(
     // own bookkeeping.
     if (state.state === "missing") return { ok: true };
     if (state.state === "malformed") return targetReviewClearFailure("review-malformed");
-    if (!sameFiledReturnsScope(state.review.scope, scope)) {
+    if (!sameFiledReturnsScopeWithOverlappingArtifacts(state.review.scope, scope)) {
       return targetReviewClearFailure("scope-mismatch");
     }
     if (expectedRevision !== undefined && targetReviewRevision(state.review) !== expectedRevision) {
@@ -403,7 +413,8 @@ async function markTargetReviewArtifactAcquisitionCompletion(
   // cannot carry this target's completion proof, so the caller must retain
   // the matching active lease and session checkpoint rather than creating a
   // transition window with no durable B-scope guard.
-  if (!sameFiledReturnsScope(storageState.review.scope, scope)) return { state: "blocked" };
+  if (!sameFiledReturnsScopeWithOverlappingArtifacts(storageState.review.scope, scope))
+    return { state: "blocked" };
   const markedReview = {
     ...storageState.review,
     artifactAcquisitionCompletion: evidence.map(({ artifactType, downloadId, requestId }) => ({
@@ -447,7 +458,7 @@ export async function reconcileRetainedArtifactAcquisition(
     const state = await readTargetReviewStorageStateByKey(key);
     if (
       state.state !== "valid" ||
-      !sameFiledReturnsScope(state.review.scope, scope) ||
+      !sameFiledReturnsScopeWithOverlappingArtifacts(state.review.scope, scope) ||
       !hasArtifactAcquisitionRecoverySignal(state.review.safeSignals)
     ) {
       return null;
@@ -542,7 +553,10 @@ export async function resolveUnconfirmedFiledReturnsDownload(
   return runTargetReviewMutationCriticalSection(async () => {
     const state = await readTargetReviewStorageStateByKey(key);
     if (state.state === "malformed") return malformedTargetReviewResponse(scope);
-    if (state.state !== "valid" || !sameFiledReturnsScope(state.review.scope, scope)) {
+    if (
+      state.state !== "valid" ||
+      !sameFiledReturnsScopeWithOverlappingArtifacts(state.review.scope, scope)
+    ) {
       return noTargetReviewResponse(scope);
     }
     const review = state.review;
@@ -813,7 +827,7 @@ export async function retryCompletedSinglePeriodZipCleanup(
     const state = await readTargetReviewStorageStateByKey(key);
     if (
       state.state !== "valid" ||
-      !sameFiledReturnsScope(state.review.scope, scope) ||
+      !sameFiledReturnsScopeWithOverlappingArtifacts(state.review.scope, scope) ||
       !hasSinglePeriodCleanupFailure(state.review.safeSignals)
     ) {
       return null;
@@ -1701,7 +1715,12 @@ function canonicalTargetReviewScope(scope: FiledReturnsDownloadScope): FiledRetu
   };
 }
 
-function sameFiledReturnsScope(
+/**
+ * Same year, period and return type, and artifact selections whose concrete formats share at least
+ * one, so it is looser than `sameExactFiledReturnsScope`. Renamed from `sameFiledReturnsScope`
+ * because that name, exported from the full-year ledger, means the exact match.
+ */
+function sameFiledReturnsScopeWithOverlappingArtifacts(
   left: FiledReturnsDownloadScope,
   right: FiledReturnsDownloadScope,
 ): boolean {
@@ -1710,19 +1729,6 @@ function sameFiledReturnsScope(
     left.period === right.period &&
     left.returnType === right.returnType &&
     artifactSelectionsOverlap(left, right)
-  );
-}
-
-function sameExactFiledReturnsScope(
-  left: FiledReturnsDownloadScope,
-  right: FiledReturnsDownloadScope,
-): boolean {
-  return (
-    left.financialYear === right.financialYear &&
-    left.period === right.period &&
-    left.returnType === right.returnType &&
-    normaliseFiledReturnsArtifactType(left.returnType, left.artifactType) ===
-      normaliseFiledReturnsArtifactType(right.returnType, right.artifactType)
   );
 }
 
