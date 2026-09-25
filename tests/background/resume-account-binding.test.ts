@@ -660,6 +660,18 @@ describe("what the panel offers after an account-safety refusal", () => {
     // still withholds them and would replace the reason with its own. The gate-removal change drops
     // this stub.
     vi.stubEnv("MODE", "source-surfaces");
+    try {
+      return await renderAndRead(summary, allSupported);
+    } finally {
+      // Restored even when rendering throws, so the stub cannot leak into a later test.
+      vi.unstubAllEnvs();
+    }
+  }
+
+  async function renderAndRead(
+    summary: FiledReturnsFlowSummary | null,
+    allSupported: FiledReturnsAllSupportedFullFiscalYearFlowSummary | null,
+  ): Promise<{ labels: string[]; text: string }> {
     const dom = new JSDOM("<div id='root'></div>", {
       pretendToBeVisual: true,
       url: "https://extension.test",
@@ -696,11 +708,12 @@ describe("what the panel offers after an account-safety refusal", () => {
     );
     const text = container.textContent ?? "";
     await act(async () => root.unmount());
-    vi.unstubAllEnvs();
     return { labels, text };
   }
 
-  const continuing = /^(Retry\b|Resume\b|Continue\b|I checked)/;
+  // Any control that would retry, resume or continue the refused plan, wherever the word sits in its
+  // label -- the all-returns retry reads "Review Downloads, then retry {return} for {period}".
+  const continuing = /\b(retry|resume|continue)\b|I checked/i;
 
   it("offers only Cancel and reset after a single-return restart refusal", async () => {
     const stopped = await saveSingleReturnPlanStoppedAtSecondPeriod();
@@ -711,9 +724,9 @@ describe("what the panel offers after an account-safety refusal", () => {
 
     const { labels, text } = await renderedButtons(summary);
 
-    expect(text, `${text}\n${JSON.stringify(labels)}`).toMatch(/GST account/i);
     expect(labels.filter((label) => continuing.test(label))).toEqual([]);
     expect(labels).toContain("Cancel and reset");
+    expect(text, `${text}\n${JSON.stringify(labels)}`).toMatch(/GST account/i);
   });
 
   it("offers only Cancel and reset after a single-return unbound-run refusal", async () => {
@@ -726,9 +739,9 @@ describe("what the panel offers after an account-safety refusal", () => {
 
     const { labels, text } = await renderedButtons(summary);
 
-    expect(text).toMatch(/GST account/i);
     expect(labels.filter((label) => continuing.test(label))).toEqual([]);
     expect(labels).toContain("Cancel and reset");
+    expect(text).toMatch(/GST account/i);
   });
 
   it("offers only the discard after an all-returns unbound-run refusal", async () => {
@@ -741,9 +754,9 @@ describe("what the panel offers after an account-safety refusal", () => {
 
     const { labels, text } = await renderedButtons(null, reopened);
 
-    expect(text).toMatch(/GST account/i);
     expect(labels.filter((label) => continuing.test(label))).toEqual([]);
     expect(labels.some((label) => /^Discard the saved FY .+ plan/.test(label))).toBe(true);
+    expect(text).toMatch(/GST account/i);
   });
 });
 
