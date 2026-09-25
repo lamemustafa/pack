@@ -6,10 +6,8 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
-import {
-  holdsFullFiscalYearPortalOutcome,
-  isResolvedFullFiscalYearTargetStatus,
-} from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
+import { holdsFullFiscalYearPortalOutcome } from "../connectors/gst/filed-returns-durable-signals";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
 import { filedReturnsSummaryStatusMessage } from "../connectors/gst/filed-returns-summary-status";
@@ -384,11 +382,6 @@ export async function startFullFiscalYearDownloadFlow(
       : null;
   const browserRestartedSinceBinding =
     currentTabSessionId !== null && currentTabSessionId !== ledger.portalTabSessionId;
-  // A run with no recorded pin -- one saved by an earlier build -- has nothing to compare. Once it
-  // holds a portal outcome, "could not determine" refuses; before that it has done no portal work
-  // and pins on its first target.
-  const unboundWithPortalOutcome =
-    ledger.portalTabId === undefined && holdsFullFiscalYearPortalOutcome(ledger.targets);
 
   while (true) {
     const nextTarget = nextRunnableFullFiscalYearTarget(ledger);
@@ -401,7 +394,10 @@ export async function startFullFiscalYearDownloadFlow(
         "full-fiscal-year-restart-account-unverified",
       );
     }
-    if (unboundWithPortalOutcome) {
+    // A run with no recorded pin -- one saved by an earlier build -- has nothing to compare. Once it
+    // holds a portal outcome, "could not determine" refuses; before that it has done no portal work
+    // and pins on its first target. Checked per target, as the all-returns runner does.
+    if (ledger.portalTabId === undefined && holdsFullFiscalYearPortalOutcome(ledger.targets)) {
       return refuseUnverifiedRun(
         deps,
         ledger,

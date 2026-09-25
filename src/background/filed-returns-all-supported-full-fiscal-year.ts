@@ -4,10 +4,8 @@ import type {
   FiledReturnsDownloadScope,
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
-import {
-  holdsFullFiscalYearPortalOutcome,
-  isResolvedFullFiscalYearTargetStatus,
-} from "../connectors/gst/filed-returns-contracts";
+import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
+import { holdsFullFiscalYearPortalOutcome } from "../connectors/gst/filed-returns-durable-signals";
 import { concreteFiledReturnsArtifactTypesForSelection } from "../connectors/gst/filed-returns-artifacts";
 import {
   expandAllSupportedFullFiscalYearTargetPlan,

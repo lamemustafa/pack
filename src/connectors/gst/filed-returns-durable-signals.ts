@@ -3,6 +3,10 @@ import type { DeclinedArtifactSignal } from "./filed-returns-acquisition-diagnos
 import { FILED_RETURNS_WORKBOOK_ABSENCE_OUTCOMES } from "./offscreen-blob-url";
 import { FILED_RETURNS_MONTHS } from "./filed-returns-scope";
 import type { FiledReturnsReturnType } from "./filed-returns-return-types";
+import {
+  holdsFullFiscalYearTargetAnswer,
+  type FiledReturnsFullFiscalYearTargetStatus,
+} from "./filed-returns-contracts";
 import { ARTIFACT_FAILURE_MESSAGES } from "./artifact-source";
 import {
   ARTIFACT_ACQUISITION_CHECKPOINT_CLEAR_FAILURE_REASONS,
@@ -75,6 +79,25 @@ export function hasRetainedFullFiscalYearArtifactEvidence(signals: readonly stri
       (signal.startsWith("filed-return-artifact-downloaded:") ||
         signal.startsWith("full-fiscal-year-opfs-staged:") ||
         signal.startsWith("all-supported-full-fiscal-year-opfs-staged:")),
+  );
+}
+
+/**
+ * Whether a saved full-year run already holds an answer, from the portal or a person, a browser
+ * download it could not confirm, or saved-artifact evidence. A run with no recorded tab pin that
+ * holds one cannot show it is continuing where it started.
+ */
+export function holdsFullFiscalYearPortalOutcome(
+  targets: readonly {
+    status: FiledReturnsFullFiscalYearTargetStatus;
+    safeSignals: readonly string[];
+  }[],
+): boolean {
+  return targets.some(
+    (target) =>
+      holdsFullFiscalYearTargetAnswer(target.status) ||
+      target.status === "download-unconfirmed" ||
+      hasRetainedFullFiscalYearArtifactEvidence(target.safeSignals),
   );
 }
 
