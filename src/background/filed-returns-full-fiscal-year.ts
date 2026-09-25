@@ -6,7 +6,10 @@ import type {
   PortalFlowStepResult,
 } from "../connectors/gst/filed-returns-contracts";
 import { filedReturnsScopeId } from "../connectors/gst/filed-returns-return-types";
-import { isResolvedFullFiscalYearTargetStatus } from "../connectors/gst/filed-returns-contracts";
+import {
+  holdsFullFiscalYearPortalOutcome,
+  isResolvedFullFiscalYearTargetStatus,
+} from "../connectors/gst/filed-returns-contracts";
 import type { PackMessageResponse } from "../connectors/gst/messages";
 import { getFiledReturnsFullFiscalYearPeriods } from "../connectors/gst/filed-returns-scope";
 import { filedReturnsSummaryStatusMessage } from "../connectors/gst/filed-returns-summary-status";
@@ -381,12 +384,30 @@ export async function startFullFiscalYearDownloadFlow(
       : null;
   const browserRestartedSinceBinding =
     currentTabSessionId !== null && currentTabSessionId !== ledger.portalTabSessionId;
+  // A run with no recorded pin -- one saved by an earlier build -- has nothing to compare. Once it
+  // holds a portal outcome, "could not determine" refuses; before that it has done no portal work
+  // and pins on its first target.
+  const unboundWithPortalOutcome =
+    ledger.portalTabId === undefined && holdsFullFiscalYearPortalOutcome(ledger.targets);
 
   while (true) {
     const nextTarget = nextRunnableFullFiscalYearTarget(ledger);
     if (!nextTarget) return completeRun(deps, ledger);
     if (browserRestartedSinceBinding) {
-      return refuseAfterBrowserRestart(deps, ledger, nextTarget);
+      return refuseUnverifiedRun(
+        deps,
+        ledger,
+        nextTarget,
+        "full-fiscal-year-restart-account-unverified",
+      );
+    }
+    if (unboundWithPortalOutcome) {
+      return refuseUnverifiedRun(
+        deps,
+        ledger,
+        nextTarget,
+        "full-fiscal-year-unbound-run-unverified",
+      );
     }
     const retryScope = scopeForFullFiscalYearTarget(nextTarget);
     const previousTargetSafeSignals = nextTarget.safeSignals;
@@ -492,16 +513,17 @@ export async function startFullFiscalYearDownloadFlow(
 }
 
 /**
- * Records the restart refusal on the target the run would have started next, so the saved run
- * carries its reason: every later reading withholds the retry and names the one exit.
+ * Records the refusal on the target the run would have started next, so the saved run carries its
+ * reason: every later reading withholds the retry and names the one exit.
  */
-async function refuseAfterBrowserRestart(
+async function refuseUnverifiedRun(
   deps: FiledReturnsFlowRunnerDeps,
   ledger: FiledReturnsFullFiscalYearLedger,
   target: FiledReturnsFullFiscalYearTarget,
+  signal: "full-fiscal-year-restart-account-unverified" | "full-fiscal-year-unbound-run-unverified",
 ): Promise<PackMessageResponse> {
   const scope = scopeForFullFiscalYearTarget(target);
-  const safeSignals = ["full-fiscal-year-restart-account-unverified"];
+  const safeSignals = [signal];
   const flowStep: PortalFlowStepResult = {
     connectorId: "gst",
     scopeId: filedReturnsScopeId(scope.returnType),

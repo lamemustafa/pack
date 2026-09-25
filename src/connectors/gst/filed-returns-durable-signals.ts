@@ -372,6 +372,7 @@ const EXACT_DURABLE_SIGNALS = new Set([
   "full-fiscal-year-pinned-gst-tab-unavailable",
   "full-fiscal-year-plan-narrower-than-eligible",
   "full-fiscal-year-target-plan-invalid",
+  "full-fiscal-year-unbound-run-unverified",
   "full-fiscal-year-restaging-required",
   "full-fiscal-year-resume-confirmation-required",
   "full-fiscal-year-retained-staging-scope-conflict",

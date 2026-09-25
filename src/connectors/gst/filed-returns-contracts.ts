@@ -379,6 +379,25 @@ export function holdsFullFiscalYearTargetAnswer(
 }
 
 /**
+ * Whether a saved full-year run already holds something the portal gave it: an answer, a browser
+ * download it could not confirm, or a staged file. A run with no recorded tab pin that holds one
+ * cannot show it is continuing in the session that produced it.
+ */
+export function holdsFullFiscalYearPortalOutcome(
+  targets: readonly {
+    status: FiledReturnsFullFiscalYearTargetStatus;
+    safeSignals: readonly string[];
+  }[],
+): boolean {
+  return targets.some(
+    (target) =>
+      holdsFullFiscalYearTargetAnswer(target.status) ||
+      target.status === "download-unconfirmed" ||
+      target.safeSignals.some((signal) => /opfs-staged(?::|$)/.test(signal)),
+  );
+}
+
+/**
  * Unresolved, and not a state the run reaches by itself. What is left needs the user to choose.
  *
  * Derived rather than listed: a status that is neither resolved nor active belongs here by
