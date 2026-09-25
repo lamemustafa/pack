@@ -100,7 +100,7 @@ describe("filed returns flow — search and no-record observation", () => {
         </section>
       </main>
     `);
-    const fetchFn = vi.fn(async (_input: RequestInfo | URL) => ({
+    const fetchFn = vi.fn<(input: RequestInfo | URL) => Promise<unknown>>(async () => ({
       ok: true,
       json: async () => ({ status: 1, data: { userPref: "Q" } }),
     }));
