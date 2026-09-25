@@ -241,6 +241,9 @@ run identifier, or dated observation. Unevidenced claims stay unchecked.
 - [ ] The authorised live full fiscal year recovery matrix below is complete:
       every observation matches a completion-eligible row in the cell legend,
       and every recorded date is valid and no later than the current UTC date.
+- [ ] The authorised live full fiscal year export-window restart matrix below is complete:
+      every observation matches a completion-eligible row in the cell legend,
+      and every recorded date is valid and no later than the current UTC date.
 - [ ] The authorised live full fiscal year all-returns recovery matrix below is complete:
       every observation matches a completion-eligible row in the cell legend,
       and every recorded date is valid and no later than the current UTC date.
@@ -253,9 +256,8 @@ each row's acquisition capability from
 `supportsFiledReturnsArtifactType`; the document cannot declare that fact. For
 each row, the final expectation cell's capability claim must agree with the
 derived value. For each acquisition-capable selection, record service-worker
-restart, browser restart, a service-worker restart and a browser restart during
-export, interrupted download, cancellation/discard and its cleanup outcome, and
-a retained checkpoint whose browser record is no longer available. A
+restart, browser restart, interrupted download, cancellation/discard and its
+cleanup outcome, and a retained checkpoint whose browser record is no longer available. A
 resumed path must not repeat a completed target. An unproven path remains
 non-complete until retry or cancellation. Manual observation is only an
 explicit non-completing action and still requires retry before ZIP staging.
@@ -272,13 +274,26 @@ as `fail-closed-as-expected` but is not completion-eligible there: rebuilding an
 exporting is the property the column claims, and a refusal does not demonstrate
 it.
 
+The export window is shared by every selection. Both full-year paths build and
+save the ZIP through one exporter and resume from the ledger's saved export
+phase. The only step that differs is the offscreen builder for derived files,
+which branches by return type and by whether portal JSON was staged. The
+export-window matrix therefore records the pair once per full-year return, on
+the selection that stages every offered format (else the only format), and a
+test derives those rows. This gives up a live observation of a restart during
+export for a PDF-only or single-format year. That builder path is a subset of
+the observed branch, and unit tests cover the builder's outcome for each format;
+the recovery under test is the same code in every case.
+
 The panel's all-returns presets run a separate plan with its own ledger and a
-combined final ZIP, which no selection row enters. The all-returns matrix
-records that plan in one row. Its contents cell is derived from the canonical
-plan expansion, `expandAllSupportedFullFiscalYearTargetPlan`, so adding a return
-or a format to the catalogue fails the test until the row is re-recorded;
-evidence gathered against the old plan cannot stand for the new one. Its
-observations use the same columns and the same legend.
+combined final ZIP, which no selection row enters, and its mixed plan takes a
+builder branch no single-return selection reaches. The all-returns matrix
+records that plan in one row, with its own export-window pair. Its contents
+cell is derived from the canonical plan expansion,
+`expandAllSupportedFullFiscalYearTargetPlan`, so adding a return or a format to
+the catalogue fails the test until the row is re-recorded;
+evidence gathered against the old plan cannot stand for the new one. Every
+observation in all three matrices uses the same legend.
 
 Every cell must match one complete row in this legend. The test renders the
 legend from the same rule table used for validation, so state, reason, date,
@@ -308,20 +323,30 @@ data are unrepresentable in the matrix.
 
 <!-- BEGIN: full-year-recovery-matrix -->
 
-| Return type | Artifact type | Service-worker restart          | Browser restart                 | Service-worker restart during export | Browser restart during export   | Interrupted download            | Cancellation/discard and cleanup | Retained checkpoint; browser record unavailable | Expected fail-closed / not applicable                 |
-| ----------- | ------------- | ------------------------------- | ------------------------------- | ------------------------------------ | ------------------------------- | ------------------------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
-| GSTR-3B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-3B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-3B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-1      | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-1      | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-2B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-2B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-2B     | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
-| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| Return type | Artifact type | Service-worker restart          | Browser restart                 | Interrupted download            | Cancellation/discard and cleanup | Retained checkpoint; browser record unavailable | Expected fail-closed / not applicable                 |
+| ----------- | ------------- | ------------------------------- | ------------------------------- | ------------------------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| GSTR-3B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-3B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-3B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | PDF           | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | JSON          | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | EXCEL         | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
+| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded | not-yet-run; date: not-recorded  | not-yet-run; date: not-recorded                 | not-yet-run; date: not-recorded; reason: not-recorded |
 
 <!-- END: full-year-recovery-matrix -->
+
+<!-- BEGIN: full-year-export-window-recovery-matrix -->
+
+| Return type | Artifact type | Service-worker restart during export | Browser restart during export   |
+| ----------- | ------------- | ------------------------------------ | ------------------------------- |
+| GSTR-3B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded |
+| GSTR-1      | PDF_AND_EXCEL | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded |
+| GSTR-2B     | PDF_AND_EXCEL | not-yet-run; date: not-recorded      | not-yet-run; date: not-recorded |
+
+<!-- END: full-year-export-window-recovery-matrix -->
 
 <!-- BEGIN: full-year-all-returns-recovery-matrix -->
 
