@@ -13,6 +13,8 @@ import {
   FULL_FISCAL_YEAR_PERIOD,
   getFiledReturnsFullFiscalYearPeriods,
 } from "../../src/connectors/gst/filed-returns-scope";
+import { pinLikeTheChildFlow } from "./full-year-completion-fixtures.test-helpers";
+import type { SinglePeriodRunner } from "../../src/background/filed-returns-full-fiscal-year";
 
 const storage = vi.hoisted(() => ({
   local: {} as Record<string, unknown>,
@@ -146,10 +148,16 @@ async function persistInitialObservation(): Promise<void> {
       ]);
     },
   );
-  const runSinglePeriod = vi.fn(async (targetScope: FiledReturnsDownloadScope) => ({
-    ok: true as const,
-    flowStep: stagedPeriodStep(targetScope),
-  }));
+  const runSinglePeriod = vi.fn(
+    async (
+      targetScope: FiledReturnsDownloadScope,
+      _runDeps?: unknown,
+      options?: Parameters<SinglePeriodRunner>[2],
+    ) => {
+      await pinLikeTheChildFlow(options);
+      return { ok: true as const, flowStep: stagedPeriodStep(targetScope) };
+    },
+  );
 
   await startFullFiscalYearDownloadFlow(scope, deps(), runSinglePeriod);
 
