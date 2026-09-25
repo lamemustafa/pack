@@ -540,6 +540,11 @@ function AllReturnsPreset({
   );
 }
 
+/** "FY <year>" as one unbreakable unit, so a narrow panel never splits the year at its hyphen. */
+export function FinancialYearText({ financialYear }: { financialYear: string }) {
+  return <span className="panel-fy">{`FY ${financialYear}`}</span>;
+}
+
 /**
  * Whether a rendered plan still describes what a run started now would fetch.
  * Derived from the same builder the action dispatches against, so a panel left

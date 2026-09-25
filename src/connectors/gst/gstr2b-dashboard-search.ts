@@ -2,6 +2,7 @@ import {
   CLICKABLE_CONTROL_SELECTOR,
   getClickableElements,
   normaliseText,
+  readElementText,
 } from "./filed-returns-dom";
 
 const SEARCH_IDENTITY_SELECTOR = ["[class*='srchbtn']", "[class*='search']", "[id*='search']"].join(
@@ -45,19 +46,4 @@ function isClickableHtmlElement(element: Element): element is HTMLElement {
     return false;
   }
   return typeof (element as Partial<HTMLElement>).click === "function";
-}
-
-function readElementText(element: HTMLElement): string {
-  const HTMLInputElementConstructor = element.ownerDocument.defaultView?.HTMLInputElement;
-  const inputValue =
-    HTMLInputElementConstructor && element instanceof HTMLInputElementConstructor
-      ? element.value
-      : "";
-  return [
-    element.innerText || "",
-    element.textContent || "",
-    inputValue,
-    element.getAttribute("aria-label") ?? "",
-    element.getAttribute("title") ?? "",
-  ].join(" ");
 }

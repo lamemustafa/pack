@@ -6,6 +6,7 @@ import {
   isFiledReturnsArtifactType,
   supportsFiledReturnsArtifactType,
 } from "../../src/connectors/gst/filed-returns-artifacts";
+import { expandAllSupportedFullFiscalYearTargetPlan } from "../../src/connectors/gst/filed-returns-all-supported-full-fiscal-year";
 import {
   FILED_RETURNS_RETURN_TYPES,
   isFiledReturnsReturnType,
@@ -15,24 +16,65 @@ import {
 const rootDir = process.cwd();
 const matrixStart = "<!-- BEGIN: full-year-recovery-matrix -->";
 const matrixEnd = "<!-- END: full-year-recovery-matrix -->";
+const exportWindowMatrixStart = "<!-- BEGIN: full-year-export-window-recovery-matrix -->";
+const exportWindowMatrixEnd = "<!-- END: full-year-export-window-recovery-matrix -->";
+const allReturnsMatrixStart = "<!-- BEGIN: full-year-all-returns-recovery-matrix -->";
+const allReturnsMatrixEnd = "<!-- END: full-year-all-returns-recovery-matrix -->";
 const legendStart = "<!-- BEGIN: full-year-recovery-cell-legend -->";
 const legendEnd = "<!-- END: full-year-recovery-cell-legend -->";
 const storeChecklistStart = "## Chrome Web Store Checklist";
 const storeChecklistEnd = "## Suggested Store Copy";
-const matrixColumns = [
+type ObservationColumnKind = "export-window" | "expectation" | "recovery";
+interface ObservationColumn {
+  kind: ObservationColumnKind;
+  name: string;
+}
+const acquisitionRestartColumns: readonly ObservationColumn[] = [
+  { kind: "recovery", name: "Service-worker restart" },
+  { kind: "recovery", name: "Browser restart" },
+];
+// The export-window pair exists because the acquisition restart columns can both be satisfied
+// before any ZIP is built (#347, #348). Its observations name which teardown was survived after
+// the last target was saved.
+const exportWindowColumns: readonly ObservationColumn[] = [
+  { kind: "export-window", name: "Service-worker restart during export" },
+  { kind: "export-window", name: "Browser restart during export" },
+];
+const laterRecoveryColumns: readonly ObservationColumn[] = [
+  { kind: "recovery", name: "Interrupted download" },
+  { kind: "recovery", name: "Cancellation/discard and cleanup" },
+  { kind: "recovery", name: "Retained checkpoint; browser record unavailable" },
+];
+const expectationColumns: readonly ObservationColumn[] = [
+  { kind: "expectation", name: "Expected fail-closed / not applicable" },
+];
+const selectionObservationColumns = [
+  ...acquisitionRestartColumns,
+  ...laterRecoveryColumns,
+  ...expectationColumns,
+];
+const allReturnsObservationColumns = [
+  ...acquisitionRestartColumns,
+  ...exportWindowColumns,
+  ...laterRecoveryColumns,
+  ...expectationColumns,
+];
+const matrixColumns = ["Return type", "Artifact type", ...columnNames(selectionObservationColumns)];
+const exportWindowMatrixColumns = [
   "Return type",
   "Artifact type",
-  "Service-worker restart",
-  "Browser restart",
-  "Interrupted download",
-  "Cancellation/discard and cleanup",
-  "Retained checkpoint; browser record unavailable",
-  "Expected fail-closed / not applicable",
+  ...columnNames(exportWindowColumns),
 ];
+const allReturnsMatrixColumns = [
+  "Plan",
+  "Returns and formats",
+  ...columnNames(allReturnsObservationColumns),
+];
+const allReturnsPlanLabel = "All supported returns";
 const observationPattern =
   /^([a-z]+(?:-[a-z]+)*); date: ([^;\s]+)(?:; reason: ([a-z]+(?:-[a-z]+)*))?$/;
 type DateConstraint = "not-recorded" | "recorded-not-future";
-type ColumnConstraint = "any" | "expectation-only" | "scenario-only";
+type ColumnConstraint = "expectation-only" | "export-window-only" | "recovery-only" | "scenario";
 type RowCapability = "acquisition-capable" | "not-acquisition-capable";
 type RowCapabilityConstraint = "any" | RowCapability;
 interface ObservationCellRule {
@@ -46,7 +88,7 @@ interface ObservationCellRule {
 }
 const observationCellRules: readonly ObservationCellRule[] = [
   {
-    columnConstraint: "scenario-only",
+    columnConstraint: "scenario",
     completionEligible: true,
     dateConstraint: "recorded-not-future",
     reasons: [undefined],
@@ -54,7 +96,7 @@ const observationCellRules: readonly ObservationCellRule[] = [
     state: "pass",
   },
   {
-    columnConstraint: "scenario-only",
+    columnConstraint: "scenario",
     completionEligible: false,
     dateConstraint: "recorded-not-future",
     reasons: [undefined],
@@ -62,8 +104,19 @@ const observationCellRules: readonly ObservationCellRule[] = [
     state: "fail",
   },
   {
-    columnConstraint: "scenario-only",
+    columnConstraint: "recovery-only",
     completionEligible: true,
+    dateConstraint: "recorded-not-future",
+    reasons: ["expected-fail-closed-boundary"],
+    rowCapabilityConstraint: "any",
+    state: "fail-closed-as-expected",
+  },
+  // Rebuilding and exporting the saved plan is the property an export-window column claims, and a
+  // refusal does not demonstrate it (#347). The refusal stays recordable, so a safe stop is not
+  // mislabelled a defect, but it cannot complete the gate.
+  {
+    columnConstraint: "export-window-only",
+    completionEligible: false,
     dateConstraint: "recorded-not-future",
     reasons: ["expected-fail-closed-boundary"],
     rowCapabilityConstraint: "any",
@@ -79,7 +132,7 @@ const observationCellRules: readonly ObservationCellRule[] = [
     state: "fail-closed-as-expected",
   },
   {
-    columnConstraint: "scenario-only",
+    columnConstraint: "scenario",
     completionEligible: false,
     dateConstraint: "recorded-not-future",
     reasons: ["recovery-scenario-not-applicable"],
@@ -87,7 +140,7 @@ const observationCellRules: readonly ObservationCellRule[] = [
     state: "not-applicable",
   },
   {
-    columnConstraint: "scenario-only",
+    columnConstraint: "scenario",
     completionEligible: true,
     dateConstraint: "recorded-not-future",
     reasons: ["recovery-scenario-not-applicable"],
@@ -104,7 +157,7 @@ const observationCellRules: readonly ObservationCellRule[] = [
     state: "not-applicable",
   },
   {
-    columnConstraint: "scenario-only",
+    columnConstraint: "scenario",
     completionEligible: false,
     dateConstraint: "not-recorded",
     reasons: [undefined],
@@ -122,6 +175,10 @@ const observationCellRules: readonly ObservationCellRule[] = [
 ];
 const recoveryMatrixCheckboxPattern =
   /^- \[( |x)\] The authorised live full fiscal year recovery matrix below is complete:/m;
+const exportWindowMatrixCheckboxPattern =
+  /^- \[( |x)\] The authorised live full fiscal year export-window restart matrix below is complete:/m;
+const allReturnsMatrixCheckboxPattern =
+  /^- \[( |x)\] The authorised live full fiscal year all-returns recovery matrix below is complete:/m;
 const storeChecklistEvidenceTokenPattern =
   /`(?:\.github\/|docs\/|scripts\/|src\/|tests\/|wxt\.config\.ts)[^`]*`|\b20\d{2}-\d{2}-\d{2}\b|\b(?:GitHub Actions run|[Ww]orkflow run|Run) `\d{8,}`/;
 
@@ -158,6 +215,108 @@ describe("publication readiness recovery matrix", () => {
     assertCanonicalSelections(matrixRows(await readRecoveryMatrix()));
   });
 
+  it("tracks the all-returns plan as one row bound to the canonical plan expansion", async () => {
+    assertCanonicalAllReturnsPlan(allReturnsMatrixRows(await readAllReturnsMatrix()));
+  });
+
+  it("rejects an all-returns row recorded against a different plan", async () => {
+    const stale = (await readAllReturnsMatrix()).replace(
+      canonicalAllReturnsPlanContents(),
+      "GSTR-3B: PDF",
+    );
+
+    expect(() => assertCanonicalAllReturnsPlan(allReturnsMatrixRows(stale))).toThrow();
+  });
+
+  it("keeps every all-returns observation fillable, dated, and reasoned when required", async () => {
+    for (const row of allReturnsMatrixRows(await readAllReturnsMatrix())) {
+      const rowCapability = deriveAllReturnsRowCapability(row);
+      const observations = row.slice(2);
+      expect(observations.length).toBe(allReturnsObservationColumns.length);
+
+      for (const [index, observation] of observations.entries()) {
+        validateObservation(
+          observation,
+          observationColumnKind(allReturnsObservationColumns, index),
+          rowCapability,
+        );
+      }
+    }
+  });
+
+  it("tracks one export-window row per full-year return, on its all-formats selection", async () => {
+    assertCanonicalExportWindowSelections(exportWindowMatrixRows(await readExportWindowMatrix()));
+  });
+
+  it("rejects an export-window row recorded on a narrower selection", async () => {
+    const narrowed = (await readExportWindowMatrix()).replace(
+      /\| GSTR-3B( *)\| PDF_AND_EXCEL \|/,
+      (_match, padding: string) => `| GSTR-3B${padding}| PDF           |`,
+    );
+
+    expect(() => assertCanonicalExportWindowSelections(exportWindowMatrixRows(narrowed))).toThrow();
+  });
+
+  it("keeps every export-window observation fillable and dated", async () => {
+    for (const [returnType = "", artifactType = "", ...observations] of exportWindowMatrixRows(
+      await readExportWindowMatrix(),
+    )) {
+      const rowCapability = deriveRowCapability(returnType, artifactType);
+      expect(observations.length).toBe(exportWindowColumns.length);
+
+      for (const [index, observation] of observations.entries()) {
+        validateObservation(
+          observation,
+          observationColumnKind(exportWindowColumns, index),
+          rowCapability,
+        );
+      }
+    }
+  });
+
+  it("records a boundary refusal in an export-window column without completing it", () => {
+    const refusal = `fail-closed-as-expected; date: ${utcDateOffset(0)}; reason: expected-fail-closed-boundary`;
+
+    expect(
+      validateObservation(refusal, "export-window", "acquisition-capable").completionEligible,
+    ).toBe(false);
+    expect(validateObservation(refusal, "recovery", "acquisition-capable").completionEligible).toBe(
+      true,
+    );
+  });
+
+  it("cannot complete a row whose export-window observation is only a refusal", () => {
+    const today = utcDateOffset(0);
+    const pass = `pass; date: ${today}`;
+    const refusal = `fail-closed-as-expected; date: ${today}; reason: expected-fail-closed-boundary`;
+    const allReturns = allReturnsObservationColumns.map((column) =>
+      column.kind === "expectation" ? refusal : pass,
+    );
+    const exportWindowIndex = allReturnsObservationColumns.findIndex(
+      (column) => column.kind === "export-window",
+    );
+    const allReturnsWithRefusal = allReturns.map((cell, index) =>
+      index === exportWindowIndex ? refusal : cell,
+    );
+
+    expect(() =>
+      assertObservationsComplete(allReturns, allReturnsObservationColumns, "acquisition-capable"),
+    ).not.toThrow();
+    expect(() =>
+      assertObservationsComplete(
+        allReturnsWithRefusal,
+        allReturnsObservationColumns,
+        "acquisition-capable",
+      ),
+    ).toThrow();
+    expect(() =>
+      assertExportWindowRowComplete(["GSTR-3B", "PDF_AND_EXCEL", pass, pass]),
+    ).not.toThrow();
+    expect(() =>
+      assertExportWindowRowComplete(["GSTR-3B", "PDF_AND_EXCEL", pass, refusal]),
+    ).toThrow();
+  });
+
   it("requires every checked Store item to carry a recorded evidence token", async () => {
     const checkedItems = checklistItems(
       markedSection(await readPublicationReadiness(), storeChecklistStart, storeChecklistEnd),
@@ -188,11 +347,7 @@ describe("publication readiness recovery matrix", () => {
     const unexpectedRow = [
       "Notes",
       "unexpected",
-      unfilled,
-      unfilled,
-      unfilled,
-      unfilled,
-      unfilled,
+      ...Array<string>(selectionObservationColumns.length - 1).fill(unfilled),
       `${unfilled}; reason: not-recorded`,
     ];
     const matrixWithUnexpectedRow = `${matrix.trimEnd()}\n| ${unexpectedRow.join(" | ")} |\n`;
@@ -205,10 +360,16 @@ describe("publication readiness recovery matrix", () => {
 
     for (const [returnType = "", artifactType = "", ...observations] of matrixRows(matrix)) {
       const rowCapability = deriveRowCapability(returnType, artifactType);
-      expect(observations.length, "matrix row must have six observation cells").toBe(6);
+      expect(observations.length, "matrix row must have one cell per observation column").toBe(
+        selectionObservationColumns.length,
+      );
 
       for (const [index, observation] of observations.entries()) {
-        validateObservation(observation, index === observations.length - 1, rowCapability);
+        validateObservation(
+          observation,
+          observationColumnKind(selectionObservationColumns, index),
+          rowCapability,
+        );
       }
     }
   });
@@ -218,62 +379,67 @@ describe("publication readiness recovery matrix", () => {
     "fail-closed-as-expected; date: 2026-08-17; reason: recovery-scenario-not-applicable",
     "fail-closed-as-expected; date: 2026-08-17; reason: selection-not-acquisition-capable",
   ])("rejects a reason assigned to the wrong state: %s", (observation) => {
-    expect(() => validateObservation(observation, false, "acquisition-capable")).toThrow();
+    expect(() => validateObservation(observation, "recovery", "acquisition-capable")).toThrow();
   });
 
   it("accepts today and past dates but rejects future evidence", () => {
     expect(() =>
-      validateObservation(`pass; date: ${utcDateOffset(-1)}`, false, "acquisition-capable"),
+      validateObservation(`pass; date: ${utcDateOffset(-1)}`, "recovery", "acquisition-capable"),
     ).not.toThrow();
     expect(() =>
-      validateObservation(`pass; date: ${utcDateOffset(0)}`, false, "acquisition-capable"),
+      validateObservation(`pass; date: ${utcDateOffset(0)}`, "recovery", "acquisition-capable"),
     ).not.toThrow();
     expect(() =>
-      validateObservation(`pass; date: ${utcDateOffset(1)}`, false, "acquisition-capable"),
+      validateObservation(`pass; date: ${utcDateOffset(1)}`, "recovery", "acquisition-capable"),
     ).toThrow();
   });
 
   it("allows date not-recorded only for the not-yet-run placeholder", () => {
     expect(() =>
-      validateObservation("not-yet-run; date: not-recorded", false, "acquisition-capable"),
+      validateObservation("not-yet-run; date: not-recorded", "recovery", "acquisition-capable"),
     ).not.toThrow();
     expect(() =>
-      validateObservation("pass; date: not-recorded", false, "acquisition-capable"),
+      validateObservation("pass; date: not-recorded", "recovery", "acquisition-capable"),
     ).toThrow();
     expect(() =>
-      validateObservation(`not-yet-run; date: ${utcDateOffset(0)}`, false, "acquisition-capable"),
+      validateObservation(
+        `not-yet-run; date: ${utcDateOffset(0)}`,
+        "recovery",
+        "acquisition-capable",
+      ),
     ).toThrow();
   });
 
   it("rejects a combination absent from the whole-cell table", () => {
     expect(() =>
-      validateObservation(`manual-review; date: ${utcDateOffset(0)}`, false, "acquisition-capable"),
+      validateObservation(
+        `manual-review; date: ${utcDateOffset(0)}`,
+        "recovery",
+        "acquisition-capable",
+      ),
     ).toThrow();
   });
 
   it.each([
     [
       "not-applicable; date: 2026-08-17; reason: recovery-scenario-not-applicable",
-      true,
+      "expectation" as const,
       "acquisition-capable" as const,
     ],
     [
       "not-applicable; date: 2026-08-17; reason: selection-not-acquisition-capable",
-      false,
+      "recovery" as const,
       "not-acquisition-capable" as const,
     ],
-  ])(
-    "rejects a reason in the wrong column: %s",
-    (observation, expectationColumn, rowCapability) => {
-      expect(() => validateObservation(observation, expectationColumn, rowCapability)).toThrow();
-    },
-  );
+  ])("rejects a reason in the wrong column: %s", (observation, columnKind, rowCapability) => {
+    expect(() => validateObservation(observation, columnKind, rowCapability)).toThrow();
+  });
 
   it.each(["2026-99-99", "2026-02-29", "2026-04-31"])(
     "rejects the non-calendar date %s",
     (date) => {
       expect(() =>
-        validateObservation(`pass; date: ${date}`, false, "acquisition-capable"),
+        validateObservation(`pass; date: ${date}`, "recovery", "acquisition-capable"),
       ).toThrow();
     },
   );
@@ -281,6 +447,53 @@ describe("publication readiness recovery matrix", () => {
   it("cannot mark the recovery gate complete while any observation is unfilled", async () => {
     const readiness = await readPublicationReadiness();
     assertRecoveryGate(readiness);
+    assertExportWindowRecoveryGate(readiness);
+    assertAllReturnsRecoveryGate(readiness);
+  });
+
+  it("cannot mark the export-window gate complete while any observation is unfilled", async () => {
+    const unfilled = (await readPublicationReadiness()).replace(
+      exportWindowMatrixCheckboxPattern,
+      "- [x] The authorised live full fiscal year export-window restart matrix below is complete:",
+    );
+
+    expect(() => assertExportWindowRecoveryGate(unfilled)).toThrow();
+  });
+
+  it("cannot mark the export-window gate complete when a filled observation failed", async () => {
+    const today = utcDateOffset(0);
+    const completed = fillRecoveryMatrix(await readPublicationReadiness());
+    const failed = replaceInSection(
+      completed,
+      exportWindowMatrix(completed),
+      `pass; date: ${today}`,
+      `fail; date: ${today}`,
+    );
+
+    expect(() => assertExportWindowRecoveryGate(completed)).not.toThrow();
+    expect(() => assertExportWindowRecoveryGate(failed)).toThrow();
+  });
+
+  it("cannot mark the all-returns gate complete while any observation is unfilled", async () => {
+    const unfilled = (await readPublicationReadiness()).replace(
+      allReturnsMatrixCheckboxPattern,
+      "- [x] The authorised live full fiscal year all-returns recovery matrix below is complete:",
+    );
+
+    expect(() => assertAllReturnsRecoveryGate(unfilled)).toThrow();
+  });
+
+  it("cannot mark the all-returns gate complete when its filled observation failed", async () => {
+    const today = utcDateOffset(0);
+    const completed = fillRecoveryMatrix(await readPublicationReadiness());
+    const failed = replaceInAllReturnsMatrix(
+      completed,
+      `pass; date: ${today}`,
+      `fail; date: ${today}`,
+    );
+
+    expect(() => assertRecoveryGate(failed)).not.toThrow();
+    expect(() => assertAllReturnsRecoveryGate(failed)).toThrow();
   });
 
   it("cannot mark the recovery gate complete when any filled observation failed", async () => {
@@ -297,7 +510,7 @@ describe("publication readiness recovery matrix", () => {
     const today = utcDateOffset(0);
     let completed = fillRecoveryMatrix(await readPublicationReadiness());
 
-    for (let scenario = 0; scenario < 5; scenario += 1) {
+    for (let scenario = 0; scenario < selectionObservationColumns.length - 1; scenario += 1) {
       completed = completed.replace(
         `pass; date: ${today}`,
         `not-applicable; date: ${today}; reason: recovery-scenario-not-applicable`,
@@ -316,10 +529,31 @@ describe("publication readiness recovery matrix", () => {
       assertRecoveryRowComplete([
         "GSTR-1",
         "JSON",
-        ...Array<string>(5).fill(scenario),
+        ...Array<string>(selectionObservationColumns.length - 1).fill(scenario),
         expectation,
       ]),
     ).not.toThrow();
+  });
+
+  it("does not let a non-capable selection complete an export window by refusal", () => {
+    const today = utcDateOffset(0);
+    const refusal = `fail-closed-as-expected; date: ${today}; reason: expected-fail-closed-boundary`;
+    const noExport = `not-applicable; date: ${today}; reason: recovery-scenario-not-applicable`;
+
+    expect(() =>
+      assertObservationsComplete(
+        [noExport, noExport],
+        exportWindowColumns,
+        "not-acquisition-capable",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertObservationsComplete(
+        [refusal, noExport],
+        exportWindowColumns,
+        "not-acquisition-capable",
+      ),
+    ).toThrow();
   });
 
   it("rejects a recorded capability claim that contradicts the derived value", () => {
@@ -330,7 +564,7 @@ describe("publication readiness recovery matrix", () => {
       assertRecoveryRowComplete([
         "GSTR-3B",
         "PDF",
-        ...Array<string>(5).fill(`pass; date: ${today}`),
+        ...Array<string>(selectionObservationColumns.length - 1).fill(`pass; date: ${today}`),
         expectation,
       ]),
     ).toThrow(
@@ -341,6 +575,8 @@ describe("publication readiness recovery matrix", () => {
   it("accepts a checked matrix only when every cell is completion-eligible", async () => {
     const completed = fillRecoveryMatrix(await readPublicationReadiness());
     expect(() => assertRecoveryGate(completed)).not.toThrow();
+    expect(() => assertExportWindowRecoveryGate(completed)).not.toThrow();
+    expect(() => assertAllReturnsRecoveryGate(completed)).not.toThrow();
   });
 });
 
@@ -353,15 +589,79 @@ function assertRecoveryGate(readiness: string): void {
   for (const row of matrixRows(recoveryMatrix(readiness))) assertRecoveryRowComplete(row);
 }
 
+function assertAllReturnsRecoveryGate(readiness: string): void {
+  const checkbox = readiness.match(allReturnsMatrixCheckboxPattern);
+
+  expect(checkbox).not.toBeNull();
+  if (checkbox?.[1] !== "x") return;
+
+  for (const row of allReturnsMatrixRows(allReturnsMatrix(readiness))) {
+    assertObservationsComplete(
+      row.slice(2),
+      allReturnsObservationColumns,
+      deriveAllReturnsRowCapability(row),
+    );
+  }
+}
+
+function assertExportWindowRecoveryGate(readiness: string): void {
+  const checkbox = readiness.match(exportWindowMatrixCheckboxPattern);
+
+  expect(checkbox).not.toBeNull();
+  if (checkbox?.[1] !== "x") return;
+
+  const rows = exportWindowMatrixRows(exportWindowMatrix(readiness));
+  assertCanonicalExportWindowSelections(rows);
+  for (const row of rows) assertExportWindowRowComplete(row);
+}
+
+function assertExportWindowRowComplete(row: string[]): void {
+  const [returnType = "", artifactType = "", ...observations] = row;
+  assertObservationsComplete(
+    observations,
+    exportWindowColumns,
+    deriveRowCapability(returnType, artifactType),
+  );
+}
+
 function assertRecoveryRowComplete(row: string[]): void {
   const [returnType = "", artifactType = "", ...observations] = row;
-  const rowCapability = deriveRowCapability(returnType, artifactType);
-  expect(observations.length, "matrix row must have six observation cells").toBe(6);
+  assertObservationsComplete(
+    observations,
+    selectionObservationColumns,
+    deriveRowCapability(returnType, artifactType),
+  );
+}
 
+function assertObservationsComplete(
+  observations: string[],
+  columns: readonly ObservationColumn[],
+  rowCapability: RowCapability,
+): void {
+  expect(observations.length, "matrix row must have one cell per observation column").toBe(
+    columns.length,
+  );
   for (const [index, observation] of observations.entries()) {
-    const rule = validateObservation(observation, index === observations.length - 1, rowCapability);
+    const rule = validateObservation(
+      observation,
+      observationColumnKind(columns, index),
+      rowCapability,
+    );
     expect(rule.completionEligible, "matrix completion requires an eligible cell state").toBe(true);
   }
+}
+
+function columnNames(columns: readonly ObservationColumn[]): string[] {
+  return columns.map((column) => column.name);
+}
+
+function observationColumnKind(
+  columns: readonly ObservationColumn[],
+  index: number,
+): ObservationColumnKind {
+  const column = columns[index];
+  if (!column) throw new Error("matrix row has more observation cells than columns");
+  return column.kind;
 }
 
 function fillRecoveryMatrix(readiness: string): string {
@@ -371,11 +671,36 @@ function fillRecoveryMatrix(readiness: string): string {
       recoveryMatrixCheckboxPattern,
       "- [x] The authorised live full fiscal year recovery matrix below is complete:",
     )
+    .replace(
+      exportWindowMatrixCheckboxPattern,
+      "- [x] The authorised live full fiscal year export-window restart matrix below is complete:",
+    )
+    .replace(
+      allReturnsMatrixCheckboxPattern,
+      "- [x] The authorised live full fiscal year all-returns recovery matrix below is complete:",
+    )
     .replaceAll(
       "not-yet-run; date: not-recorded; reason: not-recorded",
       `fail-closed-as-expected; date: ${today}; reason: expected-fail-closed-boundary`,
     )
     .replaceAll("not-yet-run; date: not-recorded", `pass; date: ${today}`);
+}
+
+function replaceInAllReturnsMatrix(readiness: string, from: string, to: string): string {
+  return replaceInSection(readiness, allReturnsMatrix(readiness), from, to);
+}
+
+function replaceInSection(readiness: string, section: string, from: string, to: string): string {
+  expect(section.includes(from)).toBe(true);
+  return readiness.replace(section, section.replace(from, to));
+}
+
+async function readExportWindowMatrix(): Promise<string> {
+  return exportWindowMatrix(await readPublicationReadiness());
+}
+
+async function readAllReturnsMatrix(): Promise<string> {
+  return allReturnsMatrix(await readPublicationReadiness());
 }
 
 async function readRecoveryMatrix(): Promise<string> {
@@ -390,6 +715,14 @@ function recoveryMatrix(readiness: string): string {
   return markedSection(readiness, matrixStart, matrixEnd);
 }
 
+function exportWindowMatrix(readiness: string): string {
+  return markedSection(readiness, exportWindowMatrixStart, exportWindowMatrixEnd);
+}
+
+function allReturnsMatrix(readiness: string): string {
+  return markedSection(readiness, allReturnsMatrixStart, allReturnsMatrixEnd);
+}
+
 function markedSection(document: string, startMarker: string, endMarker: string): string {
   const start = document.indexOf(startMarker);
   const end = document.indexOf(endMarker);
@@ -400,6 +733,18 @@ function markedSection(document: string, startMarker: string, endMarker: string)
 }
 
 function matrixRows(matrix: string): string[][] {
+  return tableRows(matrix, matrixColumns);
+}
+
+function exportWindowMatrixRows(matrix: string): string[][] {
+  return tableRows(matrix, exportWindowMatrixColumns);
+}
+
+function allReturnsMatrixRows(matrix: string): string[][] {
+  return tableRows(matrix, allReturnsMatrixColumns);
+}
+
+function tableRows(matrix: string, columns: readonly string[]): string[][] {
   const lines = matrix
     .split("\n")
     .map((line) => line.trim())
@@ -409,18 +754,17 @@ function matrixRows(matrix: string): string[][] {
 
   const [header, separator, ...dataRows] = lines.map(parseMatrixRow);
   expect(
-    header?.every((cell, index) => cell === matrixColumns[index]) &&
-      header.length === matrixColumns.length,
+    header?.every((cell, index) => cell === columns[index]) && header.length === columns.length,
     "matrix header must match the canonical columns",
   ).toBe(true);
   expect(separator?.length, "matrix separator must match the canonical column count").toBe(
-    matrixColumns.length,
+    columns.length,
   );
   expect(separator?.every((cell) => /^:?-{3,}:?$/.test(cell))).toBe(true);
 
   for (const row of dataRows) {
     expect(row.length, "matrix data row must match the canonical column count").toBe(
-      matrixColumns.length,
+      columns.length,
     );
   }
   return dataRows;
@@ -467,6 +811,59 @@ function assertCanonicalSelections(rows: string[][]): void {
   expect(new Set(documentedSelections).size).toBe(documentedSelections.length);
 }
 
+/**
+ * The export window is shared by every selection; only the offscreen builder for derived files
+ * branches, by return type and by whether portal JSON was staged. One row per full-year return,
+ * on the selection that stages every offered format, exercises each builder branch once.
+ */
+function canonicalExportWindowSelections(): string[] {
+  return FILED_RETURNS_RETURN_TYPES.filter(supportsFullFiscalYearFiledReturnsRun).map(
+    (returnType) => {
+      const artifactType = supportsFiledReturnsArtifactType(returnType, "PDF_AND_EXCEL")
+        ? "PDF_AND_EXCEL"
+        : FILED_RETURNS_ARTIFACT_TYPES.find((candidate) =>
+            supportsFiledReturnsArtifactType(returnType, candidate),
+          );
+      return [returnType, artifactType ?? "none"].join(" | ");
+    },
+  );
+}
+
+function assertCanonicalExportWindowSelections(rows: string[][]): void {
+  expect(
+    rows.map(([returnType, artifactType]) => [returnType, artifactType].join(" | ")),
+    "export-window matrix must hold one row per full-year return on its all-formats selection",
+  ).toEqual(canonicalExportWindowSelections());
+}
+
+/**
+ * The all-returns row is bound to the canonical plan expansion, so a return or format added to the
+ * catalogue changes the expected row text and fails this test until the row is re-recorded: evidence
+ * gathered against the old plan cannot silently stand for the new one.
+ */
+function canonicalAllReturnsPlanContents(): string {
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  if (!expansion.ok) return "no full-year plan";
+  return expansion.targets
+    .map((target) => `${target.returnType}: ${target.concreteArtifactTypes.join(", ")}`)
+    .join("; ");
+}
+
+function assertCanonicalAllReturnsPlan(rows: string[][]): void {
+  expect(
+    rows.map(([plan, contents]) => [plan, contents]),
+    "all-returns matrix must hold exactly the canonical plan row",
+  ).toEqual([[allReturnsPlanLabel, canonicalAllReturnsPlanContents()]]);
+}
+
+function deriveAllReturnsRowCapability(row: string[]): RowCapability {
+  assertCanonicalAllReturnsPlan([row]);
+  const expansion = expandAllSupportedFullFiscalYearTargetPlan();
+  return expansion.ok && expansion.targets.length > 0
+    ? "acquisition-capable"
+    : "not-acquisition-capable";
+}
+
 function deriveRowCapability(returnType: string, artifactType: string): RowCapability {
   if (!isFiledReturnsReturnType(returnType) || !isFiledReturnsArtifactType(artifactType)) {
     throw new Error("matrix row does not use canonical return and artifact types");
@@ -480,7 +877,7 @@ function deriveRowCapability(returnType: string, artifactType: string): RowCapab
 
 function validateObservation(
   observation: string,
-  expectationColumn: boolean,
+  columnKind: ObservationColumnKind,
   rowCapability: RowCapability,
 ): ObservationCellRule {
   const parsed = observation.match(observationPattern);
@@ -493,7 +890,7 @@ function validateObservation(
       candidate.state === state &&
       candidate.reasons.includes(reason) &&
       dateMatchesConstraint(date ?? "", candidate.dateConstraint) &&
-      columnMatchesConstraint(expectationColumn, candidate.columnConstraint),
+      columnMatchesConstraint(columnKind, candidate.columnConstraint),
   );
   const rule = matchingCellRules.find((candidate) =>
     rowCapabilityMatchesConstraint(rowCapability, candidate.rowCapabilityConstraint),
@@ -526,11 +923,13 @@ function dateMatchesConstraint(value: string, constraint: DateConstraint): boole
 }
 
 function columnMatchesConstraint(
-  expectationColumn: boolean,
+  columnKind: ObservationColumnKind,
   constraint: ColumnConstraint,
 ): boolean {
-  if (constraint === "any") return true;
-  return expectationColumn === (constraint === "expectation-only");
+  if (constraint === "scenario") return columnKind !== "expectation";
+  if (constraint === "recovery-only") return columnKind === "recovery";
+  if (constraint === "export-window-only") return columnKind === "export-window";
+  return columnKind === "expectation";
 }
 
 function rowCapabilityMatchesConstraint(
@@ -564,12 +963,12 @@ function renderObservationCellLegend(): string {
     const reasons = rule.reasons
       .map((reason) => (reason === undefined ? "none" : `\`${reason}\``))
       .join(" or ");
-    const column =
-      rule.columnConstraint === "any"
-        ? "any observation column"
-        : rule.columnConstraint === "expectation-only"
-          ? "final expectation column"
-          : "scenario columns";
+    const column = {
+      "expectation-only": "final expectation column",
+      "export-window-only": "export-window columns",
+      "recovery-only": "recovery scenario columns",
+      scenario: "scenario columns",
+    }[rule.columnConstraint];
     const rowCapability =
       rule.rowCapabilityConstraint === "any"
         ? "any derived capability"
