@@ -16,6 +16,13 @@ import {
   isAmbiguousFullFiscalYearZipHandoff,
 } from "./flow-summary";
 import { getBoundDeclinedArtifactSignal } from "../../connectors/gst/filed-returns-declined-artifact";
+import { FinancialYearText } from "./financial-year-text";
+
+/**
+ * Pack does not record which GST account made a saved run, and this summary also describes a
+ * selection with nothing saved yet -- so its label claims only the browser, true in every state.
+ */
+export const PACK_SUMMARY_LABEL = "In this browser";
 
 export function PackSummary({
   scope,
@@ -34,12 +41,12 @@ export function PackSummary({
   const singlePeriodMeta = getSinglePeriodMeta(summary);
 
   return (
-    <section className="pack-summary" aria-label="Your pack">
+    <section className="pack-summary" aria-label={PACK_SUMMARY_LABEL}>
       <div className="pack-summary-heading">
         <div>
-          <p className="section-label">Your pack</p>
+          <p className="section-label">{PACK_SUMMARY_LABEL}</p>
           <h2>
-            {scope.returnType} · FY {scope.financialYear.replace("-", "–")}
+            {scope.returnType} · <FinancialYearText financialYear={scope.financialYear} />
           </h2>
         </div>
         <div className="pack-motif" aria-hidden="true">

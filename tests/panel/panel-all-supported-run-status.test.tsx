@@ -161,7 +161,11 @@ describe("all-supported panel progress", () => {
     expect(packaged).not.toContain("Discard the saved FY 2025-26 plan and run again");
     expect(packaged).not.toContain("Resume this plan");
     // The summary itself still renders; only the actions are withheld.
-    expect(packaged).toContain("Your pack · All supported returns · FY 2025-26");
+    // Pack does not record which GST account made a saved plan, so the heading claims only where it lives.
+    expect(packaged).toContain(
+      'Saved in this browser · All supported returns · <span class="panel-fy">FY 2025-26</span>',
+    );
+    expect(packaged).not.toContain("Your pack");
 
     vi.stubEnv("MODE", "source-surfaces");
     expect(render(completed)).toContain("Discard the saved FY 2025-26 plan and run again");
@@ -187,7 +191,7 @@ describe("all-supported panel progress", () => {
 
     const markup = render(malformedIndexBlock);
 
-    expect(markup).toContain("Your pack · All supported returns");
+    expect(markup).toContain("Saved in this browser · All supported returns</strong>");
     expect(markup).not.toContain("FY undefined");
     expect(markup).not.toContain("Discard the saved FY 2025-26 plan and run again");
     expect(markup).not.toContain("Resume this plan");
@@ -310,7 +314,9 @@ describe("all-supported panel progress", () => {
       vi.setSystemTime(new Date("2026-09-22T09:00:00.000Z"));
       const markup = render(inYear("2023-24"));
 
-      expect(markup).toContain("Your pack · All supported returns · FY 2023-24");
+      expect(markup).toContain(
+        'Saved in this browser · All supported returns · <span class="panel-fy">FY 2023-24</span>',
+      );
       expect(markup).toContain("Discard the saved FY 2023-24 plan and run again");
       expect(markup).toContain("33 of 36 saved");
     });
@@ -414,7 +420,9 @@ describe("all-supported panel progress", () => {
     // The saved all-supported summary is the positive control: the rendered
     // run heading proves these rows belong to its blocked plan, not another
     // terminal surface.
-    expect(markup).toContain("Your pack · All supported returns · FY 2025-26");
+    expect(markup).toContain(
+      'Saved in this browser · All supported returns · <span class="panel-fy">FY 2025-26</span>',
+    );
     expect(markup).toContain('aria-label="GSTR-1 results"');
     expect(markup).toContain('aria-label="GSTR-2B results"');
     expect(markup).toContain('aria-label="GSTR-3B results"');
