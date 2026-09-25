@@ -18,10 +18,10 @@ import {
 import { getBoundDeclinedArtifactSignal } from "../../connectors/gst/filed-returns-declined-artifact";
 
 /**
- * Where a saved pack lives. Pack does not record which GST account made a saved run, so no
- * heading may claim it belongs to whoever is signed in -- only that this browser holds it.
+ * Pack does not record which GST account made a saved run, and this summary also describes a
+ * selection with nothing saved yet -- so its label claims only the browser, true in every state.
  */
-export const SAVED_PACK_LOCATION_LABEL = "Saved in this browser";
+export const PACK_SUMMARY_LABEL = "In this browser";
 
 export function PackSummary({
   scope,
@@ -40,10 +40,10 @@ export function PackSummary({
   const singlePeriodMeta = getSinglePeriodMeta(summary);
 
   return (
-    <section className="pack-summary" aria-label="Your pack">
+    <section className="pack-summary" aria-label={PACK_SUMMARY_LABEL}>
       <div className="pack-summary-heading">
         <div>
-          <p className="section-label">Your pack</p>
+          <p className="section-label">{PACK_SUMMARY_LABEL}</p>
           <h2>
             {scope.returnType} · FY {scope.financialYear.replace("-", "–")}
           </h2>

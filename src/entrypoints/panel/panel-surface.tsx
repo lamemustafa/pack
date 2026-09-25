@@ -14,7 +14,7 @@ import {
 } from "../popup/flow-summary";
 import { InlineStatus } from "../popup/inline-status";
 import { LastRunDiagnostics } from "../popup/last-run-diagnostics";
-import { PackSummary, SAVED_PACK_LOCATION_LABEL } from "../popup/pack-summary";
+import { PackSummary } from "../popup/pack-summary";
 import { TargetEvidence } from "../popup/target-evidence";
 import { getPopupPresentationState, isGstSignInRequired } from "../popup/presentation-state";
 import { RecoveryActions, hasRecoveryActions } from "../popup/recovery-actions";
@@ -381,6 +381,12 @@ export function PanelSurface({ pack }: { pack: PackPanelController }) {
   );
 }
 
+/**
+ * The saved-plan card renders only for a plan persisted in this browser. Pack does not record
+ * which GST account made it, so the heading claims where it is saved, never whose it is.
+ */
+export const SAVED_PLAN_CARD_LABEL = "Saved in this browser";
+
 function AllSupportedRunStatus({
   summary,
   busy,
@@ -434,7 +440,7 @@ function AllSupportedRunStatus({
     <section className="panel-all-supported-run" aria-label="All supported returns progress">
       <p>
         <strong>
-          {SAVED_PACK_LOCATION_LABEL} · All supported returns
+          {SAVED_PLAN_CARD_LABEL} · All supported returns
           {summary.summaryIdentity ? (
             <>
               {" · "}
